@@ -23,7 +23,7 @@ npm install
 npm test
 ```
 
-`npm test` 121 testin tamamını geçmeli. Geçmiyorsa çıktıyı sakla — Windows
+`npm test` 122 testin tamamını geçmeli. Geçmiyorsa çıktıyı sakla — Windows
 tarafı bu makinede yazıldı ama Windows'ta koşulmadı.
 
 ## Önce doğrula, sonra koş
@@ -111,7 +111,13 @@ turları üretimin kendisinden ~9 kat pahalıya çıktı.
 
 ## Windows notu
 
-Kod Windows'ta çalışacak şekilde yazıldı: süreç ağacı `taskkill /T` ile
-yıkılıyor, `npx` gibi `.cmd` sarmalayıcıları `cross-spawn` ile çözülüyor.
-Yine de bu makinede **test edilmedi** — Linux konteynerinde yazıldı. Bir şey
-patlarsa `src/proc/process.ts` ilk bakılacak yer.
+Kod Windows'ta çalışacak şekilde yazıldı ve Windows'ta koşularak düzeltildi:
+
+- Süreç ağacı `taskkill /T` ile yıkılıyor (POSIX'te süreç grubu sinyali).
+- `npx` gibi `.cmd` sarmalayıcıları `cross-spawn` ile çözülüyor.
+- Testlerdeki sahte CLI'lar `sh` script'i değil, Node script'i + platforma
+  uygun ince başlatıcı (`src/testing/fake-cli.ts`).
+- `entry` yolları POSIX ayracına normalleştiriliyor: aynı `task.yaml` her
+  platformda ajana aynı talimatı vermeli, yoksa koşular karşılaştırılamaz.
+
+Bir şey patlarsa `src/proc/process.ts` ilk bakılacak yer.

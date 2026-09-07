@@ -1,18 +1,14 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import { mkdtemp, writeFile, chmod, rm, readFile } from "node:fs/promises";
+import { mkdtemp, writeFile, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ClaudeCliAdapter } from "./claude.js";
+import { makeFakeCli, type FakeCliSpec } from "../testing/fake-cli.js";
 
 let root: string;
 
 /** Gerçek API çağırmadan adaptörü sınamak için sahte bir CLI kurar. */
-async function fakeCli(body: string): Promise<string> {
-  const p = join(root, `fake-${Math.random().toString(36).slice(2)}.sh`);
-  await writeFile(p, `#!/bin/sh\n${body}\n`);
-  await chmod(p, 0o755);
-  return p;
-}
+const fakeCli = (spec: FakeCliSpec) => makeFakeCli(root, spec);
 
 const req = (over: Partial<Parameters<ClaudeCliAdapter["invoke"]>[0]> = {}) => ({
   workdir: root,
@@ -57,7 +53,7 @@ describe("ClaudeCliAdapter", () => {
   });
 
   it("başarılı koşuda usage'ı JSON'dan çıkarır", async () => {
-    const bin = await fakeCli(`cat > /dev/null; echo '${OK}'`);
+    const bin = await fakeCli({ stdout: OK });
     const r = await new ClaudeCliAdapter({ model: "m", bin }).invoke(req());
     expect(r.exitCode).toBe(0);
     expect(r.usage).toEqual({ inputTokens: 10, outputTokens: 4, costUsd: 0.25 });
@@ -66,7 +62,7 @@ describe("ClaudeCliAdapter", () => {
 
   it("taskText'i stdin'den geçirir", async () => {
     const out = join(root, "stdin.txt");
-    const bin = await fakeCli(`cat > "${out}"; echo '${OK}'`);
+    const bin = await fakeCli({ stdinTo: out, stdout: OK });
     await new ClaudeCliAdapter({ model: "m", bin }).invoke(req({ taskText: "MERHABA" }));
     expect(await readFile(out, "utf8")).toBe("MERHABA");
   });
@@ -74,13 +70,13 @@ describe("ClaudeCliAdapter", () => {
   it("süreci workdir içinde çalıştırır", async () => {
     const sub = join(root, "alt");
     await import("node:fs/promises").then((fs) => fs.mkdir(sub));
-    const bin = await fakeCli(`cat > /dev/null; pwd > "${join(root, "cwd.txt")}"; echo '${OK}'`);
+    const bin = await fakeCli({ cwdTo: join(root, "cwd.txt"), stdout: OK });
     await new ClaudeCliAdapter({ model: "m", bin }).invoke(req({ workdir: sub }));
     expect((await readFile(join(root, "cwd.txt"), "utf8")).trim()).toBe(sub);
   });
 
   it("sıfır olmayan çıkış kodunu olduğu gibi taşır", async () => {
-    const bin = await fakeCli(`cat > /dev/null; echo "patladı" >&2; exit 3`);
+    const bin = await fakeCli({ stderr: "patladı", exit: 3 });
     const r = await new ClaudeCliAdapter({ model: "m", bin }).invoke(req());
     expect(r.exitCode).toBe(3);
     expect(r.stderr).toContain("patladı");
@@ -88,13 +84,13 @@ describe("ClaudeCliAdapter", () => {
 
   // CLI 0 dönüp kendi çıktısında hata bildirebiliyor; bunu başarı saymak yanlış olur.
   it("exit 0 ama is_error:true ise başarısız sayar", async () => {
-    const bin = await fakeCli(`cat > /dev/null; echo '{"is_error":true,"result":"olmadı"}'`);
+    const bin = await fakeCli({ stdout: '{"is_error":true,"result":"olmadı"}' });
     const r = await new ClaudeCliAdapter({ model: "m", bin }).invoke(req());
     expect(r.exitCode).not.toBe(0);
   });
 
   it("JSON olmayan çıktıda çökmez, stdout'u korur", async () => {
-    const bin = await fakeCli(`cat > /dev/null; echo "bu JSON değil"`);
+    const bin = await fakeCli({ stdout: "bu JSON değil" });
     const r = await new ClaudeCliAdapter({ model: "m", bin }).invoke(req());
     expect(r.exitCode).toBe(0);
     expect(r.stdout).toContain("bu JSON değil");
@@ -102,7 +98,7 @@ describe("ClaudeCliAdapter", () => {
   });
 
   it("timeout'ta süreci öldürür ve işaretler", async () => {
-    const bin = await fakeCli(`cat > /dev/null; sleep 30`);
+    const bin = await fakeCli({ sleepMs: 30_000 });
     const r = await new ClaudeCliAdapter({ model: "m", bin }).invoke(req({ timeoutMs: 300 }));
     expect(r.timedOut).toBe(true);
     expect(r.exitCode).not.toBe(0);

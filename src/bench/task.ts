@@ -61,7 +61,11 @@ function safeRelative(value: string, label: string, file: string): string {
         `Üretici gizli testleri göremez — yer gerçeği buna bağlı.`,
     );
   }
-  return norm;
+  // POSIX ayracına geri çevrilir. `normalize` Windows'ta "/" yerine "\\" koyar
+  // ve bu yol ajana verilen talimatın içine giriyor: aynı task.yaml, işletim
+  // sistemine göre farklı prompt üretirdi. Deneyin makineler arası
+  // karşılaştırılabilirliği buna bağlı.
+  return norm.split(sep).join("/");
 }
 
 async function isDirectory(path: string): Promise<boolean> {

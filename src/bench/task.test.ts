@@ -47,6 +47,12 @@ describe("loadTask", () => {
     expect(task.hiddenDir).toBe(join(dir, "hidden"));
   });
 
+  // Aynı task.yaml her platformda aynı talimatı üretmeli.
+  it("entry POSIX ayracıyla normalleşir — Windows'ta da \"/\"", async () => {
+    const dir = await makeTask("retry", VALID.replace("entry: src/retry.ts", "entry: src/deep/retry.ts"));
+    expect((await loadTask(dir)).entry).toBe("src/deep/retry.ts");
+  });
+
   it("id dizin adıyla uyuşmazsa reddeder", async () => {
     const dir = await makeTask("retry", VALID.replace("id: retry", "id: baska"));
     await expect(loadTask(dir)).rejects.toThrow(/dizin ad[ıi]/i);

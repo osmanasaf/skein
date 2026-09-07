@@ -1,16 +1,12 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import { mkdtemp, writeFile, chmod, rm, readFile } from "node:fs/promises";
+import { mkdtemp, writeFile, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CodexCliAdapter, bestEffortUsage } from "./codex.js";
+import { makeFakeCli, type FakeCliSpec } from "../testing/fake-cli.js";
 
 let root: string;
-const fakeCli = async (body: string) => {
-  const p = join(root, `fake-${Math.random().toString(36).slice(2)}.sh`);
-  await writeFile(p, `#!/bin/sh\n${body}\n`);
-  await chmod(p, 0o755);
-  return p;
-};
+const fakeCli = (spec: FakeCliSpec) => makeFakeCli(root, spec);
 const req = () => ({
   workdir: root, promptFile: join(root, "prompt.md"),
   taskText: "GOREV METNI", timeoutMs: 10_000,
@@ -43,7 +39,7 @@ describe("CodexCliAdapter", () => {
 
   it("rol promptunu ve görev metnini stdin'den geçirir", async () => {
     const out = join(root, "stdin.txt");
-    const bin = await fakeCli(`cat > "${out}"`);
+    const bin = await fakeCli({ stdinTo: out });
     await new CodexCliAdapter({ model: "m", bin }).invoke(req());
     const seen = await readFile(out, "utf8");
     expect(seen).toContain("ROL PROMPTU");
@@ -51,7 +47,7 @@ describe("CodexCliAdapter", () => {
   });
 
   it("çıkış kodunu ve stderr'i taşır", async () => {
-    const bin = await fakeCli(`cat > /dev/null; echo "hata" >&2; exit 4`);
+    const bin = await fakeCli({ stderr: "hata", exit: 4 });
     const r = await new CodexCliAdapter({ model: "m", bin }).invoke(req());
     expect(r.exitCode).toBe(4);
     expect(r.stderr).toContain("hata");
@@ -64,7 +60,7 @@ describe("CodexCliAdapter", () => {
   });
 
   it("timeout'ta süreci öldürür", async () => {
-    const bin = await fakeCli(`cat > /dev/null; sleep 30`);
+    const bin = await fakeCli({ sleepMs: 30_000 });
     const r = await new CodexCliAdapter({ model: "m", bin }).invoke({ ...req(), timeoutMs: 300 });
     expect(r.timedOut).toBe(true);
   });

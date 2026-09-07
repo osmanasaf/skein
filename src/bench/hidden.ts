@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { spawnPortable } from "../proc/process.js";
 import type { Task } from "./task.js";
 
@@ -35,7 +36,9 @@ interface VitestJson {
  * garantisini talimat olmaktan çıkarıp fiziksel yapar.
  */
 export async function runHidden(task: Task, cellDir: string, cwd: string): Promise<HiddenRun> {
-  const args = [...task.hidden.command.slice(1), "--dir", `${cellDir}/hidden`];
+  // `join` şart: elle "/" eklemek Windows'ta "C:\\...\\hucre/hidden" gibi karışık
+  // ayraçlı bir yol üretir.
+  const args = [...task.hidden.command.slice(1), "--dir", join(cellDir, "hidden")];
   const child = spawnPortable(task.hidden.command[0] as string, args, { cwd });
 
   let raw = "";
