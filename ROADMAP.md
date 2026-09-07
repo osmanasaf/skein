@@ -9,6 +9,64 @@ Sıra şu mantıkla: **en ucuz deney, en riskli varsayımı önce sınar.**
 
 ---
 
+## Yakın plan — ortak omurga
+
+Aşamalar uzun vadeli iskelet. Bu bölüm, **şu an ne yapılacağı**.
+
+### Neden sıra değişti
+
+Aşama 1 (audit gate) yerine, Aşama 3'ün içindeki karşılaştırma deneyi öne
+alındı. Gerekçe: audit gate ödünç alınmış bir fikirdir ve başarısız olsa
+proje yaşamaya devam eder; çapraz sağlayıcı denetimi ise **tezin
+kendisidir** — olumsuz çıkarsa projenin var olma sebebi kalmaz. Ve deney,
+sanıldığından ucuz: kuyruk, worktree ve yürütücü gerektirmiyor.
+
+Ayrıca Aşama 1'in ölçütü kendi kendini çürütüyordu: audit gate'in geçme
+koşulu *hiçbir şeyin değişmediği bir tur* olduğu için mekanizma, düzeltme
+**yapmayan** ajanı ödüllendiriyor. "Düzeltme oranı" ölçüsü, gate'in işe
+yarayıp yaramadığını değil ajanın sabırsızlığını ölçer. Ölçüt Adım 3'te
+yeniden tanımlanıyor.
+
+### Laboratuvar ile swarm ayrı yollar değil
+
+Deneyi bir kenara koyup "asıl ürüne dönmek" ya da tersi, yanlış ikilem.
+Parçaların çoğu ortak:
+
+| Parça | Deney | Ürün |
+|---|:---:|:---:|
+| Sağlayıcı adaptörü | ✅ | ✅ Aşama 3'ün kalbi |
+| Prompt derleyici | ✅ | ✅ her rol çağrısı |
+| Olay günlüğü | ✅ | ✅ Aşama 3 + 5; pane kazımanın yerine geçen şey |
+| Audit gate | ✅ | ✅ Aşama 1, çekirdek ilke |
+| Görev yükleyici, gizli test, hakem | ✅ | ✗ |
+| Kuyruk, handoff, worktree, gözcü, ekran | ✗ | ✅ |
+
+Deney, ürünün parçalarından kurulduğu sürece sapma değil. Atılacak
+kod yazmadığımız sürece.
+
+### Kural: her adım çalışan bir şey üretir
+
+Aşama 0'ın bedeli 1161 satır doküman ve **sıfır çalıştırılmış ajan** oldu.
+Bundan sonra hiçbir adım yalnızca doküman ya da yalnızca iskele değildir;
+her adımın sonunda koşulabilen ve çıktısı görülebilen bir şey vardır.
+
+### Adımlar
+
+| # | Adım | Üretir | Bağımlılık |
+|---|---|---|---|
+| 1 | **İlk koşu** — `claude` adaptörü (gerçek süreç), tek ajan `retry-backoff`'u çözer, gizli testler koşar | İlk gerçek artefakt ve ilk gerçek sayı ("9 kancadan 7'si yeşil") | yok — tek sağlayıcı yeter |
+| 2 | **Olay günlüğü** — rol, sağlayıcı, model, prompt hash, exit code, süre, usage | Ölçümün tek kaynağı. Pane kazımayı reddetmemizin karşılığı burada somutlaşır | Adım 1 |
+| 3 | **Audit gate** — parmak izi, kilitli durum, tur sayacı | Aşama 1'in kendisi; artık ölçülebilir bir ölçütle | Adım 2 |
+| 4 | **Deneyi tamamla** — üretim/denetim koşucusu, hakem, 12 görev, rapor | Açık Soru #2'nin sayısal cevabı | **İkinci sağlayıcı CLI'ı gerekir** |
+| 5 | **Karar noktası** | Tez olumluysa Aşama 2'ye; olumsuzsa felsefe yeniden çerçevelenir | Adım 4 |
+| 6+ | **Swarm çekirdeği** — kuyruk, handoff, worktree, gözcü | Aşama 2-3: iki rol gerçekten birbirine iş devreder | Adım 5 |
+
+Adım 1-3 bu ortamda yapılabilir. **Adım 4 sende**: `codex`, `gemini` ya da
+başka bir ikinci sağlayıcı CLI'ının kurulu olduğu bir makine gerekiyor;
+tek sağlayıcıyla 2×2 tasarımın iki hücresi boş kalır.
+
+---
+
 ## Aşama 0 — Temel · ✅ tamam
 
 Felsefenin ve kapsamın yazılı olması.
@@ -28,7 +86,10 @@ Felsefenin ve kapsamın yazılı olması.
 
 ---
 
-## Aşama 1 — Audit gate, tek başına
+## Aşama 1 — Audit gate, tek başına · ⏸️ yeniden sıralandı
+
+> Yakın plandaki **Adım 3**. Ertelenmedi, sırası değişti — gerekçe ve
+> ölçütün neden yeniden tanımlandığı yukarıda.
 
 **Sınadığı varsayım:** Açık Soru #1 — mekanik sürtünme ajanın çıktısını
 gerçekten iyileştiriyor mu?
@@ -80,6 +141,10 @@ süreç yarıda kesilip yeniden başlatıldığında iş kaybolmuyor. `daily.yam
 ---
 
 ## Aşama 3 — Sağlayıcı adaptörleri + yürütücü · **ilk uçtan uca**
+
+> Bu aşamanın **karşılaştırma deneyi** kısmı öne alındı (Yakın plan,
+> Adım 1-5). Tasarımı `bench/DESIGN.md`'de; naif iki hücreli kurgu yerine
+> 2×2 faktöriyel. Buraya kalan: gözcü döngüsü ve yürütücü.
 
 **Sınadığı varsayım:** Açık Soru #2 — çapraz sağlayıcı denetimi, aynı
 sağlayıcıyla denetimden daha çok bulgu yakalıyor mu? Projenin merkezi tezi.
@@ -185,4 +250,20 @@ Aşama 3'ten itibaren her ajan çağrısı kaydedilir. Takip edilen metrikler:
 
 ## Şu anki durum
 
-**Aşama 0 tamam.** Sıradaki: Aşama 1 — audit gate.
+**Aşama 0 tamam.** Sıra yeniden düzenlendi (bkz. Yakın plan).
+
+Yazılmış olan — 353 satır, 29 test yeşil:
+
+| Dosya | Ne | Kime hizmet ediyor |
+|---|---|---|
+| `src/adapters/contract.ts` | Adaptör sözleşmesi + kayıt, model pinlemeli | ortak |
+| `src/prompt/assemble.ts` | Katmanlı prompt derleyici, kurcalamaya karşı korumalı, hash'li | ortak |
+| `src/bench/task.ts` | Görev formatı + katı yükleyici | deney |
+| `hub/prompts/constitution/base.md` | Anayasa çekirdeği, headless'a uygun | ortak |
+| `bench/DESIGN.md` | 2×2 deney tasarımı, karar kuralı önceden ilan edilmiş | deney |
+| `bench/tasks/retry-backoff/` | İlk görev, 9 kusur kancası | deney |
+
+Yazılmamış olan: kuyruk, handoff, worktree, yürütücü, gözcü, ekran,
+audit gate. **Çalıştırılmış ajan sayısı: 0.**
+
+Sıradaki: **Adım 1 — ilk koşu.**

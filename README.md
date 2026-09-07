@@ -31,11 +31,15 @@ ajanın iyi niyetine değil **mekanizmaya** bağlar:
 | [`hub/flows/SCHEMA.md`](hub/flows/SCHEMA.md) | Topoloji tanımlama dili — kendi akışını bununla yazarsın |
 | [`hub/flows/`](hub/flows/) | Örnek akışlar: 2 adımlı `daily`, 4 adımlı kapılı `spec` |
 | [`hub/adapters/CONTRACT.md`](hub/adapters/CONTRACT.md) | Sağlayıcı sözleşmesi |
+| [`bench/DESIGN.md`](bench/DESIGN.md) | Tezi sınayan deneyin tasarımı — 2×2 çapraz kurgu |
 | [`java-kit/`](java-kit/) | Java rol ve kural seti (prompt kaynağı) |
 
 ## Durum
 
-Aşama 0 — felsefe ve kapsam yazılı. Sıradaki: audit gate.
+Aşama 0 tamam; sıra yeniden düzenlendi. Şu an ortak omurga kuruluyor:
+adaptör sözleşmesi, katmanlı prompt derleyici ve tez deneyinin koşum
+takımı yazıldı. Sıradaki adım ilk gerçek ajan koşusu — bkz.
+[`ROADMAP.md`](ROADMAP.md) "Yakın plan".
 
 ## Kaynak
 
