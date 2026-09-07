@@ -1,47 +1,32 @@
-# Murmuration — akış tanımı
+# Örnek akış — 2 adım, kapısız. Günlük iş.
 #
-# SwarmForge'un swarmforge.conf'unun yerini alır. Dört farkı var, hepsi
-# upstream'de tespit ettiğimiz yaraların karşılığı:
-#
-#   1. İleri yön BURADA tanımlı (SwarmForge'da rol promptunun içine gömülü,
-#      conf ile tutarlılığı hiç doğrulanmıyordu).
-#   2. Kapılar konfigüre edilebilir (SwarmForge'da insan onayı yalnızca
-#      harfiyen `specifier` adlı, master'daki role bağlıydı).
-#   3. Rol isimleri serbest (SwarmForge'da launcher rol adına göre sabit
-#      kodlu araç listesi enjekte ediyordu).
-#   4. syncBack açıkça yazılır (back-one/back-all'ın görünmez maliyeti yoktu).
+# Şema: SCHEMA.md
+# Rol isimleri serbesttir; sistem isme bakıp davranış değiştirmez.
+# Kopyalayıp kendi akışını yaz — derinliği ve isimleri sen belirlersin.
 
 name: daily
-description: Günlük sürücü. Üretim ve denetim farklı sağlayıcılarda.
+description: Günlük sürücü. Üretim ve denetim kasıtlı olarak farklı sağlayıcıda.
 
-# Kartın izleyeceği yol. Sıra buradan okunur, dosya sırasından değil.
 roles:
   - id: coder
-    provider: claude          # adapters/claude.* uygular
-    workspace: master         # ana checkout
+    provider: claude
+    workspace: main             # ana checkout; tam olarak bir rol alır
     prompt: roles/coder.prompt
-    receive: task             # her handoff ayrı iş
-    next: reviewer            # ileri yön — artık deklaratif
+    receive: task
+    next: reviewer
 
   - id: reviewer
-    provider: codex           # KASITLI farklı sağlayıcı: farklı kör nokta
-    workspace: reviewer       # kendi git worktree'si
-    prompt: roles/cleaner.prompt
-    receive: batch            # kuyruktaki eşdeğer işleri tek turda yut
-    syncBack: [coder]         # merge-only kopya; maliyeti görünür
-    terminal: true            # bu rolün handoff'u kartı Done'a taşır
+    provider: codex             # KASITLI farklı sağlayıcı: farklı kör nokta
+    workspace: reviewer         # kendi git worktree'si
+    prompt: roles/reviewer.prompt
+    receive: batch              # kuyruktaki eşdeğer işleri tek turda yut
+    syncBack: [coder]           # merge-only kopya; maliyeti görünür
+    next: done                  # zinciri kapatır
 
-# İnsan kapıları. Boş bırakılırsa akış hiç durmaz.
-# type: approval  -> onaylanana kadar teslim edilmez
-# type: none      -> doğrudan geçer
-gates: []
+gates: []                       # kapı yok; kod zaten senin önünden geçiyor
 
-# Her rol çağrısında uygulanan denetim kapısı.
-# İlk "bitti" denemesi reddedilir; ajan işini yeniden denetler.
-# Denetim sırasında commit atmak yeni bir tur başlatır — handoff ancak
-# hiçbir şey değişmeyen bir turdan sonra kuyruğa girer.
 audit:
   enabled: true
-  # Parmak izine dahil edilen alanlar. commit dahil olduğu için
-  # denetimde yapılan düzeltme otomatik olarak yeni tur açar.
   fingerprint: [task, recipients, commit, draft]
+
+# Maliyet: ~5 aktivasyon/kart (2 rol × 2 audit turu + 1 syncBack)

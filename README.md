@@ -17,6 +17,9 @@ ajanın iyi niyetine değil **mekanizmaya** bağlar:
 - Üreten ile denetleyen kasıtlı olarak farklı model — farklı kör nokta
 - Devir teslim doğrulanmış bir kayıt, serbest metin değil
 - "Bitti" demek sürtünmeli: ilk deneme reddedilir, ajan işini yeniden denetler
+- Topolojiyi kullanıcı yazar: kaç rol, hangi isimler, kapı nerede — 2 adım da
+  6 adım da senin kararın, ürünün sabiti değil
+- Merkez ekranı birinci sınıf: ajanları canlı izle, maliyeti ve bulguları gör
 
 ## Nereden başlamalı
 
@@ -24,7 +27,8 @@ ajanın iyi niyetine değil **mekanizmaya** bağlar:
 |---|---|
 | [`PHILOSOPHY.md`](PHILOSOPHY.md) | İlkeler, reddedilenler, test edilmemiş varsayımlar |
 | [`ROADMAP.md`](ROADMAP.md) | Risk azaltma sırasına göre aşamalar |
-| [`hub/flows/daily.yaml`](hub/flows/daily.yaml) | Akış tanımı şeması |
+| [`hub/flows/SCHEMA.md`](hub/flows/SCHEMA.md) | Topoloji tanımlama dili — kendi akışını bununla yazarsın |
+| [`hub/flows/`](hub/flows/) | Örnek akışlar: 2 adımlı `daily`, 4 adımlı kapılı `spec` |
 | [`hub/adapters/CONTRACT.md`](hub/adapters/CONTRACT.md) | Sağlayıcı sözleşmesi |
 | [`java-kit/`](java-kit/) | Java rol ve kural seti (prompt kaynağı) |
 

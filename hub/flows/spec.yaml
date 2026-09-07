@@ -1,0 +1,53 @@
+# Örnek akış — 4 adım, spec kapılı. Gereksinim belirsizse.
+#
+# Bu dosyanın varlık sebebi: şemanın 2 adımla sınırlı olmadığını göstermek.
+# Rol isimleri tamamen serbest — burada `analyst` ve `guard` kullanıldı,
+# sistemin bildiği ayrıcalıklı isimler değiller. İnsan onay kapısı da
+# herhangi bir role bağlanabiliyor.
+
+name: spec
+description: Yanlış şeyi inşa etme riski yüksek olduğunda. Kod yazılmadan önce insan onayı.
+
+roles:
+  - id: analyst                 # "specifier" olmak zorunda değil
+    provider: claude
+    workspace: main
+    prompt: roles/specifier.prompt
+    receive: task
+    next: coder
+
+  - id: coder
+    provider: codex
+    workspace: coder
+    prompt: roles/coder.prompt
+    receive: task
+    next: reviewer
+
+  - id: reviewer
+    provider: claude
+    workspace: reviewer
+    prompt: roles/cleaner.prompt
+    receive: batch
+    syncBack: [coder]
+    next: guard
+
+  - id: guard                   # güvenlik/mimari son bakış
+    provider: codex
+    workspace: guard
+    prompt: roles/guard.prompt
+    receive: batch
+    syncBack: [coder, reviewer] # açık liste: kimin uyanacağı sayılabilir
+    next: done
+
+gates:
+  - after: analyst              # kapı istediğin yere konur
+    type: approval
+    message: >
+      Spec onaya hazır. Kabul kriterleri gözlemlenebilir mi, kapsam dışı
+      doğru çizilmiş mi? Reddedersen iş analyst'e geri döner.
+
+audit:
+  enabled: true
+  fingerprint: [task, recipients, commit, draft]
+
+# Maliyet: ~12 aktivasyon/kart (4 rol × 2 audit turu + 4 syncBack alıcısı)

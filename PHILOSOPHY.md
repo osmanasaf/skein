@@ -102,31 +102,68 @@ worktree'sindeki bir rol tek alıcıya gönderdiğinde tetikleniyordu. Rolü
 yeniden adlandırmak kapıyı sessizce yok ediyordu. Biz bunu konfigürasyona
 taşıyoruz.
 
-### 8. Görünürlük ölçümle gelir, kazımayla değil
+### 8. Ekran birinci sınıf — ama kazımayla değil, ölçümle beslenir
 
 Hangi iş nerede, hangi ajan ne yapıyor, ne kadar sürdü, ne kadara mal oldu.
-Bu veriler her ajan çağrısında yapılandırılmış olarak kaydedilir.
+Bir merkez ekranı olmadan bu proje kör uçuştur; ekran süs değil, ürünün
+kendisidir.
 
-SwarmForge bunu terminal pane'inin metnini regex'le kazıyarak (`"I'm ..."`
-içeren son satırı arayarak) yapıyordu — CLI çıktı formatı değişince sessizce
-bozulan bir yüzey. Biz süreç çıkış kodu ve yapılandırılmış olay günlüğü
-kullanacağız.
+Ayrım şurada: SwarmForge ekranını terminal pane'inin metnini regex'le kazıyarak
+besliyordu (`"I'm ..."` içeren son satırı arayarak) — CLI çıktı formatı
+değişince sessizce bozulan bir yüzey. Biz aynı ekranı süreç çıkış kodu ve
+yapılandırılmış olay günlüğüyle besleyeceğiz.
+
+**tmux'u reddetmek ekranı reddetmek değildir — tam tersi.** Pane kazımayı
+bıraktığımız için ekran gerçek veriye dayanabilir: canlı ajan çıktısı, süre,
+maliyet, audit tur sayısı, kartın hangi rolde olduğu.
+
+### 9. Topolojiyi kullanıcı yazar
+
+Kaç rol, hangi sırada, hangi sağlayıcı, kapı nerede — bunlar ürünün sabitleri
+değil, kullanıcının kararıdır. Sistem bir **şema** ve **örnekler** sunar,
+sabit paketler dayatmaz.
+
+İki adımlı da kurulabilmeli, dört adımlı da, altı adımlı da. Rol isimleri
+tamamen serbesttir: `coder`, `reviewer`, `security`, `perf`, `docs` — sistem
+isme bakıp davranış değiştirmez.
+
+SwarmForge bunun tersini yapıyordu ve bu, topolojiyi değiştirmeyi kırılgan
+hale getiriyordu:
+
+- İnsan onay kapısı yalnızca harfiyen `specifier` adlı role bağlıydı; rolü
+  yeniden adlandırmak kapıyı **sessizce** yok ediyordu.
+- Launcher, rol adına göre sabit kodlu araç listesi enjekte ediyordu; yeni bir
+  rol adı vermek o rolü araçsız bırakıyordu.
+- İleri yön konfigürasyonda değil, rol promptunun metnine gömülüydü; geri yön
+  ise konfigürasyondaydı. İkisinin tutarlılığı hiç doğrulanmıyordu.
+
+Bizde topoloji tek bir bildirimsel dosyadır, doğrulanır ve düzenlenebilir.
+Zamanla bunun üstüne bir editör gelir; ama şema ilk günden genel olmalıdır.
 
 ---
 
 ## Reddettiklerimiz
 
-Kapsamın kaymaması için açık non-goal'lar:
+Bunlar **kalıcı tasarım duruşları** — "henüz değil" değil, "hayır". Her
+reddin yerine ne koyduğumuz yazılı; yerine bir şey koymayan red, kısıt olur.
 
-| Reddedilen | Neden |
-|---|---|
-| tmux / terminal multiplexer | Ajanları uzun ömürlü interaktif TUI olarak çalıştırma tercihinin sonucu. Protokol zaten durumsuz olduğu için gereksiz. Kaldırınca platform bağımlılığı da gidiyor. |
-| Pane metni kazıma | Kırılgan. CLI çıktısı değişince sessizce bozulur. Exit code + yapılandırılmış çıktı var. |
-| İnteraktif TUI ajanlar | İş başına headless süreç daha ucuz, daha ölçülebilir, her platformda ve CI'da aynı. |
-| Magic rol isimleri | Davranışın rol adına gömülü olması (araç listesi, onay kapısı, bitiş noktası) topolojiyi değiştirmeyi kırılgan yapar. |
-| Kendi CRAP/mutation/DRY araçlarımızı yazmak | Her dilin olgun araçları var. Kurumsal build'de zaten mevcutlar; yeni bağımlılık onayı gerekmiyor. |
-| Altı rollük topolojiler (başlangıçta) | Kart başına ~21 ajan aktivasyonu. Günlük iş için maliyeti karşılığını vermiyor. İki rolle başla. |
-| Çoklu proje / forge katmanı (başlangıçta) | Tek kişi, aynı anda bir-iki iş kolu. Erken genelleme. |
+| Reddedilen | Neden | Yerine |
+|---|---|---|
+| tmux / terminal multiplexer | Ajanları uzun ömürlü interaktif TUI olarak çalıştırma tercihinin sonucu. Protokol zaten durumsuz olduğu için gereksiz; kaldırınca platform bağımlılığı da gidiyor. | İş başına headless süreç + merkezi ekran |
+| Pane metni kazıma | Kırılgan. CLI çıktı formatı değişince sessizce bozulur. | Süreç çıkış kodu + yapılandırılmış olay günlüğü |
+| İnteraktif TUI ajanlar | Ölçülemiyor, pahalı, platforma bağlı. | Headless çağrı: başlar, işi yapar, çıkar |
+| Rol adına gömülü davranış | İsim değişince davranış sessizce kayboluyor; topolojiyi değiştirmek kırılgan hale geliyor. | Serbest rol isimleri; tüm davranış akış tanımında |
+| Sabit paketler (2/4/6 dayatması) | Topolojinin derinliği kullanıcının kararı, ürünün sabiti değil. | Genel şema + örnek akışlar + (sonra) editör |
+| Kendi CRAP/mutation/DRY araçlarımızı yazmak | Her dilin olgun araçları var, kurumsal build'de zaten mevcutlar. | Dilin standart araçları (Java: JaCoCo, PIT, PMD CPD, ArchUnit) |
+
+### Reddedilmeyen, sadece sıraya konan
+
+Karışmasın diye ayrı: bunlar yol haritasında ileride var, kapsam dışı değil.
+
+- **Derin topolojiler (4, 6, N adım).** Şema ilk günden destekler; sadece
+  *örnek olarak* iki rollü akışla başlıyoruz çünkü ilk deneyler ucuz olsun.
+- **Akış editörü.** Önce şema ve doğrulama, sonra editör.
+- **Çoklu proje.** Tek projeyle başlayıp genelleştireceğiz.
 
 ---
 

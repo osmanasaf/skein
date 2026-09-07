@@ -15,7 +15,11 @@ Felsefenin ve kapsamın yazılı olması.
 
 - `PHILOSOPHY.md` — ilkeler, reddedilenler, açık sorular
 - `ROADMAP.md` — bu dosya
-- `hub/flows/daily.yaml` — akış tanımı şeması taslağı
+- `hub/flows/SCHEMA.md` — topoloji tanımlama dili; kullanıcı kendi akışını
+  bununla yazar
+- `hub/flows/daily.yaml` — 2 adımlı örnek
+- `hub/flows/spec.yaml` — 4 adımlı, kapılı örnek (şemanın derinlikle ve
+  serbest rol isimleriyle sınırlı olmadığını gösterir)
 - `hub/adapters/CONTRACT.md` — sağlayıcı sözleşmesi taslağı
 - `java-kit/` — SwarmForge'a uyarlanmış Java rol/kural seti (referans ve
   prompt kaynağı olarak taşınıyor)
@@ -61,11 +65,17 @@ Henüz ajan çağrısı yok — elle test edilir. Bu kasıtlı: taşıma katman�
 - Yapılandırılmış mesaj doğrulama (dar tip kümesi, katı alan kontrolü)
 - Commit çözümleme ve soy doğrulaması
 - Yinelenen devir teslim tespiti
-- `flows/*.yaml` yükleyici: roller, ileri yön, `syncBack`, kapılar
+- **Akış yükleyici ve doğrulayıcı** — `SCHEMA.md`'deki 9 kural. Topoloji
+  yazarlığının temeli: serbest rol isimleri, deklaratif ileri yön, açık
+  `syncBack`, herhangi bir role konabilen kapı. Şema ilk günden N adımı
+  destekler; derinlik kullanıcının kararıdır.
 - Rol başına git worktree hazırlama
+- Topoloji maliyet hesabı (çalıştırmadan önce "bu akış kart başına kaç ajan
+  uyandırması" cevabı)
 
 **Biter kriteri:** İki "sahte rol" arasında elle devir teslim yapılabiliyor;
-süreç yarıda kesilip yeniden başlatıldığında iş kaybolmuyor.
+süreç yarıda kesilip yeniden başlatıldığında iş kaybolmuyor. `daily.yaml` ve
+`spec.yaml` doğrulamadan geçiyor, bozuk bir akış anlamlı hata veriyor.
 
 ---
 
@@ -80,6 +90,9 @@ sağlayıcıyla denetimden daha çok bulgu yakalıyor mu? Projenin merkezi tezi.
 - Gözcü döngüsü: kuyrukta iş varsa ajanı çağır, çıkışı bekle
 - Olay günlüğü: rol, sağlayıcı, görev, exit code, süre, usage
 - Aşama 1'in audit gate'i devrede
+- **En küçük ekran:** olay günlüğünü okuyan salt-okunur durum görünümü —
+  hangi kart hangi rolde, hangi ajan çalışıyor, canlı süreç çıktısı. Tam
+  arayüz Aşama 5'te; ama bu aşamada bile kör uçmuyoruz.
 
 **Biter kriteri:** Gerçek bir görev, gerçek bir repoda, `coder(A) →
 reviewer(B)` akışından geçip Done'a ulaşıyor. Ve karşılaştırma deneyi
@@ -107,31 +120,51 @@ uca çalışıyor; kapı sayısı ve bekleme süresi ölçülüyor.
 
 ---
 
-## Aşama 5 — Görünürlük
+## Aşama 5 — Merkez ekranı
 
 **Sınadığı varsayım:** Açık Soru #4 — maliyet karşılığını veriyor mu?
 Cevaplayabilmek için veriyi görebilmek gerek.
 
+Ekran süs değil, ürünün kendisi: birden fazla ajanı aynı anda takip etmenin
+tek yolu. tmux'u reddetmemizin sebebi de buydu — pane kazımayı bıraktığımız
+için ekran gerçek veriye dayanabiliyor.
+
 **Kapsam:**
-- Board: hangi iş hangi rolde
-- Olay günlüğü görünümü: ajan çağrıları, süre, maliyet, audit tur sayısı
-- Canlı ajan çıktısı (kazıma değil, süreç stdout'u)
-- Web arayüzü
+- Board: hangi kart hangi rolde
+- Ajan takibi: canlı süreç çıktısı (kazıma değil, gerçek stdout)
+- Olay günlüğü görünümü: süre, maliyet, audit tur sayısı, exit code
+- Onay kapıları arayüzden yönetilir
+- Karşılaştırma görünümü: çapraz vs aynı sağlayıcı bulgu sayısı
 
 **Biter kriteri:** "Bu görev bana neye mal oldu ve kaç bulgu yakalandı"
 sorusu arayüzden cevaplanabiliyor.
 
 ---
 
-## Aşama 6 — Esneklik
+## Aşama 6 — Topoloji editörü
+
+Şema Aşama 2'den beri N adımı destekliyor; bu aşama onu **elle YAML yazmadan**
+kurulabilir hale getiriyor.
+
+**Kapsam:**
+- Görsel akış kurucu: rol ekle/çıkar/sırala, sağlayıcı ata, kapı yerleştir
+- Canlı doğrulama (SCHEMA.md'deki 9 kural) ve canlı maliyet tahmini —
+  kullanıcı derinliği artırdıkça maliyetin nasıl büyüdüğünü anında görür
+- Akış şablonlarını kaydet ve yeniden kullan
+- Rol promptlarını arayüzden düzenle
+
+**Biter kriteri:** Kullanıcı 2, 4 ya da 6 adımlı bir akışı YAML'a dokunmadan
+kurup çalıştırabiliyor.
+
+---
+
+## Aşama 7 — Ölçek
 
 Buraya ancak Açık Sorular olumlu cevaplanırsa gelinir.
 
 - Birden fazla eşzamanlı akış
-- Akış editörü
 - Çoklu proje
 - Yeni sağlayıcı adaptörleri
-- Daha uzun topolojiler (spec / mimari / güvenlik rolleri)
 
 ---
 
