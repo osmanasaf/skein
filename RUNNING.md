@@ -12,12 +12,19 @@ Skein'in deney koşum takımı Windows, macOS ve Linux'ta çalışır. Bu belge,
 
 ## Kurulum
 
-```sh
+**PowerShell kullanıyorsan `&&` yazma.** Windows PowerShell 5.1 onu
+desteklemez; her komutu ayrı satıra yaz (ya da `;` kullan).
+
+```powershell
 git clone https://github.com/osmanasaf/skein
 cd skein
+git checkout claude/project-plan-brainstorm-pthvoc
 npm install
-npm test          # 120 test geçmeli
+npm test
 ```
+
+`npm test` 121 testin tamamını geçmeli. Geçmiyorsa çıktıyı sakla — Windows
+tarafı bu makinede yazıldı ama Windows'ta koşulmadı.
 
 ## Önce doğrula, sonra koş
 
@@ -25,9 +32,12 @@ Codex adaptörünün bayrakları **codex'in kurulu olmadığı bir makinede
 yazıldı**. `hub/adapters/CONTRACT.md` "bayrakları doğrulayarak yaz, ezberden
 yazılan bayrak sessizce yanlış çalışır" diyor — o doğrulama sende:
 
-```sh
-npx tsx src/bench/cli.ts doctor codex:gpt-5.5
+```powershell
+npm run bench -- doctor codex:gpt-5.5
 ```
+
+(`npm run bench` `tsx`'i projeden kullanır; `npx tsx` gibi her seferinde
+kurulum sormaz. `--` şart: ondan sonrası komuta gider.)
 
 Bu komut çağıracağı tam komut satırını basar ve küçük bir deneme çağrısı
 yapar. **ÇALIŞIYOR** derse hazırsın.
@@ -50,28 +60,28 @@ stdin'den gider.
 
 Aynı doğrulamayı claude için de yapabilirsin:
 
-```sh
-npx tsx src/bench/cli.ts doctor claude:claude-opus-5
+```powershell
+npm run bench -- doctor claude:claude-opus-5
 ```
 
 ## Koşular
 
 ### Tek üretici + gizli testler
 
-```sh
-npx tsx src/bench/cli.ts retry-backoff
+```powershell
+npm run bench -- retry-backoff
 ```
 
 ### Audit gate ile (Açık Soru #1)
 
-```sh
-npx tsx src/bench/cli.ts retry-backoff claude claude-opus-5 --audit
+```powershell
+npm run bench -- retry-backoff claude claude-opus-5 --audit
 ```
 
 ### 2x2 çapraz kurgu (Açık Soru #2 — projenin merkezi tezi)
 
-```sh
-npx tsx src/bench/cli.ts matrix retry-backoff claude:claude-opus-5 codex:gpt-5.5
+```powershell
+npm run bench -- matrix retry-backoff claude:claude-opus-5 codex:gpt-5.5
 ```
 
 Her iki model hem üretir hem denetler. Neden dört hücre gerektiği ve
@@ -79,8 +89,8 @@ Her iki model hem üretir hem denetler. Neden dört hücre gerektiği ve
 
 ### Ölçüm özeti
 
-```sh
-npx tsx src/bench/cli.ts report
+```powershell
+npm run bench -- report
 ```
 
 Tüm koşular `.skein/events.jsonl` dosyasına yazılır (yalnızca ekleme).

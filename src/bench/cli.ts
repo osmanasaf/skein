@@ -30,7 +30,10 @@ async function report(): Promise<void> {
       : !c.hooks.ran
         ? "ÖLÇÜLEMEDİ"
         : `${c.hooks.total - c.hooks.red}/${c.hooks.total} yeşil, ${c.hooks.red} kırmızı`;
-    console.log(`  ${c.provider}/${c.model}  ${c.role}`);
+    const who = c.role === "denetci"
+      ? `${c.producer} üretti → ${c.model} inceledi  ${c.crossed ? "ÇAPRAZ" : "aynı"}`
+      : `${c.model ?? c.provider ?? "?"}  ${c.role ?? ""}`;
+    console.log(`  ${who}`);
     console.log(`    ${hooks}  ·  ${((c.durationMs ?? 0) / 1000).toFixed(1)}s  ·  ` +
       `$${(c.costUsd ?? 0).toFixed(4)}  ·  exit=${c.exitCode ?? "?"}  ·  prompt ${c.promptHash?.slice(0, 12)}…`);
   }

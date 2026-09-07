@@ -48,6 +48,21 @@ describe("summarize", () => {
     expect(s.cells[0]?.hooks).toEqual({ total: 0, red: 0, ran: false });
   });
 
+  // Denetim hücreleri agent.started üretmiyor; bilgileri review.done taşıyor.
+  it("denetim hücresini review.done kaydından doldurur", () => {
+    const s = summarize([
+      ev({
+        type: "review.done", cell: "d1", producer: "opus", reviewer: "sonnet",
+        crossed: true, promptHash: "h", path: "p",
+      }),
+      ev({ type: "agent.finished", cell: "d1", exitCode: 0, durationMs: 900, usage: { costUsd: 0.2 } }),
+    ]);
+    expect(s.cells[0]).toMatchObject({
+      role: "denetci", model: "sonnet", producer: "opus", crossed: true,
+      promptHash: "h", costUsd: 0.2,
+    });
+  });
+
   it("birden çok koşuyu ayırt eder", () => {
     const s = summarize([
       started("c1", "claude"),

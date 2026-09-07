@@ -3,6 +3,9 @@ import type { SkeinEvent } from "./log.js";
 export interface CellRow {
   cell: string;
   role?: string;
+  /** Denetim hücrelerinde: kodu üreten ve inceleyen modeller. */
+  producer?: string;
+  crossed?: boolean;
   provider?: string;
   model?: string;
   promptHash?: string;
@@ -50,6 +53,13 @@ export function summarize(events: SkeinEvent[]): Summary {
         r.exitCode = e.exitCode;
         r.durationMs = e.durationMs;
         if (typeof e.usage?.costUsd === "number") r.costUsd = e.usage.costUsd;
+        break;
+      }
+      case "review.done": {
+        Object.assign(row(e.cell), {
+          role: "denetci", provider: e.reviewer, model: e.reviewer,
+          producer: e.producer, crossed: e.crossed, promptHash: e.promptHash,
+        });
         break;
       }
       case "hooks.measured": {

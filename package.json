@@ -10,12 +10,15 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "bench": "tsx src/bench/cli.ts",
+    "doctor": "tsx src/bench/cli.ts doctor"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
     "typescript": "^5.7.2",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.8",
+    "tsx": "^4.19.2"
   },
   "dependencies": {
     "@types/cross-spawn": "^6.0.6",
