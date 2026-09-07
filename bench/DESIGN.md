@@ -185,21 +185,35 @@ hata var demektir; "kaçırma" metriği kırmızı olup hiçbir bulguyla
 eşleşmeyen blokları sayar. Bu yüzden test adları kusuru tarif eder
 ("son başarısız denemeden sonra beklemez"), numara vermez.
 
-## İlk koşudan gelen bulgu: görev zorluğu kalibre edilmeli
+## İlk koşulardan gelen bulgu: k=1 sonuç vermez
 
-İlk gerçek koşu (`claude-opus-5`, `retry-backoff`, 11.8s, $0.059):
-**9 kancadan 9'u yeşil, 0 kırmızı.**
+`claude-opus-5`, `retry-backoff`, dört koşu:
 
-Bu, koşum takımı için iyi haber ama **deney için bir sorun**. Sıfır kusur
-demek, denetçiye yakalayacak bir şey olmaması demek: bu görev dört hücrede de
-aynı sonucu verir ve çeşitlilik etkisine hiç katkı yapmaz. Ölçüm gücü sıfır.
+| Koşu | Sonuç | Kırmızı kanca |
+|---|---|---|
+| 1 | 9/9 yeşil | — |
+| 2 | 8/9 | `attempts < 1 ise RangeError` |
+| 3 | 8/9 | `attempts < 1 ise RangeError` |
+| 4 | 8/9 | `attempts < 1 ise RangeError` |
 
-Bu, `bench/DESIGN.md`'nin baştan söylediği "kusurlar üreticinin kendi doğal
-hatası olmalı" ilkesinin faturası: doğal kusuru sipariş edemezsin. Görev
-yeterince zor değilse doğal kusur oluşmaz.
+**İlk koşuya bakıp "bu görev çok kolay, kusur üretmiyor" diye yazmıştım.
+Yanlıştı.** Dört koşunun üçünde *aynı* kanca kırmızı — gürültü değil,
+tekrarlanabilir bir kusur.
 
-**Sonuç — görev setine bir kabul ölçütü ekleniyor.** Bir görev sete ancak
-kalibrasyon koşusunu geçerse girer:
+Kusurun kendisi: üç koşuda da model `export function retry` yazdı,
+`async` değil. `attempts < 1` kontrolü `RangeError`'ı **senkron** fırlatıyor,
+oysa imza `Promise<T>` dönmeyi taahhüt ediyor. `retry(...).catch(...)` yazan
+bir çağıran, yakalanmamış bir istisna alır. Gerçek bir hata sınıfı —
+async görünümlü bir API'de senkron fırlatma — ve denetim deneyi için iyi bir
+hedef: denetçi bunu yakalayacak mı?
+
+Bu olay tasarımın kendi kuralını deneysel olarak doğruladı: "LLM çıktısı
+stokastik; tek koşuluk fark gürültü olabilir" diye yazmıştık, sonra tek
+koşudan sonuç çıkardım. **k≥3 bir öneri değil, ön koşul.**
+
+### Görev seti kabul ölçütü
+
+Bir görev sete ancak kalibrasyon koşusunu geçerse girer:
 
 | Ölçüt | Neden |
 |---|---|
@@ -207,15 +221,12 @@ kalibrasyon koşusunu geçerse girer:
 | Kancaların **hepsi kırmızı değil** | Model görevi hiç anlamadıysa ölçtüğün şey denetim değil, anlaşılmazlık |
 | Kırmızı kancalar koşular arası **tamamen rastgele değil** | Tümüyle stokastik kusur, kör nokta değil gürültüdür |
 
-Kalibrasyondan geçemeyen görev ya zorlaştırılır ya setten çıkarılır.
-`retry-backoff` mevcut haliyle **geçemedi**; ya sınır durumları artırılmalı
-(eşzamanlı çağrı, iptal, jitter, saat geri sarması) ya da yerine daha zor
-bir görev konmalı.
+`retry-backoff` bu ölçütün üçünü de `claude-opus-5` tarafında karşılıyor
+(3/4 koşuda aynı kanca, 8/9 yeşil). İkinci üretici gelince tekrarlanacak.
 
-Bu ölçüt neden önemli: kalibre edilmemiş 12 görevle koşulan bir deney,
+Ölçüt neden önemli: kalibre edilmemiş görevlerle koşulan bir deney,
 "çapraz sağlayıcı fark yaratmıyor" sonucunu **görevler kolay olduğu için**
-üretir ve tez haksız yere reddedilir. Kalibrasyon, deneyin ana etki
-ölçebilmesinin ön koşulu.
+üretir ve tez haksız yere reddedilir.
 
 ## Durum
 
@@ -227,7 +238,9 @@ Bu ölçüt neden önemli: kalibre edilmemiş 12 görevle koşulan bir deney,
 - [x] Üretim koşucusu (artefakt üretimi, gizli testleri izole tutma)
 - [x] Gizli test çalıştırıcı + JSON çıktı ayrıştırma (test bazlı yeşil/kırmızı)
 - [x] **İlk uçtan uca koşu** — gerçek ajan, gerçek artefakt, gerçek sayı
-- [ ] Görev zorluk kalibrasyonu (yukarıdaki ölçüt) — `retry-backoff` geçemedi
+- [x] Olay günlüğü — yalnızca-ekleme JSONL, katı doğrulama, özet görünümü
+- [ ] Görev zorluk kalibrasyonu — `retry-backoff` tek üreticide geçti,
+      ikinci üretici bekliyor
 - [ ] Denetim koşucusu (aynı artefakt → iki denetçi)
 - [ ] Hakem katmanı (körlenmiş puanlama)
 - [ ] Kalan 11 görev

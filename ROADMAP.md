@@ -54,8 +54,8 @@ her adımın sonunda koşulabilen ve çıktısı görülebilen bir şey vardır.
 
 | # | Adım | Üretir | Bağımlılık |
 |---|---|---|---|
-| 1 | **İlk koşu** — `claude` adaptörü (gerçek süreç), tek ajan `retry-backoff`'u çözer, gizli testler koşar | İlk gerçek artefakt ve ilk gerçek sayı ("9 kancadan 7'si yeşil") | yok — tek sağlayıcı yeter |
-| 2 | **Olay günlüğü** — rol, sağlayıcı, model, prompt hash, exit code, süre, usage | Ölçümün tek kaynağı. Pane kazımayı reddetmemizin karşılığı burada somutlaşır | Adım 1 |
+| 1 | ~~**İlk koşu**~~ ✅ — `claude` adaptörü (gerçek süreç), tek ajan `retry-backoff`'u çözer, gizli testler koşar | İlk gerçek artefakt ve ilk gerçek sayı | yok — tek sağlayıcı yeter |
+| 2 | ~~**Olay günlüğü**~~ ✅ — rol, sağlayıcı, model, prompt hash, exit code, süre, usage | Ölçümün tek kaynağı. Pane kazımayı reddetmemizin karşılığı burada somutlaşır | Adım 1 |
 | 3 | **Audit gate** — parmak izi, kilitli durum, tur sayacı | Aşama 1'in kendisi; artık ölçülebilir bir ölçütle | Adım 2 |
 | 4 | **Deneyi tamamla** — üretim/denetim koşucusu, hakem, 12 görev, rapor | Açık Soru #2'nin sayısal cevabı | **İkinci sağlayıcı CLI'ı gerekir** |
 | 5 | **Karar noktası** | Tez olumluysa Aşama 2'ye; olumsuzsa felsefe yeniden çerçevelenir | Adım 4 |
@@ -264,6 +264,6 @@ Yazılmış olan — 353 satır, 29 test yeşil:
 | `bench/tasks/retry-backoff/` | İlk görev, 9 kusur kancası | deney |
 
 Yazılmamış olan: kuyruk, handoff, worktree, yürütücü, gözcü, ekran,
-audit gate. **Çalıştırılmış ajan sayısı: 0.**
+audit gate. **Çalıştırılmış ajan: 4 koşu, toplam ~$0.24.**
 
-Sıradaki: **Adım 1 — ilk koşu.**
+Adım 1 ve 2 tamam. Sıradaki: **Adım 3 — audit gate.**
