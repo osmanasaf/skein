@@ -1,0 +1,82 @@
+# Engineering Rules (Java)
+
+## Build System Is Authoritative
+- The repository's own build is the only way to compile and test. Use Maven or
+  Gradle exactly as this repository configures it.
+- Do not hand-roll test runners, invoke `javac` directly, or call the JUnit
+  launcher yourself to work around the build.
+- Do not change dependency versions, add dependencies, or edit CI
+  configuration. If a change seems to require one, stop and ask the operator.
+- Do not change formatter, Checkstyle, PMD, or SpotBugs configuration. Follow
+  what the repository already enforces.
+
+## Test Loop Economy
+Java builds are slow and every handoff costs a full audit pass. Scope your runs.
+
+- During the red-green loop, run the narrowest thing that proves the behavior:
+  - Maven: `mvn -q -pl <module> -am -Dtest=<TestClass> test`
+  - Gradle: `./gradlew :<module>:test --tests '<TestClass>'`
+- Run the project's full verification exactly once, immediately before you
+  queue a handoff:
+  - Maven: `mvn -q verify`
+  - Gradle: `./gradlew build`
+- Do not run the full suite after every cycle.
+- If the full build is red for a reason your task did not cause, say so in the
+  audit rather than fixing unrelated modules.
+
+## Testing
+- JUnit 5 with AssertJ assertions, Mockito for collaborators, unless this
+  repository already standardizes on something else. Match the existing style.
+- Do not mock types you do not own. Wrap third-party and framework types in a
+  narrow adapter interface and mock the adapter.
+- For each behavior slice, write failing unit tests that express the requested
+  observable behavior first, then the minimum production code that passes them.
+- A test must fail for a plausible wrong implementation. A test that passes
+  against an empty method body is not a test.
+- Mirror the source layout: `src/test/java` beside `src/main/java`.
+
+## Coverage, Mutation, Duplication
+Run these one at a time. Never concurrently, never repository-wide.
+
+- Coverage: JaCoCo through the build (`mvn verify` with the jacoco plugin, or
+  `./gradlew jacocoTestReport`). Look at branches in code this task touched.
+- Mutation: PIT, always scoped to the touched classes:
+  `mvn -q org.pitest:pitest-maven:mutationCoverage -DtargetClasses=<pkg>.<Class> -DtargetTests=<pkg>.<Class>Test -DwithHistory`
+  A surviving mutant is a missing test. Kill it by adding the test, never by
+  deleting the code path the mutant altered.
+- Duplication: PMD CPD (`mvn pmd:cpd`, or the repository's configured task).
+  Report duplication this change introduced or worsened.
+
+## Architecture
+- Express architectural rules as ArchUnit tests, not prose: dependency
+  direction, package boundaries, layer isolation, forbidden imports.
+- A structural finding worth stating is worth enforcing. If it can become an
+  ArchUnit rule, make it one so it survives this task.
+- Keep high-level policy independent of IO, UI, framework, filesystem,
+  database, network, and device details. Adapters depend inward.
+
+## Design And Testability
+- Work in small, reviewable increments.
+- Prefer the simplest design that supports current behavior and leaves clear
+  options for the next step.
+- Separate pure, testable logic from environment boundaries. Keep the
+  untestable boundary thin and behind an interface.
+- Only testable code participates in coverage, mutation, and duplication
+  analysis.
+
+## Optional CRAP Metric
+- CRAP combines cyclomatic complexity with coverage:
+  `CRAP = CC^2 * (1 - coverage)^3 + CC`. There is no mainstream Java tool for
+  it. `github.com/unclebob/crap4java` implements it on top of JaCoCo.
+- Use it only if the operator has already installed it. Do not install it
+  yourself, and do not substitute a homegrown proxy. Without it, report
+  complexity concerns in prose against the touched methods.
+
+## Guardrails
+- Do not commit unrelated changes or generated artifacts.
+- Do not reformat files this task did not touch.
+- Do not weaken, delete, `@Disabled`, or `@Ignore` a test to reach green. A
+  failing test is a finding, not an obstacle.
+- Do not add a new third-party dependency. Ask the operator instead.
+- Before relying on an unfamiliar command, read this repository's build files
+  and developer documentation.

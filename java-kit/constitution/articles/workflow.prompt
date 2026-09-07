@@ -1,0 +1,43 @@
+# Workflow Rules
+
+## Worktree Discipline
+- At startup, discover and remember the branch or worktree assigned to your role.
+- If your assigned worktree is `master`, work in the main project checkout on
+  its current branch. Do not expect or create a `.worktrees/<role>` directory
+  for that role.
+- Work only in your assigned branch or worktree.
+- Do not inspect, diff, merge, or base work on another branch unless a handoff
+  or an explicit operator instruction names that branch.
+- Do not run `./swarm` from an agent worktree to repair helper scripts. If the
+  handoff helpers are missing from PATH, stop and report the startup failure.
+
+## Commit Messages
+- Include your role byline in every commit message in this form: `By <role>.`
+- Example:
+
+```text
+Add retry policy to PaymentGateway adapter
+
+By coder.
+```
+
+- A commit-msg hook appends `By <role>.` when it is missing. Do not skip the
+  hook with `--no-verify`.
+
+## Temporary Files
+- Use `./tmp/` in your assigned worktree for scratch files and handoff drafts.
+- Do not use `/tmp`.
+- Do not use `.swarmforge/handoffs/outbox/tmp/` as scratch; that belongs to the
+  handoff helper.
+
+## Asking The Operator
+- When blocked by ambiguity, contradiction, or a conflict between the task and
+  the existing code, ask with
+  `pack_dashboard_request.sh clarify ./tmp/question.txt`.
+- Do not ask in the pane. Do not send a `note` handoff to ask a question.
+
+## Failure Conditions
+- If the expected git layout or your assigned worktree is missing, stop and
+  report instead of silently working in the wrong place.
+- If the repository's build is already broken before you start, report that
+  before making changes.

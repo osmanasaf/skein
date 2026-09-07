@@ -1,0 +1,11 @@
+# Upstream referans klonu — bu repoya ait değil, incelemek için tutuluyor
+swarm-forge/
+
+# Çalışma zamanı durumu
+.murmuration/
+.worktrees/
+tmp/
+
+# Ortam
+.DS_Store
+*.log

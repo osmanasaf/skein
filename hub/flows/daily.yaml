@@ -1,0 +1,47 @@
+# Murmuration — akış tanımı
+#
+# SwarmForge'un swarmforge.conf'unun yerini alır. Dört farkı var, hepsi
+# upstream'de tespit ettiğimiz yaraların karşılığı:
+#
+#   1. İleri yön BURADA tanımlı (SwarmForge'da rol promptunun içine gömülü,
+#      conf ile tutarlılığı hiç doğrulanmıyordu).
+#   2. Kapılar konfigüre edilebilir (SwarmForge'da insan onayı yalnızca
+#      harfiyen `specifier` adlı, master'daki role bağlıydı).
+#   3. Rol isimleri serbest (SwarmForge'da launcher rol adına göre sabit
+#      kodlu araç listesi enjekte ediyordu).
+#   4. syncBack açıkça yazılır (back-one/back-all'ın görünmez maliyeti yoktu).
+
+name: daily
+description: Günlük sürücü. Üretim ve denetim farklı sağlayıcılarda.
+
+# Kartın izleyeceği yol. Sıra buradan okunur, dosya sırasından değil.
+roles:
+  - id: coder
+    provider: claude          # adapters/claude.* uygular
+    workspace: master         # ana checkout
+    prompt: roles/coder.prompt
+    receive: task             # her handoff ayrı iş
+    next: reviewer            # ileri yön — artık deklaratif
+
+  - id: reviewer
+    provider: codex           # KASITLI farklı sağlayıcı: farklı kör nokta
+    workspace: reviewer       # kendi git worktree'si
+    prompt: roles/cleaner.prompt
+    receive: batch            # kuyruktaki eşdeğer işleri tek turda yut
+    syncBack: [coder]         # merge-only kopya; maliyeti görünür
+    terminal: true            # bu rolün handoff'u kartı Done'a taşır
+
+# İnsan kapıları. Boş bırakılırsa akış hiç durmaz.
+# type: approval  -> onaylanana kadar teslim edilmez
+# type: none      -> doğrudan geçer
+gates: []
+
+# Her rol çağrısında uygulanan denetim kapısı.
+# İlk "bitti" denemesi reddedilir; ajan işini yeniden denetler.
+# Denetim sırasında commit atmak yeni bir tur başlatır — handoff ancak
+# hiçbir şey değişmeyen bir turdan sonra kuyruğa girer.
+audit:
+  enabled: true
+  # Parmak izine dahil edilen alanlar. commit dahil olduğu için
+  # denetimde yapılan düzeltme otomatik olarak yeni tur açar.
+  fingerprint: [task, recipients, commit, draft]
