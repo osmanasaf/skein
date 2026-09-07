@@ -128,6 +128,11 @@ export async function loadTask(dir: string): Promise<Task> {
   if (!Array.isArray(command) || command.length === 0 || !command.every((c) => typeof c === "string")) {
     throw new TaskError(label, "`hidden.command` boş olmayan bir metin dizisi olmalı");
   }
+  // Dizini koşucu ekler. Görev de eklerse vitest iki değer görüp reddediyor ve
+  // hata stderr'de kalıyordu: sessizce ölçümsüz kalan bir koşu.
+  if ((command as string[]).includes("--dir")) {
+    throw new TaskError(label, "`hidden.command` `--dir` içeremez — hedef dizini koşucu ekler");
+  }
   const hiddenCwd = typeof hiddenDoc["cwd"] === "string" ? (hiddenDoc["cwd"] as string) : HIDDEN_DIR;
 
   const hiddenDir = join(taskDir, HIDDEN_DIR);

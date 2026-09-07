@@ -185,14 +185,49 @@ hata var demektir; "kaçırma" metriği kırmızı olup hiçbir bulguyla
 eşleşmeyen blokları sayar. Bu yüzden test adları kusuru tarif eder
 ("son başarısız denemeden sonra beklemez"), numara vermez.
 
+## İlk koşudan gelen bulgu: görev zorluğu kalibre edilmeli
+
+İlk gerçek koşu (`claude-opus-5`, `retry-backoff`, 11.8s, $0.059):
+**9 kancadan 9'u yeşil, 0 kırmızı.**
+
+Bu, koşum takımı için iyi haber ama **deney için bir sorun**. Sıfır kusur
+demek, denetçiye yakalayacak bir şey olmaması demek: bu görev dört hücrede de
+aynı sonucu verir ve çeşitlilik etkisine hiç katkı yapmaz. Ölçüm gücü sıfır.
+
+Bu, `bench/DESIGN.md`'nin baştan söylediği "kusurlar üreticinin kendi doğal
+hatası olmalı" ilkesinin faturası: doğal kusuru sipariş edemezsin. Görev
+yeterince zor değilse doğal kusur oluşmaz.
+
+**Sonuç — görev setine bir kabul ölçütü ekleniyor.** Bir görev sete ancak
+kalibrasyon koşusunu geçerse girer:
+
+| Ölçüt | Neden |
+|---|---|
+| Her iki üreticide de **en az bir kırmızı kanca**, k=3 koşunun çoğunluğunda | Kusursuz çözülen görev denetimi ölçemez |
+| Kancaların **hepsi kırmızı değil** | Model görevi hiç anlamadıysa ölçtüğün şey denetim değil, anlaşılmazlık |
+| Kırmızı kancalar koşular arası **tamamen rastgele değil** | Tümüyle stokastik kusur, kör nokta değil gürültüdür |
+
+Kalibrasyondan geçemeyen görev ya zorlaştırılır ya setten çıkarılır.
+`retry-backoff` mevcut haliyle **geçemedi**; ya sınır durumları artırılmalı
+(eşzamanlı çağrı, iptal, jitter, saat geri sarması) ya da yerine daha zor
+bir görev konmalı.
+
+Bu ölçüt neden önemli: kalibre edilmemiş 12 görevle koşulan bir deney,
+"çapraz sağlayıcı fark yaratmıyor" sonucunu **görevler kolay olduğu için**
+üretir ve tez haksız yere reddedilir. Kalibrasyon, deneyin ana etki
+ölçebilmesinin ön koşulu.
+
 ## Durum
 
 - [x] Tasarım — 2×2 çapraz kurgu, iki katmanlı yer gerçeği, karar kuralı
 - [x] Adaptör sözleşmesi + kayıt (`src/adapters/`)
 - [x] Görev formatı + katı yükleyici (`src/bench/`)
 - [x] Örnek görev — `retry-backoff` (9 kusur kancası)
-- [ ] Üretim koşucusu (artefakt üretimi, gizli testleri izole tutma)
-- [ ] Gizli test çalıştırıcı + JSON çıktı ayrıştırma (test bazlı yeşil/kırmızı)
+- [x] Sağlayıcı adaptörü — `claude` CLI, headless, bayrakları doğrulanmış
+- [x] Üretim koşucusu (artefakt üretimi, gizli testleri izole tutma)
+- [x] Gizli test çalıştırıcı + JSON çıktı ayrıştırma (test bazlı yeşil/kırmızı)
+- [x] **İlk uçtan uca koşu** — gerçek ajan, gerçek artefakt, gerçek sayı
+- [ ] Görev zorluk kalibrasyonu (yukarıdaki ölçüt) — `retry-backoff` geçemedi
 - [ ] Denetim koşucusu (aynı artefakt → iki denetçi)
 - [ ] Hakem katmanı (körlenmiş puanlama)
 - [ ] Kalan 11 görev

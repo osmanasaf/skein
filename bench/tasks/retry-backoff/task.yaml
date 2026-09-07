@@ -4,4 +4,4 @@ language: ts
 spec: spec.md
 entry: src/retry.ts
 hidden:
-  command: ["npx", "vitest", "run", "--reporter=json", "--dir", "."]
+  command: ["npx", "vitest", "run", "--reporter=json"]  # dizini koşucu ekler

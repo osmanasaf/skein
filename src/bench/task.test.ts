@@ -67,6 +67,12 @@ describe("loadTask", () => {
     await expect(loadTask(dir)).rejects.toThrow(/command/i);
   });
 
+  it("gizli komut --dir içeriyorsa reddeder", async () => {
+    const dir = await makeTask("retry", VALID.replace(
+      /command: \[.*\]/, 'command: ["npx", "vitest", "--dir", "."]'));
+    await expect(loadTask(dir)).rejects.toThrow(/--dir/);
+  });
+
   it("hidden/ dizini yoksa reddeder", async () => {
     const dir = join(root, "retry");
     await mkdir(dir, { recursive: true });
