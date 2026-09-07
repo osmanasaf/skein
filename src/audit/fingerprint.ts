@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
-import { readFile, readdir } from "node:fs/promises";
-import { join, relative, sep } from "node:path";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { listFilesRelative } from "../proc/files.js";
 
 /**
  * Bir çalışma ürününün parmak izi.
@@ -12,10 +13,12 @@ import { join, relative, sep } from "node:path";
  * turdan sonra gerçekleşir (PHILOSOPHY 6).
  */
 export async function fingerprintDir(dir: string): Promise<string> {
-  const files = await walk(dir, dir);
-  // Sıralama zorunlu: dizin okuma sırası platforma göre değişir ve parmak izi
-  // bundan etkilenirse "değişmedi" turu asla gelmez.
-  files.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  let files: string[];
+  try {
+    files = await listFilesRelative(dir);
+  } catch (cause) {
+    throw new Error(`Parmak izi alınamadı: ${dir} — ${(cause as Error).message}`);
+  }
 
   const hash = createHash("sha256");
   for (const rel of files) {
@@ -32,18 +35,3 @@ export async function fingerprintDir(dir: string): Promise<string> {
 /** Dosya adı ve içeriğinde geçemeyecek bir ayraç. */
 const SEP = Buffer.from([0]);
 
-async function walk(dir: string, base: string): Promise<string[]> {
-  let entries;
-  try {
-    entries = await readdir(dir, { withFileTypes: true });
-  } catch (cause) {
-    throw new Error(`Parmak izi alınamadı: ${dir} — ${(cause as Error).message}`);
-  }
-  const out: string[] = [];
-  for (const entry of entries) {
-    const full = join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...(await walk(full, base)));
-    else if (entry.isFile()) out.push(relative(base, full).split(sep).join("/"));
-  }
-  return out;
-}

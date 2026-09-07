@@ -73,6 +73,31 @@ describe("produce", () => {
 
   // Prompt hash'i görevden bağımsız olmalı ki "hücrelerde prompt aynıydı"
   // iddiası kanıtlanabilsin.
+  // "Süit koşmadı" belirsiz bir teşhis; ajanın ne yazdığını ayırt edebilmeli.
+  it("istenen dosya yazılmadıysa bunu bildirir", async () => {
+    const r = await run();
+    expect(r.entryWritten).toBe(false);
+    expect(r.filesWritten).toEqual([]);
+  });
+
+  it("yazılan dosyaları POSIX ayracıyla listeler", async () => {
+    const cell = join(root, "yazan");
+    const writer: Adapter = {
+      id: "y", model: "m",
+      async invoke(req) {
+        await mkdir(join(req.workdir, "src"), { recursive: true });
+        await writeFile(join(req.workdir, "src", "x.ts"), "kod");
+        return { exitCode: 0, stdout: "", stderr: "", durationMs: 1 };
+      },
+    };
+    const r = await produce({
+      task: await loadTask(join(root, "gorev")), adapter: writer, cellDir: cell,
+      layers: [{ name: "produce", path: join(root, "produce.md") }], timeoutMs: 1000,
+    });
+    expect(r.filesWritten).toEqual(["src/x.ts"]);
+    expect(r.entryWritten).toBe(true);
+  });
+
   it("prompt hash'i döndürür ve görevden bağımsızdır", async () => {
     const a = await run(join(root, "h1"));
     const b = await run(join(root, "h2"));

@@ -1,5 +1,6 @@
 import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { listFilesRelative } from "../proc/files.js";
 import type { Adapter, InvokeResult } from "../adapters/contract.js";
 import { assemblePrompt, type PromptLayer } from "../prompt/assemble.js";
 import { HIDDEN_DIR, type Task } from "./task.js";
@@ -17,6 +18,10 @@ export interface ProduceOptions {
 export interface ProduceResult {
   cellDir: string;
   artifactDir: string;
+  /** Ajanın yazması istenen dosya gerçekten oluştu mu. */
+  entryWritten: boolean;
+  /** Artefakt dizinine gerçekte yazılan dosyalar. */
+  filesWritten: string[];
   /** Katmanlı promptun SHA-256'sı. Hücreler arası eşitlik bununla kanıtlanır. */
   promptHash: string;
   invoke: InvokeResult;
@@ -46,5 +51,12 @@ export async function produce(options: ProduceOptions): Promise<ProduceResult> {
   // Ancak şimdi: üretim bitti, ajan çıktı.
   await cp(task.hiddenDir, join(cellDir, HIDDEN_DIR), { recursive: true });
 
-  return { cellDir, artifactDir, promptHash: prompt.hash, invoke };
+  // "Süit koşmadı" tek başına belirsiz bir teşhis: ajan hiç dosya yazmamış da
+  // olabilir, yanlış yere yazmış da, derlenmeyen kod da yazmış olabilir.
+  // Üçünü ayırt etmek için ne yazıldığını burada kaydediyoruz.
+  const filesWritten = await listFilesRelative(artifactDir);
+  const entryWritten = filesWritten.includes(task.entry);
+
+  return { cellDir, artifactDir, promptHash: prompt.hash, invoke, entryWritten, filesWritten };
 }
+

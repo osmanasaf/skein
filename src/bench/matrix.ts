@@ -49,6 +49,22 @@ export interface MatrixOutcome {
  * böylece aynı kodu inceleyen iki denetçi arasındaki fark kodun kendisinden
  * gelemez.
  */
+/**
+ * "Süit koşmadı" üç ayrı sebebi gizler: ajan hiç yazmamıştır, yanlış yere
+ * yazmıştır, ya da derlenmeyen kod yazmıştır. Üçü farklı düzeltme gerektirir.
+ */
+export function diagnose(entryWritten: boolean, filesWritten: string[], entry: string): string {
+  if (filesWritten.length === 0) {
+    return "ajan HİÇBİR dosya yazmadı (izin reddedilmiş ya da çağrı boşa dönmüş olabilir)";
+  }
+  if (!entryWritten) {
+    return `ajan istenen dosyayı yazmadı. Beklenen: ${entry}. Yazılan: ${filesWritten.join(", ")}`;
+  }
+  return `dosya yazıldı (${filesWritten.join(", ")}) ama gizli süit koşmadı — kod derlenmiyor olabilir`;
+}
+
+const tail = (s: string): string => s.trim().slice(-200).replace(/\s+/g, " ");
+
 /** Dosya adında kullanılamayacak karakterleri temizler. */
 const safe = (s: string): string => s.replace(/[^A-Za-z0-9._-]/g, "_");
 
@@ -85,10 +101,13 @@ export async function runMatrix(options: MatrixOptions): Promise<MatrixOutcome> 
     await log.append({
       type: "hooks.measured", cell: rel(cellDir), ran: h.ran, total: h.hooks.length, red: h.red,
     });
-    console.log(h.ran
-      ? `  ${h.hooks.length - h.red.length}/${h.hooks.length} yeşil` +
-        (h.red.length > 0 ? ` — kanıtlanmış kusur: ${h.red.join(", ")}` : " — kusur yok")
-      : "  ÖLÇÜLEMEDİ — süit hiç koşmadı (artefakt derlenmiyor ya da yok)");
+    if (h.ran) {
+      console.log(`  ${h.hooks.length - h.red.length}/${h.hooks.length} yeşil` +
+        (h.red.length > 0 ? ` — kanıtlanmış kusur: ${h.red.join(", ")}` : " — kusur yok"));
+    } else {
+      console.log(`  ÖLÇÜLEMEDİ — ${diagnose(p.entryWritten, p.filesWritten, task.entry)}`);
+      console.log(`    ajan çıktısı (son 200): ${tail(p.invoke.stdout || p.invoke.stderr)}`);
+    }
 
     produced.push({
       adapter, artifactDir: p.artifactDir, redHooks: h.red, total: h.hooks.length, ran: h.ran,

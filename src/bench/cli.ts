@@ -8,7 +8,7 @@ import { loadTask } from "./task.js";
 import { produce } from "./produce.js";
 import { runHidden } from "./hidden.js";
 import { auditLoop } from "./audit-loop.js";
-import { runMatrix } from "./matrix.js";
+import { runMatrix, diagnose } from "./matrix.js";
 import { adapterFor } from "../adapters/factory.js";
 
 const REPO = resolve(import.meta.dirname, "../..");
@@ -114,9 +114,9 @@ async function run(taskId: string, provider: string, model: string, audit: boole
   await log.append({ type: "hooks.measured", cell: rel(cellDir), ran: h.ran, total: h.hooks.length, red: h.red });
 
   if (!h.ran) {
-    console.error("  ÖLÇÜLEMEDİ — süit hiç koşmadı (artefakt derlenmiyor ya da yok).");
+    console.error(`  ÖLÇÜLEMEDİ — ${diagnose(p.entryWritten, p.filesWritten, task.entry)}`);
     console.error("  Bu 'sıfır kırmızı' DEĞİLDİR.");
-    console.error((h.stderr || h.raw).slice(0, 800));
+    console.error((h.stderr || h.raw).slice(0, 600));
     process.exit(1);
   }
 

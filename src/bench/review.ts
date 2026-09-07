@@ -1,5 +1,6 @@
-import { readFile, readdir, writeFile } from "node:fs/promises";
-import { join, relative, sep } from "node:path";
+import { readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { listFilesRelative } from "../proc/files.js";
 import type { Adapter, InvokeResult } from "../adapters/contract.js";
 import { assemblePrompt, type PromptLayer } from "../prompt/assemble.js";
 import type { Task } from "./task.js";
@@ -60,8 +61,7 @@ export async function review(options: ReviewOptions): Promise<ReviewResult> {
 
 /** Artefaktın tüm dosyalarını tek metne serer; denetçi diske erişmez. */
 async function renderArtifact(dir: string): Promise<string> {
-  const files = await walk(dir, dir);
-  files.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  const files = await listFilesRelative(dir);
   const parts: string[] = [];
   for (const rel of files) {
     parts.push(`### ${rel}\n\n\`\`\`\n${await readFile(join(dir, rel), "utf8")}\n\`\`\`\n`);
@@ -69,12 +69,3 @@ async function renderArtifact(dir: string): Promise<string> {
   return parts.join("\n");
 }
 
-async function walk(dir: string, base: string): Promise<string[]> {
-  const out: string[] = [];
-  for (const entry of await readdir(dir, { withFileTypes: true })) {
-    const full = join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...(await walk(full, base)));
-    else if (entry.isFile()) out.push(relative(base, full).split(sep).join("/"));
-  }
-  return out;
-}
