@@ -8,6 +8,7 @@ import { loadTask } from "./task.js";
 import { produce } from "./produce.js";
 import { runHidden } from "./hidden.js";
 import { auditLoop } from "./audit-loop.js";
+import { runMatrix } from "./matrix.js";
 
 const REPO = resolve(import.meta.dirname, "../..");
 const LOG = join(REPO, ".skein/events.jsonl");
@@ -120,14 +121,42 @@ async function run(taskId: string, provider: string, model: string, audit: boole
   console.log(`\ngünlük: ${rel(LOG)}  (özet için: cli.ts report)`);
 }
 
+async function matrix(taskId: string, a: string, b: string): Promise<void> {
+  const runId = new Date().toISOString().replace(/[:.]/g, "-");
+  await mkdir(join(REPO, ".skein"), { recursive: true });
+  const log = new EventLog(LOG, runId);
+  await log.append({ type: "run.started", taskId });
+
+  console.log(`2x2 çapraz kurgu — ${a}  ×  ${b}\n`);
+  const out = await runMatrix({
+    repo: REPO, taskId, models: [a, b],
+    runRoot: join(REPO, ".skein/runs", runId), log, timeoutMs: 10 * 60_000,
+  });
+
+  console.log("\n=== üretim ===");
+  for (const p of out.producers) {
+    console.log(`  ${p.model.padEnd(18)} ${p.total - p.redHooks.length}/${p.total} yeşil` +
+      (p.redHooks.length > 0 ? `  ← kusur: ${p.redHooks.join("; ")}` : "  ← kusur yok"));
+  }
+  console.log("\n=== denetim hücreleri ===");
+  for (const c of out.cells) {
+    console.log(`  ${c.producer} üretti → ${c.reviewer} inceledi  ${c.crossed ? "ÇAPRAZ" : "aynı  "}  ${c.reviewPath}`);
+  }
+  const total = out.producers.reduce((s2, p) => s2 + p.costUsd, 0) + out.cells.reduce((s2, c) => s2 + c.costUsd, 0);
+  console.log(`\n  toplam: $${total.toFixed(4)}`);
+  console.log("\nSıradaki: raporları puanla — kanıtlanmış kusuru hangi hücreler yakaladı?");
+}
+
 const argv = process.argv.slice(2);
 const audit = argv.includes("--audit");
 const [cmd, ...rest] = argv.filter((a) => a !== "--audit");
 if (cmd === "report") {
   await report();
+} else if (cmd === "matrix") {
+  await matrix(rest[0] ?? "retry-backoff", rest[1] ?? "claude-opus-5", rest[2] ?? "claude-sonnet-5");
 } else if (cmd) {
   await run(cmd, rest[0] ?? "claude", rest[1] ?? "claude-opus-5", audit);
 } else {
-  console.error("kullanım: cli.ts <görev-id> [sağlayıcı] [model] [--audit]  |  cli.ts report");
+  console.error("kullanım: cli.ts <görev-id> [sağlayıcı] [model] [--audit]\n         cli.ts matrix <görev-id> [modelA] [modelB]\n         cli.ts report");
   process.exit(2);
 }

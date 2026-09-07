@@ -4,6 +4,14 @@ import type { Adapter, InvokeRequest, InvokeResult, Usage } from "./contract.js"
 export interface ClaudeCliOptions {
   /** Pinlenmiş model kimliği, ör. "claude-opus-5". Tarih eki yok. */
   model: string;
+  /**
+   * Kayıttaki sağlayıcı kimliği. Varsayılan "claude".
+   *
+   * Aynı CLI'ı farklı modellerle iki ayrı sağlayıcı gibi kaydedebilmek için
+   * ayrılabilir: 2x2 kurgu iki farklı MODEL gerektirir, satıcı ayrımı tezin
+   * daha güçlü ama daha pahalı hali.
+   */
+  id?: string;
   /** Çalıştırılacak ikili. Testte sahte bir script ile değiştirilir. */
   bin?: string;
   /**
@@ -28,12 +36,13 @@ interface ClaudeJsonResult {
  * yazılan bayrak sessizce yanlış çalışır (CONTRACT.md).
  */
 export class ClaudeCliAdapter implements Adapter {
-  readonly id = "claude";
+  readonly id: string;
   readonly model: string;
   readonly #bin: string;
   readonly #permissionMode: string;
 
   constructor(options: ClaudeCliOptions) {
+    this.id = options.id ?? "claude";
     this.model = options.model;
     this.#bin = options.bin ?? "claude";
     this.#permissionMode = options.permissionMode ?? "acceptEdits";

@@ -285,6 +285,40 @@ Parmak izi değişikliği yakalıyor ama **neyin** değiştiğini söylemiyor.
 Açık Soru #1'i ciddi ölçmek için tur başına artefakt anlık görüntüsü
 gerekiyor. Sıradaki iş.
 
+## 2x2 boru hattı — kuruldu ve koştu
+
+Dört hücrenin tamamı gerçek modellerle koştu (`claude-opus-5` × `claude-sonnet-5`,
+$0.9278). Denetim koşucusunun taşıdığı iki geçerlilik kuralı testle sabitlendi:
+denetçiye kodu kimin yazdığı **söylenmiyor**, ve denetim üretim konuşmasının
+devamı değil, **taze süreç**. İkincisi, felsefenin 1. ilkesinin ("durum ajanın
+dışında") deneyin geçerlilik koşulu olarak iş görmesi.
+
+**Satıcı değil, model çeşitliliği.** Elde tek satıcı olduğu için 2x2'nin iki
+köşesi aynı ailenin iki modeli. Bu tezin **daha zor** hali: aynı eğitim
+soyundan gelen iki model kör noktalarını daha çok paylaşır, yani burada etki
+çıkarsa çapraz satıcıda en az o kadar çıkar. Tersi geçerli değil — burada etki
+çıkmaması çapraz satıcıyı elemez.
+
+### Koşu ölçüm üretmedi — ve sebebi kayıtlı
+
+Bu koşuda **iki üretici de 9/9 yeşil** çıktı. Kanıtlanmış kusur yoksa
+denetçiye yakalanacak bir şey yok; dört hücre de aynı sonucu verir ve
+kaçırma metriği hesaplanamaz. Ölçüm gücü sıfır.
+
+Bu, kalibrasyon ölçütünün neden var olduğunun canlı örneği. `retry-backoff`
+kusuru **bazen** üretiyor (kapısız 3/4 koşuda çıkmıştı, bu koşuda hiç
+çıkmadı). Stokastik olarak temiz çıkan bir görev, deneyi ölçümsüz bırakır.
+
+**Darboğaz artık görev seti.** Boru hattı bitti; eksik olan, kusuru
+güvenilir biçimde üreten kalibre edilmiş görevler.
+
+### Yan gözlem: denetçiler kodun diskte olmadığını fark ediyor
+
+İki rapor "kod diskte yok, çalışma dizini boş" diye not düştü. Kod kasıtlı
+olarak yalnızca `taskText` içinde veriliyor (denetçi düzeltmesin diye), ama
+bu rapora gürültü olarak sızıyor. Denetçiye salt-okunur bir kopya vermek
+düşünülmeli.
+
 ## Durum
 
 - [x] Tasarım — 2×2 çapraz kurgu, iki katmanlı yer gerçeği, karar kuralı
@@ -300,7 +334,7 @@ gerekiyor. Sıradaki iş.
 - [ ] Tur başına artefakt anlık görüntüsü (yukarıdaki boşluk)
 - [ ] Görev zorluk kalibrasyonu — `retry-backoff` tek üreticide geçti,
       ikinci üretici bekliyor
-- [ ] Denetim koşucusu (aynı artefakt → iki denetçi)
+- [x] Denetim koşucusu (aynı artefakt → iki denetçi), 2x2 orkestrasyonu
 - [ ] Hakem katmanı (körlenmiş puanlama)
-- [ ] Kalan 11 görev
+- [ ] Kalan 11 görev — **darboğaz burası**: kusuru güvenilir üreten kalibre görevler
 - [ ] Rapor: hücre tablosu + etkileşim terimi

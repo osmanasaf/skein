@@ -33,6 +33,19 @@ export type EventInput =
     }
   | { type: "hooks.measured"; cell: string; ran: boolean; total: number; red: string[] }
   | {
+      type: "review.done";
+      cell: string;
+      /** Kodu üreten modelin kimliği. */
+      producer: string;
+      /** Kodu inceleyen modelin kimliği. */
+      reviewer: string;
+      /** Aynı model mi (aynı hücre) farklı mı (çapraz hücre). */
+      crossed: boolean;
+      promptHash: string;
+      /** Rapor dosyasının yolu. */
+      path: string;
+    }
+  | {
       type: "audit.round";
       cell: string;
       round: number;
@@ -50,6 +63,7 @@ const REQUIRED: Record<EventInput["type"], { strings: string[]; numbers: string[
   "agent.finished": { strings: ["cell"], numbers: ["exitCode", "durationMs"] },
   "hooks.measured": { strings: ["cell"], numbers: ["total"] },
   "audit.round": { strings: ["cell", "reason"], numbers: ["round"] },
+  "review.done": { strings: ["cell", "producer", "reviewer", "promptHash", "path"], numbers: [] },
 };
 
 class EventError extends Error {
