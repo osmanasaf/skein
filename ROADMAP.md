@@ -264,6 +264,6 @@ Yazılmış olan — 353 satır, 29 test yeşil:
 | `bench/tasks/retry-backoff/` | İlk görev, 9 kusur kancası | deney |
 
 Yazılmamış olan: kuyruk, handoff, worktree, yürütücü, gözcü, ekran,
-audit gate. **Çalıştırılmış ajan: 4 koşu, toplam ~$0.24.**
+audit gate. **Çalıştırılmış ajan: 6 koşu + 7 denetim turu, toplam ~$1.79.**
 
-Adım 1 ve 2 tamam. Sıradaki: **Adım 3 — audit gate.**
+Adım 1, 2 ve 3 tamam. Sıradaki: **Adım 4 — deneyi tamamla** (ikinci sağlayıcı gerekiyor).

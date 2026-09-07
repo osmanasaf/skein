@@ -228,6 +228,63 @@ Bir görev sete ancak kalibrasyon koşusunu geçerse girer:
 "çapraz sağlayıcı fark yaratmıyor" sonucunu **görevler kolay olduğu için**
 üretir ve tez haksız yere reddedilir.
 
+## Audit gate — ilk ölçüm (Açık Soru #1)
+
+Roadmap'in ölçütü ("denetim turunda yapılan düzeltme oranı") kendi kendini
+çürütüyordu: kapının geçme koşulu *hiçbir şeyin değişmediği bir tur* olduğu
+için mekanizma düzeltme **yapmayan** ajanı ödüllendirir. Ölçüt bir **sonuç**
+ölçüsüyle değiştirildi: kapılı ve kapısız koşuların kırmızı kanca sayısı.
+
+`claude-opus-5`, `retry-backoff`:
+
+| Koşu | Kapı | Tur | Düzeltme | Sonuç | Toplam |
+|---|---|---:|---:|---:|---:|
+| 18-40-35 | kapısız | — | — | 8/9 | $0.0599 |
+| 18-41-12 | kapısız | — | — | 8/9 | $0.0600 |
+| 18-41-26 | kapısız | — | — | 8/9 | $0.0611 |
+| 18-47-41 | **kapılı** | 3 | 1 | **9/9** | $0.5913 |
+| 18-49-59 | **kapılı** | 3 | 1 | **9/9** | $0.7011 |
+| 18-52-45 | **kapılı** | 2 | 0 | **9/9** | $0.3160 |
+
+```
+kapısız : ortalama 1.00 kırmızı  ·  $0.0603
+kapılı  : ortalama 0.00 kırmızı  ·  $0.5361      (8.9x maliyet)
+```
+
+### Mekanizma izi — sayıdan daha güçlü kanıt
+
+Kusur her koşuda aynı: model `retry`'yi `async` yazmıyor, `RangeError`
+senkron fırlıyor, imza `Promise<T>` taahhüt ediyor.
+
+| | İmza |
+|---|---|
+| kapısız, 3/3 koşu | `export function retry` ← kusur var |
+| kapılı, 3/3 koşu | `export async function retry` ← kusur yok |
+
+İki kapılı koşuda ajan denetim turunda **gerçekten bir düzeltme yaptı**
+(`degisti` → yeni tur → `degismedi` → kabul) ve kusur ortadan kalktı.
+Bu, "ajan komutu ikinci kez çalıştırıyor" alternatifini bu iki vaka için
+eler: parmak izi değişti, yani iş değişti.
+
+### Ne demiyoruz
+
+- **n=3'e 3.** Bu bir eğilim, cevap değil.
+- **Üçüncü kapılı koşuda düzeltme yapılmadı** (0 tur değişiklik) ve yine de
+  9/9 çıktı — yani o koşunun üretimi zaten temizdi ve 9/9'u kapı sağlamadı.
+  Kapı, kusurun *bulunduğu* iki vakanın ikisinde de düzeltti; bulunmadığı
+  vakada bir şey yapmadı. Doğru okuma bu.
+- **Tek görev, tek sağlayıcı, tek kusur türü.** Genelleme yok.
+- **Maliyet 8.9x** ve denetim turları üretimin kendisinden ~9 kat pahalı.
+  Açık Soru #4 için ciddi bir veri: sürtünme ucuz değil.
+
+### Bulunan tasarım boşluğu
+
+"Denetim turunda tam olarak ne değişti" sorusunu **son artefakta bakarak
+çıkarsamak** zorunda kaldık; kapı turlar arasında anlık görüntü tutmuyor.
+Parmak izi değişikliği yakalıyor ama **neyin** değiştiğini söylemiyor.
+Açık Soru #1'i ciddi ölçmek için tur başına artefakt anlık görüntüsü
+gerekiyor. Sıradaki iş.
+
 ## Durum
 
 - [x] Tasarım — 2×2 çapraz kurgu, iki katmanlı yer gerçeği, karar kuralı
@@ -239,6 +296,8 @@ Bir görev sete ancak kalibrasyon koşusunu geçerse girer:
 - [x] Gizli test çalıştırıcı + JSON çıktı ayrıştırma (test bazlı yeşil/kırmızı)
 - [x] **İlk uçtan uca koşu** — gerçek ajan, gerçek artefakt, gerçek sayı
 - [x] Olay günlüğü — yalnızca-ekleme JSONL, katı doğrulama, özet görünümü
+- [x] Audit gate — parmak izi, kilitli durum, tur sayacı, üst sınır
+- [ ] Tur başına artefakt anlık görüntüsü (yukarıdaki boşluk)
 - [ ] Görev zorluk kalibrasyonu — `retry-backoff` tek üreticide geçti,
       ikinci üretici bekliyor
 - [ ] Denetim koşucusu (aynı artefakt → iki denetçi)

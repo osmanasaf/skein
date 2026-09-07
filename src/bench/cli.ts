@@ -7,6 +7,7 @@ import { summarize } from "../events/summary.js";
 import { loadTask } from "./task.js";
 import { produce } from "./produce.js";
 import { runHidden } from "./hidden.js";
+import { auditLoop } from "./audit-loop.js";
 
 const REPO = resolve(import.meta.dirname, "../..");
 const LOG = join(REPO, ".skein/events.jsonl");
@@ -34,7 +35,7 @@ async function report(): Promise<void> {
   console.log(`\n  toplam: $${s.totalCostUsd.toFixed(4)}  ·  ${(s.totalDurationMs / 1000).toFixed(1)}s`);
 }
 
-async function run(taskId: string, provider: string, model: string): Promise<void> {
+async function run(taskId: string, provider: string, model: string, audit: boolean): Promise<void> {
   const task = await loadTask(join(REPO, "bench/tasks", taskId));
   const adapter: Adapter = new AdapterRegistry().register(new ClaudeCliAdapter({ model })).get(provider);
 
@@ -78,6 +79,31 @@ async function run(taskId: string, provider: string, model: string): Promise<voi
     process.exit(1);
   }
 
+  if (audit) {
+    console.log("\naudit gate…");
+    const outcome = await auditLoop({
+      task, adapter, cellDir, artifactDir: p.artifactDir,
+      layers: [{ name: "audit", path: join(REPO, "bench/prompts/audit.md") }],
+      maxRounds: 4, timeoutMs: 10 * 60_000,
+      onRound: async (d, inv) => {
+        await log.append({
+          type: "audit.round", cell: rel(cellDir), round: d.round, reason: d.reason, accepted: d.accepted,
+        });
+        if (inv) {
+          await log.append({
+            type: "agent.finished", cell: `${rel(cellDir)}#audit${d.round}`,
+            exitCode: inv.exitCode, durationMs: inv.durationMs,
+            ...(inv.usage ? { usage: inv.usage } : {}),
+          });
+        }
+        console.log(`  tur ${d.round}: ${d.reason}${d.accepted ? " → KABUL" : " → red"}`);
+      },
+    });
+    const extra = outcome.invocations.reduce((s2, i) => s2 + (i.usage?.costUsd ?? 0), 0);
+    console.log(`  ${outcome.rounds} tur, ${outcome.changedRounds} turda düzeltme yapıldı` +
+      `, +$${extra.toFixed(4)}` + (outcome.exhausted ? " (ÜST SINIRA TAKILDI)" : ""));
+  }
+
   console.log("\ngizli testler koşuyor…");
   const h = await runHidden(task, cellDir, REPO);
   await log.append({ type: "hooks.measured", cell: rel(cellDir), ran: h.ran, total: h.hooks.length, red: h.red });
@@ -94,12 +120,14 @@ async function run(taskId: string, provider: string, model: string): Promise<voi
   console.log(`\ngünlük: ${rel(LOG)}  (özet için: cli.ts report)`);
 }
 
-const [cmd, ...rest] = process.argv.slice(2);
+const argv = process.argv.slice(2);
+const audit = argv.includes("--audit");
+const [cmd, ...rest] = argv.filter((a) => a !== "--audit");
 if (cmd === "report") {
   await report();
 } else if (cmd) {
-  await run(cmd, rest[0] ?? "claude", rest[1] ?? "claude-opus-5");
+  await run(cmd, rest[0] ?? "claude", rest[1] ?? "claude-opus-5", audit);
 } else {
-  console.error("kullanım: cli.ts <görev-id> [sağlayıcı] [model]  |  cli.ts report");
+  console.error("kullanım: cli.ts <görev-id> [sağlayıcı] [model] [--audit]  |  cli.ts report");
   process.exit(2);
 }

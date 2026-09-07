@@ -31,7 +31,15 @@ export type EventInput =
       timedOut?: boolean;
       usage?: Usage;
     }
-  | { type: "hooks.measured"; cell: string; ran: boolean; total: number; red: string[] };
+  | { type: "hooks.measured"; cell: string; ran: boolean; total: number; red: string[] }
+  | {
+      type: "audit.round";
+      cell: string;
+      round: number;
+      /** Kapının kararı: ilk-deneme | degisti | degismedi */
+      reason: string;
+      accepted: boolean;
+    };
 
 export type SkeinEvent = EventInput & { v: number; at: string; runId: string };
 
@@ -41,6 +49,7 @@ const REQUIRED: Record<EventInput["type"], { strings: string[]; numbers: string[
   "agent.started": { strings: ["cell", "role", "provider", "model", "promptHash"], numbers: [] },
   "agent.finished": { strings: ["cell"], numbers: ["exitCode", "durationMs"] },
   "hooks.measured": { strings: ["cell"], numbers: ["total"] },
+  "audit.round": { strings: ["cell", "reason"], numbers: ["round"] },
 };
 
 class EventError extends Error {
