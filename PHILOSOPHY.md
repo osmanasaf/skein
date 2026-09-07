@@ -1,7 +1,8 @@
-# Murmuration — Felsefe
+# Skein — Felsefe
 
-> *Murmuration:* sığırcık sürülerinin gökyüzünde, merkezi bir lider olmadan,
-> tek bir organizma gibi hareket etmesi.
+> *Skein:* uçuştaki bir yaban kazı sürüsü — her kuş kendi kanadını çırpar,
+> ama formasyon tektir. Aynı kelime, birbirine dolanmış iplik demeti anlamına
+> da gelir.
 
 ## Ne inşa ediyoruz
 
@@ -18,7 +19,7 @@ yeniden kuruyoruz. Neyi neden aldığımız ve neyi neden bıraktığımız aşa
 Bir AI ajanına "şunu yap" demek ile bir yazılım ekibine "şunu yap" demek
 arasındaki fark, ekibin birbirini denetlemesidir.
 
-Murmuration bu denetimi ajanın iyi niyetine ya da prompt'un ikna gücüne
+Skein bu denetimi ajanın iyi niyetine ya da prompt'un ikna gücüne
 bağlamaz — **mekanizmaya** bağlar. Durum ajanın dışındadır, roller ayrıdır,
 devir teslim doğrulanır, "bitti" demek sürtünmelidir.
 

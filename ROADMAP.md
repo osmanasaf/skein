@@ -1,4 +1,4 @@
-# Murmuration — Yol Haritası
+# Skein — Yol Haritası
 
 Aşamalar **risk azaltma sırasına** göre dizildi, özellik sırasına göre değil.
 Her aşama tek başına değer üretir ve bir sonrakinin en büyük belirsizliğini

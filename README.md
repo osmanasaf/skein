@@ -1,15 +1,16 @@
-# Murmuration
+# Skein
 
 Farklı sağlayıcıların AI ajanlarını (Claude, Codex, Copilot, Gemini…) tek bir
 yazılım geliştirme akışında, **birbirini denetleyerek** çalıştıran bir merkez.
 
-> *Murmuration:* sığırcık sürülerinin gökyüzünde, merkezi bir lider olmadan,
-> tek bir organizma gibi hareket etmesi.
+> *Skein:* uçuştaki bir yaban kazı sürüsü — her kuş kendi kanadını çırpar,
+> ama formasyon tektir. Aynı kelime, birbirine dolanmış iplik demeti anlamına
+> da gelir.
 
 ## Tez
 
 Bir AI ajanına "şunu yap" demek ile bir yazılım ekibine "şunu yap" demek
-arasındaki fark, ekibin birbirini denetlemesidir. Murmuration bu denetimi
+arasındaki fark, ekibin birbirini denetlemesidir. Skein bu denetimi
 ajanın iyi niyetine değil **mekanizmaya** bağlar:
 
 - Durum ajanın context'inde değil, git'te ve dosyalarda — bu yüzden bir rolü

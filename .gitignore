@@ -2,7 +2,7 @@
 swarm-forge/
 
 # Çalışma zamanı durumu
-.murmuration/
+.skein/
 .worktrees/
 tmp/
 
