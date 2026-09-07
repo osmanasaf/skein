@@ -3,6 +3,7 @@ swarm-forge/
 
 # Çalışma zamanı durumu
 .skein/
+.vitest/
 .worktrees/
 tmp/
 
