@@ -1,0 +1,21 @@
+{
+  "name": "skein",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Farklı sağlayıcıların AI ajanlarını birbirini denetleyerek çalıştıran merkez",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "dependencies": {
+    "yaml": "^2.6.1"
+  }
+}
