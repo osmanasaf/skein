@@ -32,6 +32,7 @@ ajanın iyi niyetine değil **mekanizmaya** bağlar:
 | [`hub/flows/`](hub/flows/) | Örnek akışlar: 2 adımlı `daily`, 4 adımlı kapılı `spec` |
 | [`hub/adapters/CONTRACT.md`](hub/adapters/CONTRACT.md) | Sağlayıcı sözleşmesi |
 | [`bench/DESIGN.md`](bench/DESIGN.md) | Tezi sınayan deneyin tasarımı — 2×2 çapraz kurgu |
+| [`RUNNING.md`](RUNNING.md) | Deneyi kendi makinende koşturmak |
 | [`java-kit/`](java-kit/) | Java rol ve kural seti (prompt kaynağı) |
 
 ## Durum

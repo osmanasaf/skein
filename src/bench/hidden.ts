@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawnPortable } from "../proc/process.js";
 import type { Task } from "./task.js";
 
 export interface Hook {
@@ -36,11 +36,7 @@ interface VitestJson {
  */
 export async function runHidden(task: Task, cellDir: string, cwd: string): Promise<HiddenRun> {
   const args = [...task.hidden.command.slice(1), "--dir", `${cellDir}/hidden`];
-  const child = spawn(task.hidden.command[0] as string, args, {
-    cwd,
-    stdio: ["ignore", "pipe", "pipe"],
-    detached: true,
-  });
+  const child = spawnPortable(task.hidden.command[0] as string, args, { cwd });
 
   let raw = "";
   let errText = "";

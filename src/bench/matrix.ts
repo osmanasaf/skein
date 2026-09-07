@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { ClaudeCliAdapter } from "../adapters/claude.js";
+import { adapterFor } from "../adapters/factory.js";
 import type { Adapter } from "../adapters/contract.js";
 import type { EventLog } from "../events/log.js";
 import { loadTask } from "./task.js";
@@ -11,7 +11,10 @@ import { review } from "./review.js";
 export interface MatrixOptions {
   repo: string;
   taskId: string;
-  /** 2x2'nin iki köşesi. Farklı MODEL olmaları yeterli; satıcı ayrımı daha güçlü hali. */
+  /**
+   * 2x2'nin iki köşesi, "sağlayıcı:model" biçiminde.
+   * Farklı MODEL olmaları yeterli; satıcı ayrımı tezin daha güçlü hali.
+   */
   models: [string, string];
   runRoot: string;
   log: EventLog;
@@ -42,16 +45,19 @@ export interface MatrixOutcome {
  * böylece aynı kodu inceleyen iki denetçi arasındaki fark kodun kendisinden
  * gelemez.
  */
+/** Dosya adında kullanılamayacak karakterleri temizler. */
+const safe = (s: string): string => s.replace(/[^A-Za-z0-9._-]/g, "_");
+
 export async function runMatrix(options: MatrixOptions): Promise<MatrixOutcome> {
   const { repo, taskId, models, runRoot, log, timeoutMs } = options;
   const task = await loadTask(join(repo, "bench/tasks", taskId));
   const rel = (p: string) => p.slice(repo.length + 1);
 
-  const adapters: Adapter[] = models.map((m) => new ClaudeCliAdapter({ id: m, model: m }));
+  const adapters: Adapter[] = models.map(adapterFor);
   const produced: { adapter: Adapter; artifactDir: string; redHooks: string[]; total: number; costUsd: number }[] = [];
 
   for (const adapter of adapters) {
-    const cellDir = join(runRoot, task.id, adapter.model);
+    const cellDir = join(runRoot, task.id, safe(adapter.id));
     console.log(`üretim: ${adapter.model}`);
     const p = await produce({
       task, adapter, cellDir,
@@ -84,8 +90,8 @@ export async function runMatrix(options: MatrixOptions): Promise<MatrixOutcome> 
   const cells: CellOutcome[] = [];
   for (const prod of produced) {
     for (const rev of adapters) {
-      const crossed = prod.adapter.model !== rev.model;
-      const workdir = join(runRoot, task.id, "denetim", `${prod.adapter.model}--by--${rev.model}`);
+      const crossed = prod.adapter.id !== rev.id;
+      const workdir = join(runRoot, task.id, "denetim", `${safe(prod.adapter.id)}--by--${safe(rev.id)}`);
       await mkdir(workdir, { recursive: true });
       console.log(`denetim: ${prod.adapter.model} üretti, ${rev.model} inceliyor ${crossed ? "(ÇAPRAZ)" : "(aynı)"}`);
 

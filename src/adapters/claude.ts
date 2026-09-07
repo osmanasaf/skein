@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { killTree, spawnPortable, stdinOf } from "../proc/process.js";
 import type { Adapter, InvokeRequest, InvokeResult, Usage } from "./contract.js";
 
 export interface ClaudeCliOptions {
@@ -48,6 +48,10 @@ export class ClaudeCliAdapter implements Adapter {
     this.#permissionMode = options.permissionMode ?? "acceptEdits";
   }
 
+  get bin(): string {
+    return this.#bin;
+  }
+
   /** Test ve hata ayıklama için: bu istek için kurulacak argüman listesi. */
   argsFor(req: InvokeRequest): string[] {
     return [
@@ -63,14 +67,10 @@ export class ClaudeCliAdapter implements Adapter {
 
   async invoke(req: InvokeRequest): Promise<InvokeResult> {
     const started = Date.now();
-    const child = spawn(this.#bin, this.argsFor(req), {
+    const child = spawnPortable(this.#bin, this.argsFor(req), {
       cwd: req.workdir,
       env: { ...process.env, ...req.env },
-      stdio: ["pipe", "pipe", "pipe"],
-      // Kendi süreç grubunda başlat: bir sağlayıcı CLI'ı alt süreçler doğurur
-      // ve yalnızca ebeveyni öldürmek onları hayatta bırakır. Yaşayan torunlar
-      // boruları açık tuttuğu için `close` hiç gelmez ve akış sonsuza kilitlenir.
-      detached: true,
+      stdin: "pipe",
     });
 
     let stdout = "";
@@ -80,10 +80,10 @@ export class ClaudeCliAdapter implements Adapter {
     child.stdout.on("data", (c: string) => (stdout += c));
     child.stderr.on("data", (c: string) => (stderr += c));
 
-    child.stdin.on("error", () => {
-      // Süreç stdin okumadan öldüyse EPIPE gelir; sonucu exit belirler.
-    });
-    child.stdin.end(req.taskText);
+    const stdin = stdinOf(child);
+    // Süreç stdin okumadan öldüyse EPIPE gelir; sonucu exit belirler.
+    stdin?.on("error", () => {});
+    stdin?.end(req.taskText);
 
     let timedOut = false;
     const timer = setTimeout(() => {
@@ -112,25 +112,6 @@ export class ClaudeCliAdapter implements Adapter {
     if (usage) result.usage = usage;
     if (timedOut) result.timedOut = true;
     return result;
-  }
-}
-
-/**
- * Süreci ve doğurduğu her şeyi öldürür.
- *
- * `detached: true` ile başlatıldığı için çocuk kendi süreç grubunun lideridir;
- * negatif pid tüm gruba sinyal gönderir. Grup ölmüşse ESRCH gelir, zararsız.
- */
-function killTree(pid: number | undefined): void {
-  if (pid === undefined) return;
-  try {
-    process.kill(-pid, "SIGKILL");
-  } catch {
-    try {
-      process.kill(pid, "SIGKILL");
-    } catch {
-      // Süreç zaten gitmiş.
-    }
   }
 }
 

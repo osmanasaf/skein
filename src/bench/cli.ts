@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { ClaudeCliAdapter } from "../adapters/claude.js";
 import { AdapterRegistry, type Adapter } from "../adapters/contract.js";
@@ -9,6 +9,7 @@ import { produce } from "./produce.js";
 import { runHidden } from "./hidden.js";
 import { auditLoop } from "./audit-loop.js";
 import { runMatrix } from "./matrix.js";
+import { adapterFor } from "../adapters/factory.js";
 
 const REPO = resolve(import.meta.dirname, "../..");
 const LOG = join(REPO, ".skein/events.jsonl");
@@ -121,6 +122,42 @@ async function run(taskId: string, provider: string, model: string, audit: boole
   console.log(`\ngünlük: ${rel(LOG)}  (özet için: cli.ts report)`);
 }
 
+/**
+ * Bir sağlayıcı CLI'ının gerçekten çağrılabildiğini doğrular.
+ *
+ * Codex adaptörünün bayrakları, codex'in KURULU OLMADIĞI bir makinede
+ * yazıldı. CONTRACT.md "bayrakları doğrulayarak yaz" diyor; bu komut o
+ * doğrulamayı senin makinene taşıyor.
+ */
+async function doctor(spec: string): Promise<void> {
+  const adapter = adapterFor(spec);
+  const dir = join(REPO, ".skein/doctor");
+  await mkdir(dir, { recursive: true });
+  const promptFile = join(dir, "prompt.md");
+  await writeFile(promptFile, "Sen kısa cevap veren bir asistansın.\n");
+
+  const req = { workdir: dir, promptFile, taskText: "2+2 kaç? Sadece sayıyı yaz.", timeoutMs: 120_000 };
+  const args = (adapter as { argsFor?: (r: typeof req) => string[] }).argsFor?.(req) ?? [];
+  console.log(`sağlayıcı : ${adapter.id}`);
+  console.log(`model     : ${adapter.model}`);
+  console.log(`komut     : ${(adapter as { bin?: string }).bin ?? adapter.id} ${args.join(" ")}`);
+  console.log(`stdin     : rol promptu + görev metni\n`);
+
+  console.log("deneme çağrısı…");
+  const r = await adapter.invoke(req);
+  console.log(`  exit=${r.exitCode}  süre=${(r.durationMs / 1000).toFixed(1)}s` +
+    (r.usage?.costUsd !== undefined ? `  maliyet=$${r.usage.costUsd.toFixed(4)}` : ""));
+  if (r.exitCode === 0) {
+    console.log(`  stdout (ilk 300): ${r.stdout.slice(0, 300).replace(/\n/g, " ")}`);
+    console.log("\n  ÇALIŞIYOR. Matriste kullanabilirsin.");
+  } else {
+    console.error(`  stderr: ${r.stderr.slice(0, 600)}`);
+    console.error("\n  ÇALIŞMIYOR. Bayraklar yanlış olabilir — `codex --help` çıktısına bakıp");
+    console.error("  src/adapters/codex.ts içindeki DEFAULT_ARGS'ı düzelt (TypeScript bilmeden de olur).");
+    process.exit(1);
+  }
+}
+
 async function matrix(taskId: string, a: string, b: string): Promise<void> {
   const runId = new Date().toISOString().replace(/[:.]/g, "-");
   await mkdir(join(REPO, ".skein"), { recursive: true });
@@ -152,11 +189,13 @@ const audit = argv.includes("--audit");
 const [cmd, ...rest] = argv.filter((a) => a !== "--audit");
 if (cmd === "report") {
   await report();
+} else if (cmd === "doctor") {
+  await doctor(rest[0] ?? "codex:gpt-5.5");
 } else if (cmd === "matrix") {
-  await matrix(rest[0] ?? "retry-backoff", rest[1] ?? "claude-opus-5", rest[2] ?? "claude-sonnet-5");
+  await matrix(rest[0] ?? "retry-backoff", rest[1] ?? "claude:claude-opus-5", rest[2] ?? "claude:claude-sonnet-5");
 } else if (cmd) {
   await run(cmd, rest[0] ?? "claude", rest[1] ?? "claude-opus-5", audit);
 } else {
-  console.error("kullanım: cli.ts <görev-id> [sağlayıcı] [model] [--audit]\n         cli.ts matrix <görev-id> [modelA] [modelB]\n         cli.ts report");
+  console.error("kullanım: cli.ts <görev-id> [sağlayıcı] [model] [--audit]\n         cli.ts matrix <görev-id> [sağlayıcı:model] [sağlayıcı:model]\n         cli.ts doctor <sağlayıcı:model>\n         cli.ts report");
   process.exit(2);
 }
