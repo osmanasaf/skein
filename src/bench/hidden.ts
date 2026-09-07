@@ -1,3 +1,4 @@
+import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { spawnPortable } from "../proc/process.js";
 import type { Task } from "./task.js";
@@ -38,7 +39,18 @@ interface VitestJson {
 export async function runHidden(task: Task, cellDir: string, cwd: string): Promise<HiddenRun> {
   // `join` şart: elle "/" eklemek Windows'ta "C:\\...\\hucre/hidden" gibi karışık
   // ayraçlı bir yol üretir.
-  const args = [...task.hidden.command.slice(1), "--dir", join(cellDir, "hidden")];
+  //
+  // `--outputFile` de şart: vitest 5 JSON raporunu stdout'a değil dosyaya
+  // yazıyor. Stdout'tan okumaya devam etseydik her koşu "süit hiç koşmadı"
+  // görünürdü — ki tam olarak bu oldu ve ÖLÇÜLEMEDİ koruması yakaladı.
+  // Dosyadan okumak ayrıca daha sağlam: rapor başka çıktıyla karışmıyor.
+  const reportPath = join(cellDir, "hidden-report.json");
+  await rm(reportPath, { force: true });
+  const args = [
+    ...task.hidden.command.slice(1),
+    "--dir", join(cellDir, "hidden"),
+    "--outputFile", reportPath,
+  ];
   const child = spawnPortable(task.hidden.command[0] as string, args, { cwd });
 
   let raw = "";
@@ -55,7 +67,14 @@ export async function runHidden(task: Task, cellDir: string, cwd: string): Promi
     child.on("close", (code) => resolve(code ?? 1));
   });
 
-  const hooks = parseHooks(raw);
+  // Önce rapor dosyası; yoksa stdout'a geri düş (başka koşucular için).
+  let report = "";
+  try {
+    report = await readFile(reportPath, "utf8");
+  } catch {
+    report = raw;
+  }
+  const hooks = parseHooks(report);
   return {
     hooks,
     red: hooks.filter((h) => !h.passed).map((h) => h.title),

@@ -1,0 +1,7 @@
+id: token-bucket
+title: Zaman enjekteli token bucket hız sınırlayıcı
+language: ts
+spec: spec.md
+entry: src/bucket.ts
+hidden:
+  command: ["npx", "vitest", "run", "--reporter=json"]

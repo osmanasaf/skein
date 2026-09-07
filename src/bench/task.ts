@@ -134,8 +134,10 @@ export async function loadTask(dir: string): Promise<Task> {
   }
   // Dizini koşucu ekler. Görev de eklerse vitest iki değer görüp reddediyor ve
   // hata stderr'de kalıyordu: sessizce ölçümsüz kalan bir koşu.
-  if ((command as string[]).includes("--dir")) {
-    throw new TaskError(label, "`hidden.command` `--dir` içeremez — hedef dizini koşucu ekler");
+  for (const reserved of ["--dir", "--outputFile"]) {
+    if ((command as string[]).includes(reserved)) {
+      throw new TaskError(label, `\`hidden.command\` \`${reserved}\` içeremez — koşucu ekler`);
+    }
   }
   const hiddenCwd = typeof hiddenDoc["cwd"] === "string" ? (hiddenDoc["cwd"] as string) : HIDDEN_DIR;
 

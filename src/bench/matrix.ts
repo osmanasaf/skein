@@ -19,6 +19,8 @@ export interface MatrixOptions {
   runRoot: string;
   log: EventLog;
   timeoutMs: number;
+  /** Ölçüm gücü olmasa bile denetim hücrelerini koştur. Varsayılan: false. */
+  force?: boolean;
 }
 
 export interface CellOutcome {
@@ -30,8 +32,10 @@ export interface CellOutcome {
 }
 
 export interface MatrixOutcome {
-  producers: { model: string; redHooks: string[]; total: number; costUsd: number }[];
+  producers: { model: string; redHooks: string[]; total: number; ran: boolean; costUsd: number }[];
   cells: CellOutcome[];
+  /** Denetim hücreleri neden atlandı; koştularsa undefined. */
+  skipped?: string;
 }
 
 /**
@@ -54,7 +58,10 @@ export async function runMatrix(options: MatrixOptions): Promise<MatrixOutcome> 
   const rel = (p: string) => p.slice(repo.length + 1);
 
   const adapters: Adapter[] = models.map(adapterFor);
-  const produced: { adapter: Adapter; artifactDir: string; redHooks: string[]; total: number; costUsd: number }[] = [];
+  const produced: {
+    adapter: Adapter; artifactDir: string; redHooks: string[];
+    total: number; ran: boolean; costUsd: number;
+  }[] = [];
 
   for (const adapter of adapters) {
     const cellDir = join(runRoot, task.id, safe(adapter.id));
@@ -78,13 +85,43 @@ export async function runMatrix(options: MatrixOptions): Promise<MatrixOutcome> 
     await log.append({
       type: "hooks.measured", cell: rel(cellDir), ran: h.ran, total: h.hooks.length, red: h.red,
     });
-    console.log(`  ${h.hooks.length - h.red.length}/${h.hooks.length} yeşil` +
-      (h.red.length > 0 ? ` — kanıtlanmış kusur: ${h.red.join(", ")}` : " — kusur yok"));
+    console.log(h.ran
+      ? `  ${h.hooks.length - h.red.length}/${h.hooks.length} yeşil` +
+        (h.red.length > 0 ? ` — kanıtlanmış kusur: ${h.red.join(", ")}` : " — kusur yok")
+      : "  ÖLÇÜLEMEDİ — süit hiç koşmadı (artefakt derlenmiyor ya da yok)");
 
     produced.push({
-      adapter, artifactDir: p.artifactDir, redHooks: h.red, total: h.hooks.length,
+      adapter, artifactDir: p.artifactDir, redHooks: h.red, total: h.hooks.length, ran: h.ran,
       costUsd: p.invoke.usage?.costUsd ?? 0,
     });
+  }
+
+  // Denetim hücreleri pahalı ve yer gerçeği olmadan hiçbir şey ölçmezler.
+  // Ölçülemeyen ya da kusursuz bir üretim üzerinde denetim koşturmak, parayı
+  // sonuç üretmeyecek bir koşuya harcamaktır. Bu koruma tek koşu yolunda
+  // vardı ama matriste yoktu ve gerçek bir koşuda "0/0 yeşil — kusur yok"
+  // diye raporlanıp dört denetim boşa koştu.
+  const unmeasured = produced.filter((p) => !p.ran);
+  const defective = produced.filter((p) => p.redHooks.length > 0);
+  const skipped =
+    unmeasured.length > 0
+      ? `ÖLÇÜLEMEDİ: ${unmeasured.map((p) => p.adapter.model).join(", ")} için gizli süit hiç koşmadı. ` +
+        `Bu "kusur yok" DEĞİLDİR — yer gerçeği yok, denetim puanlanamaz.`
+      : defective.length === 0
+        ? `Ölçüm gücü yok: hiçbir üreticide kanıtlanmış kusur yok, denetçilerin ` +
+          `yakalayacağı bir şey olmadığı için dört hücre de aynı sonucu verir.`
+        : undefined;
+
+  if (skipped !== undefined && options.force !== true) {
+    console.log(`\n${skipped}`);
+    console.log("Denetim hücreleri atlandı (yine de koşmak için --force).");
+    return {
+      producers: produced.map((p) => ({
+        model: p.adapter.model, redHooks: p.redHooks, total: p.total, ran: p.ran, costUsd: p.costUsd,
+      })),
+      cells: [],
+      skipped,
+    };
   }
 
   const cells: CellOutcome[] = [];
@@ -123,7 +160,7 @@ export async function runMatrix(options: MatrixOptions): Promise<MatrixOutcome> 
 
   return {
     producers: produced.map((p) => ({
-      model: p.adapter.model, redHooks: p.redHooks, total: p.total, costUsd: p.costUsd,
+      model: p.adapter.model, redHooks: p.redHooks, total: p.total, ran: p.ran, costUsd: p.costUsd,
     })),
     cells,
   };

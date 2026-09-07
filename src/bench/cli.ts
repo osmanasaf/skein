@@ -161,7 +161,7 @@ async function doctor(spec: string): Promise<void> {
   }
 }
 
-async function matrix(taskId: string, a: string, b: string): Promise<void> {
+async function matrix(taskId: string, a: string, b: string, force: boolean): Promise<void> {
   const runId = new Date().toISOString().replace(/[:.]/g, "-");
   await mkdir(join(REPO, ".skein"), { recursive: true });
   const log = new EventLog(LOG, runId);
@@ -170,13 +170,19 @@ async function matrix(taskId: string, a: string, b: string): Promise<void> {
   console.log(`2x2 çapraz kurgu — ${a}  ×  ${b}\n`);
   const out = await runMatrix({
     repo: REPO, taskId, models: [a, b],
-    runRoot: join(REPO, ".skein/runs", runId), log, timeoutMs: 10 * 60_000,
+    runRoot: join(REPO, ".skein/runs", runId), log, timeoutMs: 10 * 60_000, force,
   });
 
   console.log("\n=== üretim ===");
   for (const p of out.producers) {
-    console.log(`  ${p.model.padEnd(18)} ${p.total - p.redHooks.length}/${p.total} yeşil` +
-      (p.redHooks.length > 0 ? `  ← kusur: ${p.redHooks.join("; ")}` : "  ← kusur yok"));
+    console.log(`  ${p.model.padEnd(18)} ` + (p.ran
+      ? `${p.total - p.redHooks.length}/${p.total} yeşil` +
+        (p.redHooks.length > 0 ? `  ← kusur: ${p.redHooks.join("; ")}` : "  ← kusur yok")
+      : "ÖLÇÜLEMEDİ — süit koşmadı"));
+  }
+  if (out.skipped !== undefined) {
+    console.log(`\n${out.skipped}`);
+    return;
   }
   console.log("\n=== denetim hücreleri ===");
   for (const c of out.cells) {
@@ -189,13 +195,14 @@ async function matrix(taskId: string, a: string, b: string): Promise<void> {
 
 const argv = process.argv.slice(2);
 const audit = argv.includes("--audit");
-const [cmd, ...rest] = argv.filter((a) => a !== "--audit");
+const force = argv.includes("--force");
+const [cmd, ...rest] = argv.filter((a) => a !== "--audit" && a !== "--force");
 if (cmd === "report") {
   await report();
 } else if (cmd === "doctor") {
   await doctor(rest[0] ?? "codex:gpt-5.5");
 } else if (cmd === "matrix") {
-  await matrix(rest[0] ?? "retry-backoff", rest[1] ?? "claude:claude-opus-5", rest[2] ?? "claude:claude-sonnet-5");
+  await matrix(rest[0] ?? "retry-backoff", rest[1] ?? "claude:claude-opus-5", rest[2] ?? "claude:claude-sonnet-5", force);
 } else if (cmd) {
   await run(cmd, rest[0] ?? "claude", rest[1] ?? "claude-opus-5", audit);
 } else {

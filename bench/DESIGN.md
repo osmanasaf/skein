@@ -319,6 +319,34 @@ olarak yalnızca `taskText` içinde veriliyor (denetçi düzeltmesin diye), ama
 bu rapora gürültü olarak sızıyor. Denetçiye salt-okunur bir kopya vermek
 düşünülmeli.
 
+## Kalibrasyon zor çıktı — ve bu bir bulgu
+
+`token-bucket` görevi, `retry-backoff`'tan bilinçli olarak daha zor yazıldı:
+14 kusur kancası, kesirli token birikimi, saat geri gitmesi, kısmi düşme
+yasağı, enjekte edilmiş zaman. Sonuç:
+
+| Üretici | Sonuç |
+|---|---|
+| `claude-opus-5` | 14/14 yeşil |
+| `claude-sonnet-5` | 14/14 yeşil |
+| `claude-haiku-4-5` | 14/14 yeşil |
+
+Üç model de temiz çözdü. `retry-backoff` da çoğu koşuda temiz çıkıyor.
+
+**Bu, görev yazımının değil ölçeğin sorunu olabilir.** Güçlü modeller, tek
+dosyalık, spec'i tam yazılmış, bağımsız görevleri güvenilir biçimde doğru
+çözüyor. Kör noktanın ortaya çıktığı yer muhtemelen başka: var olan bir kod
+tabanına dokunmak, örtük sözleşmeler, iki modülün etkileşimi, spec'in
+sessiz kaldığı yerler.
+
+Deney bir sonraki adımda ya **daha büyük, bağlamlı görevlere** geçmeli
+(mevcut bir repoya değişiklik), ya da kusuru üretmeye çalışmak yerine
+**gerçek kusurlu kod** bulmalı (geçmiş commit'lerden gerçek hatalar).
+İkincisi yer gerçeğini bedavaya getirir ama "üreticinin kendi kusuru"
+ilkesini bırakmak demektir — ve o ilke tezin kör nokta iddiasının taşıyıcısı.
+
+Karar verilmedi; kayda geçti.
+
 ## Durum
 
 - [x] Tasarım — 2×2 çapraz kurgu, iki katmanlı yer gerçeği, karar kuralı
