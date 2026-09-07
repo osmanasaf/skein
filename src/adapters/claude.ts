@@ -52,22 +52,59 @@ export class ClaudeCliAdapter implements Adapter {
     return this.#bin;
   }
 
-  /** Test ve hata ayıklama için: bu istek için kurulacak argüman listesi. */
-  argsFor(req: InvokeRequest): string[] {
-    return [
+  /**
+   * Bu istek için kurulacak argüman listesi.
+   *
+   * `supported` verilirse, orada olmayan opsiyonel bayraklar atlanır. CLI
+   * sürümleri arasında bayrak adları değişiyor: operatörün makinesinde
+   * `--permission-prompts` yoktu ve çağrı "unknown option" ile boşa döndü.
+   * CONTRACT.md zaten uyarıyordu — izin bayrakları adaptörün sorunu.
+   */
+  argsFor(req: InvokeRequest, supported?: ReadonlySet<string>): string[] {
+    const args = [
       "-p",
       "--output-format", "json",
       "--model", this.model,
       "--system-prompt-file", req.promptFile,
       "--permission-mode", this.#permissionMode,
-      // Soracak bir insan yok: prompt gerektiren her şey otomatik reddedilir.
-      "--permission-prompts", "none",
     ];
+    // Soracak bir insan yok: prompt gerektiren her şey otomatik reddedilsin.
+    // Zorunlu değil — yokluğunda timeout aynı işi görür, sadece daha yavaş.
+    if (supported === undefined || supported.has("--permission-prompts")) {
+      args.push("--permission-prompts", "none");
+    }
+    return args;
   }
 
+  /** `--help` çıktısından desteklenen bayraklar. İkili başına bir kez okunur. */
+  async supportedFlags(): Promise<ReadonlySet<string>> {
+    const cached = ClaudeCliAdapter.#flagCache.get(this.#bin);
+    if (cached) return cached;
+    const flags = new Set<string>();
+    try {
+      const child = spawnPortable(this.#bin, ["--help"], {});
+      let help = "";
+      child.stdout.setEncoding("utf8");
+      child.stdout.on("data", (c: string) => (help += c));
+      await new Promise<void>((resolve) => {
+        child.on("error", () => resolve());
+        child.on("close", () => resolve());
+      });
+      for (const m of help.matchAll(/--[a-zA-Z][\w-]*/g)) flags.add(m[0]);
+    } catch {
+      // --help okunamadıysa hiçbir opsiyonel bayrak eklenmez: güvenli taraf.
+    }
+    ClaudeCliAdapter.#flagCache.set(this.#bin, flags);
+    return flags;
+  }
+
+  static readonly #flagCache = new Map<string, ReadonlySet<string>>();
+
   async invoke(req: InvokeRequest): Promise<InvokeResult> {
+    const supported = await this.supportedFlags();
+
     const started = Date.now();
-    const child = spawnPortable(this.#bin, this.argsFor(req), {
+    const child = spawnPortable(this.#bin, this.argsFor(req, supported), {
       cwd: req.workdir,
       env: { ...process.env, ...req.env },
       stdin: "pipe",

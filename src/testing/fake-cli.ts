@@ -11,6 +11,8 @@ export interface FakeCliSpec {
   exit?: number;
   /** Çıkmadan önce bu kadar bekler — timeout ve süreç ağacı testleri için. */
   sleepMs?: number;
+  /** `--help` çağrısında basılacak metin. Bayrak tespitini sınamak için. */
+  help?: string;
 }
 
 /**
@@ -29,6 +31,11 @@ export async function makeFakeCli(dir: string, spec: FakeCliSpec): Promise<strin
     script,
     `import { writeFile } from "node:fs/promises";
 const spec = ${JSON.stringify(spec)};
+// Gerçek bir CLI gibi: --help anında döner, stdin okumaz, uyumaz.
+if (process.argv.includes("--help")) {
+  process.stdout.write(spec.help ?? "");
+  process.exit(0);
+}
 let input = "";
 process.stdin.setEncoding("utf8");
 for await (const chunk of process.stdin) input += chunk;

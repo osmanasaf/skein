@@ -47,6 +47,41 @@ describe("ClaudeCliAdapter", () => {
     expect(args.join(" ")).toContain("--permission-prompts none");
   });
 
+  // Operatörün CLI'ında --permission-prompts yoktu ve çağrı boşa döndü.
+  it("desteklenmeyen opsiyonel bayrağı atlar", () => {
+    const a = new ClaudeCliAdapter({ model: "m" });
+    const args = a.argsFor(req(), new Set(["--model", "--permission-mode"]));
+    expect(args.join(" ")).not.toContain("--permission-prompts");
+    expect(args.join(" ")).toContain("--permission-mode");
+  });
+
+  it("desteklenen opsiyonel bayrağı ekler", () => {
+    const a = new ClaudeCliAdapter({ model: "m" });
+    const args = a.argsFor(req(), new Set(["--permission-prompts"]));
+    expect(args.join(" ")).toContain("--permission-prompts none");
+  });
+
+  it("--help okunamayan ikilide opsiyonel bayrak eklenmez", async () => {
+    const a = new ClaudeCliAdapter({ model: "m", bin: "/yok/boyle/claude" });
+    expect((await a.supportedFlags()).size).toBe(0);
+  });
+
+  it("bayrakları gerçekten --help çıktısından okur", async () => {
+    const bin = await fakeCli({ help: "  --model <m>\n  --permission-mode <p>\n" });
+    const flags = await new ClaudeCliAdapter({ model: "m", bin }).supportedFlags();
+    expect(flags.has("--permission-mode")).toBe(true);
+    expect(flags.has("--permission-prompts")).toBe(false);
+  });
+
+  // Eski CLI'da bu bayrak yok; çağrı "unknown option" ile boşa dönüyordu.
+  it("eski CLI'da --permission-prompts göndermez", async () => {
+    const out = join(root, "args.txt");
+    const bin = await fakeCli({ help: "  --permission-mode <p>\n", stdout: OK, stdinTo: out });
+    const a = new ClaudeCliAdapter({ model: "m", bin });
+    const args = a.argsFor(req(), await a.supportedFlags());
+    expect(args).not.toContain("--permission-prompts");
+  });
+
   it("izin modu değiştirilebilir", () => {
     const a = new ClaudeCliAdapter({ model: "m", permissionMode: "dontAsk" });
     expect(a.argsFor(req()).join(" ")).toContain("--permission-mode dontAsk");
