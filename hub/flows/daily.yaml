@@ -7,18 +7,24 @@
 name: daily
 description: Günlük sürücü. Üretim ve denetim kasıtlı olarak farklı sağlayıcıda.
 
+# Tüm rollerin üstünde kanun. Sıra anlamlı; yollar bu dosyaya göre çözülür.
+constitution:
+  - ../prompts/constitution/base.md
+  - ../../java-kit/constitution/articles/engineering.prompt
+  - ../../java-kit/constitution/articles/workflow.prompt
+
 roles:
   - id: coder
     provider: claude
     workspace: main             # ana checkout; tam olarak bir rol alır
-    prompt: roles/coder.prompt
+    prompt: ../../java-kit/roles/coder.prompt
     receive: task
     next: reviewer
 
   - id: reviewer
     provider: codex             # KASITLI farklı sağlayıcı: farklı kör nokta
     workspace: reviewer         # kendi git worktree'si
-    prompt: roles/reviewer.prompt
+    prompt: ../../java-kit/roles/cleaner.prompt
     receive: batch              # kuyruktaki eşdeğer işleri tek turda yut
     syncBack: [coder]           # merge-only kopya; maliyeti görünür
     next: done                  # zinciri kapatır

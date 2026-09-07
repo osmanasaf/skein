@@ -19,6 +19,7 @@ constitution/articles/workflow.prompt      Worktree/commit/tmp disiplini
 roles/coder.prompt
 roles/cleaner.prompt
 roles/specifier.prompt                Sadece Topoloji B için
+roles/guard.prompt                    Güvenlik/mimari son bakış (Skein spec akışı)
 ```
 
 ## Kurulum

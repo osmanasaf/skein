@@ -1,2 +1,12 @@
+# SwarmForge'a özel — Skein bu dosyayı KULLANMAZ.
+#
+# Aşağıdaki talimat, ajanın bir checkout içinde uzun ömürlü ve interaktif
+# olduğunu varsayar: "git şu dosyaları oku." Skein'de ajan headless ve iş
+# başına tek süreç; okuyacak bir oturumu yok. Katmanları çekirdek derler
+# (hub/flows/SCHEMA.md → "Prompt katmanları"), giriş noktası
+# hub/prompts/constitution/base.md'dir.
+#
+# Bu dosya yalnızca java-kit upstream SwarmForge üstüne kurulduğunda geçerli.
+
 Read every file in swarmforge/constitution/articles/ and obey those
 instructions. Then read swarmforge/roles for your role.

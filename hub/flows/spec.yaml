@@ -8,25 +8,31 @@
 name: spec
 description: Yanlış şeyi inşa etme riski yüksek olduğunda. Kod yazılmadan önce insan onayı.
 
+# Tüm rollerin üstünde kanun. Sıra anlamlı; yollar bu dosyaya göre çözülür.
+constitution:
+  - ../prompts/constitution/base.md
+  - ../../java-kit/constitution/articles/engineering.prompt
+  - ../../java-kit/constitution/articles/workflow.prompt
+
 roles:
   - id: analyst                 # "specifier" olmak zorunda değil
     provider: claude
     workspace: main
-    prompt: roles/specifier.prompt
+    prompt: ../../java-kit/roles/specifier.prompt
     receive: task
     next: coder
 
   - id: coder
     provider: codex
     workspace: coder
-    prompt: roles/coder.prompt
+    prompt: ../../java-kit/roles/coder.prompt
     receive: task
     next: reviewer
 
   - id: reviewer
     provider: claude
     workspace: reviewer
-    prompt: roles/cleaner.prompt
+    prompt: ../../java-kit/roles/cleaner.prompt
     receive: batch
     syncBack: [coder]
     next: guard
@@ -34,7 +40,7 @@ roles:
   - id: guard                   # güvenlik/mimari son bakış
     provider: codex
     workspace: guard
-    prompt: roles/guard.prompt
+    prompt: ../../java-kit/roles/guard.prompt
     receive: batch
     syncBack: [coder, reviewer] # açık liste: kimin uyanacağı sayılabilir
     next: done

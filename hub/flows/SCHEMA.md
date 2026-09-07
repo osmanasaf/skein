@@ -15,6 +15,9 @@ adını değiştirmek insan onay kapısını sessizce yok ediyordu.)
 name: string                    # akışın adı
 description: string?            # opsiyonel
 
+constitution:                   # tüm rollerin üstünde kanun; sıra anlamlıdır
+  - string                      # prompt dosyası yolları
+
 roles:                          # sıra önemli değil; zincir `next` ile kurulur
   - id: string                  # serbest isim, akış içinde tekil
     provider: string            # adapters/ altındaki bir adaptör
@@ -35,6 +38,20 @@ audit:
 ```
 
 ## Alanların anlamı
+
+**Yollar** — `constitution` ve `prompt` alanlarındaki yollar **akış
+dosyasının bulunduğu dizine** göre çözülür. Mutlak yol ve `../` ile dışarı
+çıkmak yasaktır.
+
+**`constitution`** — her role, kendi rol promptundan **önce** eklenen ortak
+katmanlar. Çekirdek bunları rol promptuyla birleştirip adaptöre tek dosya
+olarak verir; ajan dosyaları kendi okumaz (headless çağrıda çalışmaz).
+
+Hangi maddelerin gireceği **akışın kararıdır**. SwarmForge tüm maddeleri
+zorluyordu; Java kuralları Python rolüne de gidiyordu. Burada bir Java akışı
+`engineering-java` maddesini alır, başka bir akış almaz.
+
+Katman sırası ve kurcalama koruması için aşağıdaki "Prompt katmanları"na bak.
 
 **`workspace`** — `main` ana checkout'tur; tam olarak bir rol onu alır.
 Diğer her rol kendi adıyla bir git worktree alır ve orada izole çalışır.
@@ -78,7 +95,37 @@ Akış yüklenirken şunlar kontrol edilir; ihlal varsa akış hiç başlamaz:
 6. `syncBack` yalnızca zincirde **daha önce** gelen rollere işaret eder.
 7. Her `gates[].after`, var olan bir `id`'ye işaret eder.
 8. Her `provider`, kayıtlı bir adaptöre karşılık gelir.
-9. Her `prompt` dosyası mevcut.
+9. Her `prompt` dosyası mevcut ve boş değil.
+10. Her `constitution` dosyası mevcut ve boş değil; liste tekil (aynı dosya
+    iki kez giremez).
+11. Hiçbir prompt dosyası katman sınırı işaretini (`<<<skein:layer`) içermez.
+
+Kural 9-11 akış yüklenirken değil, **prompt derlenirken** de yeniden
+uygulanır; ikisi de aynı birleştiriciden geçer.
+
+## Prompt katmanları
+
+Adaptöre giden `promptFile` şu sırayla derlenir:
+
+```
+constitution[0..n]      ← akıştan; tüm rollerde aynı
+role.prompt             ← rolden
+```
+
+`taskText` bu dosyaya **girmez** — adaptöre ayrı alan olarak gider. Böylece
+bir rolün prompt hash'i görevden bağımsızdır; "bu iki koşuda prompt aynıydı"
+iddiası kanıtlanabilir olur.
+
+Her katman makine-okunur bir sınır işaretiyle ayrılır ve **kaynak dosyaların
+hiçbiri bu işareti içeremez**. Bir rol promptu sahte anayasa bölümü açıp
+kendini kanun ilan edemez.
+
+> SwarmForge'da anayasanın üstünlüğü bir konvansiyondu — upstream *"those
+> filenames are law from `main`"* diyordu, ama `java-kit` o kanunu ezmek için
+> paylaşılan kopyaları elle değiştirmeni söylüyordu. İhlal mümkündü ve
+> **sessizdi**. Burada mekanik.
+
+Derleme sonucu bir SHA-256 hash üretir; olay günlüğüne yazılır.
 
 ## Maliyet
 

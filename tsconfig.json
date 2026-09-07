@@ -13,5 +13,9 @@
     "skipLibCheck": true,
     "verbatimModuleSyntax": true
   },
-  "include": ["src", "bench"]
+  "include": ["src", "bench"],
+  // Gizli testler koşum takımının parçası değil: yanlarında henüz var olmayan
+  // bir üretim artefaktına import atarlar. Yalnızca üretim sonrası, izole
+  // dizinde derlenir/koşulurlar (bench/DESIGN.md). vitest.config.ts aynısını yapar.
+  "exclude": ["node_modules", "bench/tasks"]
 }
