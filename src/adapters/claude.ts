@@ -61,7 +61,7 @@ export class ClaudeCliAdapter implements Adapter {
    * CONTRACT.md zaten uyarıyordu — izin bayrakları adaptörün sorunu.
    */
   argsFor(req: InvokeRequest, supported?: ReadonlySet<string>): string[] {
-    const args = [
+    const args: string[] = [
       "-p",
       "--output-format", "json",
       "--model", this.model,
@@ -73,6 +73,15 @@ export class ClaudeCliAdapter implements Adapter {
     if (supported === undefined || supported.has("--permission-prompts")) {
       args.push("--permission-prompts", "none");
     }
+    // Görev metni pozisyonel argüman olarak gider, stdin'den değil.
+    //
+    // Operatörün CLI sürümü `-p` modunda stdin'i okumuyordu: çağrı hatasız
+    // tamamlanıyor ama `iterations: []` ve `modelUsage: {}` dönüyordu — yani
+    // model hiç çağrılmamıştı. Pozisyonel argüman her iki sürümde de çalışıyor.
+    //
+    // Çok uzun metinlerde komut satırı sınırına takılmamak için (Windows
+    // ~32K) stdin'e düşülür.
+    if (!needsStdin(req.taskText)) args.push(req.taskText);
     return args;
   }
 
@@ -120,7 +129,7 @@ export class ClaudeCliAdapter implements Adapter {
     const stdin = stdinOf(child);
     // Süreç stdin okumadan öldüyse EPIPE gelir; sonucu exit belirler.
     stdin?.on("error", () => {});
-    stdin?.end(req.taskText);
+    stdin?.end(needsStdin(req.taskText) ? req.taskText : "");
 
     let timedOut = false;
     const timer = setTimeout(() => {
@@ -150,6 +159,16 @@ export class ClaudeCliAdapter implements Adapter {
     if (timedOut) result.timedOut = true;
     return result;
   }
+}
+
+/**
+ * Komut satırına sığmayacak kadar uzun mu.
+ *
+ * Windows'ta tüm komut satırı ~32767 karakterle sınırlı; prompt yolu ve
+ * bayraklar da aynı bütçeden yiyor, o yüzden geniş bir pay bırakılıyor.
+ */
+export function needsStdin(taskText: string): boolean {
+  return taskText.length > 8000;
 }
 
 /** Çıktı JSON değilse (CLI hata metni bastıysa) sessizce yutulur; stdout korunur. */

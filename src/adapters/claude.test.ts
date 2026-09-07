@@ -82,6 +82,19 @@ describe("ClaudeCliAdapter", () => {
     expect(args).not.toContain("--permission-prompts");
   });
 
+  // Operatörün sürümü -p modunda stdin okumuyordu: çağrı hatasız tamamlanıp
+  // iterations: [] dönüyordu, yani model hiç çağrılmamıştı.
+  it("görev metnini pozisyonel argüman olarak geçirir", () => {
+    const a = new ClaudeCliAdapter({ model: "m" });
+    expect(a.argsFor(req({ taskText: "GÖREV" })).at(-1)).toBe("GÖREV");
+  });
+
+  it("çok uzun metni pozisyonele koymaz — komut satırı sınırı", () => {
+    const a = new ClaudeCliAdapter({ model: "m" });
+    const uzun = "x".repeat(9000);
+    expect(a.argsFor(req({ taskText: uzun }))).not.toContain(uzun);
+  });
+
   it("izin modu değiştirilebilir", () => {
     const a = new ClaudeCliAdapter({ model: "m", permissionMode: "dontAsk" });
     expect(a.argsFor(req()).join(" ")).toContain("--permission-mode dontAsk");
@@ -95,11 +108,19 @@ describe("ClaudeCliAdapter", () => {
     expect(r.durationMs).toBeGreaterThanOrEqual(0);
   });
 
-  it("taskText'i stdin'den geçirir", async () => {
+  it("uzun metin stdin'e düşer", async () => {
     const out = join(root, "stdin.txt");
     const bin = await fakeCli({ stdinTo: out, stdout: OK });
-    await new ClaudeCliAdapter({ model: "m", bin }).invoke(req({ taskText: "MERHABA" }));
-    expect(await readFile(out, "utf8")).toBe("MERHABA");
+    const uzun = "y".repeat(9000);
+    await new ClaudeCliAdapter({ model: "m", bin }).invoke(req({ taskText: uzun }));
+    expect(await readFile(out, "utf8")).toBe(uzun);
+  });
+
+  it("kısa metinde stdin boş kalır — çift gönderim olmasın", async () => {
+    const out = join(root, "stdin.txt");
+    const bin = await fakeCli({ stdinTo: out, stdout: OK });
+    await new ClaudeCliAdapter({ model: "m", bin }).invoke(req({ taskText: "KISA" }));
+    expect(await readFile(out, "utf8")).toBe("");
   });
 
   it("süreci workdir içinde çalıştırır", async () => {
