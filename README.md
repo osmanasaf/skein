@@ -33,6 +33,7 @@ ajanın iyi niyetine değil **mekanizmaya** bağlar:
 | [`hub/adapters/CONTRACT.md`](hub/adapters/CONTRACT.md) | Sağlayıcı sözleşmesi |
 | [`bench/DESIGN.md`](bench/DESIGN.md) | Tezi sınayan deneyin tasarımı — 2×2 çapraz kurgu |
 | [`RUNNING.md`](RUNNING.md) | Deneyi kendi makinende koşturmak |
+| [`HANDOFF.md`](HANDOFF.md) | **Buradan devam et** — son durum ve sıradaki adım |
 | [`java-kit/`](java-kit/) | Java rol ve kural seti (prompt kaynağı) |
 
 ## Durum
