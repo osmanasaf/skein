@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { ClaudeCliAdapter } from "../adapters/claude.js";
 import { AdapterRegistry, type Adapter } from "../adapters/contract.js";
@@ -140,17 +140,50 @@ async function doctor(spec: string): Promise<void> {
   await writeFile(promptFile, "Sen kısa cevap veren bir asistansın.\n");
 
   const req = { workdir: dir, promptFile, taskText: "2+2 kaç? Sadece sayıyı yaz.", timeoutMs: 120_000 };
-  const args = (adapter as { argsFor?: (r: typeof req) => string[] }).argsFor?.(req) ?? [];
+  const bin = (adapter as { bin?: string }).bin ?? adapter.id;
+
+  // CLI sürümü ve desteklenen bayraklar: uzaktan teşhisin can damarı.
+  // Sürümler arasında bayrak adları ve girdi biçimi değişiyor.
+  const probe = adapter as { supportedFlags?: () => Promise<ReadonlySet<string>> };
+  const supported = await probe.supportedFlags?.();
+  // Gösterilen komut gerçek çağrıyla aynı olmalı: prompt gövdesi de geçilir,
+  // yoksa doctor "--system-prompt " diye boş bir bayrak gösterip yanıltır.
+  const promptText = await readFile(promptFile, "utf8");
+  const args = (adapter as {
+    argsFor?: (r: typeof req, s?: ReadonlySet<string>, p?: string) => string[];
+  }).argsFor?.(req, supported, promptText) ?? [];
+
   console.log(`sağlayıcı : ${adapter.id}`);
   console.log(`model     : ${adapter.model}`);
-  console.log(`komut     : ${(adapter as { bin?: string }).bin ?? adapter.id} ${args.join(" ")}`);
-  console.log(`stdin     : rol promptu + görev metni\n`);
+  console.log(`ikili     : ${bin}`);
+  console.log(`sürüm     : ${await binVersion(bin)}`);
+  if (supported) {
+    const ilgi = ["--system-prompt-file", "--system-prompt", "--append-system-prompt",
+      "--permission-mode", "--permission-prompts", "--output-format", "--model", "--print"];
+    console.log(`bayraklar : ${ilgi.map((f) => `${f}${supported.has(f) ? "✓" : "✗"}`).join("  ")}`);
+  }
+  const shown = args.map((a) => {
+    const short = a.length > 70 ? `${a.slice(0, 70)}…(${a.length} karakter)` : a;
+    return /\s/.test(short) ? JSON.stringify(short) : short;
+  });
+  console.log(`komut     : ${bin} ${shown.join(" ")}\n`);
 
   console.log("deneme çağrısı…");
   const r = await adapter.invoke(req);
   console.log(`  exit=${r.exitCode}  süre=${(r.durationMs / 1000).toFixed(1)}s` +
     (r.usage?.costUsd !== undefined ? `  maliyet=$${r.usage.costUsd.toFixed(4)}` : ""));
   if (r.exitCode === 0) {
+    // Çıkış kodu sıfır olabilir ama model hiç çalışmamış olabilir: sıfır tur,
+    // boş modelUsage. Operatörün makinesinde tam olarak bu oldu ve "başarılı"
+    // görünüyordu. Sessizce boş dönen bir çağrı, hatadan daha kötüdür.
+    const turns = modelTurns(r.stdout);
+    if (turns === 0) {
+      console.error(`  MODEL HİÇ ÇAĞRILMADI — sıfır tur, boş modelUsage.`);
+      console.error(`  Çağrı hatasız döndü ama görev metni ajana ulaşmadı.`);
+      console.error(`\n  ham stdout:\n${r.stdout.slice(0, 1500)}`);
+      process.exit(1);
+    }
+    console.log(`  model turu: ${turns ?? "?"}`);
     console.log(`  stdout (ilk 300): ${r.stdout.slice(0, 300).replace(/\n/g, " ")}`);
     console.log("\n  ÇALIŞIYOR. Matriste kullanabilirsin.");
   } else {
@@ -158,6 +191,39 @@ async function doctor(spec: string): Promise<void> {
     console.error("\n  ÇALIŞMIYOR. Bayraklar yanlış olabilir — `codex --help` çıktısına bakıp");
     console.error("  src/adapters/codex.ts içindeki DEFAULT_ARGS'ı düzelt (TypeScript bilmeden de olur).");
     process.exit(1);
+  }
+}
+
+/** İkilinin bildirdiği sürüm; okunamazsa "bilinmiyor". */
+async function binVersion(bin: string): Promise<string> {
+  const { spawnPortable } = await import("../proc/process.js");
+  try {
+    const child = spawnPortable(bin, ["--version"], {});
+    let out = "";
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (c: string) => (out += c));
+    await new Promise<void>((r) => {
+      child.on("error", () => r());
+      child.on("close", () => r());
+    });
+    return out.trim().split("\n")[0] ?? "bilinmiyor";
+  } catch {
+    return "bilinmiyor";
+  }
+}
+
+/** Çıktıdaki model turu sayısı; biçim tanınmazsa undefined. */
+function modelTurns(stdout: string): number | undefined {
+  try {
+    const d = JSON.parse(stdout.trim()) as {
+      usage?: { iterations?: unknown[] };
+      modelUsage?: Record<string, unknown>;
+    };
+    if (Array.isArray(d.usage?.iterations)) return d.usage.iterations.length;
+    if (d.modelUsage) return Object.keys(d.modelUsage).length;
+    return undefined;
+  } catch {
+    return undefined;
   }
 }
 

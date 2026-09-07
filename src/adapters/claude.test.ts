@@ -95,6 +95,22 @@ describe("ClaudeCliAdapter", () => {
     expect(a.argsFor(req({ taskText: uzun }))).not.toContain(uzun);
   });
 
+  // --system-prompt-file bu CLI'ın --help çıktısında yok: belgesiz çalışıyor.
+  // Belgesiz bayrağa dayanmak sürümler arası sessiz bozulmanın kısa yolu.
+  it("--system-prompt-file ilan edilmişse dosya yolunu kullanır", () => {
+    const a = new ClaudeCliAdapter({ model: "m" });
+    const args = a.argsFor(req(), new Set(["--system-prompt-file"]), "GOVDE");
+    expect(args.join(" ")).toContain("--system-prompt-file");
+    expect(args).not.toContain("GOVDE");
+  });
+
+  it("ilan edilmemişse belgelenmiş --system-prompt ile gövdeyi geçer", () => {
+    const a = new ClaudeCliAdapter({ model: "m" });
+    const args = a.argsFor(req(), new Set(["--system-prompt"]), "GOVDE");
+    expect(args.join(" ")).not.toContain("--system-prompt-file");
+    expect(args).toContain("GOVDE");
+  });
+
   it("izin modu değiştirilebilir", () => {
     const a = new ClaudeCliAdapter({ model: "m", permissionMode: "dontAsk" });
     expect(a.argsFor(req()).join(" ")).toContain("--permission-mode dontAsk");

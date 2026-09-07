@@ -60,14 +60,26 @@ export class ClaudeCliAdapter implements Adapter {
    * `--permission-prompts` yoktu ve çağrı "unknown option" ile boşa döndü.
    * CONTRACT.md zaten uyarıyordu — izin bayrakları adaptörün sorunu.
    */
-  argsFor(req: InvokeRequest, supported?: ReadonlySet<string>): string[] {
+  argsFor(req: InvokeRequest, supported?: ReadonlySet<string>, promptText?: string): string[] {
     const args: string[] = [
       "-p",
       "--output-format", "json",
       "--model", this.model,
-      "--system-prompt-file", req.promptFile,
-      "--permission-mode", this.#permissionMode,
     ];
+
+    // Rol promptu: dosya yolu mu, gövde mi.
+    //
+    // `--system-prompt-file` bu CLI'ın `--help` çıktısında GÖRÜNMÜYOR — belgesiz
+    // çalışıyor. Belgesiz bir bayrağa dayanmak, sürümler arasında sessizce
+    // bozulmanın kısa yolu. Yalnızca gerçekten ilan edilmişse kullanılıyor;
+    // aksi halde belgelenmiş `--system-prompt` ile gövde geçiliyor.
+    if (supported?.has("--system-prompt-file") ?? promptText === undefined) {
+      args.push("--system-prompt-file", req.promptFile);
+    } else {
+      args.push("--system-prompt", promptText ?? "");
+    }
+
+    args.push("--permission-mode", this.#permissionMode);
     // Soracak bir insan yok: prompt gerektiren her şey otomatik reddedilsin.
     // Zorunlu değil — yokluğunda timeout aynı işi görür, sadece daha yavaş.
     if (supported === undefined || supported.has("--permission-prompts")) {
@@ -111,9 +123,12 @@ export class ClaudeCliAdapter implements Adapter {
 
   async invoke(req: InvokeRequest): Promise<InvokeResult> {
     const supported = await this.supportedFlags();
+    // Prompt spawn'dan ÖNCE okunur: spawn ile `error` dinleyicisi arasına bir
+    // await girerse, olmayan bir ikilinin ENOENT'i dinleyicisiz ateşlenir.
+    const promptText = await readFileSafe(req.promptFile);
 
     const started = Date.now();
-    const child = spawnPortable(this.#bin, this.argsFor(req, supported), {
+    const child = spawnPortable(this.#bin, this.argsFor(req, supported, promptText), {
       cwd: req.workdir,
       env: { ...process.env, ...req.env },
       stdin: "pipe",
@@ -158,6 +173,15 @@ export class ClaudeCliAdapter implements Adapter {
     if (usage) result.usage = usage;
     if (timedOut) result.timedOut = true;
     return result;
+  }
+}
+
+async function readFileSafe(path: string): Promise<string | undefined> {
+  const { readFile } = await import("node:fs/promises");
+  try {
+    return await readFile(path, "utf8");
+  } catch {
+    return undefined;
   }
 }
 
