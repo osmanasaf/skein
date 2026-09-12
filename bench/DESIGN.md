@@ -242,14 +242,20 @@ için mekanizma düzeltme **yapmayan** ajanı ödüllendirir. Ölçüt bir **son
 | 18-40-35 | kapısız | — | — | 8/9 | $0.0599 |
 | 18-41-12 | kapısız | — | — | 8/9 | $0.0600 |
 | 18-41-26 | kapısız | — | — | 8/9 | $0.0611 |
+| (sonraki) | kapısız | — | — | 9/9 | $0.1296 |
+| (sonraki) | kapısız | — | — | 8/9 | $0.0611 |
 | 18-47-41 | **kapılı** | 3 | 1 | **9/9** | $0.5913 |
 | 18-49-59 | **kapılı** | 3 | 1 | **9/9** | $0.7011 |
 | 18-52-45 | **kapılı** | 2 | 0 | **9/9** | $0.3160 |
 
 ```
-kapısız : ortalama 1.00 kırmızı  ·  $0.0603
-kapılı  : ortalama 0.00 kırmızı  ·  $0.5361      (8.9x maliyet)
+kapısız (n=5) : ortalama 0.80 kırmızı  ·  $0.0743
+kapılı  (n=3) : ortalama 0.00 kırmızı  ·  $0.5361      (7.2x maliyet)
 ```
+
+> Sayılar olay günlüğünden (`.skein/events.jsonl`) türetilmiştir; aynı görev,
+> aynı üretici. Kapısız koşu sayısı sonradan 3'ten 5'e çıktı ve ortalama
+> 1.00'dan 0.80'e indi — beşinci koşu 9/9 verdi.
 
 ### Mekanizma izi — sayıdan daha güçlü kanıt
 
@@ -258,7 +264,7 @@ senkron fırlıyor, imza `Promise<T>` taahhüt ediyor.
 
 | | İmza |
 |---|---|
-| kapısız, 3/3 koşu | `export function retry` ← kusur var |
+| kapısız, kusurlu koşular | `export function retry` ← senkron fırlatma |
 | kapılı, 3/3 koşu | `export async function retry` ← kusur yok |
 
 İki kapılı koşuda ajan denetim turunda **gerçekten bir düzeltme yaptı**
@@ -268,7 +274,7 @@ eler: parmak izi değişti, yani iş değişti.
 
 ### Ne demiyoruz
 
-- **n=3'e 3.** Bu bir eğilim, cevap değil.
+- **n=5'e 3.** Bu bir eğilim, cevap değil.
 - **Üçüncü kapılı koşuda düzeltme yapılmadı** (0 tur değişiklik) ve yine de
   9/9 çıktı — yani o koşunun üretimi zaten temizdi ve 9/9'u kapı sağlamadı.
   Kapı, kusurun *bulunduğu* iki vakanın ikisinde de düzeltti; bulunmadığı

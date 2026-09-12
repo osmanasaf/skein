@@ -34,6 +34,7 @@ ajanın iyi niyetine değil **mekanizmaya** bağlar:
 | [`bench/DESIGN.md`](bench/DESIGN.md) | Tezi sınayan deneyin tasarımı — 2×2 çapraz kurgu |
 | [`RUNNING.md`](RUNNING.md) | Deneyi kendi makinende koşturmak |
 | [`HANDOFF.md`](HANDOFF.md) | **Buradan devam et** — son durum ve sıradaki adım |
+| [Genel bakış sayfası](https://claude.ai/code/artifact/2e7575af-84ee-40d8-aab4-5c3bdce0fe50) | Amaç, işleyiş ve ölçülen sonuçlar, tek sayfada |
 | [`java-kit/`](java-kit/) | Java rol ve kural seti (prompt kaynağı) |
 
 ## Durum
