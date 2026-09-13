@@ -122,8 +122,11 @@ Henüz ajan çağrısı yok — elle test edilir. Bu kasıtlı: taşıma katman�
 üstünde çalışan ajanlardan bağımsız olarak doğru olmalı.
 
 **Kapsam:**
-- Dosya tabanlı kuyruk: `outbox` / `inbox` / `sent` / `failed`
-- Yapılandırılmış mesaj doğrulama (dar tip kümesi, katı alan kontrolü)
+- ~~Dosya tabanlı kuyruk~~ ✅ — `queue/` / `active/` / `gate/` / `done/`.
+  Her geçiş bir `rename`; kart her an tam olarak bir dizinde. Sahiplenme
+  kilitsiz: iki koşucu aynı kartı görse de yalnızca biri taşıyabilir.
+- ~~Yapılandırılmış mesaj doğrulama~~ ✅ — kart okuması katı (olay
+  günlüğünün aksine): günlük geçmişin kaydı, kart durumun kendisi.
 - Commit çözümleme ve soy doğrulaması
 - Yinelenen devir teslim tespiti
 - ~~**Akış yükleyici ve doğrulayıcı**~~ ✅ — `SCHEMA.md`'deki 16 kural,
@@ -136,8 +139,10 @@ Henüz ajan çağrısı yok — elle test edilir. Bu kasıtlı: taşıma katman�
 - ~~Topoloji maliyet hesabı~~ ✅ — `src/flow/cost.ts`; retsiz temel ve ret
   limitiyle en kötü durum, `flow check` çıktısında
 
-**Biter kriteri:** İki "sahte rol" arasında elle devir teslim yapılabiliyor;
-süreç yarıda kesilip yeniden başlatıldığında iş kaybolmuyor. ~~`daily.yaml` ve
+**Biter kriteri:** ~~İki "sahte rol" arasında elle devir teslim yapılabiliyor;
+süreç yarıda kesilip yeniden başlatıldığında iş kaybolmuyor.~~ ✅
+`npm run card -- new|take|handoff|reject|release|recover` ile bir kart ret
+dahil uçtan uca sürülebiliyor. ~~`daily.yaml` ve
 `spec.yaml` doğrulamadan geçiyor, bozuk bir akış anlamlı hata veriyor.~~ ✅
 
 ---
@@ -254,7 +259,7 @@ Aşama 3'ten itibaren her ajan çağrısı kaydedilir. Takip edilen metrikler:
 
 **Aşama 0 tamam.** Sıra yeniden düzenlendi (bkz. Yakın plan).
 
-Yazılmış olan — 2898 satır (testler hariç), 187 test yeşil:
+Yazılmış olan — 3812 satır (testler hariç), 228 test yeşil:
 
 | Dosya | Ne | Kime hizmet ediyor |
 |---|---|---|
@@ -267,13 +272,18 @@ Yazılmış olan — 2898 satır (testler hariç), 187 test yeşil:
 | `src/flow/load.ts` | Akış yükleyici — 16 kural, zincir sırası, ret çözümü, topoloji hash'i | **ürün** |
 | `src/flow/cost.ts` | Kart başına aktivasyon tahmini; ret kenarları dahil | **ürün** |
 | `src/flow/cli.ts` | `npm run flow -- check` — topolojiyi yazar, ihlalde kural numarasıyla reddeder | **ürün** |
+| `src/flow/snapshot.ts` | Topolojinin dondurulmuş hali; kart bunu yanında taşır | **ürün** |
+| `src/card/card.ts` | Kart biçimi, ret sayaçları, geçmiş; katı okuma | **ürün** |
+| `src/card/queue.ts` | Dosya tabanlı kuyruk; atomik geçiş, kilitsiz sahiplenme, çökme toplama | **ürün** |
+| `src/card/cli.ts` | `npm run card -- …` — kartı elle sürme | **ürün** |
 
-Yazılmamış olan: **kart, kuyruk, worktree hazırlama, devir teslim, gözcü
-döngüsü, ekran.** Akış artık yükleniyor ve doğrulanıyor — ama onu koşturan
-şey yok.
+Yazılmamış olan: **worktree hazırlama, gözcü döngüsü (kartı alıp adaptörü
+çağıran şey), syncBack, ekran.** Kart artık zincir boyunca hareket ediyor —
+ama onu hareket ettiren hâlâ insan eli.
 
 **Çalıştırılmış ajan: 6 koşu + 7 denetim turu, toplam ~$1.79.**
 
-Adım 1, 2, 3 tamam. Akış yükleyici (Aşama 2'nin ilk parçası) de tamam.
-Sıradaki: **kart + kuyruk + gözcü** — tek kart, iki rol, sahte adaptörle
-uçtan uca.
+Adım 1, 2, 3 tamam. Aşama 2'nin akış yükleyici, kuyruk ve devir teslim
+parçaları da tamam. Sıradaki: **gözcü** — kuyruktan kartı alıp promptu
+derleyen, adaptörü çağıran ve sonuca göre `handoff`/`reject` diyen döngü.
+Önce sahte adaptörle, sonra gerçek CLI'larla.

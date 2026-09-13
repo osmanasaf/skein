@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "bench": "tsx src/bench/cli.ts",
     "doctor": "tsx src/bench/cli.ts doctor",
-    "flow": "tsx src/flow/cli.ts"
+    "flow": "tsx src/flow/cli.ts",
+    "card": "tsx src/card/cli.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
