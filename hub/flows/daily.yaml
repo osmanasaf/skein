@@ -27,12 +27,18 @@ roles:
     prompt: ../../java-kit/roles/cleaner.prompt
     receive: batch              # kuyruktaki eşdeğer işleri tek turda yut
     syncBack: [coder]           # merge-only kopya; maliyeti görünür
+    reject: coder               # itiraz varsa KART geri döner, gerekçesiyle
     next: done                  # zinciri kapatır
 
 gates: []                       # kapı yok; kod zaten senin önünden geçiyor
+
+reject:
+  limit: 2                      # aynı kenarda en fazla 2 ret
+  onExhausted: gate             # sonra karar senin; sessizce geçmez
 
 audit:
   enabled: true
   fingerprint: [task, recipients, commit, draft]
 
-# Maliyet: ~5 aktivasyon/kart (2 rol × 2 audit turu + 1 syncBack)
+# Maliyet: ~5 aktivasyon/kart (2 rol × 2 audit turu + 1 syncBack).
+# Her ret coder+reviewer parçasını yeniden koşturur: +4. Limit 2 → en kötü ~13.

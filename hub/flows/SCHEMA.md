@@ -26,11 +26,16 @@ roles:                          # sıra önemli değil; zincir `next` ile kurulu
     receive: task | batch       # varsayılan: task
     next: string | "done"       # bir sonraki rolün id'si, ya da bitiş
     syncBack: [string]          # merge-only kopya gidecek roller; varsayılan: []
+    reject: string?             # ret hâlinde kartın döneceği rol; varsayılan: gönderen
 
 gates:                          # insan kapıları; varsayılan: []
   - after: string               # bu rolün çıktısı kapıda bekler
     type: approval | none
     message: string?            # insana gösterilecek açıklama
+
+reject:                         # akış geneli ret politikası
+  limit: integer                # aynı kenarda en fazla kaç ret; varsayılan: 2
+  onExhausted: gate             # limit dolunca kart insan kapısında bekler
 
 audit:
   enabled: boolean              # varsayılan: true
@@ -75,6 +80,30 @@ bir kopyası gider; onların ağacı güncel kalır. Kart hareket etmez.
 > pakette kart başına 9 fazladan ajan uyandırması demekti. Burada kimin
 > uyandığını sayabilirsin.
 
+**`reject`** — geri yön. Bir rol, kendisine gelen işi kabul etmezse kart bu
+role **geri gider**. `syncBack` bir kopya gönderir ve kart yerinde kalır;
+`reject` kartın kendisini geri taşır. İkisi farklı şeylerdir.
+
+Varsayılan hedef **gönderendir**: `next`'i bu role işaret eden rol. Açıkça
+yazmak, hedef gönderenden farklıysa gerekir — güvenlik bakışı yapan bir rol,
+bulduğu kusuru kodu yazana döndürmek ister, kendisinden önceki denetçiye
+değil.
+
+Ret **boş dönmez**. Kartla birlikte bir ret kaydı taşınır: reddeden rol,
+gerekçe metni, reddedilen commit ve tur numarası. Alıcı rol bunu görev
+metninin içinde alır; "bir şeyler yanlış" değil, ne olduğu gider.
+
+Ret, devir teslim denetiminden (`audit`) ayrıdır. `audit` rolün **kendi**
+işini teslim etmeden önce denetlemesidir; `reject` teslim **sonrası**
+başka bir rolün itirazıdır. İkisi de olay günlüğüne ayrı yazılır.
+
+**`reject.limit`** — aynı kenarda üst üste kaç ret olabileceği. Sınırsız ret
+iki rolün birbirini sonsuza kadar reddetmesi demektir; bu kurgusal bir risk
+değil, iki modelin farklı doğru bildiği her durumda olan şeydir. Limit
+dolunca kart ilerlemez ve **insan kapısında bekler** (`onExhausted: gate`;
+şimdilik tek geçerli değer). Sessizce kabul etmek de, sessizce durmak da
+yasak — anlaşmazlık yukarı çıkar.
+
 **`gates`** — kapı, bir rolün çıktısının teslim edilmeden önce insan onayı
 beklemesidir. Zincirin **herhangi** bir yerine konabilir; hiçbir role
 ayrıcalık yoktur.
@@ -91,7 +120,9 @@ Akış yüklenirken şunlar kontrol edilir; ihlal varsa akış hiç başlamaz:
 2. Tam olarak bir rolün `workspace` değeri `main`.
 3. Her `next`, var olan bir `id`'ye ya da `done`'a işaret eder.
 4. Tam olarak bir rolün `next` değeri `done`.
-5. Zincirde döngü yok; her rol `done`'a ulaşabiliyor.
+5. **`next` zincirinde** döngü yok; her rol `done`'a ulaşabiliyor.
+   (Ret kasıtlı bir geri kenardır ve bu kurala girmez; onu kural 12-15
+   sınırlar.)
 6. `syncBack` yalnızca zincirde **daha önce** gelen rollere işaret eder.
 7. Her `gates[].after`, var olan bir `id`'ye işaret eder.
 8. Her `provider`, kayıtlı bir adaptöre karşılık gelir.
@@ -99,6 +130,12 @@ Akış yüklenirken şunlar kontrol edilir; ihlal varsa akış hiç başlamaz:
 10. Her `constitution` dosyası mevcut ve boş değil; liste tekil (aynı dosya
     iki kez giremez).
 11. Hiçbir prompt dosyası katman sınırı işaretini (`<<<skein:layer`) içermez.
+12. `reject`, var olan bir `id`'ye işaret eder ve rolün kendisi olamaz.
+13. `reject` yalnızca zincirde **daha önce** gelen bir role işaret eder —
+    ret ileri sıçrayamaz. (`syncBack` ile aynı kısıt.)
+14. Zincirin başı — hiçbir rolün `next`'inin işaret etmediği rol — `reject`
+    taşıyamaz; geri dönecek rol yoktur. O rol işi yapamıyorsa insana çıkar.
+15. `reject.limit` en az 1 olan bir tamsayıdır.
 
 Kural 9-11 akış yüklenirken değil, **prompt derlenirken** de yeniden
 uygulanır; ikisi de aynı birleştiriciden geçer.
@@ -133,16 +170,29 @@ Topolojiyi çalıştırmadan önce ne kadara mal olacağını görebilmelisin. K
 tahmin, kart başına ajan uyandırması:
 
 ```
-aktivasyon ≈ (rol sayısı × audit tur sayısı) + toplam syncBack alıcısı
+temel ≈ (rol sayısı × audit tur sayısı) + toplam syncBack alıcısı
 ```
 
-| Topoloji | Roller | syncBack toplamı | ~Aktivasyon |
+| Topoloji | Roller | syncBack toplamı | ~Temel |
 |---|---:|---:|---:|
 | `daily` (2 adım) | 2 | 1 | ~5 |
 | `spec` (4 adım) | 4 | 4 | ~12 |
 | 6 adım, her denetim rolü tüm öncekilere syncBack | 6 | 9 | ~21 |
 
-Derin topoloji yasak değil — maliyeti görünür olsun diye burada.
+**Ret bu sayının üstüne biner.** Bir ret, reddeden rolle hedefi arasındaki
+zincir parçasını baştan koşturur:
+
+```
+en kötü ≈ temel + Σ (kenarın ret limiti × o parçanın maliyeti)
+```
+
+| Topoloji | Temel | Ret kenarları | En kötü (limit 2) |
+|---|---:|---|---:|
+| `daily` | ~5 | reviewer→coder (4) | ~13 |
+| `spec` | ~12 | reviewer→coder (4), guard→coder (6) | ~32 |
+
+Derin topoloji de, cömert ret limiti de yasak değil — maliyeti görünür olsun
+diye burada. Ret limiti aynı zamanda bir bütçe kararıdır.
 
 ## Örnekler
 

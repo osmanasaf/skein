@@ -35,6 +35,7 @@ roles:
     prompt: ../../java-kit/roles/cleaner.prompt
     receive: batch
     syncBack: [coder]
+    reject: coder               # varsayılan zaten coder; açık yazıldı
     next: guard
 
   - id: guard                   # güvenlik/mimari son bakış
@@ -43,6 +44,8 @@ roles:
     prompt: ../../java-kit/roles/guard.prompt
     receive: batch
     syncBack: [coder, reviewer] # açık liste: kimin uyanacağı sayılabilir
+    reject: coder               # AÇIK: kusur kodda; gönderen reviewer'a değil,
+                                # kodu yazana döner
     next: done
 
 gates:
@@ -52,8 +55,13 @@ gates:
       Spec onaya hazır. Kabul kriterleri gözlemlenebilir mi, kapsam dışı
       doğru çizilmiş mi? Reddedersen iş analyst'e geri döner.
 
+reject:
+  limit: 2
+  onExhausted: gate
+
 audit:
   enabled: true
   fingerprint: [task, recipients, commit, draft]
 
-# Maliyet: ~12 aktivasyon/kart (4 rol × 2 audit turu + 4 syncBack alıcısı)
+# Maliyet: ~12 aktivasyon/kart (4 rol × 2 audit turu + 4 syncBack alıcısı).
+# Ret kenarları: reviewer→coder (+4), guard→coder (+6). Limit 2 → en kötü ~32.
