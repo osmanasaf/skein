@@ -18,7 +18,32 @@ Deney koşum takımı çalışıyor ve Açık Soru #1'e ilk sayısal cevabı ver
 **ilk çapraz satıcı koşusu operatörün Windows makinesinde tıkalı** ve
 tıkanmanın sebebini öğrenmek için tek bir komutun çıktısı bekleniyor.
 
-## Sıradaki adım — buradan başla
+## Canlı karar: orkestratör mü, deney mi
+
+Operatörün sorduğu ve cevabı kayda değer soru: *"işin sonucunda sadece
+çapraz doğrulama mı var, genel bir orkestrasyon yok mu?"*
+
+**Dürüst cevap: bugün uçtan uca koşan tek şey deney.** Yazılan ~2100 satırın
+kabaca yarısı ürün omurgası (adaptörler, audit gate, olay günlüğü, prompt
+derleyici) ama **hiçbir şey orkestrasyon yapmıyor**: kuyruk yok, devir
+teslim yok, worktree oluşturma yok, gözcü döngüsü yok, insan kapısı yok,
+ekran yok. `hub/flows/SCHEMA.md` 11 doğrulama kurallı bir akış dili
+tanımlıyor ve onu **okuyan tek satır kod yok** — `daily.yaml` çalıştırılabilir
+değil, belge.
+
+**Ve bu iki iş yarışmıyor.** Deney şuna takıldı: güçlü modeller tek dosyalık
+oyuncak görevleri temiz çözüyor, daha büyük ve bağlamlı görev lazım.
+Orkestratörün gerçek bir repoda koşması tam olarak o görevdir. Sentetik
+görev imal etmeye çalışmak yerine, gerçek işte doğal çıkan kusurlar ölçülür.
+
+Bu yüzden bir sonraki oturumun ilk kararı: **Adım 4'ü (deneyi tamamla)
+beklemeye alıp Aşama 2-3'e (akış yükleyici, kuyruk, devir teslim, worktree,
+gözcü) geçmek** mi, yoksa deneyi zorlamaya devam etmek mi.
+
+Öneri: orkestratöre geç. Gerekçesi yukarıda; ayrıca proje şu an
+gösterilebilir bir şey üretmiyor ve bu, motivasyonun da darboğazı.
+
+## Sıradaki adım — Windows tıkanması (orkestratöre geçilse de kapanmalı)
 
 Operatör şunu koşturup **çıktının tamamını** yapıştıracak:
 
