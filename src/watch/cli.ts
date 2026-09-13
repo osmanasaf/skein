@@ -22,6 +22,10 @@ Seçenekler:
                   (birden fazla kez verilebilir)
   --bin <p=yol>   sağlayıcının çalıştırılabilirini değiştir, örn.
                   --bin codex=/opt/codex/bin/codex
+  --permission-mode <m>  sağlayıcıya iletilecek izin modu (varsayılan
+                  bypassPermissions; root altında acceptEdits gerekir)
+  --allow-tool <t>  açıkça izin verilen araç, ör. --allow-tool "Bash(git:*)"
+                  (birden fazla kez verilebilir)
   --log <yol>     olay günlüğü dosyası (varsayılan: .skein/olaylar.jsonl)
   --plan          hiçbir ajan çağırmadan ne yapılacağını yaz`;
 
@@ -38,17 +42,24 @@ interface Args {
   plan: boolean;
   models: string[];
   bins: string[];
+  allowTools: string[];
+  permissionMode?: string;
   log?: string;
 }
 
 function parseArgs(argv: string[]): Args {
-  const args: Args = { once: false, plan: false, models: [], bins: [] };
+  const args: Args = { once: false, plan: false, models: [], bins: [], allowTools: [] };
   for (let i = 0; i < argv.length; i += 1) {
     const value = argv[i] as string;
     if (value === "--once") args.once = true;
     else if (value === "--plan") args.plan = true;
     else if (value === "--model") args.models.push(argv[++i] as string);
     else if (value === "--bin") args.bins.push(argv[++i] as string);
+    else if (value === "--allow-tool") args.allowTools.push(argv[++i] as string);
+    else if (value === "--permission-mode") {
+      const mode = argv[++i];
+      if (mode !== undefined) args.permissionMode = mode;
+    }
     else if (value === "--log") {
       const path = argv[++i];
       if (path !== undefined) args.log = path;
@@ -65,7 +76,12 @@ function parseArgs(argv: string[]): Args {
  * kararlar ve modelin akış dosyasına girmesi, model değiştiğinde yolda olan
  * kartların topoloji hash'ini kırardı. Model burada, koşum anında pinlenir.
  */
-function buildAdapters(providers: string[], pins: string[], bins: string[]): Map<string, Adapter> {
+function buildAdapters(
+  providers: string[],
+  pins: string[],
+  bins: string[],
+  extra: { permissionMode?: string; allowedTools?: string[] },
+): Map<string, Adapter> {
   const pinned = new Map<string, string>();
   for (const spec of pins) {
     const at = spec.indexOf(":");
@@ -85,7 +101,10 @@ function buildAdapters(providers: string[], pins: string[], bins: string[]): Map
     const bin = binOf.get(provider);
     adapters.set(
       provider,
-      adapterFor(pinned.get(provider) ?? provider, bin === undefined ? {} : { bin }),
+      adapterFor(pinned.get(provider) ?? provider, {
+        ...(bin === undefined ? {} : { bin }),
+        ...extra,
+      }),
     );
   }
   return adapters;
@@ -145,6 +164,10 @@ async function main(argv: string[]): Promise<number> {
     [...new Set(topology.roles.map((r) => r.provider))],
     args.models,
     args.bins,
+    {
+      ...(args.permissionMode === undefined ? {} : { permissionMode: args.permissionMode }),
+      ...(args.allowTools.length === 0 ? {} : { allowedTools: args.allowTools }),
+    },
   );
   const log = new EventLog(args.log ?? join(root, ".skein", "olaylar.jsonl"), `kosu-${Date.now()}`);
   const options = { root, queue, adapters, log };

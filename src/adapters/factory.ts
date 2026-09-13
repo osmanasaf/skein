@@ -43,14 +43,25 @@ export function parseModelSpec(spec: string): ModelSpec {
  * `id` model tanımının tamamı: 2x2'nin hücreleri model düzeyinde ayrışmalı,
  * yalnızca satıcı düzeyinde değil.
  */
-export function adapterFor(spec: string, options: { bin?: string } = {}): Adapter {
+export interface AdapterOptions {
+  bin?: string;
+  /** Sağlayıcıya iletilir; anlamı adaptöre göre değişir. */
+  permissionMode?: string;
+  allowedTools?: string[];
+}
+
+export function adapterFor(spec: string, options: AdapterOptions = {}): Adapter {
   const { provider, model } = parseModelSpec(spec);
-  const bin = options.bin === undefined ? {} : { bin: options.bin };
+  const extra = {
+    ...(options.bin === undefined ? {} : { bin: options.bin }),
+    ...(options.permissionMode === undefined ? {} : { permissionMode: options.permissionMode }),
+    ...(options.allowedTools === undefined ? {} : { allowedTools: options.allowedTools }),
+  };
   switch (provider) {
     case "claude":
-      return new ClaudeCliAdapter({ id: spec, model, ...bin });
+      return new ClaudeCliAdapter({ id: spec, model, ...extra });
     case "codex":
-      return new CodexCliAdapter({ id: spec, model, ...bin });
+      return new CodexCliAdapter({ id: spec, model, ...extra });
     default:
       throw new Error(
         `Bilinmeyen sağlayıcı: "${provider}". Kayıtlı olanlar: ${KNOWN_PROVIDERS.join(", ")}`,

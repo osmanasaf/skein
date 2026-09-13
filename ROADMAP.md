@@ -259,7 +259,7 @@ Aşama 3'ten itibaren her ajan çağrısı kaydedilir. Takip edilen metrikler:
 
 **Aşama 0 tamam.** Sıra yeniden düzenlendi (bkz. Yakın plan).
 
-Yazılmış olan — 4506 satır (testler hariç), 248 test yeşil:
+Yazılmış olan — 4767 satır (testler hariç), 269 test yeşil:
 
 | Dosya | Ne | Kime hizmet ediyor |
 |---|---|---|
@@ -281,15 +281,19 @@ Yazılmış olan — 4506 satır (testler hariç), 248 test yeşil:
 | `src/watch/tick.ts` | Tek tur: kartı al, promptu derle, ajanı çağır, karara bağla | **ürün** |
 | `src/watch/loop.ts` | Geçiş ve kart kalmayana kadar koşma | **ürün** |
 | `src/watch/cli.ts` | `npm run watch -- <akış>` — gözcünün kendisi | **ürün** |
+| `src/watch/git.ts` | İleri birleştirme, kirlilik kontrolü, çakışmada geri alma | **ürün** |
 
-Yazılmamış olan: **worktree oluşturma** (gözcü var olanı kullanıyor,
-yoksa komutu söyleyip duruyor), **syncBack** (merge-only kopya), **ekran**,
-ve **gerçek CLI'larla ilk koşu**. Sahte adaptörlerle uçtan uca yeşil: kart
-açılıyor, iki rolden geçiyor, reddediliyor, düzeltiliyor, bitiyor.
+**Gerçek ajanlarla ilk koşu yapıldı** (tek sağlayıcı, iki rol, haiku).
+Kart açıldı, `coder` `retry<T>`'yi yazdı ve commit attı, kod `reviewer`'ın
+worktree'sine birleştirildi, denetlendi, kart bitti. Dört koşu sürdü ve her
+biri gerçek bir kusur buldu — hepsi sahte adaptörle görünmezdi.
+
+Yazılmamış olan: **worktree oluşturma** (gözcü var olanı kullanıyor, yoksa
+komutu söyleyip duruyor), **syncBack** (merge-only kopya — ileri yön artık
+var, geri yön yok), **ekran**, ve **çapraz sağlayıcı koşu**.
 
 **Çalıştırılmış ajan: 6 koşu + 7 denetim turu, toplam ~$1.79.**
 
 Adım 1, 2, 3 tamam. Aşama 2 (akış yükleyici, kuyruk, devir teslim) ve
-Aşama 3'ün yürütücü kısmı tamam. Sıradaki: **gerçek CLI'larla ilk koşu** —
-`npm run watch -- daily`. Sahte adaptörle koşan yol aynı; değişen tek şey
-`--bin` vermemek.
+Aşama 3 (adaptörler + yürütücü) tamam. Sıradaki: **syncBack** ve
+**worktree oluşturma** — ikisi de aynı git katmanının üstünde duruyor.

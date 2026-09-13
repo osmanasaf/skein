@@ -96,11 +96,15 @@ beforeEach(async () => {
 
   claude = new FakeAdapter("claude");
   codex = new FakeAdapter("codex");
+  // Git bu dosyanın konusu değil; gerçek birleştirme git.test.ts'de.
+  // Buradaki testler yönlendirmeyi sınıyor, o yüzden git enjekte ediliyor.
   options = {
     root,
     queue,
     adapters: new Map<string, Adapter>([["claude", claude], ["codex", codex]]),
     headCommit: async () => "abc1234",
+    dirtyPaths: async () => [],
+    mergeForward: async () => ({ kind: "merged" as const }),
   };
 });
 afterEach(async () => {
@@ -195,6 +199,19 @@ describe("tick — ret", () => {
     expect(second).toContain("abc1234");
   });
 
+  it("zorunlu çıktı görev metninin BAŞINDA da durur", async () => {
+    await put();
+    claude.answer = writes({ decision: "accept" });
+    await tick("coder", options);
+
+    const text = claude.calls[0]?.taskText as string;
+    const first = text.indexOf(VERDICT_FILE);
+    const work = text.indexOf("## İş");
+    expect(first).toBeGreaterThanOrEqual(0);
+    // Sonda kalan talimat, iş bittiğinde unutulan talimattır.
+    expect(first).toBeLessThan(work);
+  });
+
   it("ilk turda ret kaydı yoktur", async () => {
     await put();
     claude.answer = writes({ decision: "accept" });
@@ -229,6 +246,110 @@ describe("tick — ret", () => {
 
     expect(result.status).toBe("escalated");
     expect((result as { card: Card }).card.state).toBe("gate");
+  });
+});
+
+describe("tick — devir teslim kodu da taşır", () => {
+  it("kabul edilen iş sonraki rolün ağacına birleştirilir", async () => {
+    await put();
+    claude.answer = writes({ decision: "accept" });
+    const merges: { fromDir: string; toDir: string }[] = [];
+
+    await tick("coder", {
+      ...options,
+      mergeForward: async (o) => {
+        merges.push({ fromDir: o.fromDir, toDir: o.toDir });
+        return { kind: "merged" };
+      },
+    });
+
+    expect(merges).toEqual([
+      { fromDir: root, toDir: join(root, WORKTREE_DIR, "reviewer") },
+    ]);
+  });
+
+  it("zincirin sonunda birleştirme yapılmaz", async () => {
+    await put();
+    claude.answer = writes({ decision: "accept" });
+    codex.answer = writes({ decision: "accept" });
+    let calls = 0;
+
+    const counting = { ...options, mergeForward: async () => { calls += 1; return { kind: "merged" as const }; } };
+    await tick("coder", counting);
+    await tick("reviewer", counting);
+
+    expect(calls).toBe(1);
+  });
+
+  it("çakışma kartı kapıya çıkarır — kimse tahmin etmez", async () => {
+    await put();
+    claude.answer = writes({ decision: "accept" });
+
+    const result = await tick("coder", {
+      ...options,
+      mergeForward: async () => ({ kind: "conflict", paths: ["src/retry.ts"] }),
+    });
+
+    expect(result.status).toBe("escalated");
+    expect((result as { reason: string }).reason).toContain("src/retry.ts");
+    expect((result as { reason: string }).reason).toMatch(/çakış/);
+  });
+
+  it("birleştirme başarısızsa kart ileri GİTMEZ", async () => {
+    const card = await put();
+    claude.answer = writes({ decision: "accept" });
+
+    await tick("coder", {
+      ...options,
+      mergeForward: async () => ({ kind: "blocked", reason: "hedef ağaç kirli" }),
+    });
+
+    expect((await queue.get(card.id))?.role).toBe("coder");
+  });
+
+  it("ret yolunda birleştirme yapılmaz — reddedilen iş ilerlemez", async () => {
+    await put();
+    claude.answer = writes({ decision: "accept" });
+    codex.answer = writes({ decision: "reject", reason: "olmadı" });
+    let calls = 0;
+
+    const counting = { ...options, mergeForward: async () => { calls += 1; return { kind: "merged" as const }; } };
+    await tick("coder", counting);
+    await tick("reviewer", counting);
+
+    expect(calls).toBe(1); // yalnızca coder'ın kabulü
+  });
+});
+
+describe("tick — işlenmemiş iş devredilemez", () => {
+  // Gerçek koşuda bulundu: coder dosyaları yazdı, commit atmadı, yine de
+  // "accept" dedi. Devir teslim iskelet commit'ini kaydediyordu.
+  it("kirli ağaçla kabul kartı kapıya çıkarır", async () => {
+    const card = await put();
+    claude.answer = writes({ decision: "accept" });
+
+    const result = await tick("coder", {
+      ...options,
+      dirtyPaths: async () => ["src/retry.ts", "src/retry.test.ts"],
+    });
+
+    expect(result.status).toBe("escalated");
+    expect((result as { reason: string }).reason).toContain("src/retry.ts");
+    expect((result as { reason: string }).reason).toMatch(/devredilemez/);
+    expect((await queue.get(card.id))?.state).toBe("gate");
+  });
+
+  it("kirli ağaç kontrolü orkestratörün kendi dosyasını saymaz", async () => {
+    await put();
+    claude.answer = writes({ decision: "accept" });
+    let ignored: string[] = [];
+
+    await tick("coder", {
+      ...options,
+      dirtyPaths: async (_dir, ignore) => { ignored = ignore; return []; },
+    });
+
+    expect(ignored).toContain(VERDICT_FILE);
   });
 });
 
@@ -281,16 +402,19 @@ describe("tick — sessiz başarısızlık yasağı", () => {
     expect((result as { reason: string }).reason).toMatch(/geçerli JSON değil/);
   });
 
+  // Kod artık devir teslimde taşındığı için eksik worktree BİR ADIM ÖNCE
+  // yakalanıyor: kart coder'dan hiç çıkmadan. Hata, iş ilerledikten sonra
+  // değil ilerlemeden önce görünüyor.
   it("olmayan worktree kartı kapıya çıkarır ve komutu söyler", async () => {
     await rm(join(root, WORKTREE_DIR, "reviewer"), { recursive: true, force: true });
-    await put();
+    const card = await put();
     claude.answer = writes({ decision: "accept" });
 
-    await tick("coder", options);
-    const result = await tick("reviewer", options);
+    const result = await tick("coder", options);
 
     expect(result.status).toBe("escalated");
     expect((result as { reason: string }).reason).toContain("git worktree add");
+    expect((await queue.get(card.id))?.role).toBe("coder");
   });
 });
 

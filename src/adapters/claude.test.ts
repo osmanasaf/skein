@@ -29,6 +29,20 @@ afterEach(async () => {
 const OK = `{"is_error":false,"result":"tamam","total_cost_usd":0.25,"usage":{"input_tokens":10,"output_tokens":4}}`;
 
 describe("ClaudeCliAdapter", () => {
+  it("izin modu ve açık araç listesi geçirilebilir", () => {
+    const adapter = new ClaudeCliAdapter({
+      model: "claude-opus-5",
+      permissionMode: "acceptEdits",
+      allowedTools: ["Bash(git:*)", "Edit"],
+    });
+    const args = adapter.argsFor(
+      { workdir: "/tmp", promptFile: "/tmp/p.md", taskText: "işi yap", timeoutMs: 1000 },
+    ).join(" ");
+
+    expect(args).toContain("--permission-mode acceptEdits");
+    expect(args).toContain("--allowed-tools Bash(git:*) Edit");
+  });
+
   it("model pinlenmiş ve id sabit", () => {
     const a = new ClaudeCliAdapter({ model: "claude-opus-5" });
     expect(a.id).toBe("claude");
@@ -43,7 +57,10 @@ describe("ClaudeCliAdapter", () => {
     expect(args.join(" ")).toContain("--output-format json");
     expect(args.join(" ")).toContain("--model claude-opus-5");
     expect(args.join(" ")).toContain(`--system-prompt-file ${join(root, "prompt.md")}`);
-    expect(args.join(" ")).toContain("--permission-mode acceptEdits");
+    // Headless bir rol commit atmak zorunda ve kimse izin istemine cevap
+    // veremez. `acceptEdits` dosya yazdırır ama Bash'e izin vermez: ajan
+    // kodu yazar, commit atamaz ve haklı olarak "başardım" demez.
+    expect(args.join(" ")).toContain("--permission-mode bypassPermissions");
     expect(args.join(" ")).toContain("--permission-prompts none");
   });
 

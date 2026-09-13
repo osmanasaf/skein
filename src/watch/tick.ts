@@ -1,13 +1,13 @@
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Adapter } from "../adapters/contract.js";
+import type { Adapter, InvokeResult } from "../adapters/contract.js";
 import type { Card } from "../card/card.js";
 import type { CardQueue } from "../card/queue.js";
 import type { EventLog } from "../events/log.js";
-import { promptLayers, roleOf, type SnapshotRole } from "../flow/snapshot.js";
+import { DONE, promptLayers, roleOf, type SnapshotRole } from "../flow/snapshot.js";
 import { assemblePrompt } from "../prompt/assemble.js";
-import { capture } from "../proc/process.js";
+import { dirtyPaths, head, mergeForward, ORCHESTRATOR_PATHS } from "./git.js";
 import { buildTaskText } from "./task-text.js";
 import { clearVerdict, readVerdict } from "./verdict.js";
 import { resolveWorkspace } from "./workspace.js";
@@ -28,16 +28,15 @@ export interface TickOptions {
   timeoutMs?: number;
   /** Test edilebilirlik için; varsayılan `git rev-parse HEAD`. */
   headCommit?: (workdir: string) => Promise<string | undefined>;
+  /** Test edilebilirlik için; varsayılan `git status --porcelain`. */
+  dirtyPaths?: (workdir: string, ignore: string[]) => Promise<string[]>;
+  /** Test edilebilirlik için; varsayılan gerçek git birleştirmesi. */
+  mergeForward?: typeof mergeForward;
 }
 
 const DEFAULT_TIMEOUT_MS = 20 * 60 * 1000;
 
-/** Çalışılan ağacın son commit'i; kart geçmişine ve itiraza bağlanır. */
-async function gitHead(workdir: string): Promise<string | undefined> {
-  const result = await capture("git", ["rev-parse", "--short", "HEAD"], { cwd: workdir, timeoutMs: 10_000 });
-  const hash = result.stdout.trim();
-  return result.exitCode === 0 && hash !== "" ? hash : undefined;
-}
+
 
 /**
  * Bir rol için tek tur koşar.
@@ -69,6 +68,20 @@ export async function tick(roleId: string, options: TickOptions): Promise<TickRe
     const reason = `Tur koşulamadı: ${(error as Error).message}`;
     return { status: "escalated", card: await queue.escalate(card, reason), reason };
   }
+}
+
+/**
+ * Ajanın kendi açıklamasını gerekçeye ekler.
+ *
+ * Sonuçsuz bir turda "verdikt yazmadı" cümlesi olayı anlatır, sebebini
+ * anlatmaz. Sebebi çoğu zaman ajan kendisi söylüyor — çekirdeğin onu
+ * okumaması, teşhisi koşu sayısı kadar geciktiriyor.
+ */
+function agentSaid(result: InvokeResult): string {
+  const text = (result.message ?? result.stdout).trim();
+  if (text === "") return "";
+  const tail = text.length > 600 ? `…${text.slice(-600)}` : text;
+  return `\n\nAjan şunu söyledi:\n${tail}`;
 }
 
 async function runRole(card: Card, role: SnapshotRole, options: TickOptions): Promise<TickResult> {
@@ -115,7 +128,7 @@ async function runRole(card: Card, role: SnapshotRole, options: TickOptions): Pr
     ...(result.usage === undefined ? {} : { usage: result.usage }),
   });
 
-  const commit = await (options.headCommit ?? gitHead)(workdir);
+  const commit = await (options.headCommit ?? head)(workdir);
 
   if (result.exitCode !== 0) {
     const tail = result.stderr.trim().slice(-400);
@@ -130,11 +143,12 @@ async function runRole(card: Card, role: SnapshotRole, options: TickOptions): Pr
   if (verdict.kind === "missing") {
     const reason =
       "Ajan verdikt yazmadı — tur sonuçsuz. Cevap vermemek bir cevap değildir; " +
-      "sessizce kabul saymak, hiçbir şey üretmemiş bir koşuyu başarılı saymak olurdu.";
+      "sessizce kabul saymak, hiçbir şey üretmemiş bir koşuyu başarılı saymak olurdu." +
+      agentSaid(result);
     return { status: "escalated", card: await queue.escalate(card, reason), reason };
   }
   if (verdict.kind === "invalid") {
-    const reason = `Verdikt geçersiz: ${verdict.problem}`;
+    const reason = `Verdikt geçersiz: ${verdict.problem}${agentSaid(result)}`;
     return { status: "escalated", card: await queue.escalate(card, reason), reason };
   }
 
@@ -147,7 +161,72 @@ async function runRole(card: Card, role: SnapshotRole, options: TickOptions): Pr
       : { status: "rejected", card: sent, reason };
   }
 
+  // KUSUR 1'in kapısı: işlenmemiş değişiklik devredilemez.
+  //
+  // Gerçek koşuda `coder` dosyaları yazdı, commit atmadı ve yine de
+  // "accept" dedi; devir teslim iskelet commit'ini kaydetti. "Dosya
+  // yazdım" ile "işi teslim ettim" ayrı şeyler. Kural "her kabul commit
+  // üretmeli" DEĞİL — değişiklik yapmadan kabul eden bir denetçi meşru;
+  // yasak olan, ortada duran ve hiçbir yere gidemeyecek iş bırakmak.
+  const dirty = await (options.dirtyPaths ?? dirtyPaths)(workdir, ORCHESTRATOR_PATHS);
+  if (dirty.length > 0) {
+    const reason =
+      `\`${role.id}\` kabul etti ama ağacında işlenmemiş değişiklik var: ` +
+      `${dirty.slice(0, 8).join(", ")}${dirty.length > 8 ? ` (+${dirty.length - 8})` : ""}. ` +
+      `İşlenmemiş iş devredilemez — sonraki rol onu göremez.`;
+    return { status: "escalated", card: await queue.escalate(card, reason), reason };
+  }
+
+  // KUSUR 2'nin kapısı: devir teslim kodu da taşır.
+  const merge = await handOverCode(card, role, options, workdir);
+  if (merge !== null) {
+    return { status: "escalated", card: await queue.escalate(card, merge), reason: merge };
+  }
+
   const moved = await queue.handoff(card, commit === undefined ? {} : { commit });
   const summary = verdict.verdict.summary;
   return { status: "accepted", card: moved, ...(summary === undefined ? {} : { summary }) };
+}
+
+/**
+ * Kodu zincirde bir sonraki rolün ağacına taşır.
+ *
+ * Şema `syncBack`'i "merge-only kopya" diye tanımlıyordu ama yalnızca GERİ
+ * yön için. İleri yön hiç yazılmamıştı: kart taşınıyor, kod bıraktığı yerde
+ * kalıyordu. Gerçek koşuda denetçi boş bir worktree'de "denetle" talimatı
+ * aldı ve doğal olarak denetleyecek bir şey bulamadı.
+ *
+ * Sorun varsa gerekçe metnini döner; yoksa null.
+ */
+async function handOverCode(
+  card: Card,
+  role: SnapshotRole,
+  options: TickOptions,
+  fromDir: string,
+): Promise<string | null> {
+  if (role.next === DONE) return null;
+
+  const next = roleOf(card.topology, role.next);
+  if (next === null) return `Sonraki rol topolojide yok: ${role.next}`;
+  if (next.workspace === role.workspace) return null;
+
+  const toDir = await resolveWorkspace(options.root, next.workspace);
+  const result = await (options.mergeForward ?? mergeForward)({
+    fromDir,
+    toDir,
+    message: `skein: ${role.id} → ${next.id} (${card.id})`,
+    ignoreDirty: ORCHESTRATOR_PATHS,
+  });
+
+  switch (result.kind) {
+    case "merged":
+    case "already":
+      return null;
+    case "conflict":
+      // Çakışmayı üçüncü bir ajanın tahmin etmesi değil, insanın çözmesi
+      // gereken yer burası.
+      return `\`${role.id}\` → \`${next.id}\` birleştirmesi çakıştı: ${result.paths.join(", ")}`;
+    case "blocked":
+      return `\`${role.id}\` → \`${next.id}\` kodu taşınamadı: ${result.reason}`;
+  }
 }

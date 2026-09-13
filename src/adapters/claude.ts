@@ -15,10 +15,20 @@ export interface ClaudeCliOptions {
   /** Çalıştırılacak ikili. Testte sahte bir script ile değiştirilir. */
   bin?: string;
   /**
-   * İzin modu. Varsayılan `acceptEdits`: ajan dosya yazabilmeli, ama
-   * `bypassPermissions` root altında CLI tarafından reddediliyor.
+   * İzin modu. Varsayılan `bypassPermissions`: headless bir rol commit
+   * atmak zorunda ve kimse izin istemine cevap veremez.
+   *
+   * `acceptEdits` YETMEZ ve bunu bir koşu pahasına öğrendik: dosya
+   * yazmaya izin verir ama Bash'e vermez, yani ajan kodu yazar, `git
+   * commit` atamaz ve — doğru davranarak — "başardım" demeyi reddeder.
+   * Tur, hiç kimsenin anlamadığı bir sebeple sonuçsuz kalır.
+   *
+   * Root altında CLI `bypassPermissions`'ı reddeder; o durumda
+   * `acceptEdits` + `allowedTools` ile gerekli komutlar açılır.
    */
   permissionMode?: string;
+  /** `--allowed-tools` değerleri, ör. `["Bash(git:*)"]`. */
+  allowedTools?: string[];
 }
 
 /** `claude -p --output-format json` çıktısının okuduğumuz alanları. */
@@ -40,12 +50,14 @@ export class ClaudeCliAdapter implements Adapter {
   readonly model: string;
   readonly #bin: string;
   readonly #permissionMode: string;
+  readonly #allowedTools: string[];
 
   constructor(options: ClaudeCliOptions) {
     this.id = options.id ?? "claude";
     this.model = options.model;
     this.#bin = options.bin ?? "claude";
-    this.#permissionMode = options.permissionMode ?? "acceptEdits";
+    this.#permissionMode = options.permissionMode ?? "bypassPermissions";
+    this.#allowedTools = options.allowedTools ?? [];
   }
 
   get bin(): string {
@@ -80,6 +92,9 @@ export class ClaudeCliAdapter implements Adapter {
     }
 
     args.push("--permission-mode", this.#permissionMode);
+    if (this.#allowedTools.length > 0 && (supported === undefined || supported.has("--allowed-tools"))) {
+      args.push("--allowed-tools", ...this.#allowedTools);
+    }
     // Soracak bir insan yok: prompt gerektiren her şey otomatik reddedilsin.
     // Zorunlu değil — yokluğunda timeout aynı işi görür, sadece daha yavaş.
     if (supported === undefined || supported.has("--permission-prompts")) {
@@ -171,6 +186,10 @@ export class ClaudeCliAdapter implements Adapter {
     };
     const usage = toUsage(parsed);
     if (usage) result.usage = usage;
+    // Ajanın son mesajı: tur sonuçsuz bittiğinde sebebi çoğu zaman burada.
+    if (typeof parsed?.result === "string" && parsed.result.trim() !== "") {
+      result.message = parsed.result.trim();
+    }
     if (timedOut) result.timedOut = true;
     return result;
   }

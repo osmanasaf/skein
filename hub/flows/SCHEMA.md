@@ -70,6 +70,31 @@ Diğer her rol kendi adıyla bir git worktree alır ve orada izole çalışır.
 **`next`** — ileri yön. Bir rol işini bitirince kart buraya gider. `done`
 yazan rol zinciri kapatır ve kartı bitmiş sayar.
 
+**Kart taşınırken kod da taşınır.** Rolün dalı, sonraki rolün worktree'sine
+merge-only olarak birleştirilir — `syncBack`'in geriye yaptığının ileri
+yöndeki karşılığı. İkisi aynı ilkenin iki yönü: bir rolün ağacı, görmesi
+gereken işi içermeli.
+
+> Bu cümle ilk taslakta yoktu ve eksikliği ancak gerçek ajanlarla koşunca
+> göründü. Her rol kendi worktree'sinde, kendi dalında çalışıyor; ana dal
+> ilerlediğinde denetçinin ağacı kendiliğinden ilerlemiyor. Denetçi boş bir
+> depoda "denetle" talimatı aldı ve doğal olarak denetleyecek bir şey
+> bulamadı. Sahte adaptörle koşan testlerin hiçbiri bunu göremezdi:
+> kod taşımayan bir devir teslim, kod üretmeyen ajanlarla kusursuz görünür.
+
+**Çakışma çözülmez, yukarı çıkar.** Birleştirme çakışırsa geri alınır
+(`merge --abort`) ve kart insan kapısında bekler. İki ajanın aynı satırda
+ayrıştığı yer, bir üçüncü ajanın tahmin edeceği yer değil.
+
+**Kabul, temiz ağaç ister.** Rol `accept` dediği hâlde ağacında işlenmemiş
+değişiklik bırakmışsa devir teslim yapılmaz. Kural "her kabul commit
+üretmeli" değil — değişiklik yapmadan kabul eden bir denetçi meşru; yasak
+olan, ortada duran ve hiçbir yere gidemeyecek iş bırakmak.
+
+> Bu da aynı koşuda bulundu: üretici dosyaları yazdı, commit atmadı, yine de
+> "kabul" dedi. Devir teslim iskelet commit'ini kaydetti — kart geçmişindeki
+> o hash bir yalandı.
+
 > SwarmForge'da ileri yön rol promptunun *metnine* gömülüydü, geri yön ise
 > konfigürasyondaydı; ikisinin tutarlılığı hiç doğrulanmıyordu. Burada ikisi
 > de tanımda ve doğrulanıyor.

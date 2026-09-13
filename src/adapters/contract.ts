@@ -30,6 +30,16 @@ export interface InvokeResult {
   stderr: string;
   durationMs: number;
   usage?: Usage;
+  /**
+   * Ajanın son mesajı, düz metin olarak — varsa.
+   *
+   * Bir tur sonuçsuz bittiğinde ajanın kendi açıklaması en değerli teşhis.
+   * Gerçek bir koşuda ajan "git add için izin yok, o yüzden verdikt
+   * yazmıyorum" diye açıkça yazdı; çekirdek bunu okumadığı için kart
+   * "verdikt yazmadı" diye kapıya çıktı ve sebep üç koşu boyunca
+   * görünmedi.
+   */
+  message?: string;
   /** Süreç timeoutMs'i aştığı için öldürüldüyse true. */
   timedOut?: boolean;
 }
