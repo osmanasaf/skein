@@ -2,6 +2,18 @@ import { ClaudeCliAdapter } from "./claude.js";
 import { CodexCliAdapter } from "./codex.js";
 import type { Adapter } from "./contract.js";
 
+/**
+ * Adaptörü olan sağlayıcılar. Akış doğrulaması (SCHEMA.md kural 8) adaptör
+ * örneklemeden bu listeye bakar, bu yüzden tek kaynak burada duruyor.
+ */
+export const KNOWN_PROVIDERS = ["claude", "codex"] as const;
+
+/** `loadFlow`'un `providers` seçeneği için hazır küme. */
+export function knownProviderSet(): { has(id: string): boolean; ids(): string[] } {
+  const set = new Set<string>(KNOWN_PROVIDERS);
+  return { has: (id) => set.has(id), ids: () => [...set].sort() };
+}
+
 export interface ModelSpec {
   provider: string;
   model: string;
@@ -39,6 +51,8 @@ export function adapterFor(spec: string): Adapter {
     case "codex":
       return new CodexCliAdapter({ id: spec, model });
     default:
-      throw new Error(`Bilinmeyen sağlayıcı: "${provider}". Kayıtlı olanlar: claude, codex`);
+      throw new Error(
+        `Bilinmeyen sağlayıcı: "${provider}". Kayıtlı olanlar: ${KNOWN_PROVIDERS.join(", ")}`,
+      );
   }
 }

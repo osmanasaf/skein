@@ -45,8 +45,14 @@ audit:
 ## Alanların anlamı
 
 **Yollar** — `constitution` ve `prompt` alanlarındaki yollar **akış
-dosyasının bulunduğu dizine** göre çözülür. Mutlak yol ve `../` ile dışarı
-çıkmak yasaktır.
+dosyasının bulunduğu dizine** göre çözülür. Mutlak yol yasaktır; çözülmüş
+yol **depo kökünün** içinde kalmak zorundadır.
+
+> `../` serbesttir. Bu kural önce "`../` ile dışarı çıkmak yasak" diye
+> yazılmıştı ve o hâliyle gönderilen iki örneği de reddederdi: ikisi de
+> `hub/flows/`'tan `java-kit/`'e `../../` ile uzanıyor. Anayasa maddeleri
+> ile rol tanımları aynı dizinde durmak zorunda değil; sınır dizin değil,
+> depo.
 
 **`constitution`** — her role, kendi rol promptundan **önce** eklenen ortak
 katmanlar. Çekirdek bunları rol promptuyla birleştirip adaptöre tek dosya
@@ -108,13 +114,44 @@ yasak — anlaşmazlık yukarı çıkar.
 beklemesidir. Zincirin **herhangi** bir yerine konabilir; hiçbir role
 ayrıcalık yoktur.
 
+**Akış hash'i** — yükleyici topolojinin SHA-256'sını hesaplar ve koşan her
+kart bu damgayı yanında taşır. Amaç, akışların **değiştirilebilir** olması:
+rol ekleyip çıkarabilmelisin, ama yolda olan bir kartın hangi topolojiyle
+koştuğu sonradan da bilinmeli.
+
+Hash'e giren: rol zinciri (sıra, sağlayıcı, workspace, prompt yolu,
+`receive`, `next`, `syncBack`, çözülmüş `reject`), kapıların yeri ve türü,
+ret politikası, audit politikası, anayasa listesi. Yollar depo köküne göre
+relatif — aynı tanım her makinede aynı hash'i verir.
+
+Hash'e girmeyen: `description` ve kapı mesajları (insana yazılmış düzyazı;
+bir yazım düzeltmesi yolda olan kartları geçersiz kılmamalı) ve prompt
+dosyalarının **içeriği** — o `assemblePrompt`'un hash'inin işi. İkisi ayrı
+kaydedilir ki bir şey değiştiğinde hangisi olduğu bilinsin: yol mu değişti,
+talimat mı.
+
+Buradan çıkan sözleşme:
+
+| Ne zaman değişir | Serbest mi | Yolda olan karta etkisi |
+|---|---|---|
+| Akış başlamadan — rol ekle/çıkar, sıra değiştir | evet | — |
+| Akış koşarken — dosyayı düzenle | evet | yok; kart kendi hash'iyle biter |
+| Ajan kendi kararıyla rol ekler | **hayır** | — |
+
+Üçüncü satır kasıtlı. Maliyeti önceden göremediğin, iki koşuyu
+karşılaştıramadığın bir topoloji ölçülemez; "prompt aynıydı, topoloji
+aynıydı" diyemezsen elinde veri değil anekdot kalır. İleride istenirse insan
+kapısı arkasında bir *öneri* olarak eklenebilir.
+
 **`audit`** — devir teslim denetim kapısı. Parmak izine `commit` dahil olduğu
 için, denetim sırasında yapılan düzeltme otomatik olarak yeni bir tur açar;
 devir teslim ancak hiçbir şeyin değişmediği bir turdan sonra gerçekleşir.
 
 ## Doğrulama kuralları
 
-Akış yüklenirken şunlar kontrol edilir; ihlal varsa akış hiç başlamaz:
+Akış yüklenirken şunlar kontrol edilir; ihlal varsa akış hiç başlamaz.
+Hata mesajları kural numarasını taşır — `npm run flow -- check <dosya>` ile
+görürsün.
 
 1. `id` değerleri tekil.
 2. Tam olarak bir rolün `workspace` değeri `main`.
@@ -136,6 +173,10 @@ Akış yüklenirken şunlar kontrol edilir; ihlal varsa akış hiç başlamaz:
 14. Zincirin başı — hiçbir rolün `next`'inin işaret etmediği rol — `reject`
     taşıyamaz; geri dönecek rol yoktur. O rol işi yapamıyorsa insana çıkar.
 15. `reject.limit` en az 1 olan bir tamsayıdır.
+16. İki rol aynı `workspace` değerini paylaşamaz. Paylaşılan bir worktree
+    izolasyonu sessizce yok eder: iki ajan aynı ağaçta çalışır ve
+    birbirinin değişikliğini ezer. Rol kopyalayıp `workspace` satırını
+    değiştirmeyi unutmak, topolojiyi büyütürken yapılacak en kolay hata.
 
 Kural 9-11 akış yüklenirken değil, **prompt derlenirken** de yeniden
 uygulanır; ikisi de aynı birleştiriciden geçer.
@@ -176,11 +217,13 @@ temel ≈ (rol sayısı × audit tur sayısı) + toplam syncBack alıcısı
 | Topoloji | Roller | syncBack toplamı | ~Temel |
 |---|---:|---:|---:|
 | `daily` (2 adım) | 2 | 1 | ~5 |
-| `spec` (4 adım) | 4 | 4 | ~12 |
+| `spec` (4 adım) | 4 | 3 | ~11 |
 | 6 adım, her denetim rolü tüm öncekilere syncBack | 6 | 9 | ~21 |
 
 **Ret bu sayının üstüne biner.** Bir ret, reddeden rolle hedefi arasındaki
-zincir parçasını baştan koşturur:
+zincir parçasını baştan koşturur. Varsayılan hedef gönderen olduğu için
+**zincirin başı dışındaki her rol bir ret kenarıdır** — akışta `reject`
+yazmamış olman kenarı yok etmez, yalnızca görünmez kılar:
 
 ```
 en kötü ≈ temel + Σ (kenarın ret limiti × o parçanın maliyeti)
@@ -189,7 +232,7 @@ en kötü ≈ temel + Σ (kenarın ret limiti × o parçanın maliyeti)
 | Topoloji | Temel | Ret kenarları | En kötü (limit 2) |
 |---|---:|---|---:|
 | `daily` | ~5 | reviewer→coder (4) | ~13 |
-| `spec` | ~12 | reviewer→coder (4), guard→coder (6) | ~32 |
+| `spec` | ~11 | coder→analyst (4), reviewer→coder (4), guard→coder (6) | ~39 |
 
 Derin topoloji de, cömert ret limiti de yasak değil — maliyeti görünür olsun
 diye burada. Ret limiti aynı zamanda bir bütçe kararıdır.

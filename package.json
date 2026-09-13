@@ -12,7 +12,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "bench": "tsx src/bench/cli.ts",
-    "doctor": "tsx src/bench/cli.ts doctor"
+    "doctor": "tsx src/bench/cli.ts doctor",
+    "flow": "tsx src/flow/cli.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

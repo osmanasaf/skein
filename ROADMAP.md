@@ -126,17 +126,19 @@ Henüz ajan çağrısı yok — elle test edilir. Bu kasıtlı: taşıma katman�
 - Yapılandırılmış mesaj doğrulama (dar tip kümesi, katı alan kontrolü)
 - Commit çözümleme ve soy doğrulaması
 - Yinelenen devir teslim tespiti
-- **Akış yükleyici ve doğrulayıcı** — `SCHEMA.md`'deki 9 kural. Topoloji
-  yazarlığının temeli: serbest rol isimleri, deklaratif ileri yön, açık
-  `syncBack`, herhangi bir role konabilen kapı. Şema ilk günden N adımı
-  destekler; derinlik kullanıcının kararıdır.
+- ~~**Akış yükleyici ve doğrulayıcı**~~ ✅ — `SCHEMA.md`'deki 16 kural,
+  zincir sırası hesabı, ret hedefi çözümü, topoloji hash'i.
+  `npm run flow -- check <dosya>`. Topoloji yazarlığının temeli: serbest rol
+  isimleri, deklaratif ileri ve geri yön, açık `syncBack`, herhangi bir role
+  konabilen kapı. Şema ilk günden N adımı destekler; derinlik kullanıcının
+  kararıdır.
 - Rol başına git worktree hazırlama
-- Topoloji maliyet hesabı (çalıştırmadan önce "bu akış kart başına kaç ajan
-  uyandırması" cevabı)
+- ~~Topoloji maliyet hesabı~~ ✅ — `src/flow/cost.ts`; retsiz temel ve ret
+  limitiyle en kötü durum, `flow check` çıktısında
 
 **Biter kriteri:** İki "sahte rol" arasında elle devir teslim yapılabiliyor;
-süreç yarıda kesilip yeniden başlatıldığında iş kaybolmuyor. `daily.yaml` ve
-`spec.yaml` doğrulamadan geçiyor, bozuk bir akış anlamlı hata veriyor.
+süreç yarıda kesilip yeniden başlatıldığında iş kaybolmuyor. ~~`daily.yaml` ve
+`spec.yaml` doğrulamadan geçiyor, bozuk bir akış anlamlı hata veriyor.~~ ✅
 
 ---
 
@@ -252,7 +254,7 @@ Aşama 3'ten itibaren her ajan çağrısı kaydedilir. Takip edilen metrikler:
 
 **Aşama 0 tamam.** Sıra yeniden düzenlendi (bkz. Yakın plan).
 
-Yazılmış olan — 353 satır, 29 test yeşil:
+Yazılmış olan — 2898 satır (testler hariç), 187 test yeşil:
 
 | Dosya | Ne | Kime hizmet ediyor |
 |---|---|---|
@@ -262,8 +264,16 @@ Yazılmış olan — 353 satır, 29 test yeşil:
 | `hub/prompts/constitution/base.md` | Anayasa çekirdeği, headless'a uygun | ortak |
 | `bench/DESIGN.md` | 2×2 deney tasarımı, karar kuralı önceden ilan edilmiş | deney |
 | `bench/tasks/retry-backoff/` | İlk görev, 9 kusur kancası | deney |
+| `src/flow/load.ts` | Akış yükleyici — 16 kural, zincir sırası, ret çözümü, topoloji hash'i | **ürün** |
+| `src/flow/cost.ts` | Kart başına aktivasyon tahmini; ret kenarları dahil | **ürün** |
+| `src/flow/cli.ts` | `npm run flow -- check` — topolojiyi yazar, ihlalde kural numarasıyla reddeder | **ürün** |
 
-Yazılmamış olan: kuyruk, handoff, worktree, yürütücü, gözcü, ekran,
-audit gate. **Çalıştırılmış ajan: 6 koşu + 7 denetim turu, toplam ~$1.79.**
+Yazılmamış olan: **kart, kuyruk, worktree hazırlama, devir teslim, gözcü
+döngüsü, ekran.** Akış artık yükleniyor ve doğrulanıyor — ama onu koşturan
+şey yok.
 
-Adım 1, 2 ve 3 tamam. Sıradaki: **Adım 4 — deneyi tamamla** (ikinci sağlayıcı gerekiyor).
+**Çalıştırılmış ajan: 6 koşu + 7 denetim turu, toplam ~$1.79.**
+
+Adım 1, 2, 3 tamam. Akış yükleyici (Aşama 2'nin ilk parçası) de tamam.
+Sıradaki: **kart + kuyruk + gözcü** — tek kart, iki rol, sahte adaptörle
+uçtan uca.
