@@ -106,3 +106,32 @@ export async function mergeForward(opts: {
     ? { kind: "conflict", paths }
     : { kind: "blocked", reason: merge.err || merge.out || "birleştirme başarısız" };
 }
+
+export type WorktreeResult =
+  | { kind: "existed" }
+  | { kind: "created"; branch: string }
+  | { kind: "failed"; reason: string };
+
+/**
+ * Bir rol için git worktree'si oluşturur; varsa dokunmaz.
+ *
+ * Dal adı `skein/<workspace>`: rollerin dalları, insanın kendi dallarından
+ * ad alanıyla ayrılır. Dal zaten varsa (önceki koşudan kalma) ona bağlanır
+ * — yeniden oluşturmaya çalışmak, biriken işi çöpe atardı.
+ */
+export async function addWorktree(
+  repoDir: string,
+  relPath: string,
+  workspace: string,
+): Promise<WorktreeResult> {
+  const branch = `skein/${workspace}`;
+
+  const fresh = await git(repoDir, ["worktree", "add", relPath, "-b", branch]);
+  if (fresh.ok) return { kind: "created", branch };
+
+  // `-b` yalnızca dal yoksa çalışır. Varsa ona bağlan.
+  const existing = await git(repoDir, ["worktree", "add", relPath, branch]);
+  if (existing.ok) return { kind: "created", branch };
+
+  return { kind: "failed", reason: existing.err || fresh.err || "worktree oluşturulamadı" };
+}

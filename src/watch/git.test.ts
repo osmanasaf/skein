@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { capture } from "../proc/process.js";
-import { currentBranch, dirtyPaths, head, mergeForward, ORCHESTRATOR_PATHS } from "./git.js";
+import { addWorktree, currentBranch, dirtyPaths, head, mergeForward, ORCHESTRATOR_PATHS } from "./git.js";
 
 let root: string;
 let main: string;
@@ -138,3 +138,29 @@ async function readFileText(path: string): Promise<string> {
   const { readFile } = await import("node:fs/promises");
   return readFile(path, "utf8");
 }
+
+describe("addWorktree", () => {
+  it("yeni worktree'yi skein/ ad alanında bir dalla oluşturur", async () => {
+    const result = await addWorktree(main, join(".worktrees", "guard"), "guard");
+
+    expect(result).toEqual({ kind: "created", branch: "skein/guard" });
+    expect(await currentBranch(join(main, ".worktrees", "guard"))).toBe("skein/guard");
+  });
+
+  it("dal önceki koşudan kalmışsa ona bağlanır — iş çöpe atılmaz", async () => {
+    const rel = join(".worktrees", "guard");
+    await addWorktree(main, rel, "guard");
+    await commit(join(main, rel), "not.txt", "önceki koşunun işi\n", "önceki iş");
+    await git(main, "worktree", "remove", "--force", rel);
+
+    const again = await addWorktree(main, rel, "guard");
+
+    expect(again.kind).toBe("created");
+    expect(await readFileText(join(main, rel, "not.txt"))).toBe("önceki koşunun işi\n");
+  });
+
+  it("başarısızlığı sessizce yutmaz", async () => {
+    const result = await addWorktree(root, join("yok", "olan"), "guard");
+    expect(result.kind).toBe("failed");
+  });
+});

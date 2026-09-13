@@ -268,17 +268,26 @@ describe("tick — devir teslim kodu da taşır", () => {
     ]);
   });
 
-  it("zincirin sonunda birleştirme yapılmaz", async () => {
+  it("zincirin sonunda İLERİ birleştirme yapılmaz", async () => {
     await put();
     claude.answer = writes({ decision: "accept" });
     codex.answer = writes({ decision: "accept" });
-    let calls = 0;
+    const forward: string[] = [];
 
-    const counting = { ...options, mergeForward: async () => { calls += 1; return { kind: "merged" as const }; } };
+    // syncBack ayrı sayılıyor: reviewer zincirin sonunda ileri taşımaz ama
+    // coder'a kopya gönderir.
+    const counting = {
+      ...options,
+      mergeForward: async (o: { message: string }) => {
+        if (!o.message.includes("syncBack")) forward.push(o.message);
+        return { kind: "merged" as const };
+      },
+    };
     await tick("coder", counting);
     await tick("reviewer", counting);
 
-    expect(calls).toBe(1);
+    expect(forward).toHaveLength(1);
+    expect(forward[0]).toContain("coder → reviewer");
   });
 
   it("çakışma kartı kapıya çıkarır — kimse tahmin etmez", async () => {
@@ -318,6 +327,77 @@ describe("tick — devir teslim kodu da taşır", () => {
     await tick("reviewer", counting);
 
     expect(calls).toBe(1); // yalnızca coder'ın kabulü
+  });
+});
+
+describe("tick — syncBack", () => {
+  it("kabul edilen iş listelenen rolün ağacına kopyalanır", async () => {
+    await put();
+    claude.answer = writes({ decision: "accept" });
+    codex.answer = writes({ decision: "accept" });
+    const merges: string[] = [];
+
+    const tracking = {
+      ...options,
+      mergeForward: async (o: { fromDir: string; toDir: string; message: string }) => {
+        merges.push(o.message);
+        return { kind: "merged" as const };
+      },
+    };
+    await tick("coder", tracking);
+    await tick("reviewer", tracking);
+
+    // coder→reviewer ileri taşıma, sonra reviewer'ın syncBack'i coder'a.
+    expect(merges).toHaveLength(2);
+    expect(merges[1]).toContain("syncBack reviewer → coder");
+  });
+
+  it("kart syncBack ile hareket etmez", async () => {
+    await put();
+    claude.answer = writes({ decision: "accept" });
+    codex.answer = writes({ decision: "accept" });
+
+    await tick("coder", options);
+    const result = await tick("reviewer", options);
+
+    // syncBack coder'a gitti ama kart bitti, coder'a dönmedi.
+    expect((result as { card: Card }).card.state).toBe("done");
+    expect(await queue.depth("coder")).toBe(0);
+  });
+
+  it("syncBack çakışması kartı durdurmaz, uyarı olur", async () => {
+    await put();
+    claude.answer = writes({ decision: "accept" });
+    codex.answer = writes({ decision: "accept" });
+
+    await tick("coder", options);
+    const result = await tick("reviewer", {
+      ...options,
+      mergeForward: async (o) =>
+        o.message.includes("syncBack")
+          ? { kind: "conflict", paths: ["src/retry.ts"] }
+          : { kind: "merged" },
+    });
+
+    // Kart yerine ulaştı; kopyanın başarısızlığı onu geri alamaz.
+    expect(result.status).toBe("accepted");
+    expect((result as { card: Card }).card.state).toBe("done");
+    // Ama sessiz kalmadı.
+    expect((result as { warnings?: string[] }).warnings?.[0]).toContain("çakıştı");
+  });
+
+  it("syncBack listesi boşsa hiçbir şey yapılmaz", async () => {
+    await put();
+    claude.answer = writes({ decision: "accept" });
+    let calls = 0;
+
+    await tick("coder", {
+      ...options,
+      mergeForward: async () => { calls += 1; return { kind: "merged" as const }; },
+    });
+
+    // coder'ın syncBack'i yok; yalnızca ileri taşıma.
+    expect(calls).toBe(1);
   });
 });
 

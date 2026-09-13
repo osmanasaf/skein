@@ -135,7 +135,9 @@ Henüz ajan çağrısı yok — elle test edilir. Bu kasıtlı: taşıma katman�
   isimleri, deklaratif ileri ve geri yön, açık `syncBack`, herhangi bir role
   konabilen kapı. Şema ilk günden N adımı destekler; derinlik kullanıcının
   kararıdır.
-- Rol başına git worktree hazırlama
+- ~~Rol başına git worktree hazırlama~~ ✅ — eksikse koşarken oluşturulur,
+  dal `skein/<workspace>` ad alanında. Önceki koşudan kalan dal varsa ona
+  bağlanır; `--plan` depoya dokunmaz.
 - ~~Topoloji maliyet hesabı~~ ✅ — `src/flow/cost.ts`; retsiz temel ve ret
   limitiyle en kötü durum, `flow check` çıktısında
 
@@ -259,7 +261,7 @@ Aşama 3'ten itibaren her ajan çağrısı kaydedilir. Takip edilen metrikler:
 
 **Aşama 0 tamam.** Sıra yeniden düzenlendi (bkz. Yakın plan).
 
-Yazılmış olan — 4767 satır (testler hariç), 269 test yeşil:
+Yazılmış olan — 4893 satır (testler hariç), 276 test yeşil:
 
 | Dosya | Ne | Kime hizmet ediyor |
 |---|---|---|
@@ -281,19 +283,22 @@ Yazılmış olan — 4767 satır (testler hariç), 269 test yeşil:
 | `src/watch/tick.ts` | Tek tur: kartı al, promptu derle, ajanı çağır, karara bağla | **ürün** |
 | `src/watch/loop.ts` | Geçiş ve kart kalmayana kadar koşma | **ürün** |
 | `src/watch/cli.ts` | `npm run watch -- <akış>` — gözcünün kendisi | **ürün** |
-| `src/watch/git.ts` | İleri birleştirme, kirlilik kontrolü, çakışmada geri alma | **ürün** |
+| `src/watch/git.ts` | İleri birleştirme, `syncBack`, worktree oluşturma, kirlilik kontrolü | **ürün** |
 
 **Gerçek ajanlarla ilk koşu yapıldı** (tek sağlayıcı, iki rol, haiku).
 Kart açıldı, `coder` `retry<T>`'yi yazdı ve commit attı, kod `reviewer`'ın
 worktree'sine birleştirildi, denetlendi, kart bitti. Dört koşu sürdü ve her
 biri gerçek bir kusur buldu — hepsi sahte adaptörle görünmezdi.
 
-Yazılmamış olan: **worktree oluşturma** (gözcü var olanı kullanıyor, yoksa
-komutu söyleyip duruyor), **syncBack** (merge-only kopya — ileri yön artık
-var, geri yön yok), **ekran**, ve **çapraz sağlayıcı koşu**.
+İkinci koşuda hiçbir elle kurulum yapılmadı: worktree kendiliğinden
+oluştu, kod ileri taşındı, kart tek geçişte bitti.
+
+Yazılmamış olan: **ekran**, **çapraz sağlayıcı koşu** (bu ortamda ikinci
+sağlayıcı CLI'ı yok), ve deneyin kendisi (Açık Soru #2).
 
 **Çalıştırılmış ajan: 6 koşu + 7 denetim turu, toplam ~$1.79.**
 
-Adım 1, 2, 3 tamam. Aşama 2 (akış yükleyici, kuyruk, devir teslim) ve
-Aşama 3 (adaptörler + yürütücü) tamam. Sıradaki: **syncBack** ve
-**worktree oluşturma** — ikisi de aynı git katmanının üstünde duruyor.
+Adım 1, 2, 3 tamam. Aşama 2 (akış yükleyici, kuyruk, devir teslim,
+worktree) ve Aşama 3 (adaptörler + yürütücü) tamam. Orkestratör uçtan uca
+koşuyor. Sıradaki: **Aşama 5 — merkez ekranı**, ya da **Açık Soru #2**
+(çapraz sağlayıcı deneyi; ikinci bir CLI gerektiriyor).

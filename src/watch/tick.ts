@@ -15,7 +15,7 @@ import { resolveWorkspace } from "./workspace.js";
 /** Bir turun sonucu. `idle` dışında her biri kartı hareket ettirmiştir. */
 export type TickResult =
   | { status: "idle" }
-  | { status: "accepted"; card: Card; summary?: string }
+  | { status: "accepted"; card: Card; summary?: string; warnings?: string[] }
   | { status: "rejected"; card: Card; reason: string }
   | { status: "escalated"; card: Card; reason: string };
 
@@ -184,8 +184,62 @@ async function runRole(card: Card, role: SnapshotRole, options: TickOptions): Pr
   }
 
   const moved = await queue.handoff(card, commit === undefined ? {} : { commit });
+
+  // syncBack devir teslimden SONRA: kart zaten yerine ulaştı, kopyanın
+  // başarısızlığı onu geri alamaz. Ama sessiz de kalamaz — ağacı güncel
+  // kalmayan bir rol, sıradaki kartına bayat bir ağaçtan başlar.
+  const warnings = await syncBack(card, role, options, workdir);
   const summary = verdict.verdict.summary;
-  return { status: "accepted", card: moved, ...(summary === undefined ? {} : { summary }) };
+  return {
+    status: "accepted",
+    card: moved,
+    ...(summary === undefined ? {} : { summary }),
+    ...(warnings.length === 0 ? {} : { warnings }),
+  };
+}
+
+/**
+ * Kabul edilen işin merge-only bir kopyasını `syncBack` listesindeki
+ * rollerin ağaçlarına gönderir. Kart hareket etmez.
+ *
+ * `next` ile farkı: `next` kartı ve kodu birlikte ileri taşır; `syncBack`
+ * yalnızca kodu, geriye, kart yerinde kalarak. Listenin açık olması kasıtlı
+ * — kimin ağacının güncelleneceği sayılabilir olmalı (SCHEMA.md, maliyet).
+ */
+async function syncBack(
+  card: Card,
+  role: SnapshotRole,
+  options: TickOptions,
+  fromDir: string,
+): Promise<string[]> {
+  const warnings: string[] = [];
+
+  for (const targetId of role.syncBack) {
+    const target = roleOf(card.topology, targetId);
+    if (target === null) {
+      warnings.push(`syncBack hedefi topolojide yok: ${targetId}`);
+      continue;
+    }
+    if (target.workspace === role.workspace) continue;
+
+    try {
+      const toDir = await resolveWorkspace(options.root, target.workspace);
+      const result = await (options.mergeForward ?? mergeForward)({
+        fromDir,
+        toDir,
+        message: `skein: syncBack ${role.id} → ${target.id} (${card.id})`,
+        ignoreDirty: ORCHESTRATOR_PATHS,
+      });
+      if (result.kind === "conflict") {
+        warnings.push(`syncBack ${role.id} → ${target.id} çakıştı: ${result.paths.join(", ")}`);
+      } else if (result.kind === "blocked") {
+        warnings.push(`syncBack ${role.id} → ${target.id} yapılamadı: ${result.reason}`);
+      }
+    } catch (error) {
+      warnings.push(`syncBack ${role.id} → ${target.id}: ${(error as Error).message}`);
+    }
+  }
+  return warnings;
 }
 
 /**

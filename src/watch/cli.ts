@@ -8,7 +8,7 @@ import { FlowError, loadFlow } from "../flow/load.js";
 import { snapshot } from "../flow/snapshot.js";
 import { runUntilIdle, sweep } from "./loop.js";
 import type { TickResult } from "./tick.js";
-import { WorkspaceError, workspacePath } from "./workspace.js";
+import { resolveWorkspace, WorkspaceError, workspacePath } from "./workspace.js";
 
 const USAGE = `Kullanım:
   npm run watch -- <akış> [seçenekler]
@@ -117,7 +117,10 @@ function describe(role: string, result: TickResult): string {
       return `${head} —`;
     case "accepted":
       return `${head} kabul → ${result.card.state === "done" ? "bitti" : result.card.role}` +
-        (result.summary === undefined ? "" : `  (${result.summary})`);
+        (result.summary === undefined ? "" : `  (${result.summary})`) +
+        (result.warnings === undefined
+          ? ""
+          : result.warnings.map((w) => `\n             ⚠ ${w}`).join(""));
     case "rejected":
       return `${head} RET → ${result.card.role}\n             ${result.reason}`;
     case "escalated":
@@ -151,12 +154,17 @@ async function main(argv: string[]): Promise<number> {
     console.log(`akış: ${flow.name} (${flow.hash.slice(0, 12)}…)\n`);
     for (const role of topology.roles) {
       const depth = await queue.depth(role.id);
+      // `--plan` depoya DOKUNMAZ: eksik worktree'yi oluşturmaz, yalnızca
+      // eksik olduğunu söyler.
+      const dir = await resolveWorkspace(root, role.workspace, { create: false }).catch(
+        () => `${workspacePath(root, role.workspace)}  (yok — koşarken oluşturulacak)`,
+      );
       console.log(
         `  ${role.id.padEnd(10)} ${String(depth).padStart(3)} kart  ` +
-          `${role.provider.padEnd(8)} ${workspacePath(root, role.workspace)}`,
+          `${role.provider.padEnd(8)} ${dir}`,
       );
     }
-    console.log("\nHiçbir ajan çağrılmadı (--plan).");
+    console.log("\nHiçbir ajan çağrılmadı, depoya dokunulmadı (--plan).");
     return 0;
   }
 
