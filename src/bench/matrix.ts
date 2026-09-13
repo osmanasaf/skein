@@ -73,7 +73,7 @@ export async function runMatrix(options: MatrixOptions): Promise<MatrixOutcome> 
   const task = await loadTask(join(repo, "bench/tasks", taskId));
   const rel = (p: string) => p.slice(repo.length + 1);
 
-  const adapters: Adapter[] = models.map(adapterFor);
+  const adapters: Adapter[] = models.map((spec) => adapterFor(spec));
   const produced: {
     adapter: Adapter; artifactDir: string; redHooks: string[];
     total: number; ran: boolean; costUsd: number;

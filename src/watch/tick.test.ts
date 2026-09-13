@@ -1,0 +1,359 @@
+import { describe, expect, it, beforeEach, afterEach } from "vitest";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { Adapter, InvokeRequest, InvokeResult } from "../adapters/contract.js";
+import { newCard, rejectCount, type Card } from "../card/card.js";
+import { CardQueue } from "../card/queue.js";
+import { knownProviderSet } from "../adapters/factory.js";
+import { EventLog, readEvents } from "../events/log.js";
+import { loadFlow } from "../flow/load.js";
+import { snapshot, type TopologySnapshot } from "../flow/snapshot.js";
+import { tick, type TickOptions } from "./tick.js";
+import { VERDICT_FILE } from "./verdict.js";
+import { WORKTREE_DIR } from "./workspace.js";
+
+const FLOW = `
+name: test
+constitution:
+  - ../prompts/base.md
+roles:
+  - id: coder
+    provider: claude
+    workspace: main
+    prompt: ../../roles/coder.prompt
+    next: reviewer
+  - id: reviewer
+    provider: codex
+    workspace: reviewer
+    prompt: ../../roles/reviewer.prompt
+    receive: batch
+    syncBack: [coder]
+    reject: coder
+    next: done
+reject:
+  limit: 2
+  onExhausted: gate
+`;
+
+/**
+ * Ajanı taklit eden adaptör. `answer` ile o turda ne yazacağını
+ * (ya da yazmayacağını) belirlersin.
+ */
+class FakeAdapter implements Adapter {
+  readonly id: string;
+  readonly model = "sahte-1";
+  readonly calls: InvokeRequest[] = [];
+  answer: ((req: InvokeRequest) => Promise<InvokeResult | void>) | null = null;
+
+  constructor(id: string) {
+    this.id = id;
+  }
+
+  async invoke(req: InvokeRequest): Promise<InvokeResult> {
+    this.calls.push(req);
+    const custom = await this.answer?.(req);
+    return custom ?? { exitCode: 0, stdout: "", stderr: "", durationMs: 5 };
+  }
+}
+
+/** Verdikt yazan bir cevap kurar. */
+function writes(verdict: unknown) {
+  return async (req: InvokeRequest): Promise<void> => {
+    await writeFile(join(req.workdir, VERDICT_FILE), JSON.stringify(verdict));
+  };
+}
+
+let root: string;
+let queue: CardQueue;
+let daily: TopologySnapshot;
+let claude: FakeAdapter;
+let codex: FakeAdapter;
+let options: TickOptions;
+
+beforeEach(async () => {
+  // Üretimde tek bir kök var: prompt dosyaları da, worktree'ler de onun
+  // altında. Test de öyle kurulur, yoksa sınadığı şey üretimdeki şey olmaz.
+  root = await mkdtemp(join(tmpdir(), "skein-tick-"));
+  await mkdir(join(root, "hub", "flows"), { recursive: true });
+  await mkdir(join(root, "hub", "prompts"), { recursive: true });
+  await mkdir(join(root, "roles"), { recursive: true });
+  await mkdir(join(root, WORKTREE_DIR, "reviewer"), { recursive: true });
+
+  await writeFile(join(root, "hub", "prompts", "base.md"), "# Anayasa\nKurallar.\n");
+  await writeFile(join(root, "roles", "coder.prompt"), "# coder\nKodu yaz.\n");
+  await writeFile(join(root, "roles", "reviewer.prompt"), "# reviewer\nKodu denetle.\n");
+  await writeFile(join(root, "hub", "flows", "test.yaml"), FLOW);
+
+  queue = new CardQueue(join(root, ".skein"));
+  await queue.init();
+
+  const flow = await loadFlow(join(root, "hub", "flows", "test.yaml"), {
+    root,
+    providers: knownProviderSet(),
+  });
+  daily = snapshot(flow, root);
+
+  claude = new FakeAdapter("claude");
+  codex = new FakeAdapter("codex");
+  options = {
+    root,
+    queue,
+    adapters: new Map<string, Adapter>([["claude", claude], ["codex", codex]]),
+    headCommit: async () => "abc1234",
+  };
+});
+afterEach(async () => {
+  await rm(root, { recursive: true, force: true });
+});
+
+async function put(title = "iş"): Promise<Card> {
+  return queue.add(newCard({ title, task: "retry'a jitter ekle", topology: daily }));
+}
+
+describe("tick — boş kuyruk", () => {
+  it("kart yoksa hiçbir şey yapmaz", async () => {
+    expect(await tick("coder", options)).toEqual({ status: "idle" });
+    expect(claude.calls).toHaveLength(0);
+  });
+});
+
+describe("tick — kabul", () => {
+  it("verdikt accept ise kart ileri gider", async () => {
+    await put();
+    claude.answer = writes({ decision: "accept", summary: "jitter eklendi" });
+
+    const result = await tick("coder", options);
+
+    expect(result.status).toBe("accepted");
+    expect(result.status === "accepted" && result.summary).toBe("jitter eklendi");
+    expect((await queue.get((result as { card: Card }).card.id))?.role).toBe("reviewer");
+  });
+
+  it("commit kart geçmişine yazılır", async () => {
+    await put();
+    claude.answer = writes({ decision: "accept" });
+    const result = await tick("coder", options);
+
+    expect((result as { card: Card }).card.history.at(-1)).toMatchObject({
+      event: "handoff", from: "coder", to: "reviewer", commit: "abc1234",
+    });
+  });
+
+  it("zincirin sonunda kart biter", async () => {
+    await put();
+    claude.answer = writes({ decision: "accept" });
+    codex.answer = writes({ decision: "accept" });
+
+    await tick("coder", options);
+    const result = await tick("reviewer", options);
+
+    expect((result as { card: Card }).card.state).toBe("done");
+  });
+
+  it("rol kendi workspace'inde koşar", async () => {
+    await put();
+    claude.answer = writes({ decision: "accept" });
+    codex.answer = writes({ decision: "accept" });
+
+    await tick("coder", options);
+    await tick("reviewer", options);
+
+    expect(claude.calls[0]?.workdir).toBe(root);
+    expect(codex.calls[0]?.workdir).toBe(join(root, WORKTREE_DIR, "reviewer"));
+  });
+});
+
+describe("tick — ret", () => {
+  it("verdikt reject ise KART geri döner", async () => {
+    await put();
+    claude.answer = writes({ decision: "accept" });
+    codex.answer = writes({ decision: "reject", reason: "senkron çağrıda RangeError" });
+
+    await tick("coder", options);
+    const result = await tick("reviewer", options);
+
+    expect(result.status).toBe("rejected");
+    const card = (result as { card: Card }).card;
+    expect(card.role).toBe("coder");
+    expect(rejectCount(card, "reviewer", "coder")).toBe(1);
+  });
+
+  it("ret gerekçesi bir sonraki turda ÜRETİCİYE gider", async () => {
+    await put();
+    claude.answer = writes({ decision: "accept" });
+    codex.answer = writes({ decision: "reject", reason: "senkron çağrıda RangeError atıyor" });
+
+    await tick("coder", options);
+    await tick("reviewer", options);
+    await tick("coder", options);
+
+    // Bu, "ret boş dönmez" sözünün mekanik karşılığı.
+    const second = claude.calls[1]?.taskText as string;
+    expect(second).toContain("Önceki tur reddedildi");
+    expect(second).toContain("senkron çağrıda RangeError atıyor");
+    expect(second).toContain("abc1234");
+  });
+
+  it("ilk turda ret kaydı yoktur", async () => {
+    await put();
+    claude.answer = writes({ decision: "accept" });
+    await tick("coder", options);
+    expect(claude.calls[0]?.taskText).not.toContain("Önceki tur reddedildi");
+  });
+
+  it("gerekçesiz reject verdikti geçersizdir — kart kapıya çıkar", async () => {
+    await put();
+    claude.answer = writes({ decision: "accept" });
+    codex.answer = writes({ decision: "reject" });
+
+    await tick("coder", options);
+    const result = await tick("reviewer", options);
+
+    expect(result.status).toBe("escalated");
+    expect((result as { reason: string }).reason).toMatch(/ret boş dönmez/);
+  });
+
+  it("limit dolunca tur escalated döner", async () => {
+    await put();
+    claude.answer = writes({ decision: "accept" });
+    codex.answer = writes({ decision: "reject", reason: "olmadı" });
+
+    // limit 2: iki tam tur geçer, üçüncü ret kartı kapıya koyar.
+    for (let i = 0; i < 2; i++) {
+      await tick("coder", options);
+      expect((await tick("reviewer", options)).status).toBe("rejected");
+    }
+    await tick("coder", options);
+    const result = await tick("reviewer", options);
+
+    expect(result.status).toBe("escalated");
+    expect((result as { card: Card }).card.state).toBe("gate");
+  });
+});
+
+describe("tick — sessiz başarısızlık yasağı", () => {
+  // Deneyde en pahalıya mal olan hata buydu: hiçbir şey üretmemiş bir
+  // koşuyu başarılı saymak.
+  it("verdikt yazmayan ajan KABUL sayılmaz", async () => {
+    await put();
+    claude.answer = null; // çıkış kodu 0, ama dosya yok
+
+    const result = await tick("coder", options);
+
+    expect(result.status).toBe("escalated");
+    expect((result as { reason: string }).reason).toMatch(/verdikt yazmadı/);
+    expect((result as { card: Card }).card.state).toBe("gate");
+  });
+
+  it("önceki turdan kalan verdikt bu turun cevabı sayılmaz", async () => {
+    await put();
+    await writeFile(join(root, VERDICT_FILE), JSON.stringify({ decision: "accept" }));
+    claude.answer = null;
+
+    expect((await tick("coder", options)).status).toBe("escalated");
+  });
+
+  it("sıfırdan farklı çıkış kodu kartı kapıya çıkarır", async () => {
+    await put();
+    claude.answer = async () => ({ exitCode: 2, stdout: "", stderr: "unknown option --foo", durationMs: 3 });
+
+    const result = await tick("coder", options);
+    expect(result.status).toBe("escalated");
+    expect((result as { reason: string }).reason).toContain("unknown option --foo");
+  });
+
+  it("zaman aşımı kartı kapıya çıkarır", async () => {
+    await put();
+    claude.answer = async () => ({ exitCode: 124, stdout: "", stderr: "", durationMs: 1, timedOut: true });
+
+    expect((await tick("coder", options)).status).toBe("escalated");
+    expect(((await queue.list())[0] as Card).history.at(-1)).toMatchObject({ event: "gate" });
+  });
+
+  it("bozuk verdikt JSON'u kartı kapıya çıkarır", async () => {
+    await put();
+    claude.answer = async (req) => {
+      await writeFile(join(req.workdir, VERDICT_FILE), "{ bu json değil");
+    };
+
+    const result = await tick("coder", options);
+    expect((result as { reason: string }).reason).toMatch(/geçerli JSON değil/);
+  });
+
+  it("olmayan worktree kartı kapıya çıkarır ve komutu söyler", async () => {
+    await rm(join(root, WORKTREE_DIR, "reviewer"), { recursive: true, force: true });
+    await put();
+    claude.answer = writes({ decision: "accept" });
+
+    await tick("coder", options);
+    const result = await tick("reviewer", options);
+
+    expect(result.status).toBe("escalated");
+    expect((result as { reason: string }).reason).toContain("git worktree add");
+  });
+});
+
+describe("tick — olay günlüğü", () => {
+  it("başlangıç ve bitiş kaydedilir, prompt hash'iyle", async () => {
+    await put();
+    claude.answer = writes({ decision: "accept" });
+    const logPath = join(root, "olaylar.jsonl");
+
+    await tick("coder", { ...options, log: new EventLog(logPath, "kosu-1") });
+
+    const { events } = await readEvents(logPath);
+    expect(events.map((e) => e.type)).toEqual(["agent.started", "agent.finished"]);
+    const started = events[0] as { promptHash: string; provider: string; model: string; role: string };
+    expect(started.role).toBe("coder");
+    expect(started.provider).toBe("claude");
+    expect(started.model).toBe("sahte-1");
+    expect(started.promptHash).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("aynı rolün promptu turlar arasında aynı hash'i taşır", async () => {
+    await put();
+    claude.answer = writes({ decision: "accept" });
+    codex.answer = writes({ decision: "reject", reason: "olmadı" });
+    const logPath = join(root, "olaylar.jsonl");
+    const log = new EventLog(logPath, "kosu-1");
+
+    await tick("coder", { ...options, log });
+    await tick("reviewer", { ...options, log });
+    await tick("coder", { ...options, log });
+
+    const { events } = await readEvents(logPath);
+    const coderHashes = events
+      .filter((e): e is typeof e & { role: string; promptHash: string } => e.type === "agent.started")
+      .filter((e) => e.role === "coder")
+      .map((e) => e.promptHash);
+
+    // Görev metni değişti (ret kaydı eklendi) ama ROL PROMPTU değişmedi.
+    expect(coderHashes).toHaveLength(2);
+    expect(coderHashes[0]).toBe(coderHashes[1]);
+  });
+});
+
+describe("tick — prompt derleme", () => {
+  it("anayasa katmanları rol promptundan önce gelir", async () => {
+    await put();
+    claude.answer = writes({ decision: "accept" });
+    await tick("coder", options);
+
+    const text = await readFile(claude.calls[0]?.promptFile as string, "utf8");
+    const anayasa = text.indexOf('name="anayasa:1"');
+    const rol = text.indexOf('name="rol:coder"');
+    expect(anayasa).toBeGreaterThanOrEqual(0);
+    expect(rol).toBeGreaterThan(anayasa);
+  });
+
+  it("görev metni prompt dosyasına GİRMEZ — hash görevden bağımsız kalmalı", async () => {
+    await put("Jitter ekle");
+    claude.answer = writes({ decision: "accept" });
+    await tick("coder", options);
+
+    const text = await readFile(claude.calls[0]?.promptFile as string, "utf8");
+    expect(text).not.toContain("Jitter ekle");
+    expect(claude.calls[0]?.taskText).toContain("Jitter ekle");
+  });
+});

@@ -304,6 +304,22 @@ export class CardQueue {
   }
 
   /**
+   * Tur sonuçsuz kaldı: kartı insan kapısına çıkarır.
+   *
+   * Başarısız bir çağrıyı sessizce yeniden denemek parayı bir döngüde
+   * yakar; "cevap vermedi"yi kabul saymak ise deneyde en pahalıya mal olan
+   * hataydı. İkisi de yasak — kart durur ve görünür olur.
+   */
+  async escalate(card: Card, reason: string): Promise<Card> {
+    const { role, path } = this.#requireActive(card);
+    const gated = {
+      ...this.#push(card, { at: now(), event: "gate", role: role.id, reason }),
+      state: "gate" as const,
+    };
+    return this.#move(gated, join(this.#root, "gate"), `${card.id}.json`, path);
+  }
+
+  /**
    * İnsan kapıdaki kartı karara bağladı.
    *
    * Kapının iki çıkışı var ve bu kasıtlı. Bir onay kapısında karar "geçsin

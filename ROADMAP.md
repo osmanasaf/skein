@@ -259,7 +259,7 @@ Aşama 3'ten itibaren her ajan çağrısı kaydedilir. Takip edilen metrikler:
 
 **Aşama 0 tamam.** Sıra yeniden düzenlendi (bkz. Yakın plan).
 
-Yazılmış olan — 3812 satır (testler hariç), 228 test yeşil:
+Yazılmış olan — 4506 satır (testler hariç), 248 test yeşil:
 
 | Dosya | Ne | Kime hizmet ediyor |
 |---|---|---|
@@ -276,14 +276,20 @@ Yazılmış olan — 3812 satır (testler hariç), 228 test yeşil:
 | `src/card/card.ts` | Kart biçimi, ret sayaçları, geçmiş; katı okuma | **ürün** |
 | `src/card/queue.ts` | Dosya tabanlı kuyruk; atomik geçiş, kilitsiz sahiplenme, çökme toplama | **ürün** |
 | `src/card/cli.ts` | `npm run card -- …` — kartı elle sürme | **ürün** |
+| `src/watch/verdict.ts` | Ajanın makine-okunur cevabı; "cevap yok" ile "kabul" kesin ayrı | **ürün** |
+| `src/watch/task-text.ts` | Role verilen iş metni; ret gerekçesi buradan geçer | **ürün** |
+| `src/watch/tick.ts` | Tek tur: kartı al, promptu derle, ajanı çağır, karara bağla | **ürün** |
+| `src/watch/loop.ts` | Geçiş ve kart kalmayana kadar koşma | **ürün** |
+| `src/watch/cli.ts` | `npm run watch -- <akış>` — gözcünün kendisi | **ürün** |
 
-Yazılmamış olan: **worktree hazırlama, gözcü döngüsü (kartı alıp adaptörü
-çağıran şey), syncBack, ekran.** Kart artık zincir boyunca hareket ediyor —
-ama onu hareket ettiren hâlâ insan eli.
+Yazılmamış olan: **worktree oluşturma** (gözcü var olanı kullanıyor,
+yoksa komutu söyleyip duruyor), **syncBack** (merge-only kopya), **ekran**,
+ve **gerçek CLI'larla ilk koşu**. Sahte adaptörlerle uçtan uca yeşil: kart
+açılıyor, iki rolden geçiyor, reddediliyor, düzeltiliyor, bitiyor.
 
 **Çalıştırılmış ajan: 6 koşu + 7 denetim turu, toplam ~$1.79.**
 
-Adım 1, 2, 3 tamam. Aşama 2'nin akış yükleyici, kuyruk ve devir teslim
-parçaları da tamam. Sıradaki: **gözcü** — kuyruktan kartı alıp promptu
-derleyen, adaptörü çağıran ve sonuca göre `handoff`/`reject` diyen döngü.
-Önce sahte adaptörle, sonra gerçek CLI'larla.
+Adım 1, 2, 3 tamam. Aşama 2 (akış yükleyici, kuyruk, devir teslim) ve
+Aşama 3'ün yürütücü kısmı tamam. Sıradaki: **gerçek CLI'larla ilk koşu** —
+`npm run watch -- daily`. Sahte adaptörle koşan yol aynı; değişen tek şey
+`--bin` vermemek.

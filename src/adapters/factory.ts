@@ -43,13 +43,14 @@ export function parseModelSpec(spec: string): ModelSpec {
  * `id` model tanımının tamamı: 2x2'nin hücreleri model düzeyinde ayrışmalı,
  * yalnızca satıcı düzeyinde değil.
  */
-export function adapterFor(spec: string): Adapter {
+export function adapterFor(spec: string, options: { bin?: string } = {}): Adapter {
   const { provider, model } = parseModelSpec(spec);
+  const bin = options.bin === undefined ? {} : { bin: options.bin };
   switch (provider) {
     case "claude":
-      return new ClaudeCliAdapter({ id: spec, model });
+      return new ClaudeCliAdapter({ id: spec, model, ...bin });
     case "codex":
-      return new CodexCliAdapter({ id: spec, model });
+      return new CodexCliAdapter({ id: spec, model, ...bin });
     default:
       throw new Error(
         `Bilinmeyen sağlayıcı: "${provider}". Kayıtlı olanlar: ${KNOWN_PROVIDERS.join(", ")}`,

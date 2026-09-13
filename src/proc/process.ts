@@ -79,3 +79,42 @@ export function killTree(pid: number | undefined): void {
     }
   }
 }
+
+export interface CaptureResult {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+}
+
+/**
+ * Kısa ömürlü bir yardımcı komutu koşturup çıktısını toplar.
+ *
+ * Ajan çağrıları için DEĞİL — onlar adaptörlerin işi ve zaman aşımı,
+ * süreç ağacı öldürme, kullanım ölçümü gibi yükleri var. Bu, `git rev-parse`
+ * gibi tek satırlık şeyler için.
+ */
+export function capture(
+  command: string,
+  args: string[],
+  options: SpawnPortableOptions & { timeoutMs?: number } = {},
+): Promise<CaptureResult> {
+  return new Promise((resolve) => {
+    const child = spawnPortable(command, args, options);
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
+    child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
+
+    const timer = setTimeout(() => killTree(child.pid), options.timeoutMs ?? 15_000);
+    // `error` ve `close` ikisi birden tetiklenebilir; ilk sonuç bağlayıcı.
+    let settled = false;
+    const finish = (exitCode: number): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({ exitCode, stdout, stderr });
+    };
+    child.on("error", () => finish(-1));
+    child.on("close", (code) => finish(code ?? -1));
+  });
+}
