@@ -1,7 +1,9 @@
 # Kendi makinende koşturmak
 
-Skein'in deney koşum takımı Windows, macOS ve Linux'ta çalışır. Bu belge,
-özellikle **gerçek çapraz satıcı koşusu** (Claude × Codex) için.
+Windows, macOS ve Linux. İki ayrı şey var ve ikisi de burada:
+
+- **Orkestratör** — kartı rollerden geçiren asıl ürün (`watch`).
+- **Deney** — 2×2 çapraz kurgu, tezi ölçen kısım (`bench`).
 
 ## Gerekenler
 
@@ -23,8 +25,69 @@ npm install
 npm test
 ```
 
-`npm test` 122 testin tamamını geçmeli. Geçmiyorsa çıktıyı sakla — Windows
-tarafı bu makinede yazıldı ama Windows'ta koşulmadı.
+`npm test` testlerin tamamını geçmeli (şu an 276). Geçmiyorsa çıktıyı
+sakla.
+
+---
+
+## Orkestratör — üç adım
+
+**Bayrak verirken `npm run` kullanma.** Bazı npm sürümleri `--` sonrasındaki
+bayrakları kendi seçeneği sanıp yutuyor; `npm run watch -- daily --plan`
+sessizce `--plan`'sız koşar. Doğrudan biçim her yerde çalışır:
+
+```powershell
+# 1. Ne koşacağını gör. Ajan çağırmaz, depoya dokunmaz.
+npx tsx src/watch/cli.ts daily --plan
+
+# 2. Kart aç. Kuyrukta kart yoksa orkestratör yapacak bir şey bulamaz.
+npx tsx src/card/cli.ts new daily "Jitter ekle" "retry fonksiyonuna tam jitter ekle"
+
+# 3. Koştur.
+npx tsx src/watch/cli.ts daily
+```
+
+`daily.yaml` üretimi `claude`'a, denetimi `codex`'e veriyor — yani bu koşu
+aynı zamanda **Açık Soru #2'nin ilk gerçek verisi**.
+
+Kartın nerede olduğunu görmek için:
+
+```powershell
+npx tsx src/card/cli.ts ls
+npx tsx src/card/cli.ts show <kart-id>
+```
+
+### Bir tur sonuçsuz kalırsa
+
+Kart insan kapısında bekler (`⏸`) ve gerekçe yazılır — **ajanın kendi
+açıklaması dahil**. Sık görülen iki sebep:
+
+| Gerekçe | Ne yapmalı |
+|---|---|
+| "Ajan verdikt yazmadı" + ajan izinden söz ediyor | `--permission-mode` / `--allow-tool` ver |
+| "kabul etti ama ağacında işlenmemiş değişiklik var" | O dosyaları `.gitignore`'a ekle ya da işlet |
+
+Kapıdaki kartı karara bağlamak:
+
+```powershell
+npx tsx src/card/cli.ts release <kart-id> forward   # geçsin
+npx tsx src/card/cli.ts release <kart-id> back      # geri dönsün
+```
+
+### Modeli ve izinleri pinlemek
+
+```powershell
+npx tsx src/watch/cli.ts daily --model claude:claude-opus-5 --model codex:gpt-5.5
+npx tsx src/watch/cli.ts daily --permission-mode acceptEdits --allow-tool "Bash"
+```
+
+Rolün `git commit` atabilmesi gerekiyor. Varsayılan `bypassPermissions` bunu
+sağlar; root olarak koşuyorsan CLI onu reddeder, o zaman `acceptEdits` +
+`--allow-tool "Bash"` ver.
+
+---
+
+## Deney (bench)
 
 ## Önce doğrula, sonra koş
 
@@ -112,6 +175,11 @@ turları üretimin kendisinden ~9 kat pahalıya çıktı.
 ## Windows notu
 
 Kod Windows'ta çalışacak şekilde yazıldı ve Windows'ta koşularak düzeltildi:
+
+- **`npm run x -- --bayrak` güvenilir değil.** Bazı npm sürümleri `--`
+  sonrasındaki bayrakları kendi seçeneği sanıp yutuyor ve komut sessizce
+  bayraksız koşuyor. `npx tsx <yol>` doğrudan biçimi kullan.
+- PowerShell 5.1 `&&` desteklemez; her komutu ayrı satıra yaz.
 
 - Süreç ağacı `taskkill /T` ile yıkılıyor (POSIX'te süreç grubu sinyali).
 - `npx` gibi `.cmd` sarmalayıcıları `cross-spawn` ile çözülüyor.

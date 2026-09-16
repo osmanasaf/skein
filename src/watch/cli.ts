@@ -11,10 +11,14 @@ import type { TickResult } from "./tick.js";
 import { resolveWorkspace, WorkspaceError, workspacePath } from "./workspace.js";
 
 const USAGE = `Kullanım:
-  npm run watch -- <akış> [seçenekler]
+  npx tsx src/watch/cli.ts <akış> [seçenekler]
 
-Kuyruktaki kartları rollerden geçirir. Kart .skein/ altında, kart açmak için
-\`npm run card -- new <akış> "<başlık>" "<iş>"\`.
+Kuyruktaki kartları rollerden geçirir. Önce kart açman gerekir:
+  npx tsx src/card/cli.ts new <akış> "<başlık>" "<iş>"
+
+\`npm run watch -- <akış> --bayrak\` de çalışır, AMA bazı npm sürümleri
+\`--\` sonrasındaki bayrakları kendi seçeneği sanıp yutuyor. Bayrak
+veriyorsan yukarıdaki doğrudan biçimi kullan.
 
 Seçenekler:
   --once          tek geçiş yap, dur (varsayılan: kart kalmayana kadar)
@@ -168,6 +172,23 @@ async function main(argv: string[]): Promise<number> {
     return 0;
   }
 
+  // Başlık her koşuda yazılır, yalnızca --plan'de değil. Sessiz bir çıktı,
+  // "hiçbir şey olmadı" ile "her şey yolunda" arasındaki farkı gizler.
+  const depths = await Promise.all(topology.roles.map((r) => queue.depth(r.id)));
+  const waiting = depths.reduce((a, b) => a + b, 0);
+  const open = (await queue.list()).filter((c) => c.state !== "done");
+  console.log(
+    `akış: ${flow.name} (${flow.hash.slice(0, 12)}…) · ${topology.roles.length} rol · ` +
+      `${waiting} kart kuyrukta, ${open.length} açık\n`,
+  );
+
+  if (open.length === 0) {
+    console.log("Kuyrukta iş yok. Kart açmak için:\n");
+    console.log(`  npx tsx src/card/cli.ts new ${args.flow} "Başlık" "Yapılacak iş"\n`);
+    console.log("Sonra bu komutu tekrar çalıştır.");
+    return 0;
+  }
+
   const adapters = buildAdapters(
     [...new Set(topology.roles.map((r) => r.provider))],
     args.models,
@@ -202,10 +223,10 @@ async function main(argv: string[]): Promise<number> {
   }
 
   const remaining = await queue.list();
-  const open = remaining.filter((c) => c.state !== "done");
+  const left = remaining.filter((c) => c.state !== "done");
   console.log(
-    `\n${remaining.length - open.length} bitti · ${open.length} açık` +
-      (gated > 0 ? ` · ${gated} insan kapısında — \`npm run card -- ls\`` : ""),
+    `\n${remaining.length - left.length} bitti · ${left.length} açık` +
+      (gated > 0 ? ` · ${gated} insan kapısında — \`npx tsx src/card/cli.ts ls\`` : ""),
   );
   return 0;
 }
