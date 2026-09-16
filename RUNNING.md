@@ -38,14 +38,19 @@ sessizce `--plan`'sız koşar. Doğrudan biçim her yerde çalışır:
 
 ```powershell
 # 1. Ne koşacağını gör. Ajan çağırmaz, depoya dokunmaz.
-npx tsx src/watch/cli.ts daily --plan
+npx tsx src/watch/cli.ts daily --plan --model claude:claude-opus-5 --model codex:gpt-5.5
 
 # 2. Kart aç. Kuyrukta kart yoksa orkestratör yapacak bir şey bulamaz.
 npx tsx src/card/cli.ts new daily "Jitter ekle" "retry fonksiyonuna tam jitter ekle"
 
 # 3. Koştur.
-npx tsx src/watch/cli.ts daily
+npx tsx src/watch/cli.ts daily --model claude:claude-opus-5 --model codex:gpt-5.5
 ```
+
+**Her sağlayıcı için `--model` zorunlu.** Akış dosyası model taşımaz: topoloji
+ile model ayrı kararlar ve modeli akışa gömmek, model değiştiğinde yolda olan
+kartların topoloji hash'ini kırardı. Pin eksikse koşu **başlamadan** durur —
+ajan çağrılmaz, para harcanmaz.
 
 `daily.yaml` üretimi `claude`'a, denetimi `codex`'e veriyor — yani bu koşu
 aynı zamanda **Açık Soru #2'nin ilk gerçek verisi**.
@@ -65,6 +70,7 @@ açıklaması dahil**. Sık görülen iki sebep:
 | Gerekçe | Ne yapmalı |
 |---|---|
 | "Ajan verdikt yazmadı" + ajan izinden söz ediyor | `--permission-mode` / `--allow-tool` ver |
+| `unrecognized_model` | `--model` pinini kontrol et; kimliği tam yaz |
 | "kabul etti ama ağacında işlenmemiş değişiklik var" | O dosyaları `.gitignore`'a ekle ya da işlet |
 
 Kapıdaki kartı karara bağlamak:

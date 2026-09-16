@@ -31,7 +31,9 @@ Seçenekler:
   --allow-tool <t>  açıkça izin verilen araç, ör. --allow-tool "Bash(git:*)"
                   (birden fazla kez verilebilir)
   --log <yol>     olay günlüğü dosyası (varsayılan: .skein/olaylar.jsonl)
-  --plan          hiçbir ajan çağırmadan ne yapılacağını yaz`;
+  --plan          hiçbir ajan çağırmadan ne yapılacağını yaz
+
+Her sağlayıcı için \`--model\` zorunludur; akış dosyası model taşımaz.`;
 
 const MARK: Record<TickResult["status"], string> = {
   idle: " ",
@@ -73,12 +75,32 @@ function parseArgs(argv: string[]): Args {
   return args;
 }
 
+/** Kullanıcının düzeltebileceği yapılandırma hatası — yığın izi gösterilmez. */
+class ConfigError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ConfigError";
+  }
+}
+
+/** Örnek model kimlikleri; eksik pin hatasında kullanıcıya gösterilir. */
+const MODEL_HINT: Record<string, string> = {
+  claude: "claude-opus-5",
+  codex: "gpt-5.5",
+};
+
 /**
  * Sağlayıcı id'sinden adaptöre.
  *
- * Akış `provider: codex` der, model yazmaz — çünkü topoloji ile model ayrı
+ * Akış `provider: codex` der, model YAZMAZ — topoloji ile model ayrı
  * kararlar ve modelin akış dosyasına girmesi, model değiştiğinde yolda olan
- * kartların topoloji hash'ini kırardı. Model burada, koşum anında pinlenir.
+ * kartların topoloji hash'ini kırardı. Model koşum anında pinlenir.
+ *
+ * Bu yüzden her sağlayıcı için `--model` ZORUNLU. Eskiden pin yoksa
+ * sağlayıcı adı model diye geçiliyordu: `claude` sağlayıcısı için modele
+ * `"claude"` gidiyor ve CLI `unrecognized_model` ile ölüyordu — ajan
+ * çağrıldıktan, yani para harcandıktan sonra. Pin yokluğu artık koşu
+ * başlamadan yakalanır.
  */
 function buildAdapters(
   providers: string[],
@@ -89,14 +111,30 @@ function buildAdapters(
   const pinned = new Map<string, string>();
   for (const spec of pins) {
     const at = spec.indexOf(":");
-    if (at === -1) throw new Error(`--model biçimi: sağlayıcı:model (verilen: ${spec})`);
+    if (at === -1) {
+      throw new ConfigError(`--model biçimi: sağlayıcı:model (verilen: ${spec})`);
+    }
     pinned.set(spec.slice(0, at), spec);
+  }
+
+  const missing = providers.filter((p) => !pinned.has(p));
+  if (missing.length > 0) {
+    const example = providers
+      .map((p) => `--model ${p}:${pinned.get(p)?.split(":")[1] ?? MODEL_HINT[p] ?? "<model>"}`)
+      .join(" ");
+    throw new ConfigError(
+      `Şu sağlayıcı(lar) için model pinlenmedi: ${missing.join(", ")}.\n\n` +
+        `  Model akış dosyasına yazılmaz — topoloji ile model ayrı kararlar ve\n` +
+        `  modeli akışa gömmek, model değiştiğinde yolda olan kartların\n` +
+        `  topoloji hash'ini kırardı. Koşarken pinlenir:\n\n` +
+        `  ${example}\n`,
+    );
   }
 
   const binOf = new Map<string, string>();
   for (const entry of bins) {
     const at = entry.indexOf("=");
-    if (at === -1) throw new Error(`--bin biçimi: sağlayıcı=yol (verilen: ${entry})`);
+    if (at === -1) throw new ConfigError(`--bin biçimi: sağlayıcı=yol (verilen: ${entry})`);
     binOf.set(entry.slice(0, at), entry.slice(at + 1));
   }
 
@@ -105,7 +143,7 @@ function buildAdapters(
     const bin = binOf.get(provider);
     adapters.set(
       provider,
-      adapterFor(pinned.get(provider) ?? provider, {
+      adapterFor(pinned.get(provider) as string, {
         ...(bin === undefined ? {} : { bin }),
         ...extra,
       }),
@@ -168,7 +206,14 @@ async function main(argv: string[]): Promise<number> {
           `${role.provider.padEnd(8)} ${dir}`,
       );
     }
-    console.log("\nHiçbir ajan çağrılmadı, depoya dokunulmadı (--plan).");
+    // Plan, koşu için gerekenleri de doğrular: eksik pini burada görmek,
+    // ajan çağrıldıktan sonra görmekten ucuz.
+    try {
+      buildAdapters([...new Set(topology.roles.map((r) => r.provider))], args.models, [], {});
+      console.log("\nHiçbir ajan çağrılmadı, depoya dokunulmadı (--plan).");
+    } catch (error) {
+      console.log(`\n⚠ Koşmaya hazır değil: ${(error as Error).message}`);
+    }
     return 0;
   }
 
@@ -234,7 +279,7 @@ async function main(argv: string[]): Promise<number> {
 main(process.argv.slice(2)).then(
   (code) => process.exit(code),
   (error: unknown) => {
-    if (error instanceof FlowError || error instanceof WorkspaceError) {
+    if (error instanceof FlowError || error instanceof WorkspaceError || error instanceof ConfigError) {
       console.error(`✗ ${error.message}`);
       process.exit(1);
     }
