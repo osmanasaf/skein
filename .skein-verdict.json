@@ -1,1 +1,0 @@
-{"decision": "accept", "summary": "backoff(attempt, baseMs) attempt 0 icin baseMs donduruyor, sonraki adimlarda iki katina cikariyor ve negatif attempt icin RangeError firlatiyor; kapsam testi ve typecheck gecti."}
