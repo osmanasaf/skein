@@ -95,6 +95,15 @@ export interface LoadOptions {
    */
   root: string;
   providers: ProviderSet;
+  /**
+   * İçerik dosyadan değil buradan okunur.
+   *
+   * Ekrandan kurulan bir TASLAĞI, dosyaya yazmadan doğrulamak için.
+   * `path` yine de gerekli ve gerçek olmalı: göreli prompt yolları ona göre
+   * çözülüyor, yani taslak da gerçek dosyayla aynı dizindeymiş gibi
+   * doğrulanıyor. Geçici bir dosyaya yazıp doğrulamak aynı şeyi vermezdi.
+   */
+  text?: string;
 }
 
 export class FlowError extends Error {
@@ -368,7 +377,7 @@ export async function loadFlow(path: string, options: LoadOptions): Promise<Flow
 
   let parsed: unknown;
   try {
-    parsed = parseYaml(await readFile(flowPath, "utf8"));
+    parsed = parseYaml(options.text ?? (await readFile(flowPath, "utf8")));
   } catch (cause) {
     throw new FlowError(file, `okunamadı ya da geçerli YAML değil: ${(cause as Error).message}`);
   }

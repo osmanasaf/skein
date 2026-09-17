@@ -178,6 +178,40 @@ const PAGE = `<!doctype html>
   .card { cursor: pointer; }
   .card:hover { border-color: var(--accent-line); }
 
+  /* akış düzenleyici */
+  .ed { display: flex; flex-direction: column; gap: 12px; }
+  .rol {
+    border: 1px solid var(--line); border-radius: 4px; padding: 12px; background: var(--surface);
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 9px 10px;
+  }
+  .rol label { display: flex; flex-direction: column; gap: 3px; font-size: 10.5px; color: var(--ink-3); }
+  .rol input, .rol select {
+    font: inherit; font-size: 12.5px; font-family: var(--mono); min-height: 34px;
+    padding: 0 7px; border: 1px solid var(--line); border-radius: 3px;
+    background: var(--bg); color: var(--ink); min-width: 0;
+  }
+  .rol .genis { grid-column: 1 / -1; }
+  .rolust { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; }
+  .rolust b { font-family: var(--mono); font-size: 12px; }
+  .mini {
+    font: inherit; font-size: 12px; min-height: 34px; padding: 0 10px; cursor: pointer;
+    border: 1px solid var(--line); background: transparent; color: var(--ink-2); border-radius: 3px;
+  }
+  .mini:hover { border-color: var(--accent); color: var(--accent-ink); }
+  .mini.sil:hover { border-color: var(--reject); color: var(--reject); }
+  .onizle {
+    font-family: var(--mono); font-size: 11.5px; line-height: 1.6; white-space: pre;
+    overflow-x: auto; background: var(--surface-2); border: 1px solid var(--line);
+    border-radius: 3px; padding: 10px 12px; max-height: 260px; overflow-y: auto;
+  }
+  .maliyet { display: flex; gap: 18px; flex-wrap: wrap; font-family: var(--mono); font-size: 12.5px; }
+  .kaydet {
+    font: inherit; font-size: 13px; font-weight: 500; min-height: 44px; padding: 0 18px;
+    border: 1px solid var(--accent); background: var(--accent); color: #fff;
+    border-radius: 3px; cursor: pointer;
+  }
+  .kaydet:disabled { opacity: .5; cursor: not-allowed; }
+
   footer { margin-top: 22px; font-family: var(--mono); font-size: 11px; color: var(--ink-3); }
 </style>
 </head>
@@ -463,6 +497,7 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape") kapat(); }
 function hashOku() {
   const h = decodeURIComponent(location.hash.replace(/^#/, ""));
   if (h.startsWith("kart/")) detayAc(h.slice("kart/".length));
+  else if (h === "akis") void akisAc();
   else document.getElementById("panel").replaceChildren();
 }
 window.addEventListener("hashchange", hashOku);
@@ -481,7 +516,7 @@ function ciz(m) {
   const hataKabi = document.getElementById("hata");
   if (m.flow.error) {
     hataKabi.replaceChildren(el("div", "err",
-      "Akış dosyası şu an geçersiz — ekran ve gözcü ESKİ topolojiyle devam ediyor:\n" + m.flow.error));
+      "Akış dosyası şu an geçersiz — ekran ve gözcü ESKİ topolojiyle devam ediyor:\\n" + m.flow.error));
   } else {
     hataKabi.replaceChildren();
   }
@@ -494,6 +529,10 @@ function ciz(m) {
   bar.append(pill);
 
   bar.append(el("div", "spacer"));
+  const duzenle = el("button", "mini", "Akışı düzenle");
+  duzenle.type = "button";
+  duzenle.addEventListener("click", () => { location.hash = "akis"; });
+  bar.append(duzenle);
   [["Açık", m.totals.open], ["Bitti", m.totals.done], ["Aktivasyon", m.totals.activations], ["Maliyet", para(m.totals.costUsd)]]
     .forEach(([ad, deger]) => {
       const s = el("div", "stat");
@@ -574,9 +613,232 @@ async function yokla() {
     uyari.replaceChildren(el("div", "err", "Durum okunamadı: " + e.message + " — gözcü kapanmış olabilir."));
   }
 }
+
+// --- Akış düzenleyici ---
+//
+// Ekranın ürettiği şey tam olarak hub/flows/<ad>.yaml. Ayrı bir "ekran
+// biçimi" olsaydı, iki temsil arasında sürüklenme kaçınılmazdı.
+let TASLAK = null;
+let SAGLAYICILAR = [];
+
+async function akisAc() {
+  const kap = document.getElementById("panel");
+  try {
+    const cevap = await fetch("/akis", { cache: "no-store" });
+    const veri = await cevap.json();
+    if (!cevap.ok) throw new Error(veri.hata || cevap.status);
+    if (!veri.draft) throw new Error("Bu ekran akış düzenlemeye açık değil.");
+    TASLAK = veri.draft;
+    SAGLAYICILAR = veri.providers || [];
+    kap.replaceChildren(editorCiz());
+    void onizle();
+  } catch (e) {
+    kap.replaceChildren(el("div", "err", "Akış okunamadı: " + e.message));
+  }
+}
+
+function alan(ad, deger, onChange, secenekler) {
+  const l = el("label", null);
+  l.append(document.createTextNode(ad));
+  const g = el(secenekler ? "select" : "input");
+  if (secenekler) {
+    secenekler.forEach((s) => {
+      const o = el("option", null, s);
+      o.value = s;
+      if (s === deger) o.selected = true;
+      g.append(o);
+    });
+  } else {
+    g.value = deger == null ? "" : deger;
+  }
+  g.addEventListener("change", () => { onChange(g.value); void onizle(); });
+  l.append(g);
+  return l;
+}
+
+function rolCiz(rol, i) {
+  const kutu = el("div", "rol");
+  const ust = el("div", "rolust");
+  ust.append(el("b", null, (i + 1) + ". " + rol.id));
+  ust.append(el("div", "spacer"));
+
+  // Zincire yeni rol EKLEMEK, sıradaki 'next' bağını yeniden kurmak demek:
+  // sıra dizideki yerden değil 'next' zincirinden okunuyor.
+  const ekle = el("button", "mini", "Altına rol ekle");
+  ekle.type = "button";
+  ekle.addEventListener("click", () => { rolEkle(i); });
+  ust.append(ekle);
+
+  const sil = el("button", "mini sil", "Sil");
+  sil.type = "button";
+  sil.addEventListener("click", () => { rolSil(i); });
+  ust.append(sil);
+  kutu.append(ust);
+
+  const idler = TASLAK.roles.map((r) => r.id);
+  const hedefler = idler.filter((x) => x !== rol.id).concat(["done"]);
+  const retler = [""].concat(idler.filter((x) => x !== rol.id));
+
+  kutu.append(alan("id", rol.id, (v) => { rolAdiDegis(i, v); }));
+  kutu.append(alan("provider", rol.provider, (v) => (rol.provider = v), SAGLAYICILAR));
+  kutu.append(alan("workspace", rol.workspace, (v) => (rol.workspace = v)));
+  kutu.append(alan("receive", rol.receive || "task", (v) => (rol.receive = v), ["task", "batch"]));
+  kutu.append(alan("next", rol.next, (v) => (rol.next = v), hedefler));
+  kutu.append(alan("reject", rol.reject || "", (v) => { rol.reject = v || undefined; }, retler));
+  const p = alan("prompt", rol.prompt, (v) => (rol.prompt = v));
+  p.className = "genis";
+  kutu.append(p);
+  return kutu;
+}
+
+/** Rolü zincire ekler: önceki rolün 'next'i yeni role, yeni rolünki eskisine. */
+function rolEkle(i) {
+  const onceki = TASLAK.roles[i];
+  let n = 1;
+  while (TASLAK.roles.some((r) => r.id === "rol" + n)) n += 1;
+  const yeni = {
+    id: "rol" + n,
+    provider: onceki.provider,
+    workspace: "rol" + n,
+    prompt: onceki.prompt,
+    receive: "batch",
+    next: onceki.next,
+  };
+  onceki.next = yeni.id;
+  TASLAK.roles.splice(i + 1, 0, yeni);
+  yenile();
+}
+
+/**
+ * Rolü çıkarır ve ona yapılan HER atfı temizler.
+ *
+ * Atıfları bırakmak akışı kalıcı olarak geçersiz yapardı: kullanıcı silmek
+ * istediği rolü silemez, çünkü ona işaret eden bir 'reject' kalıyor.
+ */
+function rolSil(i) {
+  if (TASLAK.roles.length < 2) return;
+  const giden = TASLAK.roles[i];
+  TASLAK.roles.splice(i, 1);
+  TASLAK.roles.forEach((r) => {
+    if (r.next === giden.id) r.next = giden.next;
+    if (r.reject === giden.id) r.reject = undefined;
+    if (r.syncBack) r.syncBack = r.syncBack.filter((x) => x !== giden.id);
+  });
+  if (TASLAK.gates) TASLAK.gates = TASLAK.gates.filter((g) => g.after !== giden.id);
+  yenile();
+}
+
+function rolAdiDegis(i, yeniAd) {
+  const eski = TASLAK.roles[i].id;
+  if (!yeniAd || yeniAd === eski) return;
+  TASLAK.roles[i].id = yeniAd;
+  TASLAK.roles.forEach((r) => {
+    if (r.next === eski) r.next = yeniAd;
+    if (r.reject === eski) r.reject = yeniAd;
+    if (r.syncBack) r.syncBack = r.syncBack.map((x) => (x === eski ? yeniAd : x));
+  });
+  if (TASLAK.gates) TASLAK.gates.forEach((g) => { if (g.after === eski) g.after = yeniAd; });
+  yenile();
+}
+
+function yenile() {
+  document.getElementById("panel").replaceChildren(editorCiz());
+  void onizle();
+}
+
+function editorCiz() {
+  const ust = el("div", "ust");
+  ust.addEventListener("click", (e) => { if (e.target === ust) kapat(); });
+  const p = el("div", "panel");
+
+  const kapatDugme = el("button", "kapat", "Kapat");
+  kapatDugme.type = "button";
+  kapatDugme.addEventListener("click", kapat);
+  p.append(kapatDugme);
+
+  p.append(el("h2", null, "Akış: " + TASLAK.name));
+  p.append(el("div", "cid", TASLAK.roles.length + " rol · kaydetmek dosyayı YENİDEN YAZAR"));
+
+  const ed = el("div", "ed");
+  TASLAK.roles.forEach((rol, i) => ed.append(rolCiz(rol, i)));
+  p.append(ed);
+
+  const sonuc = el("div", "kutu");
+  sonuc.id = "onizleme";
+  p.append(sonuc);
+
+  const alt = el("div", "exits");
+  const kaydet = el("button", "kaydet", "Dosyaya yaz");
+  kaydet.type = "button";
+  kaydet.id = "kaydet";
+  kaydet.disabled = true;
+  kaydet.addEventListener("click", () => { void yaz(); });
+  alt.append(kaydet);
+  p.append(alt);
+  p.append(el("div", "soon",
+    "Kaydetmek akış dosyasını yeniden yazar: YORUMLAR KAYBOLUR. Dosya git'te, " +
+    "diff'e bakabilirsin. Kapı metinleri, anayasa ve audit ayarları aynen korunur."));
+
+  ust.append(p);
+  return ust;
+}
+
+/** Taslağı DOSYAYA YAZMADAN doğrular; kural numarası kullanıcıya aynen gider. */
+async function onizle() {
+  const kutu = document.getElementById("onizleme");
+  const kaydet = document.getElementById("kaydet");
+  if (!kutu) return;
+  try {
+    const cevap = await fetch("/akis/onizleme", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-skein-token": JETON },
+      body: JSON.stringify(TASLAK),
+    });
+    const v = await cevap.json();
+    kutu.replaceChildren();
+    if (!cevap.ok) throw new Error(v.hata || cevap.status);
+    if (!v.ok) {
+      kutu.append(el("div", "err", v.message));
+      if (kaydet) kaydet.disabled = true;
+    } else {
+      kutu.append(el("div", "eyebrow", "Maliyet"));
+      const m = el("div", "maliyet");
+      m.append(el("span", null, v.cost.base + " aktivasyon/kart"));
+      m.append(el("span", null, v.cost.worst + " en kötü"));
+      m.append(el("span", null, v.cost.rejectEdges.length + " ret kenarı"));
+      kutu.append(m);
+      if (kaydet) kaydet.disabled = false;
+    }
+    kutu.append(el("div", "eyebrow", "Yazılacak dosya"));
+    kutu.append(el("div", "onizle", v.yaml || ""));
+  } catch (e) {
+    kutu.replaceChildren(el("div", "err", "Önizleme alınamadı: " + e.message));
+    if (kaydet) kaydet.disabled = true;
+  }
+}
+
+async function yaz() {
+  const kaydet = document.getElementById("kaydet");
+  kaydet.disabled = true;
+  try {
+    const cevap = await fetch("/akis/yaz", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-skein-token": JETON },
+      body: JSON.stringify(TASLAK),
+    });
+    const v = await cevap.json();
+    if (!cevap.ok) throw new Error(v.hata || cevap.status);
+    ciz(v.model);
+    kapat();
+  } catch (e) {
+    document.getElementById("onizleme").replaceChildren(el("div", "err", e.message));
+  }
+}
+
 yokla().then(hashOku);
 setInterval(yokla, 1000);
 </script>
 </body>
 </html>
 `;
+

@@ -25,7 +25,7 @@ npm install
 npm test
 ```
 
-`npm test` testlerin tamamını geçmeli (şu an 421). Geçmiyorsa çıktıyı
+`npm test` testlerin tamamını geçmeli (şu an 453). Geçmiyorsa çıktıyı
 sakla.
 
 ---
@@ -124,6 +124,23 @@ ve ret gerekçelerini gösterdiği için ağa açılmaz. `--host` ile
 değiştirebilirsin ama ne yaptığını bil: yazma çağrıları sayfaya gömülü bir
 jetonla korunuyor, ama ağa açılan bir ekran yine de depo içeriğini
 gösterir.
+
+### Akışı ekrandan kurmak
+
+Şeritteki **Akışı düzenle** düğmesi: rol ekle/çıkar, sağlayıcı ata, `next` ve
+`reject` bağlarını kur. Her değişiklikte:
+
+- **Canlı doğrulama** — 16 kuralın tamamı, kural numarasıyla
+- **Canlı maliyet** — aktivasyon/kart ve en kötü durum; rol ekledikçe büyür
+- **Yazılacak dosyanın önizlemesi** — kaydetmeden önce tamamı görünür
+
+Geçersiz taslak **yazılmaz**. Yazma atomik; gözcü koşuyorsa yeni akışı
+kendiliğinden alır.
+
+**Kaydetmek dosyayı yeniden yazar ve YORUMLAR KAYBOLUR.** Dosya git'te, diff'e
+bakabilirsin. Kapı metinleri, anayasa ve audit ayarları korunur.
+
+Düzenlemeyi kapatmak için: `npx tsx src/ui/cli.ts <akış> --salt-okunur`
 
 Gözcü ile ekran ayrı süreçler; ekran kilidi almaz, kuyruğa dokunmaz.
 

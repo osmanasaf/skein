@@ -2,6 +2,8 @@ import { randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { QueueError, type ReleaseDecision } from "../card/queue.js";
+import { checkDraft, fromFlow, writeDraft, type FlowDraft } from "../flow/draft.js";
+import type { Flow, LoadOptions } from "../flow/load.js";
 import { closeOrphan } from "../card/orphan.js";
 import { releaseCard } from "../card/release.js";
 import type { TopologySnapshot } from "../flow/snapshot.js";
@@ -22,7 +24,20 @@ export interface ServeUiOptions extends DetailOptions {
    * dosyası değiştiyse ekran yeni sütunları çiziyor, geçersizse eskisiyle
    * çizmeye devam edip gerekçeyi gösteriyor.
    */
-  live?: { topology: TopologySnapshot; flow: { name: string; hash: string }; error: string | null; refresh: () => Promise<unknown> };
+  live?: {
+    topology: TopologySnapshot;
+    flow: Flow;
+    error: string | null;
+    refresh: () => Promise<unknown>;
+  };
+  /**
+   * Akış dosyasının yolu ve yükleme seçenekleri — ekrandan düzenleme için.
+   * Verilmezse düzenleme uçları 404 döner (ekran salt okunur kalır).
+   */
+  flowPath?: string;
+  loadOptions?: LoadOptions;
+  /** Düzenleyicide seçilebilecek sağlayıcılar. */
+  providerIds?: string[];
   /** 0 = boş port seç. */
   port?: number;
   /**
@@ -81,6 +96,9 @@ function yetkili(req: IncomingMessage, token: string, self: string): string | nu
  *   GET  /kart/<id>           kartın izi + devredilen commit'in diff özeti
  *   POST /kart/<id>/birak     kapıdaki kartı karara bağlar
  *   POST /kart/<id>/kapat     akışta karşılığı kalmamış kartı kapatır
+ *   GET  /akis                düzenleyicinin başlangıç hâli
+ *   POST /akis/onizleme       taslağı DOSYAYA YAZMADAN doğrular
+ *   POST /akis/yaz            geçerli taslağı atomik yazar
  *
  * Yazan uç noktalar KOMUT gönderiyor: yüzey kendi kopyasını
  * güncellemiyor, `queue.release()` çağırıyor ve cevabı çekirdeğin ürettiği
@@ -111,6 +129,51 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
 
     const birak = path === undefined ? null : /^\/kart\/([^/]+)\/birak$/.exec(path);
     const kapat = path === undefined ? null : /^\/kart\/([^/]+)\/kapat$/.exec(path);
+
+    if (req.method === "POST" && (path === "/akis/onizleme" || path === "/akis/yaz")) {
+      const hata = yetkili(req, token, self);
+      if (hata !== null) {
+        res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ hata }));
+        return;
+      }
+      const flowPath = options.flowPath;
+      const loadOptions = options.loadOptions;
+      if (flowPath === undefined || loadOptions === undefined) {
+        res.writeHead(404, { "content-type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ hata: "Bu ekran akış düzenlemeye açık değil." }));
+        return;
+      }
+      const yaz = path === "/akis/yaz";
+      readBody(req)
+        .then(async (body) => {
+          const draft = JSON.parse(body === "" ? "{}" : body) as FlowDraft;
+          // Önizleme YAZMAZ: ekranda denenen her taslak diske düşseydi gözcü
+          // yarım taslakları okurdu.
+          if (!yaz) {
+            const sonuc = await checkDraft(flowPath, draft, loadOptions);
+            res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+            res.end(JSON.stringify(sonuc));
+            return;
+          }
+          const sonuc = await writeDraft(flowPath, draft, loadOptions);
+          if (!sonuc.ok) {
+            res.writeHead(409, { "content-type": "application/json; charset=utf-8" });
+            res.end(JSON.stringify({ hata: sonuc.message }));
+            return;
+          }
+          // Yazdıktan sonra model YENİDEN kuruluyor: yeni topoloji zaten
+          // `live.refresh()` ile okunacak, ekran onu çizsin.
+          const model = await buildModel(await guncel());
+          res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ ...sonuc, model }));
+        })
+        .catch((error: unknown) => {
+          res.writeHead(400, { "content-type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ hata: (error as Error).message }));
+        });
+      return;
+    }
 
     if (req.method === "POST" && kapat !== null) {
       const hata = yetkili(req, token, self);
@@ -177,6 +240,29 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
     if (req.method !== "GET") {
       res.writeHead(405, { "content-type": "text/plain; charset=utf-8" });
       res.end("Bu uç nokta yalnızca okur.");
+      return;
+    }
+
+    if (path === "/akis") {
+      // Düzenleyicinin başlangıç hâli: yaşayan akışın taslak karşılığı.
+      guncel().then(
+        async (o) => {
+          // Taslak yaşayan AKIŞTAN kuruluyor, dondurulmuş topolojiden değil:
+          // kapı mesajları ve yol biçimi yalnızca akışta tam.
+          const draft = options.flowPath === undefined || options.live === undefined
+            ? null
+            : fromFlow(options.live.flow);
+          res.writeHead(200, {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "no-store",
+          });
+          res.end(JSON.stringify({ draft, providers: options.providerIds ?? [] }));
+        },
+        (error: unknown) => {
+          res.writeHead(500, { "content-type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ hata: (error as Error).message }));
+        },
+      );
       return;
     }
 

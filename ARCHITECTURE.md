@@ -228,7 +228,7 @@ Ekran tartışması bunların üstüne gelir, bunları yeniden açmaz:
 | ~~2~~ | ✅ `agent.step` — ajan koşarken günlüğe düşüyor | Canlı koşuda doğrulandı: 8 adım, tur bitmeden, saniye saniye |
 | ~~3~~ | ✅ Okuyucu ekran — pano, canlı adım, kart izi, diff | Gerçek depoda doğrulandı; üç sorunun üçü de ekrandan cevaplanıyor |
 | ~~4~~ | ✅ Kapı ekrandan açılıyor | Yüzey komut gönderiyor; çekirdeğin reddi kullanıcıya aynen gidiyor |
-| 5 | Tanımlama: akış ve rol düzenleme (Aşama 6) | Doğrulama ve maliyet tahmini zaten yazılı |
+| ~~5~~ | ✅ Akış ekrandan kuruluyor | Doğrulama ve maliyet tahmini zaten yazılıydı; ekran onları kullanıyor |
 | 6 | Planlamada ajanlar arası yazılı tur | En sonda, ve mekanizma olarak; serbest sohbet olarak değil |
 
 Adım 6'nın gerekçesi `PHILOSOPHY.md`'de: serbest sohbet maliyeti sınırsız
@@ -510,3 +510,50 @@ ikisi de kendiliğinden toparladı.
 adaptör haritası eski kalır ve o role düşen kart `adaptör yok` gerekçesiyle
 kaçış kapısına çıkar. Sessiz değil, görünür — ve doğrusu bu: model pinleri
 komut satırından geliyor, gözcü kendi başına model seçemez.
+
+### Adım 5 — akış ekrandan kuruluyor · 2026-09-17
+
+`src/flow/draft.ts` + ekranda düzenleyici. 453 test yeşil (+32).
+
+**Ekranın ürettiği şey tam olarak `hub/flows/<ad>.yaml`.** Ayrı bir "ekran
+biçimi" olsaydı iki temsil arasında sürüklenme kaçınılmazdı ve akış dosyası
+tek doğruluk kaynağı olmaktan çıkardı.
+
+**Doğrulama gerçek yükleyiciden geçiyor.** `LoadOptions.text` eklendi: taslak
+DOSYAYA YAZILMADAN, gerçek yolun dizininde duruyormuş gibi doğrulanıyor —
+göreli prompt yolları böylece aynı çözülüyor. Ekrana ayrı bir kural kopyası
+yazmak, iki kural kümesinin ayrışmasıyla biterdi. Kural numaraları kullanıcıya
+aynen gidiyor.
+
+**Yazma iki kapılı:** geçersiz taslak yazılmaz (ekranın ürettiği dosyayı gözcü
+de okuyor), ve yazma atomik (önce yan dosya, sonra `rename` — gözcü her geçişte
+bu dosyayı okuyor ve yarı yazılmış hâli görmemeli).
+
+**İki sessiz kayıp yakalandı ve kapatıldı:**
+
+1. **Kapı mesajı.** Dondurulmuş topolojide yok (düzyazı, hash'e girmiyor).
+   Taslağı oradan kursaydık ekrandan yapılan ilk kaydetme kapı metnini silerdi.
+   Taslak artık `Flow`'dan kuruluyor.
+2. **Yol biçimi.** `Flow` mutlak yol taşıyor, topoloji köke göre göreli, YAML
+   ise akış DOSYASINA göre göreli bekliyor. Yanlışını yazmak akışı sessizce
+   başka bir dosyaya bağlardı.
+
+Güvence: deponun KENDİ akış dosyaları (`daily`, `spec`) taslağa çevrilip geri
+yazıldığında **topoloji hash'i değişmiyor**, kapı mesajı ve açıklama
+korunuyor, yazılmamış ret hedefi yazılmamış kalıyor.
+
+**Kabul edilen kayıp:** kaydetmek dosyayı yeniden yazar, **yorumlar kaybolur**.
+Sessiz değil: yazılacak dosyanın tamamı kaydetmeden önce önizlemede duruyor ve
+dosya git'te. Yorum korumak, YAML'ı AST düzeyinde düzenlemek demekti; ekranın
+değeri buna değmezdi.
+
+**Kapsam dışı bırakılan:** rol promptlarını ekrandan düzenlemek. Sebebi
+belgede zaten yazılı — prompt İÇERİĞİ her turda taze okunuyor, yani yoldaki
+kartın bir sonraki turunu da değiştirir. Bu, kendi kararını hak ediyor.
+
+**Yol boyunca çıkan kusur:** sayfanın gömülü betiği tamamen bozuktu ve hiçbir
+test görmüyordu — uçlar çalıştığı için hepsi yeşildi. Sebep: şablon içinde
+ters bölü + n yazınca TypeScript onu gerçek satır sonuna çeviriyor ve JS
+dizesi ortasından kırılıyor. Sayfa bembeyaz açılıyordu. `src/ui/page.test.ts`
+artık gömülü betiği `new Function` ile derliyor (çalıştırmadan) — bir daha
+görünmeden geçemez.

@@ -3,9 +3,10 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { knownProviderSet } from "../adapters/factory.js";
+import { readFile } from "node:fs/promises";
 import { newCard, type Card } from "../card/card.js";
 import { CardQueue } from "../card/queue.js";
-import { loadFlow } from "../flow/load.js";
+import { loadFlow, type Flow } from "../flow/load.js";
 import { snapshot, type TopologySnapshot } from "../flow/snapshot.js";
 import { serveUi, type UiServer } from "./server.js";
 
@@ -25,6 +26,7 @@ let root: string;
 let queue: CardQueue;
 let topology: TopologySnapshot;
 let server: UiServer;
+let gercekFlow: Flow;
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "skein-uisrv-"));
@@ -42,6 +44,7 @@ beforeEach(async () => {
     providers: knownProviderSet(),
   });
   topology = snapshot(flow, root);
+  gercekFlow = flow;
   server = await serveUi({ root, queue, topology, flowName: flow.name, flowHash: flow.hash });
 });
 afterEach(async () => {
@@ -264,7 +267,7 @@ describe("serveUi — yaşayan akış", () => {
   function sahteLive(baslangic: TopologySnapshot) {
     return {
       topology: baslangic,
-      flow: { name: "test", hash: "aaa" },
+      flow: gercekFlow,
       error: null as string | null,
       yoklandi: 0,
       async refresh() {
@@ -312,5 +315,114 @@ describe("serveUi — yaşayan akış", () => {
     } finally {
       await s.close();
     }
+  });
+});
+
+describe("serveUi — akış düzenleme", () => {
+  let s: UiServer;
+  const opts = () => ({ root, providers: knownProviderSet() });
+
+  beforeEach(async () => {
+    s = await serveUi({
+      root, queue, topology, flowName: "test", flowHash: gercekFlow.hash,
+      live: { topology, flow: gercekFlow, error: null, refresh: async () => {} },
+      flowPath: gercekFlow.path,
+      loadOptions: opts(),
+      providerIds: ["claude", "codex"],
+    });
+  });
+  afterEach(async () => {
+    await s.close();
+  });
+
+  const gonder = (yol: string, govde: unknown, jeton?: string) =>
+    fetch(`${s.url}${yol}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-skein-token": jeton ?? s.token },
+      body: JSON.stringify(govde),
+    });
+
+  it("düzenleyicinin başlangıç hâlini verir", async () => {
+    const v = (await (await fetch(`${s.url}akis`)).json()) as {
+      draft: { name: string; roles: { id: string }[] };
+      providers: string[];
+    };
+    expect(v.draft.roles.map((r) => r.id)).toEqual(["coder"]);
+    expect(v.providers).toEqual(["claude", "codex"]);
+  });
+
+  it("geçerli taslakta maliyet ve yaml döner", async () => {
+    const draft = ((await (await fetch(`${s.url}akis`)).json()) as { draft: unknown }).draft;
+
+    const v = (await (await gonder("akis/onizleme", draft)).json()) as {
+      ok: boolean; yaml: string; cost: { base: number };
+    };
+
+    expect(v.ok).toBe(true);
+    expect(v.cost.base).toBe(1);
+    expect(v.yaml).toContain("id: coder");
+  });
+
+  // Kural numaraları kullanıcıya AYNEN gitmeli.
+  it("geçersiz taslakta kural numarası döner", async () => {
+    const v = (await (await gonder("akis/onizleme", {
+      name: "test", constitution: ["../prompts/base.md"],
+      roles: [{ id: "coder", provider: "claude", workspace: "main", prompt: "../../roles/coder.prompt", next: "coder" }],
+    })).json()) as { ok: boolean; message: string };
+
+    expect(v.ok).toBe(false);
+    expect(v.message).toContain("kural");
+  });
+
+  // Ekranda denenen her taslak diske düşseydi gözcü yarım taslakları okurdu.
+  it("önizleme dosyaya dokunmaz", async () => {
+    const once = await readFile(gercekFlow.path, "utf8");
+    await gonder("akis/onizleme", { name: "x", constitution: [], roles: [] });
+    expect(await readFile(gercekFlow.path, "utf8")).toBe(once);
+  });
+
+  it("geçerli taslağı dosyaya yazar", async () => {
+    const veri = (await (await fetch(`${s.url}akis`)).json()) as {
+      draft: { description?: string };
+    };
+    veri.draft.description = "ekrandan yazıldı";
+
+    const res = await gonder("akis/yaz", veri.draft);
+
+    expect(res.status).toBe(200);
+    expect(await readFile(gercekFlow.path, "utf8")).toContain("ekrandan yazıldı");
+  });
+
+  // Ekranın ürettiği dosyayı gözcü de okuyor; bozuk YAML yazmak çalışan bir
+  // sistemi ekrandan bozmak olurdu.
+  it("geçersiz taslağı YAZMAZ", async () => {
+    const once = await readFile(gercekFlow.path, "utf8");
+
+    const res = await gonder("akis/yaz", { name: "test", constitution: [], roles: [] });
+
+    expect(res.status).toBe(409);
+    expect(await readFile(gercekFlow.path, "utf8")).toBe(once);
+  });
+
+  it("jetonsuz yazma reddedilir", async () => {
+    const res = await fetch(`${s.url}akis/yaz`, { method: "POST", body: "{}" });
+    expect(res.status).toBe(403);
+  });
+
+  it("jetonsuz önizleme de reddedilir", async () => {
+    const res = await fetch(`${s.url}akis/onizleme`, { method: "POST", body: "{}" });
+    expect(res.status).toBe(403);
+  });
+});
+
+describe("serveUi — salt okunur ekran", () => {
+  it("düzenleme kapalıysa uçlar 404", async () => {
+    const res = await fetch(`${server.url}akis/yaz`, {
+      method: "POST",
+      headers: { "x-skein-token": server.token },
+      body: "{}",
+    });
+    expect(res.status).toBe(404);
+    expect(((await (await fetch(`${server.url}akis`)).json()) as { draft: null }).draft).toBeNull();
   });
 });

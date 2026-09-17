@@ -18,16 +18,19 @@ Gözcüyü ayrı bir kabukta koştur:
 
 Seçenekler:
   --port <n>   dinlenecek port (varsayılan: boş bir port seçilir)
-  --host <h>   dinlenecek arayüz (varsayılan 127.0.0.1 — yerel araç)`;
+  --host <h>   dinlenecek arayüz (varsayılan 127.0.0.1 — yerel araç)
+  --salt-okunur  akış düzenlemeyi kapat`;
 
 async function main(argv: string[]): Promise<number> {
   let flowName: string | undefined;
   let port: number | undefined;
   let host: string | undefined;
+  let saltOkunur = false;
   for (let i = 0; i < argv.length; i += 1) {
     const value = argv[i] as string;
     if (value === "--port") port = Number(argv[++i]);
     else if (value === "--host") host = argv[++i];
+    else if (value === "--salt-okunur") saltOkunur = true;
     else if (!value.startsWith("--") && flowName === undefined) flowName = value;
   }
 
@@ -62,13 +65,25 @@ async function main(argv: string[]): Promise<number> {
     flowName: flow.name,
     flowHash: flow.hash,
     live,
+    // Akış düzenleme açık: ekranın ürettiği dosya tam olarak bu yol.
+    ...(saltOkunur
+      ? {}
+      : {
+          flowPath: flow.path,
+          loadOptions: { root, providers: knownProviderSet() },
+          providerIds: knownProviderSet().ids(),
+        }),
     ...(port === undefined ? {} : { port }),
     ...(host === undefined ? {} : { host }),
   });
 
   console.log(`ekran açık: ${server.url}`);
   console.log(`akış: ${flow.name} (${flow.hash.slice(0, 12)}…) · ${topology.roles.length} rol`);
-  console.log(`\nYalnızca okur. Durdurmak için Ctrl-C.`);
+  console.log(
+    saltOkunur
+      ? `\nSalt okunur. Durdurmak için Ctrl-C.`
+      : `\nKapı kararı ve akış düzenleme açık. Durdurmak için Ctrl-C.`,
+  );
 
   const stop = (): void => {
     void server.close().then(() => process.exit(0));
