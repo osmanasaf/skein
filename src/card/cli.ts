@@ -5,6 +5,7 @@ import { loadFlow } from "../flow/load.js";
 import { snapshot } from "../flow/snapshot.js";
 import { newCard, type Card } from "./card.js";
 import { CardQueue, QueueError, type ReleaseDecision } from "./queue.js";
+import { closeOrphan } from "./orphan.js";
 import { releaseCard } from "./release.js";
 import { FlowError } from "../flow/load.js";
 
@@ -16,6 +17,7 @@ const USAGE = `Kullanım:
   npm run card -- handoff <kart-id> [commit]          kabul: kart ileri gider
   npm run card -- reject <kart-id> <gerekçe>          ret: KART geri döner
   npm run card -- release <kart-id> [forward|back|retry]  kapıdaki kartı karara bağlar
+  npm run card -- kapat <kart-id>                  akışta karşılığı kalmamış kartı kapatır
        forward  bir sonraki role geçsin (yalnızca onay/kilit kapısında)
        back     önceki role dönsün
        retry    aynı rol baştan koşsun (kaçış kapısının varsayılanı)
@@ -195,6 +197,25 @@ async function run(argv: string[], root: string): Promise<number> {
           ? `✓ ${released.id} bitti`
           : `→ ${released.id} bırakıldı (${taken}): ${released.role} kuyruğunda`,
       );
+      return 0;
+    }
+
+    case "kapat": {
+      const card = await need(rest[0]);
+      // Hangi akışa bakılacağı kartın kendisinden okunuyor: kart hangi akışla
+      // açıldıysa o akışın YAŞAYAN hâli sorulur. Dosya okunamıyorsa (silinmiş,
+      // bozulmuş) `null` gider ve o akışın her kartı yetim sayılır.
+      const live = await loadFlow(join(root, "hub", "flows", `${card.topology.flow}.yaml`), {
+        root,
+        providers: knownProviderSet(),
+      })
+        .then((flow) => snapshot(flow, root))
+        .catch(() => null);
+      // Kapatma yalnızca akışta karşılığı kalmamış kart için; `closeOrphan`
+      // bunu doğruluyor ve değilse gerekçesiyle reddediyor.
+      const { card: closed, reason } = await closeOrphan(root, queue, live, card.id);
+      console.log(`✓ ${closed.id} kapatıldı: ${reason}`);
+      console.log(`  İş dalında duruyor; kapanan şey kartın yolculuğu.`);
       return 0;
     }
 

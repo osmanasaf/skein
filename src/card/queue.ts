@@ -401,6 +401,37 @@ export class CardQueue {
   }
 
   /**
+   * Kartı insan kararıyla kapatır — iş bitmeden.
+   *
+   * Tek kullanımı: akışta karşılığı kalmamış kart (bkz. `src/card/orphan.ts`).
+   * `handoff` gibi zincirin sonunu beklemiyor, çünkü bekleyecek bir zincir
+   * yok; kart `done`'a gerekçesiyle gider ve izini bırakır.
+   *
+   * `active` kart kapatılamaz: o an bir ajan koşuyor olabilir ve altından
+   * kartı çekmek, parası ödenmiş bir turu ortada bırakmak olurdu.
+   */
+  async close(id: string, reason: string): Promise<Card> {
+    const trimmed = reason.trim();
+    if (trimmed === "") throw new QueueError("Kapatma gerekçesi boş olamaz");
+
+    const found = await this.#locate(id);
+    const here = found[0];
+    if (here === undefined) throw new QueueError(`Böyle bir kart yok: ${id}`);
+    if (here.card.state === "done") throw new QueueError(`Kart zaten bitmiş: ${id}`);
+    if (here.card.state === "active") {
+      throw new QueueError(
+        `\`${id}\` şu an bir rolde koşuyor; kapatmadan önce turun bitmesini bekle.`,
+      );
+    }
+
+    const closed = {
+      ...this.#push(here.card, { at: now(), event: "done" as const, from: here.card.role, reason: trimmed }),
+      state: "done" as const,
+    };
+    return this.#move(closed, join(this.#root, "done"), `${id}.json`, here.path);
+  }
+
+  /**
    * Yarıda kalmış işi toplar. Başlangıçta çağrılır.
    *
    * İki şey yapar: kopyaları tek kurala göre çözer (geçmişi uzun olan

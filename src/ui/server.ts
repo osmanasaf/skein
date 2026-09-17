@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { QueueError, type ReleaseDecision } from "../card/queue.js";
+import { closeOrphan } from "../card/orphan.js";
 import { releaseCard } from "../card/release.js";
 import { buildDetail, buildModel, type DetailOptions, type UiModel } from "./model.js";
 import { renderPage } from "./page.js";
@@ -72,8 +73,9 @@ function yetkili(req: IncomingMessage, token: string, self: string): string | nu
  *   GET  /durum               panonun modeli
  *   GET  /kart/<id>           kartın izi + devredilen commit'in diff özeti
  *   POST /kart/<id>/birak     kapıdaki kartı karara bağlar
+ *   POST /kart/<id>/kapat     akışta karşılığı kalmamış kartı kapatır
  *
- * Tek yazan uç nokta bu, ve KOMUT gönderiyor: yüzey kendi kopyasını
+ * Yazan uç noktalar KOMUT gönderiyor: yüzey kendi kopyasını
  * güncellemiyor, `queue.release()` çağırıyor ve cevabı çekirdeğin ürettiği
  * yeni durumdan okuyor (ARCHITECTURE, değişmez 1). Çekirdek reddederse
  * (kaçış kapısından ileri bırakma) mesaj kullanıcıya aynen gider.
@@ -87,6 +89,29 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
     const path = (req.url ?? "/").split("?")[0];
 
     const birak = path === undefined ? null : /^\/kart\/([^/]+)\/birak$/.exec(path);
+    const kapat = path === undefined ? null : /^\/kart\/([^/]+)\/kapat$/.exec(path);
+
+    if (req.method === "POST" && kapat !== null) {
+      const hata = yetkili(req, token, self);
+      if (hata !== null) {
+        res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ hata }));
+        return;
+      }
+      const id = decodeURIComponent(kapat[1] as string);
+      closeOrphan(options.root, options.queue, options.topology, id, options.logPath)
+        .then(async ({ card, reason }) => {
+          const model = await buildModel(options);
+          res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ kart: { id: card.id, state: card.state }, reason, model }));
+        })
+        .catch((error: unknown) => {
+          const kod = error instanceof QueueError ? 409 : 400;
+          res.writeHead(kod, { "content-type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ hata: (error as Error).message }));
+        });
+      return;
+    }
 
     if (req.method === "POST" && birak !== null) {
       const hata = yetkili(req, token, self);

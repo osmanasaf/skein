@@ -90,6 +90,13 @@ const PAGE = `<!doctype html>
   }
   .card.live { border: 2px solid var(--accent); padding: 12px 13px; }
   .card.gate { background: var(--gate-bg); border-color: var(--gate-line); }
+  .card.orphan { border-color: var(--reject); border-style: dashed; }
+  .band {
+    border: 1px dashed var(--reject); border-radius: 4px; padding: 14px 16px; margin-bottom: 16px;
+  }
+  .band h2 { margin: 0 0 4px; font-size: 15px; font-weight: 700; color: var(--reject); }
+  .band p { margin: 0 0 12px; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); max-width: 70ch; }
+  .band .kartlar { display: grid; grid-template-columns: repeat(auto-fit, minmax(252px, 1fr)); gap: 12px; }
   .card h3 { margin: 0; font-size: 14.5px; font-weight: 600; line-height: 1.3; }
   .cid { font-family: var(--mono); font-size: 11px; color: var(--ink-3); margin-top: 3px; }
   .tag {
@@ -176,6 +183,7 @@ const PAGE = `<!doctype html>
 <body>
 <div class="wrap">
   <div class="bar" id="bar"></div>
+  <div id="hata"></div>
   <div id="uyari"></div>
   <div class="board" id="board"></div>
   <footer id="foot"></footer>
@@ -212,6 +220,26 @@ function kapiCikislari(kind) {
     dugmeler: [["Geçir", "forward"], ["Geri gönder", "back"]] };
 }
 
+/** Yetim kartı kapatır — tek meşru çıkış. */
+async function kapatKart(id, kart) {
+  const dugmeler = kart.querySelectorAll("button");
+  dugmeler.forEach((b) => (b.disabled = true));
+  try {
+    const cevap = await fetch("/kart/" + encodeURIComponent(id) + "/kapat", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-skein-token": JETON },
+    });
+    const veri = await cevap.json();
+    if (!cevap.ok) throw new Error(veri.hata || cevap.status);
+    ciz(veri.model);
+  } catch (e) {
+    dugmeler.forEach((b) => (b.disabled = false));
+    const eski = kart.querySelector(".redd");
+    if (eski) eski.remove();
+    kart.append(el("div", "redd", e.message));
+  }
+}
+
 /**
  * Kapıyı açar — KOMUT göndererek.
  *
@@ -240,7 +268,7 @@ async function karar(id, secim, dugme, kart) {
 }
 
 function kartCiz(c) {
-  const kutu = el("div", "card" + (c.state === "active" ? " live" : "") + (c.gate ? " gate" : ""));
+  const kutu = el("div", "card" + (c.state === "active" ? " live" : "") + (c.gate ? " gate" : "") + (c.orphan ? " orphan" : ""));
 
   const ust = el("div", "tag " + (c.gate ? "gate" : c.state === "active" ? "run" : "queued"));
   if (c.state === "active") ust.append(el("span", "dot"));
@@ -295,7 +323,19 @@ function kartCiz(c) {
     kutu.append(iz);
   }
 
-  if (kapi) {
+  if (c.orphan) {
+    const cikis = el("div", "exits");
+    const b = el("button", "primary", "Kartı kapat");
+    b.type = "button";
+    b.style.cssText = "background:var(--reject);border-color:var(--reject);color:#fff";
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      void kapatKart(c.id, kutu);
+    });
+    cikis.append(b);
+    kutu.append(cikis);
+    kutu.append(el("div", "soon", "iş dalında duruyor; kapanan şey kartın yolculuğu"));
+  } else if (kapi) {
     const cikis = el("div", "exits");
     kapi.dugmeler.forEach(([ad, secim], i) => {
       const b = el("button", i === 0 ? "primary" : null, ad);
@@ -450,6 +490,26 @@ function ciz(m) {
       bar.append(s);
     });
 
+  // Hiçbir kart ekrandan düşmemeli. Rolü yaşayan akışta olmayan kart
+  // hiçbir sütuna uymuyor; kendi şeridinde, sebebiyle birlikte duruyor.
+  const uyari = document.getElementById("uyari");
+  const yetimler = m.cards.filter((c) => c.orphan);
+  if (yetimler.length) {
+    const band = el("div", "band");
+    band.append(el("h2", null, yetimler.length + " kart akışta karşılığı olmayan bir rolde"));
+    band.append(el("p", null,
+      "Bu kartlar hiçbir role gitmiyor: ya o rol akıştan silindi, ya da gözcü/ekran " +
+      "akış dosyasının eski hâlini taşıyor. Kart açılırken topolojisini donduruyor " +
+      "ve yolunu ondan okuyor — yani kimse onu almıyor ve hiçbir hata da üretmiyor. " +
+      "Gözcüyü ve ekranı yeniden başlatmak ilkini çözer; rol gerçekten silindiyse kartı kapat."));
+    const kartlar = el("div", "kartlar");
+    yetimler.forEach((c) => kartlar.append(kartCiz(c)));
+    band.append(kartlar);
+    uyari.replaceChildren(band);
+  } else {
+    uyari.replaceChildren();
+  }
+
   const board = document.getElementById("board");
   board.replaceChildren();
   m.roles.forEach((rol) => {
@@ -458,7 +518,7 @@ function ciz(m) {
     head.append(el("h2", null, rol.id));
     head.append(el("span", "mono", rol.provider + " · " + rol.workspace));
     head.append(el("div", "spacer"));
-    const kartlar = m.cards.filter((c) => c.role === rol.id && c.state !== "done");
+    const kartlar = m.cards.filter((c) => c.role === rol.id && c.state !== "done" && !c.orphan);
     // Sayı SÜTUNDAKİ kart sayısı, kuyruk derinliği değil: kapıda bekleyen
     // kart kuyrukta durmuyor ve "0" yazan bir başlık yalan söylüyordu.
     head.append(el("span", "mono", String(kartlar.length)));
@@ -489,7 +549,7 @@ function ciz(m) {
 }
 
 async function yokla() {
-  const uyari = document.getElementById("uyari");
+  const uyari = document.getElementById("hata");
   try {
     const cevap = await fetch("/durum", { cache: "no-store" });
     const veri = await cevap.json();

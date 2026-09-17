@@ -413,3 +413,56 @@ kapıda, hangi yöne?"* Tek bir kartın izinden okunamayan tek şey buydu.
 Günlük yazımı kuyruğun içinde değil `src/card/release.ts` içinde: kartın
 nerede olduğu ile o kararın kaydı iki ayrı sorumluluk, ve kuyruk ölçümden
 habersiz kalmalı. Ekran da `card` CLI'ı da aynı yardımcıdan geçiyor.
+
+### Akış değişince yoldaki kartlar — ve "yetim kart" kararı · 2026-09-17
+
+**Sınır:** topolojiyi üç yer okuyor ve üçü farklı anda — gözcü başlarken bir
+kez, kart açılırken bir kez (ve **donduruyor**), ekran başlarken bir kez.
+`sweep()` kendi listesini geziyor, `tick()` ise yönlendirmeyi kartın
+topolojisinden okuyor. Bu ikisi ayrıştığında kart hiçbir turda alınmıyor ve
+**hiçbir hata üretmiyor**.
+
+Dondurma kasıtlı (değişmez 4). Gözcünün ve ekranın bir kez okuması kasıtlı
+değildi; `--serve` toplu koşudan türedi ve orada süreç zaten kısa yaşıyordu.
+
+#### Karar 1 — yoldaki kartlara dokunulmaz
+
+Akış değişse de yoldaki kart kendi topolojisiyle yaşar. Tartışma yok:
+"bazen değiştirilebilir" bir garanti, garanti değildir.
+
+#### Karar 2 — rolü kalmamış kart GÖRÜNÜR olur
+
+Ekran hiçbir kartı düşürmez. Rolü yaşayan akışta olmayan kart kendi
+şeridinde, iki olası sebebiyle birlikte durur:
+
+- rol akıştan gerçekten silindi (kart gerçekten yetim), ya da
+- akışa rol eklendi ve **bakan taraf bayat**.
+
+Tek anlık görüntüden ayırt edilemiyorlar, ama eylem aynı: bu kart hiçbir
+yere gitmiyor. Gözcü de aynı kartı **bir kez** duyurur.
+
+#### Karar 3 — tek çıkış "kapat", "yeni akışa taşı" DEĞİL
+
+Kartı yaşayan topolojiye taşımak daha nazik görünüyor ama iki şeyi kırıyor:
+
+1. **Dondurmanın verdiği tek garanti** — kart başladığı yoldan gider.
+2. **Kodun nerede olduğu** — iş, rol adını taşıyan dallarda
+   (`skein/<workspace>`) ve ileri birleştirme zinciri o rollere göre kuruldu.
+   Yeni topolojiye taşınan kartın commit'leri, kimsenin birleştirmeyeceği bir
+   dalda kalır — sessizce.
+
+"İptal" değil "kapat" demesinin sebebi: iş çöpe gitmiyor. Commit'ler dalında,
+iz geçmişinde duruyor. Kapanan şey kartın **yolculuğu**. İşi yeni akışta
+sürdürmek istiyorsan yeni kart açarsın; o kart yeni topolojiyi dondurur.
+
+Kapatma **yalnızca** yetim kart için açık. Genel bir "kartı iptal et" düğmesi,
+sürtünmesi olması gereken bir şeyi (işi yarıda bırakmak) sürtünmesiz yapardı.
+Koşan kart da kapatılamaz: altından kartı çekmek, parası ödenmiş bir turu
+ortada bırakmak olurdu.
+
+#### Sırada kalan: akışı yeniden yükleme (adım 5'in ön koşulu)
+
+Bu kayıt sınırı **görünür** kıldı, kaldırmadı. Kaldırmak gözcünün ve ekranın
+akış dosyasını izleyip yeniden okuması demek — ve yeniden yükleme **atomik ve
+doğrulanmış** olmalı: oku, 16 kuralı geçir, geçerse değiştir; geçmezse
+eskisiyle devam et ve söyle. Yarım kaydedilmiş bir YAML gözcüyü düşürmemeli.

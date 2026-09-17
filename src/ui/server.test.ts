@@ -202,3 +202,59 @@ describe("serveUi — kapıyı açmak", () => {
     expect(html).not.toContain("__JETON__");
   });
 });
+
+describe("serveUi — yetim kart", () => {
+  // Rolü yaşayan akışta olmayan kart hiçbir sütuna düşmüyor; model onu yine
+  // döndürmeli ve işaretlemeli, yoksa ekrandan sessizce kaybolur.
+  it("yetim kart modelde işaretli gelir", async () => {
+    const yabanci: TopologySnapshot = {
+      ...topology,
+      roles: [{ ...(topology.roles[0] as TopologySnapshot["roles"][number]), id: "analyst" }],
+    };
+    await queue.add(newCard({ title: "yetim", task: "iş", topology: yabanci }));
+
+    const model = (await (await fetch(`${server.url}durum`)).json()) as {
+      cards: { orphan: boolean; role: string }[];
+      totals: { orphans: number };
+    };
+
+    expect(model.cards[0]).toMatchObject({ role: "analyst", orphan: true });
+    expect(model.totals.orphans).toBe(1);
+  });
+
+  it("yetim kart jetonla kapatılabilir", async () => {
+    const yabanci: TopologySnapshot = {
+      ...topology,
+      roles: [{ ...(topology.roles[0] as TopologySnapshot["roles"][number]), id: "analyst" }],
+    };
+    const card = await queue.add(newCard({ title: "yetim", task: "iş", topology: yabanci }));
+
+    const res = await fetch(`${server.url}kart/${card.id}/kapat`, {
+      method: "POST",
+      headers: { "x-skein-token": server.token },
+    });
+    const veri = (await res.json()) as { kart: { state: string }; reason: string };
+
+    expect(res.status).toBe(200);
+    expect(veri.kart.state).toBe("done");
+    expect(veri.reason).toContain("analyst");
+  });
+
+  it("yetim olmayan kart kapatılamaz", async () => {
+    const card = await queue.add(newCard({ title: "normal", task: "iş", topology }));
+
+    const res = await fetch(`${server.url}kart/${card.id}/kapat`, {
+      method: "POST",
+      headers: { "x-skein-token": server.token },
+    });
+
+    expect(res.status).toBe(409);
+    expect((await queue.get(card.id))?.state).toBe("queued");
+  });
+
+  it("jetonsuz kapatma reddedilir", async () => {
+    const card = await queue.add(newCard({ title: "normal", task: "iş", topology }));
+    const res = await fetch(`${server.url}kart/${card.id}/kapat`, { method: "POST" });
+    expect(res.status).toBe(403);
+  });
+});

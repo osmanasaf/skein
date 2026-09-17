@@ -229,3 +229,59 @@ describe("serve — durum süreçte tutulmaz", () => {
     expect((await queue.get(card.id))?.state).toBe("done");
   });
 });
+
+describe("serve — yetim kart", () => {
+  /** `topology` iki rol tanıyor; bu kart üçüncü bir rolde bekliyor. */
+  async function yetimKoy(): Promise<void> {
+    const yabanci: TopologySnapshot = {
+      ...topology,
+      roles: [{ ...(topology.roles[0] as TopologySnapshot["roles"][number]), id: "tester" }],
+    };
+    await queue.add(newCard({ title: "yetim iş", task: "x", topology: yabanci }));
+  }
+
+  // `sweep()` yalnızca kendi topolojisindeki rolleri geziyor; bu kart hiçbir
+  // turda alınmıyor ve hiçbir hata üretmiyordu.
+  it("süpürülmeyen kartı duyurur", async () => {
+    await yetimKoy();
+    const stop = new AbortController();
+    const gorulen: { id: string; role: string }[] = [];
+
+    const running = serve(topology, {
+      ...base,
+      signal: stop.signal,
+      onOrphan: (c) => gorulen.push({ id: c.id, role: c.role }),
+    });
+    await new Promise((r) => setTimeout(r, 60));
+    stop.abort();
+    await running;
+
+    expect(gorulen).toHaveLength(1);
+    expect(gorulen[0]?.role).toBe("tester");
+  });
+
+  // Her geçişte tekrarlanan uyarı, asıl çıktıyı okunmaz hâle getirirdi.
+  it("aynı kartı bir kez duyurur", async () => {
+    await yetimKoy();
+    const stop = new AbortController();
+    let sayac = 0;
+
+    const running = serve(topology, { ...base, signal: stop.signal, onOrphan: () => (sayac += 1) });
+    await new Promise((r) => setTimeout(r, 120));
+    stop.abort();
+    const summary = await running;
+
+    expect(summary.sweeps).toBeGreaterThan(2);
+    expect(sayac).toBe(1);
+  });
+
+  it("yetim yoksa hiç duyurmaz", async () => {
+    const stop = new AbortController();
+    let sayac = 0;
+    const running = serve(topology, { ...base, signal: stop.signal, onOrphan: () => (sayac += 1) });
+    await new Promise((r) => setTimeout(r, 60));
+    stop.abort();
+    await running;
+    expect(sayac).toBe(0);
+  });
+});

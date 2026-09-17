@@ -1,4 +1,5 @@
 import { watch, type FSWatcher } from "node:fs";
+import { isOrphan } from "../card/orphan.js";
 import type { TopologySnapshot } from "../flow/snapshot.js";
 import { sweep, type SweepResult } from "./loop.js";
 import type { TickOptions } from "./tick.js";
@@ -18,6 +19,12 @@ export interface ServeOptions extends TickOptions {
    * Varsayılan 500.
    */
   maxBusySweeps?: number;
+  /**
+   * Akışta karşılığı olmayan rolde bekleyen kart görüldü — kart başına
+   * BİR KEZ. Gözcü o kuyruğu hiç açmıyor; sessiz takılma bu projenin en
+   * sevmediği şey.
+   */
+  onOrphan?: (card: { id: string; title: string; role: string }) => void;
 }
 
 export interface ServeSummary {
@@ -60,11 +67,15 @@ export async function serve(
   let naps = 0;
   let busy = 0;
   let idling = false;
+  // Kart başına bir kez: her geçişte tekrarlanan uyarı, asıl çıktıyı
+  // okunmaz hâle getirirdi.
+  const duyurulan = new Set<string>();
 
   while (!aborted()) {
     const result = await sweep(topology, options);
     options.onSweep?.(result, sweeps);
     sweeps += 1;
+    await duyurYetimleri(topology, options, duyurulan);
 
     if (result.moved) {
       idling = false;
@@ -134,4 +145,33 @@ async function waitForWork(dir: string | undefined, pollMs: number, signal?: Abo
       watcher?.on("error", () => watcher?.close());
     }
   });
+}
+
+/**
+ * Gözcünün göremediği kartları duyurur.
+ *
+ * `sweep()` yalnızca KENDİ topolojisindeki rolleri geziyor. Akış dosyası
+ * değiştiyse (ya da gözcü eski listeyi taşıyorsa) bazı kartlar hiçbir turda
+ * alınmıyor ve hiçbir hata üretmiyor. Tek belirti kartın ilerlememesi
+ * oluyordu; artık gözcü bunu söylüyor.
+ */
+async function duyurYetimleri(
+  topology: TopologySnapshot,
+  options: ServeOptions,
+  duyurulan: Set<string>,
+): Promise<void> {
+  if (options.onOrphan === undefined) return;
+  let cards;
+  try {
+    cards = await options.queue.list();
+  } catch {
+    // Bozuk bir kart dosyası gözcüyü durdurmamalı; bu yol yalnızca uyarı
+    // üretiyor, kartları hareket ettirmiyor.
+    return;
+  }
+  for (const card of cards) {
+    if (!isOrphan(card, topology) || duyurulan.has(card.id)) continue;
+    duyurulan.add(card.id);
+    options.onOrphan({ id: card.id, title: card.title, role: card.role });
+  }
 }

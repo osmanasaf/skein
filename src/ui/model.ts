@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { gateKind, type Card, type CardState } from "../card/card.js";
+import { isOrphan, isStale } from "../card/orphan.js";
 import type { CardQueue } from "../card/queue.js";
 import { readEvents, type SkeinEvent } from "../events/log.js";
 import type { TopologySnapshot } from "../flow/snapshot.js";
@@ -18,7 +19,7 @@ export interface UiModel {
   daemon: { alive: boolean; info: LockInfo } | null;
   roles: UiRole[];
   cards: UiCard[];
-  totals: { open: number; done: number; costUsd: number; activations: number };
+  totals: { open: number; done: number; costUsd: number; activations: number; orphans: number };
   at: string;
 }
 
@@ -48,6 +49,16 @@ export interface UiCard {
   costUsd: number;
   /** Kart koşuyorsa ajanın son adımı. */
   live: UiStep | null;
+  /**
+   * Kartın rolü YAŞAYAN akışta yok — hiçbir sütuna düşmez.
+   *
+   * Bu alan olmadan pano kartı sessizce eliyordu: sütunlar rollerden
+   * geliyor ve hiçbir role uymayan kart filtreden düşüyordu. Bir kartın
+   * ekrandan yok olması, en kötü görünüm hatası.
+   */
+  orphan: boolean;
+  /** Kart farklı bir akış damgasıyla başladı — bilgi amaçlı. */
+  stale: boolean;
   /**
    * Kartın hikâyesi, sırayla. Sayı tek başına anlatmıyor: "2 ret" ile
    * "kabul, ret, kapı, ret, bitti" aynı şey değil.
@@ -104,7 +115,12 @@ export async function buildModel(options: BuildOptions): Promise<UiModel> {
   }
 
   const byCard = groupEvents(events);
-  const ui = cards.map((card) => toUiCard(card, byCard.get(card.id) ?? []));
+  const ui = cards.map((card) =>
+    toUiCard(card, byCard.get(card.id) ?? [], {
+      orphan: isOrphan(card, topology),
+      stale: isStale(card, options.flowHash),
+    }),
+  );
 
   return {
     flow: { name: options.flowName, hash: options.flowHash },
@@ -112,6 +128,7 @@ export async function buildModel(options: BuildOptions): Promise<UiModel> {
     roles,
     cards: ui,
     totals: {
+      orphans: ui.filter((c) => c.orphan).length,
       open: ui.filter((c) => c.state !== "done").length,
       done: ui.filter((c) => c.state === "done").length,
       costUsd: ui.reduce((sum, c) => sum + c.costUsd, 0),
@@ -134,7 +151,11 @@ function groupEvents(events: SkeinEvent[]): Map<string, SkeinEvent[]> {
   return byCard;
 }
 
-function toUiCard(card: Card, events: SkeinEvent[]): UiCard {
+function toUiCard(
+  card: Card,
+  events: SkeinEvent[],
+  hiza: { orphan: boolean; stale: boolean },
+): UiCard {
   let costUsd = 0;
   let durationMs = 0;
   for (const event of events) {
@@ -172,6 +193,8 @@ function toUiCard(card: Card, events: SkeinEvent[]): UiCard {
     durationMs,
     costUsd,
     live: card.state === "active" ? lastStep(events) : null,
+    orphan: hiza.orphan,
+    stale: hiza.stale,
     trail,
   };
 }
@@ -287,7 +310,10 @@ export async function buildDetail(options: DetailOptions, id: string): Promise<U
   }
 
   return {
-    card: toUiCard(card, mine),
+    card: toUiCard(card, mine, {
+      orphan: isOrphan(card, options.topology),
+      stale: isStale(card, options.flowHash),
+    }),
     history,
     diff: commit === null ? null : await readDiff(options, commit),
   };

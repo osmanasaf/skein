@@ -229,6 +229,13 @@ async function runServer(
       ...(pollMs === undefined ? {} : { pollMs }),
       onSweep,
       onIdle: () => console.log("· kuyruk boş, bekleniyor"),
+      onOrphan: (card) =>
+        console.log(
+          `\n⚠ \`${card.id}\` (${card.title}) \`${card.role}\` rolünde bekliyor ama bu akışta\n` +
+            `  öyle bir rol yok — gözcü o kuyruğu HİÇ açmıyor. Akış dosyası değiştiyse\n` +
+            `  gözcüyü yeniden başlat; rol gerçekten silindiyse kartı kapat:\n` +
+            `    npx tsx src/card/cli.ts kapat ${card.id}\n`,
+        ),
     });
 
     if (summary.stopped === "runaway") {

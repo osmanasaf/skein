@@ -61,7 +61,19 @@ export type HistoryEntry =
     }
   | { at: string; event: "released"; role: string }
   | { at: string; event: "requeued"; role: string; reason: string }
-  | { at: string; event: "done"; from: string };
+  | {
+      at: string;
+      event: "done";
+      from: string;
+      /**
+       * Kart normal yoldan değil, insan kararıyla kapandıysa sebebi.
+       *
+       * "Bitti" iki farklı şey olabiliyor: zinciri tamamlamak, ve akışta
+       * karşılığı kalmamış bir kartı kapatmak. İkisini ayırt edemeyen bir
+       * geçmiş, sonradan bakan birine yalan söyler.
+       */
+      reason?: string;
+    };
 
 export interface Card {
   id: string;

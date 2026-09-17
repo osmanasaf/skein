@@ -25,7 +25,7 @@ npm install
 npm test
 ```
 
-`npm test` testlerin tamamını geçmeli (şu an 385). Geçmiyorsa çıktıyı
+`npm test` testlerin tamamını geçmeli (şu an 403). Geçmiyorsa çıktıyı
 sakla.
 
 ---
@@ -126,6 +126,23 @@ jetonla korunuyor, ama ağa açılan bir ekran yine de depo içeriğini
 gösterir.
 
 Gözcü ile ekran ayrı süreçler; ekran kilidi almaz, kuyruğa dokunmaz.
+
+### Akış dosyasını değiştirdiysen
+
+**Gözcüyü ve ekranı yeniden başlat.** İkisi de akışı açılışta bir kez okuyor.
+Akışa rol eklediysen gözcü o rolün kuyruğunu HİÇ açmaz — kart sessizce
+takılır.
+
+Gözcü bunu artık söylüyor (kart başına bir kez) ve ekran kartı kendi
+şeridinde gösteriyor. Rol gerçekten silindiyse kartın tek çıkışı var:
+
+```powershell
+npx tsx src/card/cli.ts kapat <kart-id>
+```
+
+Kapatma yalnızca akışta karşılığı kalmamış kart için çalışır; yoldaki normal
+bir kartı durdurmak istiyorsan kapıdan karara bağla. Kapatılan kartın işi
+dalında durmaya devam eder — kapanan şey kartın yolculuğu.
 
 **Aynı depoda tek yazıcı.** Gözcü açıkken ikinci bir `watch` koşusu
 reddedilir; `--plan` reddedilmez çünkü yazmaz. Sebep şu: ikinci koşu,

@@ -96,6 +96,20 @@ export type EventInput =
       /** Hangi kapıydı — çıkış kümesini bu belirliyordu. */
       kind: "approval" | "deadlock" | "escalation";
     }
+  | {
+      /**
+       * İnsan kartı iş bitmeden kapattı.
+       *
+       * `card.settled` turun sonucunu söylüyor, bu ise kartın SONUNU: zinciri
+       * tamamlayarak mı bitti, yoksa kapatıldı mı. Kartlar arası soru:
+       * "topoloji değiştirdiğimizde kaç kart yolda kaldı?"
+       */
+      type: "card.closed";
+      card: string;
+      /** Kapatıldığı andaki rolü — akışta karşılığı olmayan rol. */
+      role: string;
+      reason: string;
+    }
   | { type: "hooks.measured"; cell: string; ran: boolean; total: number; red: string[] }
   | {
       type: "review.done";
@@ -129,6 +143,7 @@ const REQUIRED: Record<EventInput["type"], { strings: string[]; numbers: string[
   "card.settled": { strings: ["cell", "card", "role", "outcome", "state"], numbers: [] },
   "agent.step": { strings: ["cell", "role", "kind"], numbers: ["seq"] },
   "gate.released": { strings: ["card", "role", "decision", "kind"], numbers: [] },
+  "card.closed": { strings: ["card", "role", "reason"], numbers: [] },
   "hooks.measured": { strings: ["cell"], numbers: ["total"] },
   "audit.round": { strings: ["cell", "reason"], numbers: ["round"] },
   "review.done": { strings: ["cell", "producer", "reviewer", "promptHash", "path"], numbers: [] },
