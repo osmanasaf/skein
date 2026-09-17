@@ -4,7 +4,7 @@ Bu dosya bir sonraki oturumun giriş noktası. Durum ajanın kafasında değil,
 burada ve git'te (PHILOSOPHY 1).
 
 **Dal:** `claude/project-plan-brainstorm-pthvoc`
-**Durum:** 341 test yeşil, typecheck temiz, origin ile senkron.
+**Durum:** 373 test yeşil, typecheck temiz, origin ile senkron.
 **Kod:** 5037 satır (testler hariç).
 **Çizimler:** [kartın yolu](https://claude.ai/code/artifact/185e9279-510a-4544-a20c-831ecf1cdfd3) ·
 [genel bakış](https://claude.ai/code/artifact/2e7575af-84ee-40d8-aab4-5c3bdce0fe50)
@@ -20,8 +20,10 @@ sonuç günlüğe yazılıyor.
 **Yol haritasının 1. ve 2. adımı bitti:** `--serve` ile gözcü kuyruk
 boşalınca ölmüyor, uyuyor — kart açmak işin başlaması demek. Ve ajan
 koşarken attığı her adım (`agent.step`) günlüğe düşüyor, tur bitmeden.
-Sıra **adım 3'te: okuyucu ekran** — `ARCHITECTURE.md` "Sıra" tablosu.
-Ekranın ihtiyacı olan verinin tamamı artık var.
+**Adım 3 de bitti: ekran var.** `npx tsx src/ui/cli.ts <akış>` panoyu açıyor:
+kart × rol, canlı adım, kapı tipleri, ve karta tıklayınca tam iz + diff.
+Yalnızca okur. Sıra **adım 4'te: kapıyı ekrandan açmak** — ilk yazan yüzey
+eylemi, komut olarak.
 
 ---
 
@@ -83,6 +85,7 @@ npx tsx src/flow/cli.ts check daily        topolojiyi doğrular ve yazar
 npx tsx src/card/cli.ts new|ls|show|…      kartı elle sürer
 npx tsx src/watch/cli.ts daily --model …   orkestratör (toplu koşu)
 npx tsx src/watch/cli.ts daily --serve …   gözcüyü açık bırak
+npx tsx src/ui/cli.ts daily                ekran (yalnızca okur)
 ```
 
 **Bayrak verirken `npm run` kullanma** — bazı npm sürümleri `--` sonrasını
@@ -98,6 +101,7 @@ var.
 | Gözcü — tur, verdikt, yönlendirme | `src/watch/tick.ts` |
 | Uzun ömürlü gözcü — uyu/uyan, durdurma | `src/watch/serve.ts` |
 | Canlı adımlar — `stream-json` → `agent.step` | `src/adapters/claude.ts` |
+| Ekran — okuma modeli, yerel sunucu, sayfa | `src/ui/` |
 | Akan çıktıyı satıra bölme | `src/proc/lines.ts` |
 | Tek yazıcı kilidi — bayat kilidi devralır | `src/watch/lock.ts` |
 | Git katmanı — ileri birleştirme, syncBack, worktree, kirlilik | `src/watch/git.ts` |

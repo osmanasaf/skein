@@ -25,7 +25,7 @@ npm install
 npm test
 ```
 
-`npm test` testlerin tamamını geçmeli (şu an 341). Geçmiyorsa çıktıyı
+`npm test` testlerin tamamını geçmeli (şu an 373). Geçmiyorsa çıktıyı
 sakla.
 
 ---
@@ -97,6 +97,28 @@ söyler.
 Bugün yalnızca `claude` adaptörü adım yayıyor. `codex` yaymıyor: bayrakları
 doğrulanmadı ve metin kazıyarak adım üretmek yasak (`hub/adapters/CONTRACT.md`).
 Adım gelmemesi turu etkilemez.
+
+### Ekran
+
+```powershell
+npx tsx src/ui/cli.ts daily            # boş bir port seçer
+npx tsx src/ui/cli.ts daily --port 7799
+```
+
+Bastığı adresi tarayıcıda aç. Gösterdikleri:
+
+- **Pano** — hangi kart hangi rolde, kuyruk derinliği, gözcü açık mı
+- **Canlı adım** — koşan ajanın son adımı (araç adı + dokunduğu dosya)
+- **Kapı tipi** — onay / kilit / kaçış; her birinin çıkışları farklı ve
+  kaçışta "Geçir" düğmesi hiç çizilmiyor
+- **Kart detayı** — karta tıkla: tam iz, ret gerekçeleri, devir özetleri ve
+  devredilen commit'in diff özeti. URL adreslenebilir (`#kart/<id>`).
+
+**Yalnızca okur.** Yazan uç nokta yok; düğmeler adım 4'te bağlanacak. Ekran
+`127.0.0.1`'e bağlanır — kart metinlerini ve ret gerekçelerini gösterdiği
+için ağa açılmaz. `--host` ile değiştirebilirsin ama ne yaptığını bil.
+
+Gözcü ile ekran ayrı süreçler; ekran kilidi almaz, kuyruğa dokunmaz.
 
 **Aynı depoda tek yazıcı.** Gözcü açıkken ikinci bir `watch` koşusu
 reddedilir; `--plan` reddedilmez çünkü yazmaz. Sebep şu: ikinci koşu,

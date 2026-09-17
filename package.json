@@ -15,7 +15,8 @@
     "doctor": "tsx src/bench/cli.ts doctor",
     "flow": "tsx src/flow/cli.ts",
     "card": "tsx src/card/cli.ts",
-    "watch": "tsx src/watch/cli.ts"
+    "watch": "tsx src/watch/cli.ts",
+    "ui": "tsx src/ui/cli.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

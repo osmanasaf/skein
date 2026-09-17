@@ -29,7 +29,7 @@ klonuna dönüşür ve asıl sorunu çözmeyi bırakır.
 
 ```
 ┌─────────────────────────────────────────────┐
-│  YÜZEY        CLI · ekran · (ileride) editör│   durum TUTMAZ
+│  YÜZEY        CLI · ekran · (ileride) editör│   ✅ okuyucu ekran
 ├─────────────────────────────────────────────┤
 │  OTURUM       uzun ömürlü süreç + canlı olay │   ✅ adım 1-2 yazıldı
 ├─────────────────────────────────────────────┤
@@ -227,7 +227,7 @@ Ekran tartışması bunların üstüne gelir, bunları yeniden açmaz:
 | 0 | Bu belge | Yapı oturmadan ekran çizmek, ekranı yanlış yere bağlar |
 | ~~1~~ | ✅ `--serve` — davranış aynı, süreç kalıcı | Canlı koşuda doğrulandı: gözcü uyurken açılan kart ikinci komut olmadan bitti |
 | ~~2~~ | ✅ `agent.step` — ajan koşarken günlüğe düşüyor | Canlı koşuda doğrulandı: 8 adım, tur bitmeden, saniye saniye |
-| 3 | Okuyucu ekran: kart × rol panosu, son gerekçe, diff | En çok değeri en az riskle veren yüzey |
+| ~~3~~ | ✅ Okuyucu ekran — pano, canlı adım, kart izi, diff | Gerçek depoda doğrulandı; üç sorunun üçü de ekrandan cevaplanıyor |
 | 4 | Kontrol: kapıyı ekrandan açmak | İlk *yazan* yüzey eylemi — komut olarak, durum olarak değil |
 | 5 | Tanımlama: akış ve rol düzenleme (Aşama 6) | Doğrulama ve maliyet tahmini zaten yazılı |
 | 6 | Planlamada ajanlar arası yazılı tur | En sonda, ve mekanizma olarak; serbest sohbet olarak değil |
@@ -346,3 +346,40 @@ bir akışta iş metnini rapora çevirirdi.
    prompt'ta yazıyor; çekirdek doğrulamıyor. Rol başına yazma izni
    (`writes: [docs/spec/**]`) akış diline eklenip devir öncesi commit'in
    dokunduğu yollar denetlenebilir. Şema değişikliği olduğu için ayrı karar.
+
+### Adım 3 — okuyucu ekran · 2026-09-17
+
+**Yazılanlar:** `src/ui/model.ts` (okuma modeli), `src/ui/server.ts`
+(yerel sunucu), `src/ui/page.ts` (sayfa), `src/ui/cli.ts`.
+373 test yeşil (+32).
+
+**Biter kriteri karşılandı.** Üç soru da ekrandan cevaplanıyor:
+
+| Soru | Nereden |
+|---|---|
+| Hangi kart hangi rolde | `.skein/{queue,active,gate,done}/` dizini |
+| En son neden reddedildi | Kartın `history` dizisi — gerekçe tam metin |
+| Kodda ne değişti | Devir commit'i → `git show --numstat` |
+
+**Kararlar:**
+
+- **Bağımlılık yok.** Sayfa tek dosya, çerçevesiz. Derleme adımı ve paket
+  ağacı, "ekran saf okuyucudur" kısıtını ilk ihlal edecek yer olurdu.
+- **Yalnızca `GET`.** Yazan uç nokta yok; `POST` 405 döner. Kapıyı ekrandan
+  açmak adım 4 ve komut olarak gelecek.
+- **127.0.0.1.** Ekran kart metinlerini ve ret gerekçelerini gösteriyor;
+  yerel bir araç, ağa açılan bir servis değil.
+- **`recover()` çağrılmıyor.** O yazan bir işlem ve gözcünün işi. Ekranın
+  açılması kuyruğu oynatmamalı.
+- **Üç kapı tipi, üç ayrı çıkış kümesi.** Kaçış kapısında "Geçir" düğmesi
+  hiç çizilmiyor — ekran, çekirdeğin reddedeceği bir eylemi önermemeli.
+- **Panel adreslenebilir** (`#kart/<id>`): bir karta bakarken URL'yi
+  paylaşmak, "hangi kart" sorusunu konuşmanın en kısa yolu.
+
+**Yol boyunca çıkan iki kusur (ikisi de ekranı açıp bakınca):**
+
+1. Sütun başlığındaki sayı kuyruk derinliğiydi; kapıdaki kart kuyrukta
+   durmadığı için iki kart duran sütun **"0"** yazıyordu. Sayı artık
+   sütundaki kart sayısı, kuyruk derinliği ayrı bir ipucu.
+2. Beş sütun 1500 piksele sığmıyor, "bitti" sütunu `analyst`'in altına
+   sarıyor ve o sütuna aitmiş gibi görünüyordu.
