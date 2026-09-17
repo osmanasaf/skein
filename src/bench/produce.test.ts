@@ -105,3 +105,55 @@ describe("produce", () => {
     expect(a.promptHash).toMatch(/^[0-9a-f]{64}$/);
   });
 });
+
+describe("produce — seed/", () => {
+  /** Görev dizinine mevcut kod koyar. */
+  async function seed(files: Record<string, string>): Promise<void> {
+    for (const [rel, body] of Object.entries(files)) {
+      const abs = join(root, "gorev", "seed", rel);
+      await mkdir(join(abs, ".."), { recursive: true });
+      await writeFile(abs, body);
+    }
+  }
+
+  it("mevcut kodu üretimden ÖNCE artefakt dizinine koyar", async () => {
+    await seed({ "src/store.ts": "export const VERSION = 1;\n" });
+    const cell = join(root, "hucre");
+    const r = await produce({
+      task: await loadTask(join(root, "gorev")),
+      adapter: {
+        id: "sahte", model: "m",
+        async invoke(req) {
+          // Ajan çağrıldığı anda dosya orada olmalı; yoksa "mevcut koda
+          // dokunmak" görev sınıfı boş bir dizine yazmaya dönüşür.
+          seen = req;
+          const body = await readFile(join(req.workdir, "src/store.ts"), "utf8");
+          expect(body).toContain("VERSION = 1");
+          return { exitCode: 0, stdout: "", stderr: "", durationMs: 1 };
+        },
+      },
+      cellDir: cell,
+      layers: [{ name: "produce", path: join(root, "produce.md") }],
+      timeoutMs: 1000,
+    });
+    expect(r.seeded).toEqual(["src/store.ts"]);
+  });
+
+  it("görev metni ajana hangi dosyaları bulacağını söyler", async () => {
+    await seed({ "src/store.ts": "x", "src/apply.ts": "y" });
+    await run();
+    expect(seen?.taskText).toContain("src/store.ts");
+    expect(seen?.taskText).toContain("src/apply.ts");
+  });
+
+  it("seed yokken görev metnine hiçbir şey eklemez", async () => {
+    await run();
+    expect(seen?.taskText).toBe("SPEC GOVDESI\n\nÇözümü şu dosyaya yaz: src/x.ts\n");
+  });
+
+  it("seed varken de gizli testler üretim sırasında diskte YOKTUR", async () => {
+    await seed({ "src/store.ts": "x" });
+    await run();
+    expect(hiddenVisibleAtInvoke).toBe(false);
+  });
+});

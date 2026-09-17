@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { ClaudeCliAdapter } from "../adapters/claude.js";
 import { AdapterRegistry, type Adapter } from "../adapters/contract.js";
@@ -9,9 +9,37 @@ import { produce } from "./produce.js";
 import { runHidden } from "./hidden.js";
 import { auditLoop } from "./audit-loop.js";
 import { runMatrix, diagnose } from "./matrix.js";
+import { selfTest } from "./selftest.js";
 import { adapterFor } from "../adapters/factory.js";
 
 const REPO = resolve(import.meta.dirname, "../..");
+
+/**
+ * Sağlayıcı CLI'ının izin ayarları, ortamdan.
+ *
+ * Varsayılan `bypassPermissions` root altında CLI tarafından reddediliyor
+ * (konteynerde koşarken tam olarak bu oldu: exit 1, tek satır stderr).
+ * Otomatik geri düşmek yerine açıkça veriliyor — izin modu ajanın neye
+ * dokunabildiğini belirliyor ve koşular arasında sessizce değişmesi,
+ * karşılaştırmayı fark edilmeden bozar. Koşuda ekrana yazdırılıyor.
+ *
+ *   SKEIN_PERMISSION_MODE=acceptEdits
+ *   SKEIN_ALLOWED_TOOLS="Read,Write,Edit,Bash"
+ */
+function adapterEnv(): { permissionMode?: string; allowedTools?: string[] } {
+  const mode = process.env["SKEIN_PERMISSION_MODE"]?.trim();
+  const tools = process.env["SKEIN_ALLOWED_TOOLS"]?.split(",").map((t) => t.trim()).filter(Boolean);
+  return {
+    ...(mode ? { permissionMode: mode } : {}),
+    ...(tools && tools.length > 0 ? { allowedTools: tools } : {}),
+  };
+}
+
+function announceEnv(): void {
+  const e = adapterEnv();
+  if (e.permissionMode) console.log(`izin modu: ${e.permissionMode}`);
+  if (e.allowedTools) console.log(`araçlar  : ${e.allowedTools.join(" ")}`);
+}
 const LOG = join(REPO, ".skein/events.jsonl");
 const rel = (p: string) => p.slice(REPO.length + 1);
 
@@ -42,7 +70,9 @@ async function report(): Promise<void> {
 
 async function run(taskId: string, provider: string, model: string, audit: boolean): Promise<void> {
   const task = await loadTask(join(REPO, "bench/tasks", taskId));
-  const adapter: Adapter = new AdapterRegistry().register(new ClaudeCliAdapter({ model })).get(provider);
+  const adapter: Adapter = new AdapterRegistry()
+    .register(new ClaudeCliAdapter({ model, ...adapterEnv() }))
+    .get(provider);
 
   const runId = new Date().toISOString().replace(/[:.]/g, "-");
   const cellDir = join(REPO, ".skein/runs", runId, task.id, `${adapter.id}--${adapter.model}`);
@@ -51,7 +81,9 @@ async function run(taskId: string, provider: string, model: string, audit: boole
 
   console.log(`görev    : ${task.id} — ${task.title}`);
   console.log(`üretici  : ${adapter.id} / ${adapter.model}`);
-  console.log(`hücre    : ${rel(cellDir)}\n`);
+  console.log(`hücre    : ${rel(cellDir)}`);
+  announceEnv();
+  console.log();
 
   await log.append({ type: "run.started", taskId: task.id });
 
@@ -133,7 +165,7 @@ async function run(taskId: string, provider: string, model: string, audit: boole
  * doğrulamayı senin makinene taşıyor.
  */
 async function doctor(spec: string): Promise<void> {
-  const adapter = adapterFor(spec);
+  const adapter = adapterFor(spec, adapterEnv());
   const dir = join(REPO, ".skein/doctor");
   await mkdir(dir, { recursive: true });
   const promptFile = join(dir, "prompt.md");
@@ -227,16 +259,60 @@ function modelTurns(stdout: string): number | undefined {
   }
 }
 
+/**
+ * Her görevin kancalarını referans çözümüne karşı koşar.
+ *
+ * Ajan çağrılmaz, para harcanmaz. Görev seti büyürken tek koruma bu:
+ * doğru bir çözümle de kırmızı kalan kanca bozuk testtir ve her hücrede
+ * kırmızı çıkıp "kaçırma" metriğini sessizce şişirir.
+ */
+async function selftest(taskId?: string): Promise<void> {
+  const taskRoot = join(REPO, "bench/tasks");
+  const ids = taskId ? [taskId] : (await readdir(taskRoot, { withFileTypes: true }))
+    .filter((e) => e.isDirectory()).map((e) => e.name).sort();
+
+  let bad = 0;
+  for (const id of ids) {
+    const task = await loadTask(join(taskRoot, id));
+    const r = await selfTest(task, REPO);
+    if (!r.hasReference) {
+      console.log(`  ?  ${id.padEnd(16)} referans çözüm yok (hidden/reference/) — kancalar kanıtsız`);
+      bad++;
+      continue;
+    }
+    if (!r.ran) {
+      console.log(`  ✗  ${id.padEnd(16)} süit koşmadı — referans derlenmiyor olabilir`);
+      console.log(`     ${r.stderr.slice(0, 300)}`);
+      bad++;
+      continue;
+    }
+    if (r.red.length > 0) {
+      console.log(`  ✗  ${id.padEnd(16)} ${r.red.length}/${r.total} kanca BOZUK — doğru çözümle de kırmızı:`);
+      for (const t of r.red) console.log(`       ${t}`);
+      bad++;
+      continue;
+    }
+    console.log(`  ✓  ${id.padEnd(16)} ${r.total} kanca, referansla hepsi yeşil`);
+  }
+  if (bad > 0) {
+    console.error(`\n${bad} görev kanca doğrulamasını geçemedi.`);
+    process.exit(1);
+  }
+}
+
 async function matrix(taskId: string, a: string, b: string, force: boolean): Promise<void> {
   const runId = new Date().toISOString().replace(/[:.]/g, "-");
   await mkdir(join(REPO, ".skein"), { recursive: true });
   const log = new EventLog(LOG, runId);
   await log.append({ type: "run.started", taskId });
 
-  console.log(`2x2 çapraz kurgu — ${a}  ×  ${b}\n`);
+  console.log(`2x2 çapraz kurgu — ${a}  ×  ${b}`);
+  announceEnv();
+  console.log();
   const out = await runMatrix({
     repo: REPO, taskId, models: [a, b],
     runRoot: join(REPO, ".skein/runs", runId), log, timeoutMs: 10 * 60_000, force,
+    adapter: adapterEnv(),
   });
 
   console.log("\n=== üretim ===");
@@ -267,11 +343,13 @@ if (cmd === "report") {
   await report();
 } else if (cmd === "doctor") {
   await doctor(rest[0] ?? "codex:gpt-5.5");
+} else if (cmd === "selftest") {
+  await selftest(rest[0]);
 } else if (cmd === "matrix") {
   await matrix(rest[0] ?? "retry-backoff", rest[1] ?? "claude:claude-opus-5", rest[2] ?? "claude:claude-sonnet-5", force);
 } else if (cmd) {
   await run(cmd, rest[0] ?? "claude", rest[1] ?? "claude-opus-5", audit);
 } else {
-  console.error("kullanım: cli.ts <görev-id> [sağlayıcı] [model] [--audit]\n         cli.ts matrix <görev-id> [sağlayıcı:model] [sağlayıcı:model]\n         cli.ts doctor <sağlayıcı:model>\n         cli.ts report");
+  console.error("kullanım: cli.ts <görev-id> [sağlayıcı] [model] [--audit]\n         cli.ts matrix <görev-id> [sağlayıcı:model] [sağlayıcı:model]\n         cli.ts doctor <sağlayıcı:model>\n         cli.ts selftest [görev-id]\n         cli.ts report");
   process.exit(2);
 }

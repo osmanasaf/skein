@@ -5,6 +5,16 @@ import { parse as parseYaml } from "yaml";
 /** Gizli testlerin durduğu alt dizin. Üretici bunu asla görmez. */
 export const HIDDEN_DIR = "hidden";
 
+/**
+ * Üretim başlamadan artefakt dizinine kopyalanan mevcut kod.
+ *
+ * "Var olan bir kod tabanına dokunmak" görev sınıfı bunu gerektiriyor:
+ * boş bir dizine tek dosya yazmak ile örtük sözleşmeleri olan bir modüle
+ * dokunmak farklı işler ve `bench/DESIGN.md` ikincisinin kör noktayı
+ * ortaya çıkardığından şüpheleniyor.
+ */
+export const SEED_DIR = "seed";
+
 export interface HiddenSuite {
   /** argv dizisi — shell yok, enjeksiyon yüzeyi yok. */
   command: string[];
@@ -23,6 +33,8 @@ export interface Task {
   hidden: HiddenSuite;
   /** Gizli testlerin mutlak yolu. Üretim workdir'ine kopyalanmaz. */
   hiddenDir: string;
+  /** Mevcut kodun mutlak yolu; yoksa undefined. Üretimden ÖNCE kopyalanır. */
+  seedDir: string | undefined;
   dir: string;
 }
 
@@ -146,6 +158,9 @@ export async function loadTask(dir: string): Promise<Task> {
     throw new TaskError(label, `\`${HIDDEN_DIR}/\` dizini yok — yer gerçeği bu testlerden geliyor`);
   }
 
+  const seedCandidate = join(taskDir, SEED_DIR);
+  const seedDir = (await isDirectory(seedCandidate)) ? seedCandidate : undefined;
+
   return {
     id,
     title,
@@ -154,6 +169,7 @@ export async function loadTask(dir: string): Promise<Task> {
     entry,
     hidden: { command: command as string[], cwd: hiddenCwd },
     hiddenDir,
+    seedDir,
     dir: taskDir,
   };
 }

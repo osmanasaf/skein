@@ -1,0 +1,7 @@
+id: snapshot-store
+title: Mevcut olay mağazasına geri alma ekle
+language: ts
+spec: spec.md
+entry: src/store.ts
+hidden:
+  command: ["npx", "vitest", "run", "--reporter=json"]

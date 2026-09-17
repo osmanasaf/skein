@@ -20,8 +20,10 @@ export interface ProduceResult {
   artifactDir: string;
   /** Ajanın yazması istenen dosya gerçekten oluştu mu. */
   entryWritten: boolean;
-  /** Artefakt dizinine gerçekte yazılan dosyalar. */
+  /** Artefakt dizinine gerçekte yazılan dosyalar (seed dahil). */
   filesWritten: string[];
+  /** Üretimden önce yerine konan mevcut kod; seed yoksa boş. */
+  seeded: string[];
   /** Katmanlı promptun SHA-256'sı. Hücreler arası eşitlik bununla kanıtlanır. */
   promptHash: string;
   invoke: InvokeResult;
@@ -39,12 +41,29 @@ export async function produce(options: ProduceOptions): Promise<ProduceResult> {
   const artifactDir = join(cellDir, "artifact");
   await mkdir(artifactDir, { recursive: true });
 
+  // Mevcut kod üretimden ÖNCE yerine konur; gizli testler SONRA kopyalanır.
+  // İkisinin sırası deneyin geçerlilik koşulu: ajan dokunacağı kodu görmeli,
+  // ölçen testi görmemeli.
+  let seeded: string[] = [];
+  if (task.seedDir !== undefined) {
+    await cp(task.seedDir, artifactDir, { recursive: true });
+    seeded = await listFilesRelative(artifactDir);
+  }
+
   const prompt = await assemblePrompt(layers);
   const promptFile = join(cellDir, "prompt.txt");
   await writeFile(promptFile, prompt.text);
 
   const spec = await readFile(task.specPath, "utf8");
-  const taskText = `${spec}\n\nÇözümü şu dosyaya yaz: ${task.entry}\n`;
+  // Seed varsa ajana dizinde ne bulduğu söylenir. Bu metin göreve göre
+  // değişir ama iki üretici için birebir aynıdır — eşleşmeli karşılaştırmanın
+  // gerektirdiği tek eşitlik bu.
+  const seedNote = seeded.length === 0
+    ? ""
+    : `\nÇalışma dizininde hâlihazırda şu dosyalar var; değiştirmen gereken ` +
+      `yerleri değiştir, gerisine dokunma:\n` +
+      seeded.map((f) => `  ${f}`).join("\n") + "\n";
+  const taskText = `${spec}\n${seedNote}\nÇözümü şu dosyaya yaz: ${task.entry}\n`;
 
   const invoke = await adapter.invoke({ workdir: artifactDir, promptFile, taskText, timeoutMs });
 
@@ -57,6 +76,6 @@ export async function produce(options: ProduceOptions): Promise<ProduceResult> {
   const filesWritten = await listFilesRelative(artifactDir);
   const entryWritten = filesWritten.includes(task.entry);
 
-  return { cellDir, artifactDir, promptHash: prompt.hash, invoke, entryWritten, filesWritten };
+  return { cellDir, artifactDir, promptHash: prompt.hash, invoke, entryWritten, filesWritten, seeded };
 }
 

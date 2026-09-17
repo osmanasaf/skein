@@ -119,3 +119,19 @@ describe("loadTask", () => {
     await expect(loadTask(dir)).rejects.toThrow(/task\.yaml/);
   });
 });
+
+describe("loadTask — seed/", () => {
+  it("seed/ yoksa seedDir undefined kalır", async () => {
+    const task = await loadTask(await makeTask("retry", VALID));
+    expect(task.seedDir).toBeUndefined();
+  });
+
+  it("seed/ varsa mutlak yolunu döndürür", async () => {
+    const dir = await makeTask("retry", VALID);
+    await mkdir(join(dir, "seed", "src"), { recursive: true });
+    await writeFile(join(dir, "seed", "src", "mevcut.ts"), "export const a = 1;\n");
+
+    const task = await loadTask(dir);
+    expect(task.seedDir).toBe(join(dir, "seed"));
+  });
+});

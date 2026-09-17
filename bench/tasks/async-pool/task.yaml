@@ -1,0 +1,7 @@
+id: async-pool
+title: Sınırlı eşzamanlılıkla görev havuzu
+language: ts
+spec: spec.md
+entry: src/pool.ts
+hidden:
+  command: ["npx", "vitest", "run", "--reporter=json"]

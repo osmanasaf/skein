@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { adapterFor } from "../adapters/factory.js";
+import { adapterFor, type AdapterOptions } from "../adapters/factory.js";
 import type { Adapter } from "../adapters/contract.js";
 import type { EventLog } from "../events/log.js";
 import { loadTask } from "./task.js";
@@ -21,6 +21,8 @@ export interface MatrixOptions {
   timeoutMs: number;
   /** Ölçüm gücü olmasa bile denetim hücrelerini koştur. Varsayılan: false. */
   force?: boolean;
+  /** Sağlayıcı CLI seçenekleri (izin modu, araçlar). Dört hücrede de aynı. */
+  adapter?: AdapterOptions;
 }
 
 export interface CellOutcome {
@@ -73,7 +75,7 @@ export async function runMatrix(options: MatrixOptions): Promise<MatrixOutcome> 
   const task = await loadTask(join(repo, "bench/tasks", taskId));
   const rel = (p: string) => p.slice(repo.length + 1);
 
-  const adapters: Adapter[] = models.map((spec) => adapterFor(spec));
+  const adapters: Adapter[] = models.map((spec) => adapterFor(spec, options.adapter ?? {}));
   const produced: {
     adapter: Adapter; artifactDir: string; redHooks: string[];
     total: number; ran: boolean; costUsd: number;
