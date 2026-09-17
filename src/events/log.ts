@@ -31,6 +31,25 @@ export type EventInput =
       timedOut?: boolean;
       usage?: Usage;
     }
+  | {
+      /**
+       * Turun neyle sonuçlandığı. `agent.finished` ajanın bittiğini söyler,
+       * kartın nereye gittiğini söylemez; bu olay olmadan sonuç günlükten
+       * okunamaz (PHILOSOPHY 8).
+       */
+      type: "card.settled";
+      cell: string;
+      card: string;
+      role: string;
+      outcome: "accepted" | "rejected" | "escalated";
+      /** Kartın turdan sonraki durumu (queued | gate | done …). */
+      state: string;
+      /** Ret ya da kapı gerekçesi. */
+      reason?: string;
+      summary?: string;
+      /** syncBack uyarıları. */
+      warnings?: string[];
+    }
   | { type: "hooks.measured"; cell: string; ran: boolean; total: number; red: string[] }
   | {
       type: "review.done";
@@ -61,6 +80,7 @@ const REQUIRED: Record<EventInput["type"], { strings: string[]; numbers: string[
   "run.started": { strings: ["taskId"], numbers: [] },
   "agent.started": { strings: ["cell", "role", "provider", "model", "promptHash"], numbers: [] },
   "agent.finished": { strings: ["cell"], numbers: ["exitCode", "durationMs"] },
+  "card.settled": { strings: ["cell", "card", "role", "outcome", "state"], numbers: [] },
   "hooks.measured": { strings: ["cell"], numbers: ["total"] },
   "audit.round": { strings: ["cell", "reason"], numbers: ["round"] },
   "review.done": { strings: ["cell", "producer", "reviewer", "promptHash", "path"], numbers: [] },

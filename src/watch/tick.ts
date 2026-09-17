@@ -50,6 +50,25 @@ const DEFAULT_TIMEOUT_MS = 20 * 60 * 1000;
  * saymaktı; cevapsız tur kartı insan kapısına çıkarır.
  */
 export async function tick(roleId: string, options: TickOptions): Promise<TickResult> {
+  const result = await settle(roleId, options);
+  if (result.status !== "idle") {
+    // Tek yazım noktası: her sonuçlanma yolu buradan geçer, hiçbiri kaydı atlayamaz.
+    await options.log?.append({
+      type: "card.settled",
+      cell: `${result.card.id}:${roleId}`,
+      card: result.card.id,
+      role: roleId,
+      outcome: result.status,
+      state: result.card.state,
+      ...("reason" in result ? { reason: result.reason } : {}),
+      ...("summary" in result && result.summary !== undefined ? { summary: result.summary } : {}),
+      ...("warnings" in result && result.warnings !== undefined ? { warnings: result.warnings } : {}),
+    });
+  }
+  return result;
+}
+
+async function settle(roleId: string, options: TickOptions): Promise<TickResult> {
   const { queue } = options;
 
   const card = await queue.take(roleId);
