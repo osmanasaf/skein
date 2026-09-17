@@ -1,5 +1,19 @@
 # SwarmForge — Java Kit
 
+> **⚠ Bu kit Skein'de KOŞMAZ.** Rol promptları SwarmForge'un kabuk
+> yardımcılarını çağırıyor (`swarm_handoff.sh`, `ready_for_next.sh`,
+> `done_with_current.sh`, `pack_dashboard_request.sh`) ve `type: git_handoff`
+> mesaj biçimini varsayıyor. Skein'de devir teslim çekirdeğin işi; ajan
+> yalnızca `.skein-verdict.json` yazar.
+>
+> Gerçek bir koşuda bu fark ortaya çıktı: ajan, olmayan betikleri çağırmak
+> yerine durdu ve "bana verilen kurallar Java/Maven için yazılmış ama bu depo
+> TypeScript kullanıyor" dedi. Doğru davranıştı.
+>
+> Skein'in kendi rol promptları `hub/prompts/roles/`, dile özel mühendislik
+> maddeleri `hub/prompts/constitution/` altında. Bu kit **referans** olarak
+> duruyor: upstream'in rolleri neyi nasıl tarif ediyordu.
+
 SwarmForge'un pack katmanının Java'ya uyarlanmış hali. Upstream'in `two-pack`
 ve `four-pack` topolojilerini temel alır, ama Clojure/Go/Gherkin bağımlılıkları
 çıkarılmış, yerine Java ekosisteminin standart araçları konmuştur.
