@@ -183,6 +183,17 @@ sınamak üzere kuruldu; cevaplar olumsuz çıkarsa ilke değişir.
    hem çapraz-sağlayıcı hem aynı-sağlayıcı denetimden geçirip bulgu sayısını
    ve türünü karşılaştırmak.
 
+   *2026-09-17 — boru hattı kuruldu, soru duruyor.* İlk çapraz satıcı koşusu
+   tamamlandı: `coder` claude-opus-5'te üretti (62 sn, commit `aa1852b`), kod
+   `reviewer`'ın worktree'sine birleştirildi, `codex` gpt-5.5 orada okudu,
+   testleri koşturdu ve kabul etti (89 sn). İnsan eli değmedi.
+
+   Ama denetçi **kabul etti** — yakalayacak bir şey yoktu. Görev dört satırlık,
+   tam tanımlı bir fonksiyondu. Bu, bench'te çıkan darboğazın aynısı: güçlü
+   modeller küçük ve kendi kendine yeten görevleri temiz çözüyor, dolayısıyla
+   denetim mekanizması boşta çalışıyor. Soruyu cevaplamak için üreticinin
+   gerçekten kusur ürettiği görevler gerekiyor.
+
 3. **Rol ayrımı, iyi bir kontrol listesine sahip tek ajandan daha mı iyi?**
    Ayrı rol, taze bağlam demek — ama aynı zamanda bağlam kaybı ve merge
    maliyeti demek. Ölçüm: iki rollük akış ile tek ajan + denetim promptunun
