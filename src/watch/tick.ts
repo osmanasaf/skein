@@ -1,7 +1,7 @@
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Adapter, InvokeResult } from "../adapters/contract.js";
+import type { Adapter, AgentStep, InvokeResult } from "../adapters/contract.js";
 import type { Card } from "../card/card.js";
 import type { CardQueue } from "../card/queue.js";
 import type { EventLog } from "../events/log.js";
@@ -108,6 +108,56 @@ function agentSaid(result: InvokeResult): string {
   return `\n\nAjan şunu söyledi:\n${tail}`;
 }
 
+/**
+ * Ajanın adımlarını olay günlüğüne yazan kanal.
+ *
+ * İki kural burada kapsülleniyor:
+ *
+ * 1. **Sıra korunur.** Yazımlar zincire dizilir; aksi hâlde eşzamanlı
+ *    `appendFile` çağrıları günlüğe sırasız düşerdi. `seq` yine de kayda
+ *    yazılıyor — sıra, dosyadaki konuma DEĞİL kaydın kendisine bağlı olmalı.
+ * 2. **Adım kaybı turu bozmaz.** Bunlar gözlem; diski dolmuş bir makinede
+ *    parası ödenmiş bir ajan çağrısı, günlüğe yazamadığı için çökmemeli.
+ *    Kartın nereye gittiği yine `card.settled`'dan okunur.
+ */
+function stepSink(
+  cell: string,
+  role: string,
+  log: EventLog | undefined,
+): { onStep: (step: AgentStep) => void; done: () => Promise<void> } {
+  let seq = 0;
+  let chain: Promise<void> = Promise.resolve();
+  let failed = false;
+
+  const onStep = (step: AgentStep): void => {
+    if (log === undefined) return;
+    seq += 1;
+    const n = seq;
+    chain = chain.then(async () => {
+      try {
+        await log.append({
+          type: "agent.step",
+          cell,
+          role,
+          seq: n,
+          kind: step.kind,
+          ...(step.name === undefined ? {} : { name: step.name }),
+          ...(step.detail === undefined ? {} : { detail: step.detail }),
+        });
+      } catch (error) {
+        // Bir kez söyle, sonra sus: her adımda tekrarlanan bir uyarı,
+        // asıl çıktıyı okunmaz hâle getirirdi.
+        if (!failed) {
+          failed = true;
+          console.error(`⚠ adım günlüğe yazılamadı (${cell}): ${(error as Error).message}`);
+        }
+      }
+    });
+  };
+
+  return { onStep, done: () => chain };
+}
+
 async function runRole(card: Card, role: SnapshotRole, options: TickOptions): Promise<TickResult> {
   const { root, queue, adapters, log } = options;
 
@@ -136,12 +186,15 @@ async function runRole(card: Card, role: SnapshotRole, options: TickOptions): Pr
     promptHash: prompt.hash,
   });
 
+  const steps = stepSink(cell, role.id, log);
   const result = await adapter.invoke({
     workdir,
     promptFile,
     taskText: buildTaskText(card, role),
     timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+    ...(log === undefined ? {} : { onStep: steps.onStep }),
   });
+  await steps.done();
 
   await log?.append({
     type: "agent.finished",

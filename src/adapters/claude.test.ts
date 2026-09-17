@@ -3,6 +3,7 @@ import { mkdtemp, writeFile, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ClaudeCliAdapter } from "./claude.js";
+import type { AgentStep } from "./contract.js";
 import { makeFakeCli, type FakeCliSpec } from "../testing/fake-cli.js";
 
 let root: string;
@@ -103,7 +104,26 @@ describe("ClaudeCliAdapter", () => {
   // iterations: [] dönüyordu, yani model hiç çağrılmamıştı.
   it("görev metnini pozisyonel argüman olarak geçirir", () => {
     const a = new ClaudeCliAdapter({ model: "m" });
-    expect(a.argsFor(req({ taskText: "GÖREV" })).at(-1)).toBe("GÖREV");
+    expect(a.argsFor(req({ taskText: "GÖREV" }))).toContain("GÖREV");
+  });
+
+  // `--allowed-tools <tools...>` VARIADIC: sonrasındaki her pozisyoneli araç
+  // adı sanıyor. Görev metni sonda olduğunda CLI "Input must be provided"
+  // diyor — ajan görevi hiç görmüyor. Eskiden araya `--permission-prompts`
+  // girdiği için kaza gizleniyordu; o bayrağın olmadığı sürümde tur sessizce
+  // boşa gidiyordu.
+  it("görev metni araç listesinden ÖNCE gelir", () => {
+    const a = new ClaudeCliAdapter({ model: "m", allowedTools: ["Read", "Write"] });
+    const args = a.argsFor(req({ taskText: "GÖREV" }), new Set(["--allowed-tools"]));
+    expect(args.indexOf("GÖREV")).toBeLessThan(args.indexOf("--allowed-tools"));
+  });
+
+  // Aynı kaza, hiçbir opsiyonel bayrak desteklenmediğinde de olmamalı.
+  it("araya bayrak girmese de görev metni yutulmaz", () => {
+    const a = new ClaudeCliAdapter({ model: "m", allowedTools: ["Read"] });
+    const args = a.argsFor(req({ taskText: "GÖREV" }), new Set(["--allowed-tools"]));
+    expect(args.at(-1)).not.toBe("GÖREV");
+    expect(args[1]).toBe("GÖREV");
   });
 
   it("çok uzun metni pozisyonele koymaz — komut satırı sınırı", () => {
@@ -198,5 +218,142 @@ describe("ClaudeCliAdapter", () => {
     const r = await new ClaudeCliAdapter({ model: "m", bin: "/yok/boyle/bir/sey" }).invoke(req());
     expect(r.exitCode).not.toBe(0);
     expect(r.stderr).toMatch(/çalıştırılamadı/);
+  });
+});
+
+// --- Akış modu (adım 2) ---
+
+/** Gerçek koşudan alınmış satır şekilleri. */
+const S_TEXT = JSON.stringify({
+  type: "assistant",
+  message: { content: [{ type: "text", text: "Önce dosyayı okuyacağım.\nSonra yazacağım." }] },
+});
+const S_TOOL = JSON.stringify({
+  type: "assistant",
+  message: { content: [{ type: "tool_use", name: "Read", input: { file_path: "/repo/not.txt" } }] },
+});
+const S_THINK = JSON.stringify({
+  type: "assistant",
+  message: { content: [{ type: "thinking", thinking: "içimden geçenler" }] },
+});
+const S_SYS = JSON.stringify({ type: "system", subtype: "thinking_tokens", estimated_tokens: 5 });
+const S_RESULT = JSON.stringify({
+  type: "result",
+  subtype: "success",
+  is_error: false,
+  result: "bitti",
+  total_cost_usd: 0.02,
+  usage: { input_tokens: 7, output_tokens: 3 },
+});
+// Gerçek koşuda `result`'tan SONRA da satır geliyor.
+const S_AFTER = JSON.stringify({ type: "system", subtype: "task_summary", detail: "özet" });
+
+describe("ClaudeCliAdapter — akış modu", () => {
+  it("adım istenmezse biçim değişmez", () => {
+    const a = new ClaudeCliAdapter({ model: "m" });
+    expect(a.argsFor(req()).join(" ")).toContain("--output-format json");
+  });
+
+  it("adım istenirse stream-json'a geçer", () => {
+    const a = new ClaudeCliAdapter({ model: "m" });
+    const args = a.argsFor(req({ onStep: () => {} })).join(" ");
+    expect(args).toContain("--output-format stream-json");
+    // `stream-json` yalnızca --verbose ile tam kayıt basıyor.
+    expect(args).toContain("--verbose");
+  });
+
+  // Mutlak yol her satırda tekrarlanınca ayrıntı görünmez oluyor.
+  it("çalışma dizininin altındaki yolu kısaltır", async () => {
+    const line = JSON.stringify({
+      type: "assistant",
+      message: { content: [{ type: "tool_use", name: "Edit", input: { file_path: join(root, "src", "retry.ts") } }] },
+    });
+    const bin = await fakeCli({ stdout: `${line}\n${S_RESULT}\n` });
+    const steps: AgentStep[] = [];
+    await new ClaudeCliAdapter({ model: "m", bin }).invoke(req({ onStep: (s) => steps.push(s) }));
+    expect(steps[0]?.detail).toBe(join("src", "retry.ts").split("\\").join("/"));
+  });
+
+  it("dizin dışındaki yol olduğu gibi kalır", async () => {
+    const line = JSON.stringify({
+      type: "assistant",
+      message: { content: [{ type: "tool_use", name: "Read", input: { file_path: "/etc/hosts" } }] },
+    });
+    const bin = await fakeCli({ stdout: `${line}\n${S_RESULT}\n` });
+    const steps: AgentStep[] = [];
+    await new ClaudeCliAdapter({ model: "m", bin }).invoke(req({ onStep: (s) => steps.push(s) }));
+    expect(steps[0]?.detail).toBe("/etc/hosts");
+  });
+
+  it("araç ve metin adımlarını yayar", async () => {
+    const bin = await fakeCli({ stdout: [S_TEXT, S_TOOL, S_RESULT, S_AFTER].join("\n") + "\n" });
+    const steps: AgentStep[] = [];
+    await new ClaudeCliAdapter({ model: "m", bin }).invoke(req({ onStep: (s) => steps.push(s) }));
+
+    expect(steps).toEqual([
+      { kind: "text", detail: "Önce dosyayı okuyacağım." },
+      { kind: "tool", name: "Read", detail: "/repo/not.txt" },
+    ]);
+  });
+
+  // İç muhakeme gözlem değil; günlüğü şişirmekten başka bir şey yapmaz.
+  it("thinking ve system satırlarını adıma çevirmez", async () => {
+    const bin = await fakeCli({ stdout: [S_THINK, S_SYS, S_RESULT].join("\n") + "\n" });
+    const steps: AgentStep[] = [];
+    await new ClaudeCliAdapter({ model: "m", bin }).invoke(req({ onStep: (s) => steps.push(s) }));
+    expect(steps).toEqual([]);
+  });
+
+  // "Sonuncusu sonuçtur" varsayımı maliyeti ve ajanın son mesajını
+  // sessizce kaybettirirdi: gerçek koşuda result son satır DEĞİL.
+  it("sonucu son satırdan değil `type: result` satırından okur", async () => {
+    const bin = await fakeCli({ stdout: [S_TOOL, S_RESULT, S_AFTER].join("\n") + "\n" });
+    const r = await new ClaudeCliAdapter({ model: "m", bin }).invoke(req({ onStep: () => {} }));
+
+    expect(r.usage).toEqual({ inputTokens: 7, outputTokens: 3, costUsd: 0.02 });
+    expect(r.message).toBe("bitti");
+    expect(r.exitCode).toBe(0);
+  });
+
+  it("akışta hata bildirilirse exitCode 0 olmaz", async () => {
+    const err = JSON.stringify({ type: "result", is_error: true, result: "patladı" });
+    const bin = await fakeCli({ stdout: `${err}\n` });
+    const r = await new ClaudeCliAdapter({ model: "m", bin }).invoke(req({ onStep: () => {} }));
+    expect(r.exitCode).toBe(1);
+  });
+
+  it("JSON olmayan satır turu bozmaz", async () => {
+    const bin = await fakeCli({ stdout: `uyarı: bir şey\n${S_TOOL}\n${S_RESULT}\n` });
+    const steps: AgentStep[] = [];
+    const r = await new ClaudeCliAdapter({ model: "m", bin }).invoke(req({ onStep: (s) => steps.push(s) }));
+    expect(steps).toHaveLength(1);
+    expect(r.exitCode).toBe(0);
+  });
+
+  // Asıl sınav: adım süreç BİTMEDEN gelmeli. Biriktirip sonunda ayrıştıran
+  // bir uygulama yukarıdaki testlerin hepsini geçer, bunu geçemez.
+  //
+  // Kanıt zamanlamaya değil NEDENSELLİĞE dayanıyor: sahte CLI son satırı
+  // yazmadan önce bir dosya bekliyor, o dosyayı ilk adımı gören test yazıyor.
+  // Adımlar süreç bittikten sonra yayılsaydı dosya hiç belirmez, süreç 3 ile
+  // çıkardı — yavaş bir makinede yanlışlıkla kırmızı yanan bir eşik yok.
+  it("adımlar süreç bitmeden gelir", async () => {
+    const hold = join(root, "devam-et");
+    const bin = await fakeCli({ chunks: [`${S_TOOL}\n`, `${S_RESULT}\n`], holdUntil: hold });
+    const steps: AgentStep[] = [];
+
+    const result = await new ClaudeCliAdapter({ model: "m", bin }).invoke(
+      req({
+        onStep: (s) => {
+          steps.push(s);
+          void writeFile(hold, "");
+        },
+      }),
+    );
+
+    expect(steps).toHaveLength(1);
+    expect(result.exitCode).toBe(0);
+    // Sonuç satırı ancak adım görüldükten SONRA yazıldı; yine de okundu.
+    expect(result.usage?.costUsd).toBe(0.02);
   });
 });

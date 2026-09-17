@@ -5,6 +5,25 @@
  * söyle" der. Handoff, audit gate, worktree ve kuyruk çekirdeğin işidir.
  */
 
+/**
+ * Ajanın koşarken attığı tek adım.
+ *
+ * Sağlayıcıdan bağımsız ve KASITLI olarak dar: ajanın iç muhakemesi
+ * (`thinking`) buraya girmez, yalnızca dışarıdan gözlenebilir olan girer —
+ * hangi aracı çağırdı, ne söyledi. Ekranın "şu an ne yapıyor" sorusuna
+ * cevabı bu, ve pane metni kazımanın yerine geçen şey de bu (PHILOSOPHY 8).
+ *
+ * Adımlar GÖZLEM'dir, durum değil: kaybolmaları turun sonucunu değiştirmez.
+ * Kartın nereye gittiğini `card.settled` söyler.
+ */
+export interface AgentStep {
+  kind: "tool" | "text";
+  /** Araç adı — yalnızca `kind: "tool"` için. */
+  name?: string;
+  /** Kırpılmış ayrıntı: dosya yolu, komut başı ya da metnin ilk satırı. */
+  detail?: string;
+}
+
 export interface InvokeRequest {
   /** Rolün git worktree'si; süreç burada çalışır. */
   workdir: string;
@@ -15,6 +34,15 @@ export interface InvokeRequest {
   timeoutMs: number;
   /** Sağlayıcıya özel ek ortam değişkenleri. */
   env?: Record<string, string>;
+  /**
+   * Adım geldikçe çağrılır — canlı izleme buradan besleniyor.
+   *
+   * İSTEĞE BAĞLI, iki yönden: çağıran vermeyebilir (deney vermiyor), ve
+   * adaptör desteklemeyebilir. Desteklemeyen adaptör bunu sessizce yok sayar
+   * ve turun geri kalanı aynen çalışır. Yalnızca yapılandırılmış çıktıdan
+   * beslenir; metin kazıyarak adım üretmek yasak.
+   */
+  onStep?: (step: AgentStep) => void;
 }
 
 export interface Usage {

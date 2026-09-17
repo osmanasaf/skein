@@ -1,5 +1,6 @@
+import { LineSplitter } from "../proc/lines.js";
 import { killTree, spawnPortable, stdinOf } from "../proc/process.js";
-import type { Adapter, InvokeRequest, InvokeResult, Usage } from "./contract.js";
+import type { Adapter, AgentStep, InvokeRequest, InvokeResult, Usage } from "./contract.js";
 
 export interface ClaudeCliOptions {
   /** Pinlenmiş model kimliği, ör. "claude-opus-5". Tarih eki yok. */
@@ -73,11 +74,30 @@ export class ClaudeCliAdapter implements Adapter {
    * CONTRACT.md zaten uyarıyordu — izin bayrakları adaptörün sorunu.
    */
   argsFor(req: InvokeRequest, supported?: ReadonlySet<string>, promptText?: string): string[] {
-    const args: string[] = [
-      "-p",
-      "--output-format", "json",
-      "--model", this.model,
-    ];
+    const args: string[] = ["-p"];
+
+    // Görev metni EN BAŞTA, hiçbir bayraktan sonra değil.
+    //
+    // `--allowed-tools <tools...>` variadic: kendisinden sonraki her
+    // pozisyonel argümanı araç adı sanar. Görev metni sonda olduğunda araya
+    // bir bayrak girmezse metin araç listesine yutuluyor ve CLI "Input must
+    // be provided" diyor — yani ajan görevi HİÇ görmüyor. Eskiden araya
+    // `--permission-prompts` giriyordu ve kaza gizleniyordu; o bayrağın
+    // olmadığı bir CLI sürümünde (operatörün makinesinde yoktu) tur sessizce
+    // boşa gidiyordu. Sıra artık kazaya bağlı değil.
+    //
+    // Çok uzun metinlerde komut satırı sınırına takılmamak için (Windows
+    // ~32K) stdin'e düşülür.
+    if (!needsStdin(req.taskText)) args.push(req.taskText);
+
+    // Akış biçimi yalnızca adım isteniyorsa: `json` yolu kanıtlanmış ve
+    // deney onu kullanıyor, biçimi gereksiz yere değiştirmenin faydası yok.
+    if (req.onStep !== undefined) {
+      args.push("--output-format", "stream-json", "--verbose");
+    } else {
+      args.push("--output-format", "json");
+    }
+    args.push("--model", this.model);
 
     // Rol promptu: dosya yolu mu, gövde mi.
     //
@@ -100,15 +120,6 @@ export class ClaudeCliAdapter implements Adapter {
     if (supported === undefined || supported.has("--permission-prompts")) {
       args.push("--permission-prompts", "none");
     }
-    // Görev metni pozisyonel argüman olarak gider, stdin'den değil.
-    //
-    // Operatörün CLI sürümü `-p` modunda stdin'i okumuyordu: çağrı hatasız
-    // tamamlanıyor ama `iterations: []` ve `modelUsage: {}` dönüyordu — yani
-    // model hiç çağrılmamıştı. Pozisyonel argüman her iki sürümde de çalışıyor.
-    //
-    // Çok uzun metinlerde komut satırı sınırına takılmamak için (Windows
-    // ~32K) stdin'e düşülür.
-    if (!needsStdin(req.taskText)) args.push(req.taskText);
     return args;
   }
 
@@ -153,8 +164,31 @@ export class ClaudeCliAdapter implements Adapter {
     let stderr = "";
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (c: string) => (stdout += c));
     child.stderr.on("data", (c: string) => (stderr += c));
+
+    // Akış modunda her satır ayrı bir kayıt: satır tamamlandıkça okunur,
+    // sürecin bitmesi beklenmez. stdout yine de biriktirilir — teşhis için
+    // ham çıktı sözleşmenin parçası.
+    let streamed: ClaudeJsonResult | undefined;
+    if (req.onStep !== undefined) {
+      const onStep = req.onStep;
+      const splitter = new LineSplitter((line) => {
+        const record = parseLine(line);
+        if (record === undefined) return;
+        if (record.type === "result") {
+          streamed = record.value as ClaudeJsonResult;
+          return;
+        }
+        for (const step of stepsOf(record, req.workdir)) onStep(step);
+      });
+      child.stdout.on("data", (c: string) => {
+        stdout += c;
+        splitter.push(c);
+      });
+      child.stdout.on("end", () => splitter.flush());
+    } else {
+      child.stdout.on("data", (c: string) => (stdout += c));
+    }
 
     const stdin = stdinOf(child);
     // Süreç stdin okumadan öldüyse EPIPE gelir; sonucu exit belirler.
@@ -175,7 +209,11 @@ export class ClaudeCliAdapter implements Adapter {
       child.on("close", (code, signal) => resolve(code ?? (signal ? 137 : 1)));
     }).finally(() => clearTimeout(timer));
 
-    const parsed = parseResult(stdout);
+    // Akış modunda sonuç, `type: "result"` satırından gelir — SON satırdan
+    // değil. Gerçek koşuda `result`'tan sonra bir `system` satırı daha
+    // geliyor; "sonuncusu sonuçtur" varsayımı maliyeti ve ajanın son mesajını
+    // sessizce kaybettirirdi.
+    const parsed = req.onStep !== undefined ? streamed : parseResult(stdout);
     const result: InvokeResult = {
       // Süreç 0 dönse bile CLI kendi çıktısında hata bildirdiyse başarı değildir.
       // Sağlayıcının hatayı nasıl bildirdiği adaptörde kapsüllenir.
@@ -233,4 +271,95 @@ function toUsage(parsed: ClaudeJsonResult | undefined): Usage | undefined {
   if (typeof parsed.usage?.output_tokens === "number") usage.outputTokens = parsed.usage.output_tokens;
   if (typeof parsed.total_cost_usd === "number") usage.costUsd = parsed.total_cost_usd;
   return Object.keys(usage).length > 0 ? usage : undefined;
+}
+
+/** Akıştaki tek kayıt: tipi ve gövdesi. */
+interface StreamRecord {
+  type: string;
+  value: Record<string, unknown>;
+}
+
+function parseLine(line: string): StreamRecord | undefined {
+  try {
+    const value: unknown = JSON.parse(line);
+    if (value === null || typeof value !== "object" || Array.isArray(value)) return undefined;
+    const record = value as Record<string, unknown>;
+    return typeof record["type"] === "string" ? { type: record["type"], value: record } : undefined;
+  } catch {
+    // Akışta JSON olmayan satır olabilir (CLI uyarısı). Adım kaybı turun
+    // sonucunu değiştirmez; kayıt GÖZLEM'dir.
+    return undefined;
+  }
+}
+
+/** Adım ayrıntısının üst sınırı. Günlük okunabilir kalmalı. */
+const DETAIL_MAX = 160;
+
+function trim(text: string): string {
+  const oneLine = text.trim().split("\n")[0] ?? "";
+  return oneLine.length > DETAIL_MAX ? `${oneLine.slice(0, DETAIL_MAX - 1)}…` : oneLine;
+}
+
+/**
+ * Sağlayıcıya özel akış kaydını, sağlayıcıdan bağımsız adımlara çevirir.
+ *
+ * Yalnızca `assistant` kayıtlarının `tool_use` ve `text` parçaları geçer.
+ * `thinking` KASITLI olarak dışarıda: ajanın iç muhakemesi gözlem değil, ve
+ * günlüğü şişirmekten başka bir şey yapmaz.
+ */
+export function stepsOf(record: StreamRecord, workdir?: string): AgentStep[] {
+  if (record.type !== "assistant") return [];
+  const message = record.value["message"];
+  if (message === null || typeof message !== "object") return [];
+  const content = (message as Record<string, unknown>)["content"];
+  if (!Array.isArray(content)) return [];
+
+  const steps: AgentStep[] = [];
+  for (const raw of content) {
+    if (raw === null || typeof raw !== "object") continue;
+    const block = raw as Record<string, unknown>;
+    if (block["type"] === "tool_use" && typeof block["name"] === "string") {
+      const step: AgentStep = { kind: "tool", name: block["name"] };
+      const detail = toolDetail(block["input"], workdir);
+      if (detail !== "") step.detail = detail;
+      steps.push(step);
+    } else if (block["type"] === "text" && typeof block["text"] === "string") {
+      const detail = trim(block["text"]);
+      if (detail !== "") steps.push({ kind: "text", detail });
+    }
+  }
+  return steps;
+}
+
+/**
+ * Çalışma dizininin altındaki yolu kısaltır.
+ *
+ * Ajanın verdiği yol mutlak: `/uzun/gecici/dizin/.worktrees/reviewer/src/a.ts`.
+ * Ekranda ve günlükte okunması gereken kısım son parça; önekin her satırda
+ * tekrarlanması ayrıntıyı görünmez yapıyor.
+ */
+function relativize(value: string, workdir?: string): string {
+  if (workdir === undefined || workdir === "") return value;
+  const prefix = workdir.endsWith("/") || workdir.endsWith("\\") ? workdir : `${workdir}/`;
+  return value.startsWith(prefix) ? value.slice(prefix.length) : value;
+}
+
+/**
+ * Aracın girdisinden okunabilir tek bir satır.
+ *
+ * Alan sırası önem sırası: hangi dosyaya dokunduğu, hangi komutu koşturduğu.
+ * Hiçbiri yoksa ham JSON'un başı — hiç ayrıntı olmamasından iyidir.
+ */
+function toolDetail(input: unknown, workdir?: string): string {
+  if (input === null || typeof input !== "object") return "";
+  const record = input as Record<string, unknown>;
+  for (const key of ["file_path", "command", "pattern", "path", "description", "prompt"]) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim() !== "") return trim(relativize(value, workdir));
+  }
+  try {
+    return trim(JSON.stringify(record));
+  } catch {
+    return "";
+  }
 }

@@ -548,6 +548,58 @@ describe("tick — olay günlüğü", () => {
     expect(started.promptHash).toMatch(/^[0-9a-f]{64}$/);
   });
 
+  // Adım 2: `agent.started` ile `agent.finished` arasında dakikalar geçiyor
+  // ve günlükten "şu an ne oluyor" okunamıyordu.
+  it("ajanın adımları sırasıyla günlüğe düşer", async () => {
+    await put();
+    claude.answer = async (req) => {
+      req.onStep?.({ kind: "text", detail: "önce okuyacağım" });
+      req.onStep?.({ kind: "tool", name: "Read", detail: "/repo/retry.ts" });
+      req.onStep?.({ kind: "tool", name: "Edit", detail: "/repo/retry.ts" });
+      await writeFile(join(req.workdir, VERDICT_FILE), JSON.stringify({ decision: "accept" }));
+    };
+    const logPath = join(root, "olaylar.jsonl");
+
+    await tick("coder", { ...options, log: new EventLog(logPath, "kosu-1") });
+
+    const { events } = await readEvents(logPath);
+    const steps = events.filter((e) => e.type === "agent.step") as unknown as Record<string, unknown>[];
+    expect(steps.map((s) => s["seq"])).toEqual([1, 2, 3]);
+    expect(steps.map((s) => s["name"])).toEqual([undefined, "Read", "Edit"]);
+    expect(steps[0]).toMatchObject({ cell: expect.stringContaining(":coder"), role: "coder", kind: "text" });
+    // Adımlar başlangıç ile bitiş ARASINDA: günlüğü okuyan, turun neresinde
+    // olunduğunu sıradan anlayabilmeli.
+    const types = events.map((e) => e.type);
+    expect(types.indexOf("agent.step")).toBeGreaterThan(types.indexOf("agent.started"));
+    expect(types.lastIndexOf("agent.step")).toBeLessThan(types.indexOf("agent.finished"));
+  });
+
+  // Adımlar gözlem, durum değil: kaybolmaları turu bozmamalı. (Kartın
+  // nereye gittiğini söyleyen `card.settled` için aynı şey geçerli DEĞİL —
+  // o yazılamıyorsa tur gürültüyle patlamalı.)
+  it("adım yazılamasa da tur tamamlanır", async () => {
+    await put();
+    claude.answer = async (req) => {
+      req.onStep?.({ kind: "tool", name: "Read" });
+      req.onStep?.({ kind: "tool", name: "Edit" });
+      await writeFile(join(req.workdir, VERDICT_FILE), JSON.stringify({ decision: "accept" }));
+    };
+    const logPath = join(root, "olaylar.jsonl");
+    class AdimiYazamayanLog extends EventLog {
+      override async append(event: Parameters<EventLog["append"]>[0]): Promise<void> {
+        if (event.type === "agent.step") throw new Error("disk dolu");
+        return super.append(event);
+      }
+    }
+
+    const result = await tick("coder", { ...options, log: new AdimiYazamayanLog(logPath, "kosu-1") });
+
+    expect(result.status).toBe("accepted");
+    // Turun kaydı yine de tam: sonuç olayı yazıldı.
+    const { events } = await readEvents(logPath);
+    expect(events.map((e) => e.type)).toEqual(["agent.started", "agent.finished", "card.settled"]);
+  });
+
   it("aynı rolün promptu turlar arasında aynı hash'i taşır", async () => {
     await put();
     claude.answer = writes({ decision: "accept" });

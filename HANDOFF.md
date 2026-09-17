@@ -4,7 +4,7 @@ Bu dosya bir sonraki oturumun giriş noktası. Durum ajanın kafasında değil,
 burada ve git'te (PHILOSOPHY 1).
 
 **Dal:** `claude/project-plan-brainstorm-pthvoc`
-**Durum:** 308 test yeşil, typecheck temiz, origin ile senkron.
+**Durum:** 328 test yeşil, typecheck temiz, origin ile senkron.
 **Kod:** 5037 satır (testler hariç).
 **Çizimler:** [kartın yolu](https://claude.ai/code/artifact/185e9279-510a-4544-a20c-831ecf1cdfd3) ·
 [genel bakış](https://claude.ai/code/artifact/2e7575af-84ee-40d8-aab4-5c3bdce0fe50)
@@ -17,10 +17,11 @@ burada ve git'te (PHILOSOPHY 1).
 satıcının ajanı arasında dolaşıyor, kod worktree'ler arasında taşınıyor,
 sonuç günlüğe yazılıyor.
 
-**Yol haritasının 1. adımı da bitti:** `--serve` ile gözcü artık kuyruk
-boşalınca ölmüyor, uyuyor. Kart açmak işin başlaması demek. Sıra adım 2'de
-(ajan çıktısının canlı akması) ve adım 3'te (okuyucu ekran) —
-`ARCHITECTURE.md` "Sıra" tablosu.
+**Yol haritasının 1. ve 2. adımı bitti:** `--serve` ile gözcü kuyruk
+boşalınca ölmüyor, uyuyor — kart açmak işin başlaması demek. Ve ajan
+koşarken attığı her adım (`agent.step`) günlüğe düşüyor, tur bitmeden.
+Sıra **adım 3'te: okuyucu ekran** — `ARCHITECTURE.md` "Sıra" tablosu.
+Ekranın ihtiyacı olan verinin tamamı artık var.
 
 ---
 
@@ -96,6 +97,8 @@ var.
 | Kuyruk — atomik geçiş, kilitsiz sahiplenme, çökme toplama | `src/card/queue.ts` |
 | Gözcü — tur, verdikt, yönlendirme | `src/watch/tick.ts` |
 | Uzun ömürlü gözcü — uyu/uyan, durdurma | `src/watch/serve.ts` |
+| Canlı adımlar — `stream-json` → `agent.step` | `src/adapters/claude.ts` |
+| Akan çıktıyı satıra bölme | `src/proc/lines.ts` |
 | Tek yazıcı kilidi — bayat kilidi devralır | `src/watch/lock.ts` |
 | Git katmanı — ileri birleştirme, syncBack, worktree, kirlilik | `src/watch/git.ts` |
 | Olay günlüğü — `card.settled` dahil | `src/events/log.ts` |

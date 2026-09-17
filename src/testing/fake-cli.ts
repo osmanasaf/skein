@@ -7,6 +7,22 @@ export interface FakeCliSpec {
   /** Çalışma dizinini bu dosyaya yazar. */
   cwdTo?: string;
   stdout?: string;
+  /**
+   * stdout'u parça parça yazar, aralarında bekleyerek.
+   *
+   * `stdout` tek seferde yazıyor ve akışın CANLI olup olmadığını sınayamıyor:
+   * biriktirip sonunda ayrıştıran bir uygulama da aynı testi geçerdi.
+   */
+  chunks?: string[];
+  chunkDelayMs?: number;
+  /**
+   * Son parçayı yazmadan önce bu dosyanın belirmesini bekler.
+   *
+   * Akışın canlı olduğunu ZAMANLAMAYLA değil NEDENSELLİKLE sınamak için:
+   * dosyayı, ilk adımı gören test yazar. Adımlar ancak süreç bittikten
+   * sonra yayılsaydı dosya hiç belirmez ve süreç 3 ile çıkardı.
+   */
+  holdUntil?: string;
   stderr?: string;
   exit?: number;
   /** Çıkmadan önce bu kadar bekler — timeout ve süreç ağacı testleri için. */
@@ -42,6 +58,21 @@ for await (const chunk of process.stdin) input += chunk;
 if (spec.stdinTo) await writeFile(spec.stdinTo, input);
 if (spec.cwdTo) await writeFile(spec.cwdTo, process.cwd());
 if (spec.stdout) process.stdout.write(spec.stdout);
+const chunks = spec.chunks ?? [];
+for (const [i, chunk] of chunks.entries()) {
+  if (spec.holdUntil && i === chunks.length - 1) {
+    const { access } = await import("node:fs/promises");
+    const until = Date.now() + 3000;
+    let seen = false;
+    while (Date.now() < until) {
+      try { await access(spec.holdUntil); seen = true; break; } catch { /* daha yok */ }
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    if (!seen) process.exit(3);
+  }
+  process.stdout.write(chunk);
+  if (spec.chunkDelayMs) await new Promise((r) => setTimeout(r, spec.chunkDelayMs));
+}
 if (spec.stderr) process.stderr.write(spec.stderr);
 if (spec.sleepMs) await new Promise((r) => setTimeout(r, spec.sleepMs));
 process.exit(spec.exit ?? 0);

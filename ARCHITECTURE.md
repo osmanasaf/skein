@@ -31,7 +31,7 @@ klonuna dönüşür ve asıl sorunu çözmeyi bırakır.
 ┌─────────────────────────────────────────────┐
 │  YÜZEY        CLI · ekran · (ileride) editör│   durum TUTMAZ
 ├─────────────────────────────────────────────┤
-│  OTURUM       uzun ömürlü süreç (--serve)   │   ✅ adım 1 yazıldı
+│  OTURUM       uzun ömürlü süreç + canlı olay │   ✅ adım 1-2 yazıldı
 ├─────────────────────────────────────────────┤
 │  ÇEKİRDEK     akış · kart · kuyruk · tur·git│   ✅ yazıldı, koşuyor
 ├─────────────────────────────────────────────┤
@@ -102,8 +102,9 @@ Gerçekten eksik olan üç şey vardı, ve üçü de dar:
 - **Kontrol yüzeyi** — adım 4. localhost'ta küçük bir soket: "durum ver",
   "kapıyı aç". Şimdilik `card release` bu işi görüyor ve gözcü açıkken
   çalışıyor.
-- **Adaptörlerde akış modu** — adım 2. `capture()` bugün çıktıyı biriktirip
-  sonunda veriyor; satır geldikçe olay yayan bir kardeşi gerekiyor.
+- **Adaptörlerde akış modu** — ✅ adım 2. `claude` adaptörü `stream-json`
+  okuyor, her satırı sağlayıcıdan bağımsız bir adıma çeviriyor ve tur
+  bitmeden günlüğe yazıyor.
 
 ### Adım 1'de öğrenilen: asıl tehlike `take()` değil `recover()`
 
@@ -225,7 +226,7 @@ Ekran tartışması bunların üstüne gelir, bunları yeniden açmaz:
 |---|---|---|
 | 0 | Bu belge | Yapı oturmadan ekran çizmek, ekranı yanlış yere bağlar |
 | ~~1~~ | ✅ `--serve` — davranış aynı, süreç kalıcı | Canlı koşuda doğrulandı: gözcü uyurken açılan kart ikinci komut olmadan bitti |
-| 2 | Akış modunda adaptör + dar canlı olaylar | Canlı izlemenin ön koşulu; tip kümesi dar tutulur |
+| ~~2~~ | ✅ `agent.step` — ajan koşarken günlüğe düşüyor | Canlı koşuda doğrulandı: 8 adım, tur bitmeden, saniye saniye |
 | 3 | Okuyucu ekran: kart × rol panosu, son gerekçe, diff | En çok değeri en az riskle veren yüzey |
 | 4 | Kontrol: kapıyı ekrandan açmak | İlk *yazan* yüzey eylemi — komut olarak, durum olarak değil |
 | 5 | Tanımlama: akış ve rol düzenleme (Aşama 6) | Doğrulama ve maliyet tahmini zaten yazılı |
@@ -261,3 +262,48 @@ kaldığı yerden devam ediyor — durum süreçte değil, dizinde.
 akışa yeni bir rol eklenirse o rolün kuyruğu süpürülmez; gözcüyü yeniden
 başlatmak gerekir. Yoldaki kartlar etkilenmez — onlar kendi dondurulmuş
 topolojilerini taşır (değişmez 4).
+
+### Adım 2 — canlı adımlar · 2026-09-17
+
+**Yazılanlar:** `src/proc/lines.ts` (satır ayırıcı), `AgentStep` +
+`onStep` (sözleşme), `claude` adaptöründe `stream-json` okuma,
+`agent.step` olayı, `tick`'te sıralı yazım kanalı. 328 test yeşil (+20).
+
+**Biter kriteri karşılandı.** Canlı koşuda, ajan HÂLÂ koşarken günlük şunu
+gösteriyordu:
+
+```
+12:19:16  agent.started
+12:19:19  adım  1  tool  Bash   pwd && ls -la
+12:19:21  adım  2  tool  Read   README.md
+12:19:26  adım  4  tool  Write  LICENSE
+12:19:29  adım  5  tool  Edit   README.md
+12:19:34  adım  8  text         İş başarıyla tamamlandı:
+12:19:36  agent.finished
+```
+
+Daha önce bu aralık — çoğu zaman dakikalar — günlükte tamamen boştu.
+
+**Kararlar:**
+
+- **`thinking` blokları dışarıda.** Ajanın iç muhakemesi gözlem değil;
+  günlüğü şişirmekten başka bir şey yapmaz.
+- **Biçim yalnızca adım istendiğinde değişiyor.** `--output-format json`
+  yolu kanıtlanmış ve deney onu kullanıyor; gereksiz yere değiştirmenin
+  faydası yok.
+- **Adım kaybı turu bozmaz.** Diski dolmuş bir makinede, parası ödenmiş bir
+  ajan çağrısı günlüğe yazamadığı için çökmemeli. `card.settled` için aynı
+  hoşgörü YOK — o yazılamıyorsa tur gürültüyle patlamalı.
+- **Adaptör başına isteğe bağlı.** `codex` desteklemiyor: bayrakları
+  doğrulanmadı ve metin kazıyarak adım üretmek yasak (CONTRACT.md).
+
+**Yol boyunca çıkan iki kusur:**
+
+1. **`--allowed-tools` variadic.** Görev metni ondan sonra geldiği için CLI
+   metni araç adı sanıyor ve "Input must be provided" diyor — ajan görevi
+   HİÇ görmüyor. Araya giren `--permission-prompts` kazayı gizliyordu; o
+   bayrağın olmadığı CLI sürümünde (operatörün makinesinde yoktu) tur
+   sessizce boşa gidiyordu. Görev metni artık en başta.
+2. **`result` son satır değil.** Gerçek koşuda `type: "result"` satırından
+   SONRA bir `system` satırı daha geliyor. "Sonuncusu sonuçtur" varsayımı
+   maliyeti ve ajanın son mesajını sessizce kaybettirirdi.

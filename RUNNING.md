@@ -25,7 +25,7 @@ npm install
 npm test
 ```
 
-`npm test` testlerin tamamını geçmeli (şu an 308). Geçmiyorsa çıktıyı
+`npm test` testlerin tamamını geçmeli (şu an 328). Geçmiyorsa çıktıyı
 sakla.
 
 ---
@@ -68,6 +68,35 @@ hemen çıkar.
 |---|---|
 | `--serve` | Kuyruk boşalınca çıkma, bekle |
 | `--poll <ms>` | Beklerken yoklama aralığı (varsayılan 1000) |
+
+### Ajan koşarken ne yaptığını izlemek
+
+Gözcü, ajanın attığı her adımı olay günlüğüne yazıyor — tur bitmeden.
+Başka bir kabukta:
+
+```powershell
+Get-Content .skein\olaylar.jsonl -Wait -Tail 20    # PowerShell
+tail -f .skein/olaylar.jsonl                       # macOS / Linux
+```
+
+`agent.step` kayıtları ajanın hangi aracı çağırdığını ve neye dokunduğunu
+söyler:
+
+```
+adım 1  tool  Bash   pwd && ls -la
+adım 2  tool  Read   README.md
+adım 4  tool  Write  LICENSE
+adım 8  text         İş başarıyla tamamlandı:
+```
+
+Ajanın iç muhakemesi (`thinking`) KASITLI olarak yazılmıyor: gözlem değil,
+ve günlüğü şişirmekten başka bir şey yapmıyor. Bu kayıtlar gözlem olduğu
+için kaybolmaları turu bozmaz — kartın nereye gittiğini `card.settled`
+söyler.
+
+Bugün yalnızca `claude` adaptörü adım yayıyor. `codex` yaymıyor: bayrakları
+doğrulanmadı ve metin kazıyarak adım üretmek yasak (`hub/adapters/CONTRACT.md`).
+Adım gelmemesi turu etkilemez.
 
 **Aynı depoda tek yazıcı.** Gözcü açıkken ikinci bir `watch` koşusu
 reddedilir; `--plan` reddedilmez çünkü yazmaz. Sebep şu: ikinci koşu,

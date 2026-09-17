@@ -57,6 +57,29 @@ export type EventInput =
       /** syncBack uyarıları. */
       warnings?: string[];
     }
+  | {
+      /**
+       * Ajanın koşarken attığı bir adım — canlı izlemenin taşıyıcısı.
+       *
+       * `agent.started` ile `agent.finished` arasındaki boşluğu dolduruyor:
+       * o iki olay arasında dakikalar geçiyor ve günlükten "şu an ne oluyor"
+       * okunamıyordu.
+       *
+       * GÖZLEM, durum değil: bu kayıtların kaybı turun sonucunu değiştirmez
+       * ve kartın nereye gittiği yine `card.settled`'dan okunur. `seq`
+       * olduğu için, kayıtlar sırasız yazılsa bile sıra kurtarılabilir.
+       */
+      type: "agent.step";
+      cell: string;
+      role: string;
+      /** Hücre içinde 1'den başlayan sıra numarası. */
+      seq: number;
+      kind: "tool" | "text";
+      /** Araç adı — yalnızca `kind: "tool"` için. */
+      name?: string;
+      /** Kırpılmış ayrıntı. */
+      detail?: string;
+    }
   | { type: "hooks.measured"; cell: string; ran: boolean; total: number; red: string[] }
   | {
       type: "review.done";
@@ -88,6 +111,7 @@ const REQUIRED: Record<EventInput["type"], { strings: string[]; numbers: string[
   "agent.started": { strings: ["cell", "role", "provider", "model", "promptHash"], numbers: [] },
   "agent.finished": { strings: ["cell"], numbers: ["exitCode", "durationMs"] },
   "card.settled": { strings: ["cell", "card", "role", "outcome", "state"], numbers: [] },
+  "agent.step": { strings: ["cell", "role", "kind"], numbers: ["seq"] },
   "hooks.measured": { strings: ["cell"], numbers: ["total"] },
   "audit.round": { strings: ["cell", "reason"], numbers: ["round"] },
   "review.done": { strings: ["cell", "producer", "reviewer", "promptHash", "path"], numbers: [] },

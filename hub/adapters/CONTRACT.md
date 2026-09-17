@@ -21,6 +21,7 @@ request:
   taskText     : string   — bu tur yapılacak iş
   timeoutMs    : number
   env          : map      — sağlayıcıya özel ek ortam değişkenleri
+  onStep       : fn?      — adım geldikçe çağrılır (isteğe bağlı, aşağıya bak)
 
 result:
   exitCode     : number   — 0 = başarı
@@ -46,10 +47,30 @@ formatı değişince sessizce bozulan bir yüzey. Adaptör bunun yerine süreç
 izin/onay modu farklı adlandırılır ve zamanla değişir. Bu bilgi adaptörde
 kapsüllenir.
 
+**Canlı adım isteğe bağlıdır, ve yalnızca yapılandırılmış çıktıdan gelir.**
+`onStep` verilirse adaptör, ajan koşarken her adımı (hangi aracı çağırdı, ne
+söyledi) bildirebilir. İki kural:
+
+1. **Metin kazıyarak adım üretmek yasak.** Sağlayıcının makine-okunur bir
+   akış biçimi yoksa adaptör `onStep`'i sessizce yok sayar ve turun geri
+   kalanı aynen çalışır. Pane kazımayı reddetmenin sebebi buydu; kendi
+   ekranımız için geri getirmek anlamsız olurdu.
+2. **Adım GÖZLEM'dir, durum değil.** Kaybı turun sonucunu değiştirmez;
+   kartın nereye gittiği `card.settled`'dan okunur.
+
+Bugün `claude` adaptörü destekliyor (`--output-format stream-json`),
+`codex` desteklemiyor — bayrakları doğrulanmadığı için (aşağıdaki kural).
+
 **Bayrakları doğrulayarak yaz.** Her sağlayıcının non-interactive çağrım
 şekli (bayrak adları, izin modu, prompt dosyası geçirme biçimi) kendi
 dokümanından doğrulanmalıdır. Ezberden yazılan bayrak sessizce yanlış
 çalışır.
+
+Bayrağın ADI kadar SIRASI da doğrulanmalı: `claude`'un
+`--allowed-tools <tools...>` bayrağı variadic ve kendisinden sonraki her
+pozisyonel argümanı araç adı sanıyor. Görev metni sondayken CLI "Input must
+be provided" diyor — yani ajan görevi hiç görmüyor. Görev metni artık en
+başta.
 
 ## Yürütücünün adaptörden beklemedikleri
 
