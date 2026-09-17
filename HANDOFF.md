@@ -21,6 +21,12 @@ sonuç günlüğe yazılıyor. Kalan tek büyük eksik **ekran**.
 
 ## Sıradaki oturumun konusu: EKRAN
 
+**Önce `ARCHITECTURE.md` okunsun.** Genel yapı oturtuldu: üç katman (çekirdek
+/ oturum / yüzey), uzun ömürlü çekirdeğin (`skeind`) ne olduğu ve neden küçük
+bir iş olduğu, yerel DB kararı (gerekmiyor; gerekirse türetilmiş indeks), ve
+ekranın kıramayacağı altı değişmez orada yazılı. Aşağıdaki sorular hâlâ
+geçerli ama artık boşlukta değil.
+
 Bu tartışma kendi oturumunu hak ediyor, çünkü ilk soru "nasıl yapalım"
 değil.
 
@@ -165,6 +171,7 @@ Orkestratördeki üç koşu da aynı duvarı gösteriyor.
 
 | Dosya | Ne için |
 |---|---|
+| `ARCHITECTURE.md` | **Genel yapı** — üç katman, uzun ömürlü çekirdek, DB kararı, değişmezler |
 | `PHILOSOPHY.md` | İlkeler, reddedilenler, açık sorular (#2 güncel) |
 | `hub/flows/SCHEMA.md` | Akış dili — 16 kural, ret yolu, kod taşıma, hash sözleşmesi |
 | `RUNNING.md` | Kendi makinende koşturmak; Windows notları |

@@ -196,6 +196,10 @@ uca çalışıyor; kapı sayısı ve bekleme süresi ölçülüyor.
 
 ## Aşama 5 — Merkez ekranı
 
+> Bu aşama orkestratör yazılmadan önce taslaklandı. Güncel yapı kararları
+> `ARCHITECTURE.md`'de: ekrandan önce **oturum katmanı** (`skeind`) geliyor,
+> ekran saf okuyucu olarak başlıyor ve yeni durum tutmuyor.
+
 **Sınadığı varsayım:** Açık Soru #4 — maliyet karşılığını veriyor mu?
 Cevaplayabilmek için veriyi görebilmek gerek.
 
