@@ -25,7 +25,7 @@ npm install
 npm test
 ```
 
-`npm test` testlerin tamamını geçmeli (şu an 373). Geçmiyorsa çıktıyı
+`npm test` testlerin tamamını geçmeli (şu an 385). Geçmiyorsa çıktıyı
 sakla.
 
 ---
@@ -114,9 +114,16 @@ Bastığı adresi tarayıcıda aç. Gösterdikleri:
 - **Kart detayı** — karta tıkla: tam iz, ret gerekçeleri, devir özetleri ve
   devredilen commit'in diff özeti. URL adreslenebilir (`#kart/<id>`).
 
-**Yalnızca okur.** Yazan uç nokta yok; düğmeler adım 4'te bağlanacak. Ekran
-`127.0.0.1`'e bağlanır — kart metinlerini ve ret gerekçelerini gösterdiği
-için ağa açılmaz. `--host` ile değiştirebilirsin ama ne yaptığını bil.
+**Kapıyı ekrandan açabilirsin.** Kapıdaki kartın düğmeleri kapı tipine göre
+değişiyor ve çekirdeğe komut gönderiyor; çekirdek reddederse gerekçe kartın
+üstünde belirir. Karar `gate.released` olarak günlüğe de düşer, ve aynı iş
+`card release` ile de yapılabilir.
+
+Bunun dışında ekran yalnızca okur. `127.0.0.1`'e bağlanır — kart metinlerini
+ve ret gerekçelerini gösterdiği için ağa açılmaz. `--host` ile
+değiştirebilirsin ama ne yaptığını bil: yazma çağrıları sayfaya gömülü bir
+jetonla korunuyor, ama ağa açılan bir ekran yine de depo içeriğini
+gösterir.
 
 Gözcü ile ekran ayrı süreçler; ekran kilidi almaz, kuyruğa dokunmaz.
 

@@ -99,9 +99,8 @@ Gerçekten eksik olan üç şey vardı, ve üçü de dar:
 - **Uyandırma** — ✅ adım 1. Doğruluğu yoklama sağlıyor, `fs.watch` yalnızca
   gecikmeyi kısaltıyor. Tersi kurulsaydı, izlemenin çalışmadığı bir dosya
   sisteminde gözcü kartı hiç görmezdi — ve bu **sessiz** bir arıza olurdu.
-- **Kontrol yüzeyi** — adım 4. localhost'ta küçük bir soket: "durum ver",
-  "kapıyı aç". Şimdilik `card release` bu işi görüyor ve gözcü açıkken
-  çalışıyor.
+- **Kontrol yüzeyi** — ✅ adım 4. `POST /kart/<id>/birak`: jetonlu, kapı
+  tipine göre doğru çıkışla, kararı olay günlüğüne düşürerek.
 - **Adaptörlerde akış modu** — ✅ adım 2. `claude` adaptörü `stream-json`
   okuyor, her satırı sağlayıcıdan bağımsız bir adıma çeviriyor ve tur
   bitmeden günlüğe yazıyor.
@@ -228,7 +227,7 @@ Ekran tartışması bunların üstüne gelir, bunları yeniden açmaz:
 | ~~1~~ | ✅ `--serve` — davranış aynı, süreç kalıcı | Canlı koşuda doğrulandı: gözcü uyurken açılan kart ikinci komut olmadan bitti |
 | ~~2~~ | ✅ `agent.step` — ajan koşarken günlüğe düşüyor | Canlı koşuda doğrulandı: 8 adım, tur bitmeden, saniye saniye |
 | ~~3~~ | ✅ Okuyucu ekran — pano, canlı adım, kart izi, diff | Gerçek depoda doğrulandı; üç sorunun üçü de ekrandan cevaplanıyor |
-| 4 | Kontrol: kapıyı ekrandan açmak | İlk *yazan* yüzey eylemi — komut olarak, durum olarak değil |
+| ~~4~~ | ✅ Kapı ekrandan açılıyor | Yüzey komut gönderiyor; çekirdeğin reddi kullanıcıya aynen gidiyor |
 | 5 | Tanımlama: akış ve rol düzenleme (Aşama 6) | Doğrulama ve maliyet tahmini zaten yazılı |
 | 6 | Planlamada ajanlar arası yazılı tur | En sonda, ve mekanizma olarak; serbest sohbet olarak değil |
 
@@ -383,3 +382,34 @@ bir akışta iş metnini rapora çevirirdi.
    sütundaki kart sayısı, kuyruk derinliği ayrı bir ipucu.
 2. Beş sütun 1500 piksele sığmıyor, "bitti" sütunu `analyst`'in altına
    sarıyor ve o sütuna aitmiş gibi görünüyordu.
+
+### Adım 4 — kapı ekrandan açılıyor · 2026-09-17
+
+Ekranın ilk **yazan** eylemi. `POST /kart/<id>/birak` → `releaseCard()` →
+`queue.release()`. 385 test yeşil (+12).
+
+**Değişmez korundu:** yüzey kendi kopyasını güncellemiyor. Komut çekirdeğe
+gidiyor, cevap çekirdeğin ürettiği YENİ modelden okunuyor, ekran onu
+çiziyor. Çekirdek reddederse mesaj kullanıcıya **aynen** gidiyor — o mesaj
+gerekçeyi ve çıkış yolunu zaten söylüyor.
+
+**Yerel sunucuya yazma eklemenin bedeli var ve ödendi.** Tarayıcıda açık
+herhangi bir site `http://127.0.0.1:<port>`'a POST atabilir; yani
+kullanıcının haberi olmadan bir kapı açabilirdi. İki kapı birden:
+
+1. **Jeton** — açılışta üretiliyor ve sayfaya gömülüyor. Başka kaynaktaki
+   JavaScript sayfayı okuyamadığı için jetonu öğrenemez.
+2. **Özel başlık** (`x-skein-token`) — çapraz kaynak isteği önce preflight
+   ister, biz preflight'a izin vermiyoruz. `Origin` varsa ayrıca kendi
+   adresimizle eşleşmeli.
+
+Canlı doğrulandı: jetonsuz POST **403**, kaçış kapısından ileri bırakma
+**409** (gerekçesiyle), doğru karar kartı taşıdı ve günlüğe düştü.
+
+**`gate.released` olayı eklendi.** Karar kartın geçmişine zaten giriyordu;
+bu kayıt KARTLAR ARASI soru için: *"insan ne sıklıkla araya girdi, hangi
+kapıda, hangi yöne?"* Tek bir kartın izinden okunamayan tek şey buydu.
+
+Günlük yazımı kuyruğun içinde değil `src/card/release.ts` içinde: kartın
+nerede olduğu ile o kararın kaydı iki ayrı sorumluluk, ve kuyruk ölçümden
+habersiz kalmalı. Ekran da `card` CLI'ı da aynı yardımcıdan geçiyor.

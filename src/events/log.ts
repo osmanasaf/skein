@@ -80,6 +80,22 @@ export type EventInput =
       /** Kırpılmış ayrıntı. */
       detail?: string;
     }
+  | {
+      /**
+       * İnsan kapıdaki kartı karara bağladı.
+       *
+       * Karar kartın kendi geçmişine zaten yazılıyor; bu kayıt KARTLAR ARASI
+       * soru içindir: "insan ne sıklıkla araya girdi, hangi kapıda, hangi
+       * yöne?" Tek bir kartın izinden okunamayan tek şey bu.
+       */
+      type: "gate.released";
+      card: string;
+      /** Kartın gittiği rol. */
+      role: string;
+      decision: "forward" | "back" | "retry";
+      /** Hangi kapıydı — çıkış kümesini bu belirliyordu. */
+      kind: "approval" | "deadlock" | "escalation";
+    }
   | { type: "hooks.measured"; cell: string; ran: boolean; total: number; red: string[] }
   | {
       type: "review.done";
@@ -112,6 +128,7 @@ const REQUIRED: Record<EventInput["type"], { strings: string[]; numbers: string[
   "agent.finished": { strings: ["cell"], numbers: ["exitCode", "durationMs"] },
   "card.settled": { strings: ["cell", "card", "role", "outcome", "state"], numbers: [] },
   "agent.step": { strings: ["cell", "role", "kind"], numbers: ["seq"] },
+  "gate.released": { strings: ["card", "role", "decision", "kind"], numbers: [] },
   "hooks.measured": { strings: ["cell"], numbers: ["total"] },
   "audit.round": { strings: ["cell", "reason"], numbers: ["round"] },
   "review.done": { strings: ["cell", "producer", "reviewer", "promptHash", "path"], numbers: [] },

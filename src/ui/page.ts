@@ -6,7 +6,18 @@
  * ilk ihlal edecek yer olurdu. Sayfa `/durum`'u yokluyor ve çiziyor; başka
  * hiçbir şey yapmıyor.
  */
-export const PAGE = `<!doctype html>
+/**
+ * Sayfayı jetonla birlikte üretir.
+ *
+ * Jeton gömülü geliyor çünkü başka bir kaynaktaki JavaScript bu sayfayı
+ * okuyamaz — yani yazma çağrısı için gereken jetonu öğrenemez. Ayrıntı:
+ * `server.ts` içindeki `yetkili()`.
+ */
+export function renderPage(token: string): string {
+  return PAGE.replace("__JETON__", token);
+}
+
+const PAGE = `<!doctype html>
 <html lang="tr">
 <head>
 <meta charset="utf-8">
@@ -112,7 +123,14 @@ export const PAGE = `<!doctype html>
   .exits button {
     font: inherit; font-size: 13px; font-weight: 500; min-height: 44px; padding: 0 14px;
     border: 1px solid var(--gate-line); background: transparent; color: var(--gate-ink);
-    border-radius: 3px; cursor: not-allowed; opacity: .75;
+    border-radius: 3px; cursor: pointer;
+  }
+  .exits button:hover:not(:disabled) { border-color: var(--gate); }
+  .exits button:disabled { cursor: progress; opacity: .6; }
+  .redd {
+    margin-top: 10px; padding: 10px 12px; border: 1px solid var(--reject);
+    border-radius: 3px; font-size: 12.5px; line-height: 1.5; color: var(--ink);
+    white-space: pre-wrap; overflow-wrap: anywhere;
   }
   .exits button.primary { background: var(--gate); border-color: var(--gate); color: #fff; }
   .soon { margin-top: 7px; font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); }
@@ -164,6 +182,7 @@ export const PAGE = `<!doctype html>
 </div>
 <div id="panel"></div>
 <script>
+const JETON = "__JETON__";
 const DOT = { accepted: "var(--accept)", rejected: "var(--reject)", gate: "var(--gate)", released: "var(--gate)", done: "var(--accept)" };
 const el = (tag, cls, text) => {
   const n = document.createElement(tag);
@@ -180,10 +199,44 @@ const para = (n) => "$" + (n || 0).toFixed(2);
 
 function kapiCikislari(kind) {
   // Üç kapı, üç ayrı çıkış kümesi. Kaçışta "Geçir" YOK: tur tamamlanmadı,
-  // kod sonraki worktree'ye hiç taşınmadı.
-  if (kind === "escalation") return { etiket: "kaçış kapısı", not: "kod taşınmadı", dugmeler: ["Yeniden koş", "Geri gönder"] };
-  if (kind === "deadlock") return { etiket: "kilit kapısı", not: "ret limiti doldu", dugmeler: ["Üretici haklı", "Denetçi haklı"] };
-  return { etiket: "onay kapısı", not: "kod taşındı", dugmeler: ["Geçir", "Geri gönder"] };
+  // kod sonraki worktree'ye hiç taşınmadı ve çekirdek zaten reddeder.
+  if (kind === "escalation") {
+    return { etiket: "kaçış kapısı", not: "kod taşınmadı",
+      dugmeler: [["Yeniden koş", "retry"], ["Geri gönder", "back"]] };
+  }
+  if (kind === "deadlock") {
+    return { etiket: "kilit kapısı", not: "ret limiti doldu",
+      dugmeler: [["Üretici haklı", "forward"], ["Denetçi haklı", "back"]] };
+  }
+  return { etiket: "onay kapısı", not: "kod taşındı",
+    dugmeler: [["Geçir", "forward"], ["Geri gönder", "back"]] };
+}
+
+/**
+ * Kapıyı açar — KOMUT göndererek.
+ *
+ * Ekran kendi kopyasını güncellemiyor: çekirdek kararı uyguluyor, cevaptaki
+ * yeni model çiziliyor. Çekirdek reddederse mesajı aynen gösteriyoruz;
+ * o mesaj gerekçeyi ve çıkış yolunu zaten söylüyor.
+ */
+async function karar(id, secim, dugme, kart) {
+  const kutular = kart.querySelectorAll("button");
+  kutular.forEach((b) => (b.disabled = true));
+  try {
+    const cevap = await fetch("/kart/" + encodeURIComponent(id) + "/birak", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-skein-token": JETON },
+      body: JSON.stringify({ karar: secim }),
+    });
+    const veri = await cevap.json();
+    if (!cevap.ok) throw new Error(veri.hata || cevap.status);
+    ciz(veri.model);
+  } catch (e) {
+    kutular.forEach((b) => (b.disabled = false));
+    const eski = kart.querySelector(".redd");
+    if (eski) eski.remove();
+    kart.append(el("div", "redd", e.message));
+  }
 }
 
 function kartCiz(c) {
@@ -244,14 +297,17 @@ function kartCiz(c) {
 
   if (kapi) {
     const cikis = el("div", "exits");
-    kapi.dugmeler.forEach((ad, i) => {
+    kapi.dugmeler.forEach(([ad, secim], i) => {
       const b = el("button", i === 0 ? "primary" : null, ad);
       b.type = "button";
-      b.disabled = true;
+      b.addEventListener("click", (e) => {
+        // Kartın kendisi de tıklanabilir (detay açar); düğme onu tetiklemesin.
+        e.stopPropagation();
+        void karar(c.id, secim, b, kutu);
+      });
       cikis.append(b);
     });
     kutu.append(cikis);
-    kutu.append(el("div", "soon", "↑ adım 4 — bu düğmeler çekirdeğe komut gönderecek"));
   }
   kutu.tabIndex = 0;
   kutu.setAttribute("role", "button");

@@ -4,7 +4,7 @@ Bu dosya bir sonraki oturumun giriş noktası. Durum ajanın kafasında değil,
 burada ve git'te (PHILOSOPHY 1).
 
 **Dal:** `claude/project-plan-brainstorm-pthvoc`
-**Durum:** 373 test yeşil, typecheck temiz, origin ile senkron.
+**Durum:** 385 test yeşil, typecheck temiz, origin ile senkron.
 **Kod:** 5037 satır (testler hariç).
 **Çizimler:** [kartın yolu](https://claude.ai/code/artifact/185e9279-510a-4544-a20c-831ecf1cdfd3) ·
 [genel bakış](https://claude.ai/code/artifact/2e7575af-84ee-40d8-aab4-5c3bdce0fe50)
@@ -22,8 +22,9 @@ boşalınca ölmüyor, uyuyor — kart açmak işin başlaması demek. Ve ajan
 koşarken attığı her adım (`agent.step`) günlüğe düşüyor, tur bitmeden.
 **Adım 3 de bitti: ekran var.** `npx tsx src/ui/cli.ts <akış>` panoyu açıyor:
 kart × rol, canlı adım, kapı tipleri, ve karta tıklayınca tam iz + diff.
-Yalnızca okur. Sıra **adım 4'te: kapıyı ekrandan açmak** — ilk yazan yüzey
-eylemi, komut olarak.
+**Adım 4 de bitti:** kapı artık ekrandan açılıyor — jetonlu, kapı tipine göre
+doğru çıkışla, kararı `gate.released` olayıyla günlüğe düşürerek. Sıra
+**adım 5'te: akış ve rol düzenleme** (`ARCHITECTURE.md` "Sıra" tablosu).
 
 ---
 
@@ -102,6 +103,7 @@ var.
 | Uzun ömürlü gözcü — uyu/uyan, durdurma | `src/watch/serve.ts` |
 | Canlı adımlar — `stream-json` → `agent.step` | `src/adapters/claude.ts` |
 | Ekran — okuma modeli, yerel sunucu, sayfa | `src/ui/` |
+| Kapı kararı — kartı taşır, kaydı düşer | `src/card/release.ts` |
 | Akan çıktıyı satıra bölme | `src/proc/lines.ts` |
 | Tek yazıcı kilidi — bayat kilidi devralır | `src/watch/lock.ts` |
 | Git katmanı — ileri birleştirme, syncBack, worktree, kirlilik | `src/watch/git.ts` |

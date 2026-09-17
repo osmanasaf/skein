@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { knownProviderSet } from "../adapters/factory.js";
-import { newCard } from "../card/card.js";
+import { newCard, type Card } from "../card/card.js";
 import { CardQueue } from "../card/queue.js";
 import { loadFlow } from "../flow/load.js";
 import { snapshot, type TopologySnapshot } from "../flow/snapshot.js";
@@ -74,8 +74,7 @@ describe("serveUi", () => {
     expect(res.headers.get("cache-control")).toContain("no-store");
   });
 
-  // Bu yüzey OKUR. Yazma adım 4 ve komut olarak gelecek.
-  it("GET dışındaki yöntemleri reddeder", async () => {
+  it("okuma uç noktalarına POST edilemez", async () => {
     const res = await fetch(`${server.url}durum`, { method: "POST" });
     expect(res.status).toBe(405);
   });
@@ -113,5 +112,93 @@ describe("serveUi", () => {
 
   it("varsayılan olarak yalnızca yerel arayüzü dinler", () => {
     expect(server.url).toContain("127.0.0.1");
+  });
+});
+
+describe("serveUi — kapıyı açmak", () => {
+  const birak = (id: string, karar?: string, baslik?: Record<string, string>) =>
+    fetch(`${server.url}kart/${id}/birak`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...(baslik ?? { "x-skein-token": server.token }) },
+      body: JSON.stringify(karar === undefined ? {} : { karar }),
+    });
+
+  async function kapida(): Promise<string> {
+    const card = await queue.add(newCard({ title: "jitter", task: "iş", topology }));
+    const taken = (await queue.take("coder")) as Card;
+    await queue.escalate(taken, "ağaçta işlenmemiş değişiklik var: README.md");
+    return card.id;
+  }
+
+  // Yerel sunucuya yazma eklemek, tarayıcıda açık HERHANGİ bir sitenin
+  // kullanıcının haberi olmadan kapı açabilmesi demek.
+  it("jetonsuz yazma reddedilir", async () => {
+    const id = await kapida();
+
+    const res = await birak(id, "retry", {});
+
+    expect(res.status).toBe(403);
+    // Kart yerinde kaldı: reddedilen bir komut hiçbir şeyi oynatmamalı.
+    expect((await queue.get(id))?.state).toBe("gate");
+  });
+
+  it("yanlış jeton reddedilir", async () => {
+    const id = await kapida();
+    // Jeton hex; başlık değerleri ByteString olmak zorunda.
+    expect((await birak(id, "retry", { "x-skein-token": "deadbeef" })).status).toBe(403);
+  });
+
+  it("başka kaynaktan gelen istek reddedilir", async () => {
+    const id = await kapida();
+    const res = await birak(id, "retry", {
+      "x-skein-token": server.token,
+      origin: "https://kotu-site.example",
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it("jetonla kapıyı açar ve yeni modeli döndürür", async () => {
+    const id = await kapida();
+
+    const res = await birak(id, "retry");
+    const veri = (await res.json()) as { kart: { state: string; role: string }; model: { cards: unknown[] } };
+
+    expect(res.status).toBe(200);
+    expect(veri.kart).toMatchObject({ state: "queued", role: "coder" });
+    // Cevap çekirdeğin ürettiği YENİ durumdan okunuyor, ekranın kopyasından değil.
+    expect(veri.model.cards).toHaveLength(1);
+    expect((await queue.get(id))?.state).toBe("queued");
+  });
+
+  // Çekirdeğin reddi kullanıcıya aynen gitmeli: mesaj gerekçeyi ve çıkış
+  // yolunu zaten söylüyor.
+  it("kaçış kapısından ileri bırakma 409 ve gerekçeyle reddedilir", async () => {
+    const id = await kapida();
+
+    const res = await birak(id, "forward");
+    const veri = (await res.json()) as { hata: string };
+
+    expect(res.status).toBe(409);
+    expect(veri.hata).toContain("kaçış kapısında");
+    expect(veri.hata).toContain("README.md");
+    expect((await queue.get(id))?.state).toBe("gate");
+  });
+
+  it("bilinmeyen karar reddedilir", async () => {
+    const id = await kapida();
+    const res = await birak(id, "sallama");
+    expect(res.status).toBe(409);
+    expect((await queue.get(id))?.state).toBe("gate");
+  });
+
+  it("kapıda olmayan kart 409", async () => {
+    const card = await queue.add(newCard({ title: "x", task: "iş", topology }));
+    expect((await birak(card.id, "retry")).status).toBe(409);
+  });
+
+  it("jeton sayfaya gömülü gelir", async () => {
+    const html = await (await fetch(server.url)).text();
+    expect(html).toContain(server.token);
+    expect(html).not.toContain("__JETON__");
   });
 });

@@ -3,8 +3,9 @@ import { join, resolve } from "node:path";
 import { knownProviderSet } from "../adapters/factory.js";
 import { loadFlow } from "../flow/load.js";
 import { snapshot } from "../flow/snapshot.js";
-import { gateKind, newCard, type Card } from "./card.js";
+import { newCard, type Card } from "./card.js";
 import { CardQueue, QueueError, type ReleaseDecision } from "./queue.js";
+import { releaseCard } from "./release.js";
 import { FlowError } from "../flow/load.js";
 
 const USAGE = `Kullanım:
@@ -183,8 +184,12 @@ async function run(argv: string[], root: string): Promise<number> {
         console.error(`✗ Bilinmeyen karar: ${asked}. Beklenen: forward, back, retry`);
         return 1;
       }
-      const released = await queue.release(card.id, decision === undefined ? {} : { decision });
-      const taken = decision ?? (gateKind(card) === "escalation" ? "retry" : "forward");
+      const { card: released, decision: taken } = await releaseCard(
+        root,
+        queue,
+        card.id,
+        decision,
+      );
       console.log(
         released.state === "done"
           ? `✓ ${released.id} bitti`
