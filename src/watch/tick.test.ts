@@ -104,6 +104,7 @@ beforeEach(async () => {
     adapters: new Map<string, Adapter>([["claude", claude], ["codex", codex]]),
     headCommit: async () => "abc1234",
     dirtyPaths: async () => [],
+    isTracked: async () => false,
     mergeForward: async () => ({ kind: "merged" as const }),
   };
 });
@@ -430,6 +431,38 @@ describe("tick — işlenmemiş iş devredilemez", () => {
     });
 
     expect(ignored).toContain(VERDICT_FILE);
+  });
+});
+
+describe("tick — orkestratörün izi ürüne giremez", () => {
+  // Gerçek koşuda denetçi ajan `.skein-verdict.json`'ı zorla ekleyip
+  // commit'ledi; syncBack onu ana ağaca taşıdı. `.gitignore` yeterli değil.
+  it("verdikt dosyası izleniyorsa kart kapıya çıkar", async () => {
+    await put();
+    claude.answer = writes({ decision: "accept" });
+
+    const result = await tick("coder", { ...options, isTracked: async () => true });
+
+    expect(result.status).toBe("escalated");
+    expect((result as { reason: string }).reason).toContain(VERDICT_FILE);
+    expect((result as { reason: string }).reason).toContain("git rm --cached");
+  });
+
+  it("ret yolunda da yakalanır", async () => {
+    await put();
+    claude.answer = writes({ decision: "accept" });
+    codex.answer = writes({ decision: "reject", reason: "olmadı" });
+
+    await tick("coder", options);
+    const result = await tick("reviewer", { ...options, isTracked: async () => true });
+
+    expect(result.status).toBe("escalated");
+  });
+
+  it("izlenmiyorsa hiçbir şey olmaz", async () => {
+    await put();
+    claude.answer = writes({ decision: "accept" });
+    expect((await tick("coder", options)).status).toBe("accepted");
   });
 });
 

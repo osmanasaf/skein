@@ -135,3 +135,16 @@ export async function addWorktree(
 
   return { kind: "failed", reason: existing.err || fresh.err || "worktree oluşturulamadı" };
 }
+
+/**
+ * Bir yol git tarafından izleniyor mu.
+ *
+ * Orkestratörün kontrol dosyası ürünün geçmişine girmemeli. `.gitignore`'da
+ * olması yetmiyor: gerçek bir koşuda denetçi ajan `.skein-verdict.json`'ı
+ * zorla ekleyip commit'ledi ve `syncBack` onu ana ağaca taşıdı. Yok sayma
+ * kuralı bir tavsiyedir; bu kontrol, ihlalin sessiz kalmamasını sağlar.
+ */
+export async function isTracked(dir: string, path: string): Promise<boolean> {
+  const { ok, out } = await git(dir, ["ls-files", "--cached", "--", path]);
+  return ok && out !== "";
+}

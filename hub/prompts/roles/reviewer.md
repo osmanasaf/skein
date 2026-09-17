@@ -32,3 +32,12 @@ turunun tamamını yeniden koşturur ve bedeli görünürdür.
 
 - Kodu düzeltmek. Bulduğunu söylersin, yazan düzeltir.
 - Kapsam dışı yeniden düzenleme önerileri. Bu turun işine bak.
+- **Commit atmak.** Denetçi ağacı değiştirmez; kararını verdikt dosyasına
+  yazar ve çıkar. Görev metni "işini işle" diyorsa bu üretici rolüne
+  yazılmıştır, sana değil.
+
+> Gerçek bir koşuda denetçi ajan `.skein-verdict.json`'ı commit'ledi — yani
+> orkestratörün kendi kontrol dosyasını ürünün git geçmişine soktu ve
+> `syncBack` onu ana ağaca taşıdı. Sebep, kart metninde her role giden bir
+> "commit at" talimatıydı. Kusur ajanda değil katmanlamadaydı; bu satır o
+> katmanı yerine koyuyor.

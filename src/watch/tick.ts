@@ -7,9 +7,9 @@ import type { CardQueue } from "../card/queue.js";
 import type { EventLog } from "../events/log.js";
 import { DONE, promptLayers, roleOf, type SnapshotRole } from "../flow/snapshot.js";
 import { assemblePrompt } from "../prompt/assemble.js";
-import { dirtyPaths, head, mergeForward, ORCHESTRATOR_PATHS } from "./git.js";
+import { dirtyPaths, head, isTracked, mergeForward, ORCHESTRATOR_PATHS } from "./git.js";
 import { buildTaskText } from "./task-text.js";
-import { clearVerdict, readVerdict } from "./verdict.js";
+import { clearVerdict, readVerdict, VERDICT_FILE } from "./verdict.js";
 import { resolveWorkspace } from "./workspace.js";
 
 /** Bir turun sonucu. `idle` dışında her biri kartı hareket ettirmiştir. */
@@ -32,6 +32,8 @@ export interface TickOptions {
   dirtyPaths?: (workdir: string, ignore: string[]) => Promise<string[]>;
   /** Test edilebilirlik için; varsayılan gerçek git birleştirmesi. */
   mergeForward?: typeof mergeForward;
+  /** Test edilebilirlik için; varsayılan `git ls-files --cached`. */
+  isTracked?: (workdir: string, path: string) => Promise<boolean>;
 }
 
 const DEFAULT_TIMEOUT_MS = 20 * 60 * 1000;
@@ -149,6 +151,20 @@ async function runRole(card: Card, role: SnapshotRole, options: TickOptions): Pr
   }
   if (verdict.kind === "invalid") {
     const reason = `Verdikt geçersiz: ${verdict.problem}${agentSaid(result)}`;
+    return { status: "escalated", card: await queue.escalate(card, reason), reason };
+  }
+
+  // Orkestratörün kontrol dosyası ürünün geçmişine giremez.
+  //
+  // `.gitignore`'da olması yetmedi: gerçek bir koşuda denetçi ajan onu zorla
+  // ekleyip commit'ledi ve `syncBack` ana ağaca taşıdı. Kök sebep kart
+  // metnindeki "işini işle" talimatının her role gitmesiydi — o katmanlama
+  // düzeltildi, ama kural artık mekanik olarak da duruyor.
+  if (await (options.isTracked ?? isTracked)(workdir, VERDICT_FILE)) {
+    const reason =
+      `\`${VERDICT_FILE}\` git tarafından izleniyor. Orkestratörün kontrol ` +
+      `dosyası ürünün geçmişine giremez.\n  Düzeltmek için: ` +
+      `git rm --cached ${VERDICT_FILE} && git commit -m "orkestratör izini kaldır"`;
     return { status: "escalated", card: await queue.escalate(card, reason), reason };
   }
 

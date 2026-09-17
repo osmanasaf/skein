@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { capture } from "../proc/process.js";
-import { addWorktree, currentBranch, dirtyPaths, head, mergeForward, ORCHESTRATOR_PATHS } from "./git.js";
+import { addWorktree, currentBranch, dirtyPaths, head, isTracked, mergeForward, ORCHESTRATOR_PATHS } from "./git.js";
 
 let root: string;
 let main: string;
@@ -138,6 +138,28 @@ async function readFileText(path: string): Promise<string> {
   const { readFile } = await import("node:fs/promises");
   return readFile(path, "utf8");
 }
+
+describe("isTracked", () => {
+  it("izlenen dosyayı bulur", async () => {
+    await commit(main, "var.ts", "a\n", "ekle");
+    expect(await isTracked(main, "var.ts")).toBe(true);
+  });
+
+  it("izlenmeyen dosya için false", async () => {
+    await writeFile(join(main, ".skein-verdict.json"), "{}");
+    expect(await isTracked(main, ".skein-verdict.json")).toBe(false);
+  });
+
+  // `.gitignore` bir tavsiye; zorla eklenen dosya yine de izlenir.
+  it("yok sayılan ama zorla eklenmiş dosyayı yakalar", async () => {
+    await writeFile(join(main, ".gitignore"), ".skein-verdict.json\n");
+    await writeFile(join(main, ".skein-verdict.json"), "{}");
+    await git(main, "add", "-f", ".skein-verdict.json");
+    await git(main, "commit", "-qm", "zorla");
+
+    expect(await isTracked(main, ".skein-verdict.json")).toBe(true);
+  });
+});
 
 describe("addWorktree", () => {
   it("yeni worktree'yi skein/ ad alanında bir dalla oluşturur", async () => {

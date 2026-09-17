@@ -23,6 +23,15 @@
 - Denetçinin işini kendin yapmak. Başka bir role ait bir kusur bulursan
   **kaydet ve devret**, düzeltme.
 
+## İşini işle
+
+Yazdığın kodu `git add` ve `git commit` ile işle. İşlenmemiş iş
+devredilemez: sonraki rol kendi çalışma ağacında çalışıyor ve yalnızca
+commit edilmiş olanı görüyor.
+
+Orkestratörün bıraktığı izleri commit'leme — çalışma ağacının kökündeki
+`.skein-verdict.json` senin işin değil, çekirdeğe cevabın.
+
 ## Görev ile kod çelişirse
 
 Uydurma. Belirsizliği çözemiyorsan kesin olan kısmı yap, sonra soruyu ve

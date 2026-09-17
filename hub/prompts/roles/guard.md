@@ -22,3 +22,7 @@ olduğu için iş, sana göndereni değil, kodu yazanı bulmalı — akış bunu
 
 Stil tercihi, isim beğenmemek ya da "daha iyi olabilirdi" ret sebebi değil.
 Somut bir başarısızlık senaryosu yazamıyorsan, kusur değildir.
+
+## Sahiplenmediğin
+
+- Kodu düzeltmek ve **commit atmak**. Bakarsın, karar verirsin, çıkarsın.
