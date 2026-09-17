@@ -155,8 +155,23 @@ Sonucu gördükten sonra eşik belirlemek, deneyi süse çevirir. Şimdiden:
 bench/tasks/<id>/
   task.yaml          # kimlik + gizli test komutu
   spec.md            # üreticinin göreceği TEK dosya
+  seed/              # opsiyonel: mevcut kod — üretimden ÖNCE konur
   hidden/            # gizli testler — üretici asla görmez
+    reference/       # referans çözüm — kancaların karşılanabilirlik kanıtı
 ```
+
+`seed/` varsa içeriği artefakt dizinine **üretim başlamadan** kopyalanır
+ve görev metni ajana orada ne bulacağını söyler. Gizli testler hâlâ
+üretim **bittikten sonra** kopyalanır; iki kopyanın sırası deneyin
+geçerlilik koşuludur: ajan dokunacağı kodu görmeli, ölçen testi
+görmemeli.
+
+`hidden/reference/` bir referans çözümdür ve `hidden/` altında durduğu
+için üretici onu da hiç görmez. `npm run bench -- selftest` kancaları bu
+çözüme karşı koşar ve hepsinin yeşile döndüğünü doğrular. Doğru bir
+çözümle de kırmızı kalan kanca kusur değil **bozuk test** ölçüyordur: her
+hücrede kırmızı çıkar, "kaçırma" metriğini şişirir ve hiçbir üreticiyle
+ilgisi yoktur. Ajan çağrılmadığı için bu doğrulama bedavadır.
 
 ```yaml
 id: retry-backoff        # dizin adıyla birebir aynı olmalı
@@ -353,6 +368,168 @@ ilkesini bırakmak demektir — ve o ilke tezin kör nokta iddiasının taşıy�
 
 Karar verilmedi; kayda geçti.
 
+## Üç yeni görev sınıfı — ve frontier modelin duvarı
+
+Bir önceki bölüm darboğazı "görev yazımının değil ölçeğin sorunu olabilir"
+diye bırakmıştı ve üç aday yön saymıştı. Üçü de birer göreve çevrildi,
+her biri ayrı bir hipotezi sınıyor:
+
+| Görev | Sınıf | Hipotez |
+|---|---|---|
+| `async-pool` | eşzamanlılık | Kusur, tek bir çağrının içinde değil çağrıların *arasında* doğar: tembel başlatma, hata sonrası iptal, senkron fırlatan thunk. |
+| `snapshot-store` | mevcut koda dokunmak | Kusur, yazılanda değil *bozulanda*: verilen kodun örtük sözleşmeleri (sürüm tekilliği, anlık görüntü kimliği) görev metninde yazmıyor, kodda yaşıyor. |
+| `csv-roundtrip` | sessiz kenar durumu | Değişmez yazılı (`parse(serialize(rows)) === rows`), onu bozan girdiler yazılı değil. Model türetecek mi? |
+
+`snapshot-store` için görev formatına `seed/` eklendi: üretimden önce
+artefakt dizinine konan mevcut kod. Görev metni yalnızca "geri alma ekle"
+diyor; korunması gereken sözleşmeler `seed/src/selector.ts` içinde
+yaşıyor — sürüme göre önbellekleyen bir sayaç ve bir önceki anlık
+görüntüyü elinde tutan bir fark izleyici. Yer gerçeği nesnel kalıyor
+(teslim edilen değişiklik *mevcut, görünür* kodu bozuyor) ama bilgi
+görev metninde hiç geçmiyor. "Elle tohumlanmış hata işe yaramaz" kuralı
+korunuyor: tohumlanan hata değil, bağlam.
+
+### Kancaların sağlamlığı artık kanıtlanıyor
+
+Görev sayısı arttıkça sessiz bir hata sınıfı büyüyor: **doğru bir çözümle
+de kırmızı kalan kanca.** Böyle bir kanca her hücrede kırmızı çıkar,
+kaçırma metriğini şişirir ve hiçbir üreticiyle ilgisi yoktur — yani
+deneyi, kimsenin fark etmeyeceği bir yerden bozar.
+
+Her göreve `hidden/reference/` altında bir referans çözüm kondu ve
+`selftest` komutu kancaları ona karşı koşuyor. Beş görevin beşi geçiyor
+(9 + 12 + 14 + 16 + 18 = 69 kanca). Ajan çağrılmadığı için bedava.
+
+### Kalibrasyon: `claude-opus-5` üçünü de temiz çözdü
+
+| Görev | Kanca | Tur 1 | Tur 2 | Maliyet |
+|---|---:|---|---|---:|
+| `async-pool` | 12 | 12/12 yeşil | 12/12 yeşil | $0.17 |
+| `snapshot-store` | 16 | 14/14 yeşil | 16/16 yeşil | $0.33 – $0.47 |
+| `csv-roundtrip` | 18 | 18/18 yeşil | 18/18 yeşil | $0.24 – $0.26 |
+
+İki tur arasında görev metinleri **sadeleştirildi**. İlk turdan sonra
+şöyle bir açıklama yazmıştım: görev metni kusuru önceden söylüyor, yani
+denetimi görev yazarı zaten yapmış. `snapshot-store` spec'inde
+"Korunması gereken değişmezler" diye bir bölüm vardı ve sürüm
+tekilliğini açıkça sayıyordu; `csv-roundtrip` "virgül, tırnak, satır
+sonu, boşluk, boş dize" diye zor girdileri tek tek yazıyordu;
+`async-pool` "görevler baştan hepsi birden başlatılmaz" diyordu. Üçü de
+kaldırıldı.
+
+**Açıklama tutmadı.** Sadeleşmiş metinlerle de üçü de temiz çıktı. İlk
+tur beş dakikada yazılmış bir hipotezdi ve ikinci tur onu eledi; kayda
+geçiyor çünkü aynı açıklamaya tekrar sarılmanın bedeli bir tur daha.
+
+### Kalibrasyon: `claude-haiku-4-5` kusur üretti — hem de tasarlanan kusuru
+
+| Görev | Sonuç | Maliyet |
+|---|---|---:|
+| `snapshot-store` | **14/16**, 2 kırmızı | $0.0431 |
+| `csv-roundtrip` | **17/18**, 1 kırmızı | $0.1290 |
+| `async-pool` | **10/12**, 2 kırmızı | $0.0931 |
+
+```
+snapshot-store
+  ✗ version geri gitmez
+  ✗ version hiçbir zaman tekrar etmez
+
+csv-roundtrip
+  ✗ gidiş-dönüş: tek boş alanlı tek satır
+
+async-pool
+  ✗ bir görev reddederse O hatayla reddeder
+  ✗ bir görev reddettikten sonra yeni görev başlatmaz
+```
+
+Üçü de **önceden tarif edilmiş** kusurlar — kancalar tahmin üzerine
+yazılmıştı ve tahmin tuttu:
+
+- `snapshot-store`: geri alma, geçmişi baştan oynatarak yapıldı — kısa ve
+  ilk bakışta doğru — ama `apply` her çağrıda `version`ı kendi artırdığı
+  için sürüm geriye düştü ve daha önce kullanılmış bir değeri tekrar etti.
+  Sürüme göre önbellekleyen mevcut tüketici o noktadan sonra bayat veri
+  gösterir. Görev metni bu sözleşmeden hiç söz etmiyor;
+  `seed/src/selector.ts` içinde yazıyor. **Örtük sözleşme hipotezi
+  çalıştı.**
+- `csv-roundtrip`: `serialize([[""]])` boş metin üretir, dolayısıyla
+  değişmez `parse("")`ın `[[""]]` dönmesini zorunlu kılar. Bu, görev
+  metninde hiç geçmeyen ama değişmezden **türetilebilen** tek sonuç ve
+  model onu türetmedi. **Sessiz kenar durumu hipotezi çalıştı.**
+- `async-pool`: hata yolunda iki kusur birden — reddeden görevin hatası
+  yerine başka bir hata yüzeye çıktı ve ilk hatadan sonra kuyruk
+  beslenmeye devam etti. İkisi de tek bir çağrının içinde değil,
+  çağrıların arasında yaşayan kusurlar. **Eşzamanlılık hipotezi
+  çalıştı.**
+
+**Bu, iki görev sınıfının da çalıştığının ilk kanıtı.** Aynı iki görev,
+`claude-opus-5` tarafında ikişer koşuda da temiz. Yani görevler bozuk
+değil, `claude-opus-5` için kolay.
+
+### Üçüncü görev ölçülemedi — ve sebebi bir tuzaktı
+
+`async-pool` × `claude-haiku-4-5` iki koşuda da **ÖLÇÜLEMEDİ** verdi:
+hücrenin artefakt dizini boştu. "Ajan hiçbir dosya yazmadı" teşhisi
+doğruydu ama eksikti — dosya yazılmıştı, sadece başka yere: ajan çalışma
+dizininden yukarı çıkıp **deponun kendi `src/` dizinini** bulmuş ve
+çözümü oraya yazmıştı. İki koşuda da aynı yere.
+
+İki ayrı zarar:
+
+1. Hücre boş kaldığı için koşu ölçümsüz göründü ve parası boşa gitti.
+2. Ajanın ürettiği dosya operatörün deposuna düştü ve orada kaldı.
+   İkincisi daha ciddi: `.skein/runs/` `git` tarafından yok sayılıyor,
+   ama `src/` sayılmıyor.
+
+Sebep muhtemelen araç listesi: ajana `Glob` ve `Grep` verilmişti, yani
+dizin ağacında yukarı bakabiliyordu. `claude-opus-5` aynı araçlarla altı
+koşuda bir kez bile çıkmadı; bu bir kural değil, model davranışı.
+
+Teşhis artık bunu açıkça söylüyor: üretim bittiğinde istenen dosya depo
+kökünde belirmişse `ÖLÇÜLEMEDİ` satırı "ajan hücresinin DIŞINA yazdı"
+der ve yolu verir. Damga karşılaştırması ile: aynı adlı bir dosya depoda
+zaten duruyorsa ona "ajan yazdı" denmez.
+
+Araç listesi `Read,Write,Edit` ile kısıtlanınca aynı koşu kaçmadı ve
+ölçüm verdi (yukarıdaki tabloda `async-pool` satırı). Üretim için bu üç
+araç yetiyor: seed dosyalarının listesi zaten görev metninde.
+
+**Kaçan dosyanın içeriği ayrıca bir veri:** `export function runPool` —
+`async` değil. Yani `limit < 1` kontrolü `RangeError`'ı senkron
+fırlatıyor, oysa imza `Promise<T[]>` taahhüt ediyor. Bu, `retry-backoff`
+ölçümlerinde bulunan kusurun birebir aynısı ve `async-pool`'un
+kancalarından biri onu bekliyor. Yani üçüncü görev de kusur üretiyordu;
+yalnızca hücrenin dışında ürettiği için sayılamıyordu.
+
+### Ne demiyoruz
+
+- **k=1.** Bu bölümdeki her hücre tek koşu. DESIGN'ın kendi kuralı k≥3
+  diyor; buradaki sayılar kalibrasyon sinyali, sonuç değil.
+- **"Frontier model kusur üretmiyor" değil.** Beş görevde temiz çıkması,
+  bu beş görevin `claude-opus-5` için kolay olduğunu söyler. Kusurun
+  hangi ölçekte başladığı hâlâ bilinmiyor.
+- **Kusur üretilmesi ile kusurun denetimde yakalanması ayrı şeyler.**
+  Bu bölüm yalnızca birincisini ölçtü.
+
+### Bunun deney için sonucu
+
+Ölçüm gücü olan bir 2x2, üreticinin kusur ürettiği bir hücre gerektiriyor.
+Elde artık üç tane var: üç yeni görevin üçü de `claude-haiku-4-5`
+üreticisiyle kusur üretiyor (k=1).
+Üç yol açık, ve üçü de aynı anda denenebilir:
+
+1. **2x2'yi haiku sınıfında koşmak.** Bugün mümkün, ucuz (üretim ~$0.04)
+   ve ölçüm gücü var. Sonuç "bu güç sınıfındaki modellerde" der.
+2. **Görevleri büyütmek.** `snapshot-store` dört dosya; on dosyalık, iki
+   modülün etkileşimini içeren bir görev frontier modelde de kusur
+   üretebilir. Pahalı ve yazması yavaş.
+3. **Üretici sayısını artırmak.** k=3 ile `claude-sonnet-5` de denenmeli;
+   haiku ile opus arasındaki eşiğin nerede olduğu bilinmiyor.
+
+Sıralama önemli: (1) bugün bir cevap verir, (2) daha genel bir cevap
+verir. Birinciyi koşmadan ikinciye yatırım yapmak, ölçüm takımının
+çalıştığını hiç görmeden görev yazmak demek.
+
 ## Durum
 
 - [x] Tasarım — 2×2 çapraz kurgu, iki katmanlı yer gerçeği, karar kuralı
@@ -366,9 +543,12 @@ Karar verilmedi; kayda geçti.
 - [x] Olay günlüğü — yalnızca-ekleme JSONL, katı doğrulama, özet görünümü
 - [x] Audit gate — parmak izi, kilitli durum, tur sayacı, üst sınır
 - [ ] Tur başına artefakt anlık görüntüsü (yukarıdaki boşluk)
-- [ ] Görev zorluk kalibrasyonu — `retry-backoff` tek üreticide geçti,
-      ikinci üretici bekliyor
+- [x] Kanca sağlamlığı — `hidden/reference/` + `selftest`, 5/5 görev geçiyor
+- [x] Görev formatında `seed/` — mevcut koda dokunan görev sınıfı
+- [ ] Görev zorluk kalibrasyonu — `snapshot-store` × `claude-haiku-4-5`
+      kusur üretiyor (k=1); `claude-opus-5` beş görevde de temiz
 - [x] Denetim koşucusu (aynı artefakt → iki denetçi), 2x2 orkestrasyonu
 - [ ] Hakem katmanı (körlenmiş puanlama)
-- [ ] Kalan 11 görev — **darboğaz burası**: kusuru güvenilir üreten kalibre görevler
+- [ ] Kalan görevler — darboğaz hâlâ burası, ama artık daha dar: elde
+      ölçüm gücü olan bir hücre var (`snapshot-store` × haiku)
 - [ ] Rapor: hücre tablosu + etkileşim terimi

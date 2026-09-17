@@ -55,7 +55,20 @@ export interface MatrixOutcome {
  * "Süit koşmadı" üç ayrı sebebi gizler: ajan hiç yazmamıştır, yanlış yere
  * yazmıştır, ya da derlenmeyen kod yazmıştır. Üçü farklı düzeltme gerektirir.
  */
-export function diagnose(entryWritten: boolean, filesWritten: string[], entry: string): string {
+export function diagnose(
+  entryWritten: boolean,
+  filesWritten: string[],
+  entry: string,
+  escapedTo?: string,
+): string {
+  // Kaçış önce söylenir: "hiçbir dosya yazmadı" teşhisi doğru ama eksik ve
+  // operatörü yanlış yere bakmaya gönderir — asıl haber, dosyanın DEPOSUNA
+  // düşmüş olması.
+  if (escapedTo !== undefined) {
+    return `ajan hücresinin DIŞINA yazdı: ${escapedTo}. ` +
+      `Çözümü oraya yazdığı için hücre boş kaldı ve dosya deponun içinde duruyor — sil. ` +
+      `Ajana Glob/Grep verilmişse çalışma dizininden yukarı çıkabiliyor.`;
+  }
   if (filesWritten.length === 0) {
     return "ajan HİÇBİR dosya yazmadı (izin reddedilmiş ya da çağrı boşa dönmüş olabilir)";
   }
@@ -87,7 +100,7 @@ export async function runMatrix(options: MatrixOptions): Promise<MatrixOutcome> 
     const p = await produce({
       task, adapter, cellDir,
       layers: [{ name: "produce", path: join(repo, "bench/prompts/produce.md") }],
-      timeoutMs,
+      timeoutMs, repo,
     });
     await log.append({
       type: "agent.started", cell: rel(cellDir), role: "uretici",
@@ -107,7 +120,7 @@ export async function runMatrix(options: MatrixOptions): Promise<MatrixOutcome> 
       console.log(`  ${h.hooks.length - h.red.length}/${h.hooks.length} yeşil` +
         (h.red.length > 0 ? ` — kanıtlanmış kusur: ${h.red.join(", ")}` : " — kusur yok"));
     } else {
-      console.log(`  ÖLÇÜLEMEDİ — ${diagnose(p.entryWritten, p.filesWritten, task.entry)}`);
+      console.log(`  ÖLÇÜLEMEDİ — ${diagnose(p.entryWritten, p.filesWritten, task.entry, p.escapedTo)}`);
       console.log(`    ajan çıktısı (son 200): ${tail(p.invoke.stdout || p.invoke.stderr)}`);
     }
 

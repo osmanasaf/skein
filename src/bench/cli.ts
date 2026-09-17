@@ -91,7 +91,7 @@ async function run(taskId: string, provider: string, model: string, audit: boole
   const p = await produce({
     task, adapter, cellDir,
     layers: [{ name: "produce", path: join(REPO, "bench/prompts/produce.md") }],
-    timeoutMs: 10 * 60_000,
+    timeoutMs: 10 * 60_000, repo: REPO,
   });
   await log.append({
     type: "agent.started", cell: rel(cellDir), role: "uretici",
@@ -146,7 +146,7 @@ async function run(taskId: string, provider: string, model: string, audit: boole
   await log.append({ type: "hooks.measured", cell: rel(cellDir), ran: h.ran, total: h.hooks.length, red: h.red });
 
   if (!h.ran) {
-    console.error(`  ÖLÇÜLEMEDİ — ${diagnose(p.entryWritten, p.filesWritten, task.entry)}`);
+    console.error(`  ÖLÇÜLEMEDİ — ${diagnose(p.entryWritten, p.filesWritten, task.entry, p.escapedTo)}`);
     console.error("  Bu 'sıfır kırmızı' DEĞİLDİR.");
     console.error((h.stderr || h.raw).slice(0, 600));
     process.exit(1);

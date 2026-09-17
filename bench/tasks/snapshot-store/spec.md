@@ -17,22 +17,10 @@ undo(): boolean;
 - Geçmiş boşken `undo()` hiçbir şey yapmaz: abone çağrılmaz, durum değişmez.
 - Geri alma sonrası `dispatch` normal çalışmaya devam eder.
 
-## Korunması gereken değişmezler
-
-Bunlar mevcut kodun dayandığı sözleşmelerdir; `undo` sonrası da geçerli
-olmalıdır.
-
-- **`version` asla geri gitmez ve asla tekrar etmez.** Durumun her yeni
-  hâli, daha önce kullanılmamış ve bir öncekinden büyük bir `version`
-  taşır. Aboneler iki bildirimi bu sayıyla ayırt ediyor.
-- **Dışarı verilmiş bir anlık görüntü geçmişe dönük değişmez.**
-  `getSnapshot()` ile alınmış bir `State`, sonraki bir `dispatch` ya da
-  `undo` sonrasında da ilk alındığı andaki değeri taşır — içindeki
-  `items` dizisi dahil.
-- **`apply` saftır.** Girdisini değiştirmez. Bu dosyaya dokunma.
-
 ## Kısıtlar
 
+- Mevcut kodun dayandığı sözleşmeleri bozma. Bu dosyanın genel API'si
+  (`getSnapshot`, `history`, `dispatch`, `subscribe`) ve onu kullanan
+  diğer modüller aynı şekilde çalışmaya devam etmeli.
+- `src/apply.ts` ve `src/state.ts` dosyalarına dokunma.
 - Bağımlılık ekleme; yalnızca standart kütüphane.
-- Mevcut genel API (`getSnapshot`, `history`, `dispatch`, `subscribe`)
-  davranışını koru.

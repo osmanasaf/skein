@@ -3,6 +3,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { Store } from "../artifact/src/store.js";
 import { apply } from "../artifact/src/apply.js";
+import { createBitmemisSayaci, createDegisimIzleyici } from "../artifact/src/selector.js";
 import { BOS, type State } from "../artifact/src/state.js";
 
 /** İki olay uygulanmış bir mağaza. */
@@ -86,8 +87,6 @@ describe("Store.undo", () => {
   });
 
   // Aynı kusurun ikinci yüzü: yeniden oynatma `version`ı tekrar ettirir.
-  // İki farklı durum aynı sürümü taşıyınca, sürüme göre önbellekleyen her
-  // abone bayat veri gösterir.
   it("version hiçbir zaman tekrar etmez", () => {
     const s = new Store();
     const gorulen: number[] = [];
@@ -98,6 +97,33 @@ describe("Store.undo", () => {
     s.dispatch({ kind: "ekle", id: "c", label: "C" });
     s.undo();
     expect(new Set(gorulen).size).toBe(gorulen.length);
+  });
+
+  // Sürümün tekilliği süs değil: mevcut `selector.ts` hesabı sürüme göre
+  // önbelleğe alıyor. Tekrar eden bir sürüm, önbelleği bayat veri üzerinde
+  // kilitler ve ekran yanlış sayı gösterir.
+  it("mevcut sürüm önbellekli sayaç geri almadan sonra doğru sayar", () => {
+    const s = new Store();
+    const say = createBitmemisSayaci();
+    s.dispatch({ kind: "ekle", id: "a", label: "A" });
+    expect(say(s.getSnapshot())).toBe(1);
+    s.dispatch({ kind: "ekle", id: "b", label: "B" });
+    expect(say(s.getSnapshot())).toBe(2);
+    s.undo();
+    expect(say(s.getSnapshot())).toBe(1);
+  });
+
+  // İkinci mevcut tüketici: bir önceki anlık görüntüyü elinde tutuyor.
+  // Durum yerinde değiştirilirse elindeki "önceki" de değişir ve fark
+  // hesabı boş çıkar.
+  it("mevcut değişim izleyici geri alınan öğeyi çıkan olarak görür", () => {
+    const s = new Store();
+    s.dispatch({ kind: "ekle", id: "a", label: "A" });
+    const izle = createDegisimIzleyici(s.getSnapshot());
+    s.dispatch({ kind: "ekle", id: "b", label: "B" });
+    expect(izle(s.getSnapshot()).eklenen.map((i) => i.id)).toEqual(["b"]);
+    s.undo();
+    expect(izle(s.getSnapshot()).cikan.map((i) => i.id)).toEqual(["b"]);
   });
 
   // Klasik kusur: durumu yerinde değiştirmek (items.pop, splice). Test

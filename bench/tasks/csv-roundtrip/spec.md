@@ -15,8 +15,6 @@ export declare function serialize(rows: readonly (readonly string[])[]): string;
   virgül ve satır sonu düz karakterdir, ayraç değildir.
 - Tırnaklı alanın içinde iki ardışık çift tırnak (`""`) tek bir çift
   tırnak karakteri demektir; alanı sonlandıran tırnak tek olandır.
-- Alanlar kırpılmaz: yazılan boşluk okunan boşluktur.
-- `parse` her zaman en az bir satır döndürür.
 
 ## Değişmez — tek ölçüt bu
 
@@ -27,9 +25,7 @@ herhangi bir dize matrisi olmak üzere:
 parse(serialize(rows))   derinlemesine eşittir   rows
 ```
 
-Bu **her** `rows` için geçerli olmalıdır. Alanların içinde ne olduğunun
-bir önemi yok: virgül, tırnak, satır sonu, boşluk, boş dize — hepsi
-kendisi olarak geri gelmeli.
+Bu **her** `rows` için geçerli olmalıdır.
 
 `serialize`'ın hangi alanı tırnaklayacağına ve neyi nasıl kaçıracağına
 sen karar ver; ölçüt yukarıdaki eşitliktir.

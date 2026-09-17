@@ -15,4 +15,14 @@ describe("diagnose", () => {
   it("doğru dosya yazıldıysa derleme sorununa işaret eder", () => {
     expect(diagnose(true, ["src/x.ts"], "src/x.ts")).toMatch(/derlenmiyor/);
   });
+
+  // Gerçek bir koşuda oldu: ajan yukarı çıkıp deponun kendi src/ dizinine
+  // yazdı. "Hiçbir dosya yazmadı" teşhisi doğru ama operatörü yanlış yere
+  // bakmaya gönderiyordu — ve dosya deponun içinde duruyordu.
+  it("hücre dışına yazmayı önce ve açıkça söyler", () => {
+    const msg = diagnose(false, [], "src/x.ts", "/repo/src/x.ts");
+    expect(msg).toMatch(/DIŞINA/);
+    expect(msg).toContain("/repo/src/x.ts");
+    expect(msg).not.toMatch(/HİÇBİR dosya/);
+  });
 });

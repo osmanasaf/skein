@@ -282,6 +282,41 @@ Aynı doğrulamayı claude için de yapabilirsin:
 npm run bench -- doctor claude:claude-opus-5
 ```
 
+### Kancalar sağlam mı (ajan çağırmaz, para harcamaz)
+
+```powershell
+npm run bench -- selftest
+```
+
+Her görevin gizli kancalarını, `hidden/reference/` altındaki referans
+çözüme karşı koşar. Doğru bir çözümle de kırmızı kalan bir kanca kusur
+değil **bozuk test** ölçüyordur — ve her hücrede kırmızı çıkıp "kaçırma"
+metriğini sessizce şişirir. Görev seti büyürken ilk koşulacak komut bu.
+
+Tek görev için: `npm run bench -- selftest async-pool`
+
+### İzin modu (root altında koşuyorsan)
+
+Sağlayıcı CLI'ı varsayılan `bypassPermissions`'ı root altında reddediyor
+(tek satırlık stderr, exit 1). Ortamdan geç:
+
+```bash
+export SKEIN_PERMISSION_MODE=acceptEdits
+export SKEIN_ALLOWED_TOOLS="Read,Write,Edit,Glob,Grep"
+```
+
+Her koşu kullandığı izin modunu ekrana basar. Otomatik geri düşmüyor:
+izin modu ajanın neye dokunabildiğini belirliyor ve koşular arasında
+sessizce değişmesi karşılaştırmayı fark edilmeden bozar.
+
+**Üreticiye `Glob`/`Grep` verme.** Gerçek bir koşuda `claude-haiku-4-5`
+çalışma dizininden yukarı çıktı, deponun kendi `src/` dizinini buldu ve
+çözümü oraya yazdı — iki koşuda da. Hücre boş kaldığı için koşu
+`ÖLÇÜLEMEDİ` göründü ve dosya deponun içinde kaldı (`.skein/runs/`
+yok sayılıyor, `src/` sayılmıyor). Üretim için `Read,Write,Edit` yetiyor:
+seed dosyalarının listesi zaten görev metninde. Koşu artık bu durumu
+yakalayıp dosyanın yolunu söylüyor, ama en iyi tuzak kurulmayandır.
+
 ## Koşular
 
 ### Tek üretici + gizli testler
@@ -320,12 +355,20 @@ Kabaca, `retry-backoff` için:
 
 | Koşu | Yaklaşık |
 |---|---|
-| Tek üretim | $0.06 |
+| Tek üretim (`retry-backoff`, ilk ölçümler) | $0.06 |
+| Tek üretim (yeni görevler, `claude-opus-5`) | $0.17 – $0.47 |
 | Audit gate'li üretim | $0.32 – $0.70 |
 | 2x2 matris (2 üretim + 4 denetim) | $0.93 |
 
 Deney koşuları gerçek para harcar. `--audit` özellikle pahalı: denetim
 turları üretimin kendisinden ~9 kat pahalıya çıktı.
+
+Üretim maliyeti göreve göre 3-8 kat değişiyor: `retry-backoff` tek
+fonksiyon, `snapshot-store` dört dosyalık bir dizini okutuyor. Bir
+çağrının tabanı da sanıldığından yüksek — "2+2" soran bir `doctor`
+çağrısı bile `claude-haiku-4-5` üzerinde $0.06 tuttu, çünkü CLI'ın kendi
+sistem promptu her çağrıda önbelleğe yazılıyor. Koşu sayısını tahmin
+ederken çarpan bu taban.
 
 ## Windows notu
 

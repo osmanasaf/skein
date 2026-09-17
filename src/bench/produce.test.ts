@@ -157,3 +157,48 @@ describe("produce — seed/", () => {
     expect(hiddenVisibleAtInvoke).toBe(false);
   });
 });
+
+describe("produce — hücre dışına kaçış", () => {
+  it("istenen dosya depo kökünde belirirse yolunu bildirir", async () => {
+    const cell = join(root, "hucre");
+    const r = await produce({
+      task: await loadTask(join(root, "gorev")),
+      adapter: {
+        id: "sahte", model: "m",
+        async invoke() {
+          // Ajanın çalışma dizininden yukarı çıkıp depoya yazması.
+          await mkdir(join(root, "src"), { recursive: true });
+          await writeFile(join(root, "src", "x.ts"), "export const a = 1;\n");
+          return { exitCode: 0, stdout: "", stderr: "", durationMs: 1 };
+        },
+      },
+      cellDir: cell,
+      layers: [{ name: "produce", path: join(root, "produce.md") }],
+      timeoutMs: 1000,
+      repo: root,
+    });
+    expect(r.entryWritten).toBe(false);
+    expect(r.escapedTo).toBe(join(root, "src", "x.ts"));
+  });
+
+  it("dosya hücrede yazıldıysa kaçış aramaz", async () => {
+    const cell = join(root, "hucre");
+    const r = await produce({
+      task: await loadTask(join(root, "gorev")),
+      adapter: {
+        id: "sahte", model: "m",
+        async invoke(req) {
+          await mkdir(join(req.workdir, "src"), { recursive: true });
+          await writeFile(join(req.workdir, "src", "x.ts"), "export const a = 1;\n");
+          return { exitCode: 0, stdout: "", stderr: "", durationMs: 1 };
+        },
+      },
+      cellDir: cell,
+      layers: [{ name: "produce", path: join(root, "produce.md") }],
+      timeoutMs: 1000,
+      repo: root,
+    });
+    expect(r.entryWritten).toBe(true);
+    expect(r.escapedTo).toBeUndefined();
+  });
+});
