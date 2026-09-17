@@ -1,85 +1,137 @@
-# Devir Teslim — 2026-09-12
+# Devir Teslim — 2026-09-17
 
 Bu dosya bir sonraki oturumun giriş noktası. Durum ajanın kafasında değil,
 burada ve git'te (PHILOSOPHY 1).
 
-**Dal:** `claude/project-plan-brainstorm-pthvoc` · **HEAD:** `bb5b66f`
-**Durum:** 138 test yeşil, typecheck temiz, origin ile senkron.
-**Genel bakış sayfası:** https://claude.ai/code/artifact/2e7575af-84ee-40d8-aab4-5c3bdce0fe50
-
-> 7 Eylül'den bu yana repoda değişiklik yok. Aşağıdaki "sıradaki adım" hâlâ
-> geçerli; yalnızca ölçüm sayıları olay günlüğünden yeniden türetildi.
+**Dal:** `claude/project-plan-brainstorm-pthvoc` · **HEAD:** `b46cbc6`
+**Durum:** 290 test yeşil, typecheck temiz, origin ile senkron.
+**Kod:** 5037 satır (testler hariç).
+**Çizimler:** [kartın yolu](https://claude.ai/code/artifact/185e9279-510a-4544-a20c-831ecf1cdfd3) ·
+[genel bakış](https://claude.ai/code/artifact/2e7575af-84ee-40d8-aab4-5c3bdce0fe50)
 
 ---
 
 ## Tek cümlede nerede kaldık
 
-Deney koşum takımı çalışıyor ve Açık Soru #1'e ilk sayısal cevabı verdi;
-**ilk çapraz satıcı koşusu operatörün Windows makinesinde tıkalı** ve
-tıkanmanın sebebini öğrenmek için tek bir komutun çıktısı bekleniyor.
+**Orkestratör bitti ve gerçek iş yapıyor** — kart açılıyor, iki farklı
+satıcının ajanı arasında dolaşıyor, kod worktree'ler arasında taşınıyor,
+sonuç günlüğe yazılıyor. Kalan tek büyük eksik **ekran**.
 
-## Canlı karar: orkestratör mü, deney mi
+---
 
-Operatörün sorduğu ve cevabı kayda değer soru: *"işin sonucunda sadece
-çapraz doğrulama mı var, genel bir orkestrasyon yok mu?"*
+## Sıradaki oturumun konusu: EKRAN
 
-**Dürüst cevap: bugün uçtan uca koşan tek şey deney.** Yazılan ~2100 satırın
-kabaca yarısı ürün omurgası (adaptörler, audit gate, olay günlüğü, prompt
-derleyici) ama **hiçbir şey orkestrasyon yapmıyor**: kuyruk yok, devir
-teslim yok, worktree oluşturma yok, gözcü döngüsü yok, insan kapısı yok,
-ekran yok. `hub/flows/SCHEMA.md` 11 doğrulama kurallı bir akış dili
-tanımlıyor ve onu **okuyan tek satır kod yok** — `daily.yaml` çalıştırılabilir
-değil, belge.
+Bu tartışma kendi oturumunu hak ediyor, çünkü ilk soru "nasıl yapalım"
+değil.
 
-**Ve bu iki iş yarışmıyor.** Deney şuna takıldı: güçlü modeller tek dosyalık
-oyuncak görevleri temiz çözüyor, daha büyük ve bağlamlı görev lazım.
-Orkestratörün gerçek bir repoda koşması tam olarak o görevdir. Sentetik
-görev imal etmeye çalışmak yerine, gerçek işte doğal çıkan kusurlar ölçülür.
+### Önce cevaplanması gereken: ekran karşılığını veriyor mu?
 
-Bu yüzden bir sonraki oturumun ilk kararı: **Adım 4'ü (deneyi tamamla)
-beklemeye alıp Aşama 2-3'e (akış yükleyici, kuyruk, devir teslim, worktree,
-gözcü) geçmek** mi, yoksa deneyi zorlamaya devam etmek mi.
+Şu an `watch` koşarken zaten okunabilir bir çıktı basıyor ve `card ls`
+kuyruğu gösteriyor. Tipik koşu 2-3 dakika, tek kart. Bu ölçekte ekran ne
+ekliyor?
 
-Öneri: orkestratöre geç. Gerekçesi yukarıda; ayrıca proje şu an
-gösterilebilir bir şey üretmiyor ve bu, motivasyonun da darboğazı.
+Ekranın karşılığını verdiği yerler farklı:
 
-## Sıradaki adım — Windows tıkanması (orkestratöre geçilse de kapanmalı)
+- Kuyruk derinleştiğinde (10 kart, 4 rol — hangisi nerede?)
+- Koşu uzadığında (20 dakikalık bir tur sırasında ne oluyor?)
+- Sonradan bakıldığında (dün ne oldu, hangi kart kaç kez reddedildi?)
 
-Operatör şunu koşturup **çıktının tamamını** yapıştıracak:
+**İlk karar bu olmalı:** hangi durum için yapıyoruz. Üçü üç farklı ürün.
 
-```powershell
-git pull
-npm run bench -- doctor claude:claude-opus-5
+### Sonra: okuma kaynağı zaten var
+
+Ekranın yeni durum tutmasına gerek yok, ve tutmamalı:
+
+- `.skein/queue|active|gate|done/` — kartın nerede olduğu **dizinden** okunur
+- `.skein/olaylar.jsonl` — ne olduğu; `card.settled` artık her turun sonucunu
+  (kabul/ret/kapı, gerekçe, syncBack uyarıları) taşıyor
+- Kartın kendi `history` dizisi — tam iz, gerekçeleriyle
+
+Yani ekran saf bir **okuyucu** olabilir. Bu iyi bir kısıt; ihlal edilirse
+durum iki yerde tutulmuş olur.
+
+### Açık tasarım soruları
+
+| Soru | Not |
+|---|---|
+| Terminal (TUI) mi, web mi? | Web bir süreç demek; şu an daemon yok, `watch` toplu koşuyor ve bitiyor |
+| Canlı mı, yenilemeli mi? | Canlı izleme bir gözcü süreci ya da dosya yoklaması gerektirir |
+| En değerli tek görünüm? | Muhtemelen kart × rol panosu, son gerekçeyle |
+| `bench` ile paylaşılacak mı? | `src/events/summary.ts` deney okuyucusu; orkestratör onu kullanmıyor |
+
+`ROADMAP.md` Aşama 5 ("Merkez ekranı") ilk taslağı içeriyor — ama
+orkestratör yazılmadan önce yazılmıştı; okurken tarihini hesaba kat.
+
+---
+
+## Ne çalışıyor
+
+```
+npx tsx src/flow/cli.ts check daily        topolojiyi doğrular ve yazar
+npx tsx src/card/cli.ts new|ls|show|…      kartı elle sürer
+npx tsx src/watch/cli.ts daily --model …   orkestratör
 ```
 
-Bu komut şunları basar: CLI sürümü, hangi bayrakların desteklendiği,
-çalıştırılacak tam komut satırı, ve modelin gerçekten çağrılıp
-çağrılmadığı.
+**Bayrak verirken `npm run` kullanma** — bazı npm sürümleri `--` sonrasını
+kendi seçeneği sanıp yutuyor, sessizce. `RUNNING.md`'de üç adımlık başlangıç
+var.
 
-**Beklenen iki sonuç:**
+| Parça | Dosya |
+|---|---|
+| Akış yükleyici — 16 kural, zincir sırası, topoloji hash'i | `src/flow/load.ts` |
+| Maliyet tahmini — ret kenarları dahil | `src/flow/cost.ts` |
+| Kart — geçmiş, ret sayaçları, gömülü topoloji | `src/card/card.ts` |
+| Kuyruk — atomik geçiş, kilitsiz sahiplenme, çökme toplama | `src/card/queue.ts` |
+| Gözcü — tur, verdikt, yönlendirme | `src/watch/tick.ts` |
+| Git katmanı — ileri birleştirme, syncBack, worktree, kirlilik | `src/watch/git.ts` |
+| Olay günlüğü — `card.settled` dahil | `src/events/log.ts` |
 
-- `ÇALIŞIYOR` → matrise geç:
-  `npm run bench -- matrix retry-backoff claude:claude-opus-5 codex:gpt-5.5`
-- `MODEL HİÇ ÇAĞRILMADI` → çıktıdaki bayrak listesi sebebi verecek.
+Yazılmamış: **ekran**. Ve deneyin kendisi (aşağıya bak).
 
-## Tıkanmanın hikâyesi — dört tur, dört ayrı sebep
+---
 
-Operatörün makinesinde `claude` üretimi ajanı hiç çalıştıramadı. Her tur bir
-sebep eledi:
+## Üç canlı çapraz satıcı koşusu — ve çıkan örüntü
 
-| Tur | Belirti | Sebep | Çözüm |
-|---|---|---|---|
-| 1 | `0/0 yeşil — kusur yok` | Matriste ölçüm koruması yoktu; ayrıca vitest 5 JSON raporunu dosyaya yazıyor | Koruma matrise eklendi, rapor `--outputFile` ile okunuyor |
-| 2 | `HİÇBİR dosya yazmadı` | `error: unknown option '--permission-prompts'` | Bayraklar `--help` çıktısından tespit ediliyor |
-| 3 | `iterations: []` | Görev metni stdin'den gidiyordu, o sürüm `-p` modunda stdin okumuyor | Metin pozisyonel argüman oldu |
-| 4 | `iterations: []` (hâlâ) | `--system-prompt-file` `--help`'te YOK, belgesiz çalışıyor | İlan edilmişse dosya, değilse `--system-prompt` gövde |
+| # | Görev | Üretici | Denetçi | Sonuç |
+|---|---|---|---|---|
+| 1 | `backoff` (4 satır) | claude-opus-5 | codex gpt-5.5 | kabul, 2 dk 36 sn |
+| 2 | token bucket | claude-haiku | claude-haiku | kabul |
+| 3 | `card.settled` (Skein'in kendi backlog'u) | claude-opus-5 | codex gpt-5.5 | kabul |
 
-Tur 4'ün düzeltmesi operatörde **henüz denenmedi.** `doctor` çıktısı bunu
-söyleyecek.
+**Üçünde de üretici kusur üretmedi.** Çapraz denetimin yakalayacağı bir şey
+oluşmadı. Üçüncüsünde çıktı ayrıca insan-yönlendirmeli bir üçüncü gözden
+geçti; iki küçük bulgu çıktı ama ikisi de ret sebebi değildi.
 
-**Kalıp:** dört sebebin dördü de "benim makinemde çalışıyor" varsayımıydı ve
-hiçbiri Linux'ta görünmüyordu. Bir sonraki sebep de muhtemelen aynı yerden
-gelecek: sabit varsayım yerine CLI'ın kendi beyanına bak.
+Örüntünün kendisi artık bulgu — ayrıntısı `PHILOSOPHY.md` açık soru #2'de.
+Soru muhtemelen yeniden çerçevelenmeli: *"çapraz denetim daha çok yakalar
+mı"* değil, *"bu güçteki modellerde denetim katmanı hangi görev sınıfında
+karşılığını verir"*.
+
+Kovalanmayı bekleyen aday görev sınıfları: belirsiz gereksinim, mevcut koda
+derin dokunan değişiklik, eşzamanlılık.
+
+---
+
+## Kusurları ajanlar buldu, ben değil
+
+Bu oturumun en şaşırtıcı sonucu. Ajanlar durup şunları söyledi:
+
+- *"bana verilen kurallar Java/Maven için yazılmış ama bu depo TypeScript"* —
+  `daily.yaml` java-kit'e işaret ediyordu ve o kit SwarmForge'un kabuk
+  betiklerini çağırıyordu; Skein'de yok. Ajana **yapması imkânsız** şeyler
+  söyleniyordu.
+- *"git add için izin yok, o yüzden verdikt yazmıyorum"* — `acceptEdits`
+  dosya yazdırır ama Bash'e izin vermez. Ajan işi yaptı, commit atamadı, ve
+  "başardım" demeyi reddetti.
+
+Üçüncüsünü ajan söylemedi ama yaptı: denetçi `.skein-verdict.json`'ı
+commit'ledi. Kök sebep kart metnimdeydi — *"işini işle"* talimatını karta
+yazmıştım ve **kart metni her role aynı gidiyor**. O talimat artık
+`hub/prompts/roles/coder.md`'de, olması gereken yerde.
+
+Ders: çekirdeğin kapıları (ÖLÇÜLEMEDİ, kirli ağaç, izlenen verdikt) ajanın
+söylediğini **duyulur** hale getiriyor. Mekanizma çalışıyor, sadece
+beklenen yerde değil.
 
 ---
 
@@ -95,71 +147,35 @@ kapılı  (n=3) : ortalama 0.00 kırmızı kanca  ·  $0.5361     (7.2x maliyet)
 Sayıdan güçlü olan mekanizma izi: kusur her koşuda aynı — model `retry`'yi
 `async` yazmıyor, `RangeError` senkron fırlıyor, oysa imza `Promise<T>`
 taahhüt ediyor. Kapılı üç koşunun üçünde de `export async function retry`.
-İki kapılı koşuda ajan denetim turunda parmak izini değiştirdi.
 
-Sınırlar `bench/DESIGN.md`'de: n=5'e 3, tek görev, tek kusur türü, ve üçüncü
-kapılı koşu hiç düzeltme yapmadan 9/9 çıktı (üretimi zaten temizdi).
+Sınırlar `bench/DESIGN.md`'de.
 
-### Açık Soru #2 — çapraz sağlayıcı: tıkalı
-
-2x2 boru hattı kuruldu ve dört hücre gerçek modellerle koştu
-(`claude-opus-5` × `claude-sonnet-5`, $0.93), ama **ölçüm üretmedi**: iki
-üretici de temiz çözdü, yani denetçiye yakalanacak kanıtlanmış kusur yoktu.
-
-### Görev kalibrasyonu — asıl darboğaz
+### Görev kalibrasyonu — hâlâ darboğaz
 
 | Görev | opus-5 | sonnet-5 | haiku-4.5 |
 |---|---|---|---|
 | `retry-backoff` (9 kanca) | 5 koşuda 4'ü kusurlu | temiz | — |
 | `token-bucket` (14 kanca) | 14/14 | 14/14 | 14/14 |
 
-Güçlü modeller tek dosyalık, spec'i tam yazılmış bağımsız görevleri temiz
-çözüyor. İki yol, ikisi de bedelli:
-
-- **Daha büyük, bağlamlı görevler** (var olan bir repoya değişiklik) —
-  ilkeye sadık, görev yazımı pahalı
-- **Gerçek kusurlu kod** (geçmiş commit'lerden) — yer gerçeği bedava, ama
-  "kusur üreticinin kendisinin olmalı" ilkesini bırakmak demek, ve o ilke
-  tezin kör nokta iddiasının taşıyıcısı
-
-Karar verilmedi.
+Orkestratördeki üç koşu da aynı duvarı gösteriyor.
 
 ---
-
-## Ne var, ne yok
-
-**Çalışıyor:** adaptörler (claude + codex, sürüm-dayanıklı bayraklar),
-katmanlı prompt derleyici (kurcalamaya karşı korumalı, hash'li), görev
-yükleyici, gizli test çalıştırıcı, olay günlüğü + özet, audit gate (parmak
-izi + kilitli durum + tur sayacı + üst sınır), 2x2 matris orkestrasyonu,
-ölçüm koruması, `doctor` teşhisi.
-
-**Yok:** hakem katmanı (körlenmiş puanlama), kalan 10 görev, 2x2 raporu
-(etkileşim terimi hesabı), ve ürün tarafının tamamı — kuyruk, handoff,
-worktree, gözcü döngüsü, merkez ekranı.
-
-**Bilinen boşluk:** audit gate turlar arası anlık görüntü tutmuyor, bu yüzden
-"denetim turunda tam olarak ne değişti" sorusu son artefakta bakılarak
-çıkarsanıyor.
-
-## Sayılar
-
-2131 satır kod · 138 test · 27 gerçek ajan çağrısı · ~$3.60 (bu ortamda).
-Operatörün makinesindeki koşular ayrı.
-
-## Yol haritası bağlamı
-
-`ROADMAP.md` → "Yakın plan": Adım 1-3 tamam (ilk koşu, olay günlüğü, audit
-gate). Adım 4 (deneyi tamamla) yarım: boru hattı kuruldu, kalibre görev
-bekliyor.
 
 ## Okuma sırası
 
 | Dosya | Ne için |
 |---|---|
-| bu dosya | Nerede kaldık, sıradaki adım |
-| `PHILOSOPHY.md` | İlkeler, reddedilenler, açık sorular |
-| `ROADMAP.md` | Yakın plan ve aşamalar |
-| `bench/DESIGN.md` | Deney tasarımı, ölçümler, kalibrasyon bulgusu |
-| `RUNNING.md` | Kendi makinende koşturmak |
-| `hub/flows/SCHEMA.md` | Akış tanımlama dili |
+| `PHILOSOPHY.md` | İlkeler, reddedilenler, açık sorular (#2 güncel) |
+| `hub/flows/SCHEMA.md` | Akış dili — 16 kural, ret yolu, kod taşıma, hash sözleşmesi |
+| `RUNNING.md` | Kendi makinende koşturmak; Windows notları |
+| `ROADMAP.md` | Aşama 5 = ekran (orkestratörden önce yazıldı, tarihini hesaba kat) |
+| `bench/DESIGN.md` | 2×2 deney tasarımı ve sınırları |
+
+---
+
+## Not: ajanlar senin dalına commit atıyor
+
+`main` workspace'i kullanıcının checkout'u olduğu için kaçınılmaz. Deney
+koşuları ayrı dalda yapıldı (`deney/olay-gunlugu`) ve inceleme sonrası
+birleştirildi. İleride orkestratörün kendi dalında koşması düşünülebilir —
+ama bu, ekran tartışmasından sonra.
