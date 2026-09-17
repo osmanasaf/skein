@@ -5,8 +5,12 @@ import { adapterFor, knownProviderSet } from "../adapters/factory.js";
 import { CardQueue } from "../card/queue.js";
 import { EventLog } from "../events/log.js";
 import { FlowError, loadFlow } from "../flow/load.js";
-import { snapshot } from "../flow/snapshot.js";
+import { snapshot, type TopologySnapshot } from "../flow/snapshot.js";
+import { acquireLock, releaseLock, type LockInfo } from "./lock.js";
 import { runUntilIdle, sweep } from "./loop.js";
+import type { TickOptions } from "./tick.js";
+import type { SweepResult } from "./loop.js";
+import { serve } from "./serve.js";
 import type { TickResult } from "./tick.js";
 import { resolveWorkspace, WorkspaceError, workspacePath } from "./workspace.js";
 
@@ -21,6 +25,9 @@ Kuyruktaki kartları rollerden geçirir. Önce kart açman gerekir:
 veriyorsan yukarıdaki doğrudan biçimi kullan.
 
 Seçenekler:
+  --serve         kuyruk boşalınca ÇIKMA, bekle — kart açıldığında kendisi
+                  uyanır; durdurmak için Ctrl-C
+  --poll <ms>     beklerken yoklama aralığı (varsayılan 1000)
   --once          tek geçiş yap, dur (varsayılan: kart kalmayana kadar)
   --model <spec>  bir sağlayıcının modelini pinle, örn. --model codex:gpt-5.5
                   (birden fazla kez verilebilir)
@@ -45,6 +52,8 @@ const MARK: Record<TickResult["status"], string> = {
 interface Args {
   flow?: string;
   once: boolean;
+  serve: boolean;
+  pollMs?: number;
   plan: boolean;
   models: string[];
   bins: string[];
@@ -54,10 +63,16 @@ interface Args {
 }
 
 function parseArgs(argv: string[]): Args {
-  const args: Args = { once: false, plan: false, models: [], bins: [], allowTools: [] };
+  const args: Args = { once: false, serve: false, plan: false, models: [], bins: [], allowTools: [] };
   for (let i = 0; i < argv.length; i += 1) {
     const value = argv[i] as string;
     if (value === "--once") args.once = true;
+    else if (value === "--serve") args.serve = true;
+    else if (value === "--poll") {
+      const ms = Number(argv[++i]);
+      if (!Number.isFinite(ms) || ms <= 0) throw new ConfigError(`--poll pozitif bir sayı olmalı (verilen: ${String(argv[i])})`);
+      args.pollMs = ms;
+    }
     else if (value === "--plan") args.plan = true;
     else if (value === "--model") args.models.push(argv[++i] as string);
     else if (value === "--bin") args.bins.push(argv[++i] as string);
@@ -170,6 +185,83 @@ function describe(role: string, result: TickResult): string {
   }
 }
 
+/**
+ * Uzun ömürlü gözcü.
+ *
+ * Toplu koşudan tek farkı ömür: aynı döngü, ama kuyruk boşalınca çıkmak
+ * yerine bekliyor. Bir depo DEĞİL — durdurulduğunda `npx tsx src/watch/cli.ts`
+ * kaldığı yerden devam eder.
+ *
+ * Kilidi çağıran tutar: kilit `recover()`'dan ÖNCE alınmak zorunda, o da
+ * buradan önce koşuyor.
+ */
+async function runServer(
+  root: string,
+  topology: TopologySnapshot,
+  options: TickOptions,
+  onSweep: (s: SweepResult, i: number) => void,
+  pollMs?: number,
+): Promise<number> {
+  const stop = new AbortController();
+  let asked = 0;
+  const onSignal = (): void => {
+    asked += 1;
+    if (asked === 1) {
+      // Turu yarıda kesmek, parası ödenmiş bir ajan çağrısını çöpe atmak
+      // demek. İkinci sinyal acele edenler için.
+      console.log("\ndurduruluyor — koşan tur bitince çıkılacak (tekrar Ctrl-C: hemen)");
+      stop.abort();
+      return;
+    }
+    console.log("\nhemen çıkılıyor; koşan ajan yarıda kalabilir");
+    process.exit(130);
+  };
+  process.on("SIGINT", onSignal);
+  process.on("SIGTERM", onSignal);
+
+  console.log(`gözcü açık · pid ${process.pid} · durdurmak için Ctrl-C\n`);
+
+  try {
+    const summary = await serve(topology, {
+      ...options,
+      signal: stop.signal,
+      watchDir: join(root, ".skein", "queue"),
+      ...(pollMs === undefined ? {} : { pollMs }),
+      onSweep,
+      onIdle: () => console.log("· kuyruk boş, bekleniyor"),
+    });
+
+    if (summary.stopped === "runaway") {
+      console.error(
+        `\n✗ kaçak döngü: kuyruk hiç boşalmadan ${summary.sweeps} geçiş yapıldı.\n` +
+          `  Gözcü durduruldu. Kartların durumu için: npx tsx src/card/cli.ts ls`,
+      );
+      return 1;
+    }
+    console.log(`\ngözcü kapandı · ${summary.sweeps} geçiş · ${summary.naps} bekleme`);
+    return 0;
+  } finally {
+    process.off("SIGINT", onSignal);
+    process.off("SIGTERM", onSignal);
+  }
+}
+
+/** Kilit alınamadığında kullanıcıya ne olduğunu ve ne yapacağını söyler. */
+function busyMessage(holder: LockInfo, lockPath: string): string {
+  const who =
+    holder.mode === "serve"
+      ? `Bu depoda zaten bir gözcü açık: pid ${holder.pid}, akış ${holder.flow}.`
+      : `Bu depoda başka bir koşu sürüyor: pid ${holder.pid}, akış ${holder.flow}.`;
+  return (
+    `${who}\n\n` +
+    `  Kuyruğa yazan tek süreç olmalı. İkinci koşu, birincinin ELİNDEKİ kartı\n` +
+    `  çökmüş sanıp kuyruğa geri atar — ve aynı iş ikinci kez, para harcayarak\n` +
+    `  yapılır.\n\n` +
+    `  O süreci durdur; gerçekten yoksa kilidi sil:\n` +
+    `    ${lockPath}\n`
+  );
+}
+
 async function main(argv: string[]): Promise<number> {
   const args = parseArgs(argv);
   if (args.flow === undefined) {
@@ -186,11 +278,6 @@ async function main(argv: string[]): Promise<number> {
 
   const queue = new CardQueue(join(root, ".skein"));
   await queue.init();
-
-  const recovered = await queue.recover();
-  if (recovered.length > 0) {
-    console.log(`kurtarıldı: ${recovered.length} kart kuyruğa geri kondu\n`);
-  }
 
   if (args.plan) {
     console.log(`akış: ${flow.name} (${flow.hash.slice(0, 12)}…)\n`);
@@ -217,6 +304,42 @@ async function main(argv: string[]): Promise<number> {
     return 0;
   }
 
+  // Kilit `recover()`'dan ÖNCE: kurtarma, başka bir koşunun elindeki kartı
+  // kuyruğa geri atabilen tek işlem. Sıra ters olsaydı kilit, koruduğu şeyi
+  // korumadan önce ihlal edilmiş olurdu.
+  const lockPath = join(root, ".skein", "daemon.json");
+  const lock = await acquireLock(lockPath, {
+    pid: process.pid,
+    startedAt: new Date().toISOString(),
+    flow: flow.name,
+    hash: flow.hash,
+    mode: args.serve ? "serve" : "batch",
+  });
+  if (lock.kind === "busy") throw new ConfigError(busyMessage(lock.holder, lockPath));
+  if (lock.took !== undefined) {
+    console.log(`bayat kilit devralındı (ölü pid ${lock.took.pid})\n`);
+  }
+
+  try {
+    return await run(root, flow, topology, queue, args);
+  } finally {
+    await releaseLock(lockPath, process.pid);
+  }
+}
+
+/** Kilit alındıktan sonraki asıl koşu. */
+async function run(
+  root: string,
+  flow: { name: string; hash: string },
+  topology: TopologySnapshot,
+  queue: CardQueue,
+  args: Args,
+): Promise<number> {
+  const recovered = await queue.recover();
+  if (recovered.length > 0) {
+    console.log(`kurtarıldı: ${recovered.length} kart kuyruğa geri kondu\n`);
+  }
+
   // Başlık her koşuda yazılır, yalnızca --plan'de değil. Sessiz bir çıktı,
   // "hiçbir şey olmadı" ile "her şey yolunda" arasındaki farkı gizler.
   const depths = await Promise.all(topology.roles.map((r) => queue.depth(r.id)));
@@ -230,8 +353,9 @@ async function main(argv: string[]): Promise<number> {
   if (open.length === 0) {
     console.log("Kuyrukta iş yok. Kart açmak için:\n");
     console.log(`  npx tsx src/card/cli.ts new ${args.flow} "Başlık" "Yapılacak iş"\n`);
-    console.log("Sonra bu komutu tekrar çalıştır.");
-    return 0;
+    // Gözcü açıkken kart açmak, işin BAŞLAMASI demek: ikinci bir komut yok.
+    console.log(args.serve ? "Gözcü bekliyor; kartı görünce kendisi başlar." : "Sonra bu komutu tekrar çalıştır.");
+    if (!args.serve) return 0;
   }
 
   const adapters = buildAdapters(
@@ -255,16 +379,17 @@ async function main(argv: string[]): Promise<number> {
     }
   };
 
+  const onSweep = (s: SweepResult, i: number): void => {
+    if (s.moved) console.log(`── geçiş ${i + 1} ──`);
+    report(s.results);
+  };
+
+  if (args.serve) return runServer(root, topology, options, onSweep, args.pollMs);
+
   if (args.once) {
     report((await sweep(topology, options)).results);
   } else {
-    await runUntilIdle(topology, {
-      ...options,
-      onSweep: (s, i) => {
-        if (s.moved) console.log(`── geçiş ${i + 1} ──`);
-        report(s.results);
-      },
-    });
+    await runUntilIdle(topology, { ...options, onSweep });
   }
 
   const remaining = await queue.list();

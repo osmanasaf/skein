@@ -25,7 +25,7 @@ npm install
 npm test
 ```
 
-`npm test` testlerin tamamını geçmeli (şu an 276). Geçmiyorsa çıktıyı
+`npm test` testlerin tamamını geçmeli (şu an 308). Geçmiyorsa çıktıyı
 sakla.
 
 ---
@@ -46,6 +46,43 @@ npx tsx src/card/cli.ts new daily "Jitter ekle" "retry fonksiyonuna tam jitter e
 # 3. Koştur.
 npx tsx src/watch/cli.ts daily --model claude:claude-opus-5 --model codex:gpt-5.5
 ```
+
+### Ya da: gözcüyü açık bırak (`--serve`)
+
+Toplu koşu kuyruk boşalınca çıkar. `--serve` çıkmaz, **bekler** — kart
+açmak işin başlaması demek olur, ikinci bir komut gerekmez:
+
+```powershell
+# Bir kabukta gözcüyü aç ve orada bırak
+npx tsx src/watch/cli.ts daily --serve --model claude:claude-opus-5 --model codex:gpt-5.5
+
+# Başka bir kabukta kart aç — gözcü kendisi uyanır
+npx tsx src/card/cli.ts new daily "Jitter ekle" "retry fonksiyonuna tam jitter ekle"
+```
+
+Durdurmak için **Ctrl-C**: koşan tur bitirilir, sonra çıkılır (yarıda
+kesilen tur, parası ödenmiş bir ajan çağrısını çöpe atardı). İkinci Ctrl-C
+hemen çıkar.
+
+| Seçenek | Ne yapar |
+|---|---|
+| `--serve` | Kuyruk boşalınca çıkma, bekle |
+| `--poll <ms>` | Beklerken yoklama aralığı (varsayılan 1000) |
+
+**Aynı depoda tek yazıcı.** Gözcü açıkken ikinci bir `watch` koşusu
+reddedilir; `--plan` reddedilmez çünkü yazmaz. Sebep şu: ikinci koşu,
+birincinin **elindeki** kartı çökmüş sanıp kuyruğa geri atar ve aynı iş
+ikinci kez, para harcayarak yapılır. Kilit `.skein/daemon.json`; süreç
+`kill -9` ile ölse bile sonraki gözcü onu bayat görüp devralır.
+
+Kart açmak, `card ls`, `card show` ve `card release` gözcü açıkken de
+serbesttir — kuyruğa kart eklemek ve kapıdaki kartı karara bağlamak
+gözcünün turuyla çakışmaz.
+
+**`npx tsx` ile başlatılan gözcüyü `kill` ile durduramazsın:** araya üç
+sarmalayıcı süreç giriyor ve sinyal node'a ulaşmıyor. Ctrl-C çalışır
+(terminal sinyali süreç grubuna gider); betikten durduracaksan pid'i
+`.skein/daemon.json` içinden oku.
 
 **Her sağlayıcı için `--model` zorunlu.** Akış dosyası model taşımaz: topoloji
 ile model ayrı kararlar ve modeli akışa gömmek, model değiştiğinde yolda olan
@@ -72,6 +109,7 @@ açıklaması dahil**. Sık görülen iki sebep:
 | "Ajan verdikt yazmadı" + ajan izinden söz ediyor | `--permission-mode` / `--allow-tool` ver |
 | `unrecognized_model` | `--model` pinini kontrol et; kimliği tam yaz |
 | "kabul etti ama ağacında işlenmemiş değişiklik var" | O dosyaları `.gitignore`'a ekle ya da işlet |
+| "Bu depoda zaten bir gözcü açık" | Açık gözcüyü durdur; süreç gerçekten yoksa `.skein/daemon.json`'ı sil |
 
 Kapıdaki kartı karara bağlamak:
 

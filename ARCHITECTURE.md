@@ -31,7 +31,7 @@ klonuna dönüşür ve asıl sorunu çözmeyi bırakır.
 ┌─────────────────────────────────────────────┐
 │  YÜZEY        CLI · ekran · (ileride) editör│   durum TUTMAZ
 ├─────────────────────────────────────────────┤
-│  OTURUM       uzun ömürlü süreç (skeind)    │   YOK — tek büyük eksik
+│  OTURUM       uzun ömürlü süreç (--serve)   │   ✅ adım 1 yazıldı
 ├─────────────────────────────────────────────┤
 │  ÇEKİRDEK     akış · kart · kuyruk · tur·git│   ✅ yazıldı, koşuyor
 ├─────────────────────────────────────────────┤
@@ -48,9 +48,18 @@ olay günlüğüne bakar. İhlal edilirse ekran ikinci bir durum kopyası olur v
 
 ## "Uzun ömürlü çekirdek" ne demek
 
-### Bugünkü durum
+### Bugünkü durum (adım 1 sonrası)
 
-`src/watch/cli.ts` bir **toplu iş**: kuyruğu süpürür, kart kalmayınca
+`--serve` ile gözcü artık kuyruk boşalınca **ölmüyor, uyuyor**:
+`src/watch/serve.ts` aynı süpürme döngüsünü koşturur, kuyruk boşalınca
+`fs.watch` + yoklama ile bekler, kart düşünce uyanır. Ctrl-C koşan turu
+bitirip çıkar. `src/watch/lock.ts` yazan her koşuyu tekleştirir.
+
+Kalan eksikler adım 2 ve 3'ün konusu: ajan çıktısının canlı akması ve
+ekranın bağlanacağı bir kontrol yüzeyi. Aşağıdaki tablo, adım 1'den önceki
+durumu ve hangi ihtiyacın neden doğduğunu anlatıyor.
+
+`--serve` olmadan `src/watch/cli.ts` bir **toplu iş**: kuyruğu süpürür, kart kalmayınca
 `process.exit`. Süreç ömrü = koşu ömrü.
 
 Üç şeyi aynı anda imkânsız kılan da bu:
@@ -85,14 +94,27 @@ Bir daemon'ı zorlaştıran şeyler zaten çözülmüş durumda:
 | Sonlanma garantisi | `reject.limit` + `maxSweeps` |
 | Eşzamanlılık güvenliği | Atomik `rename` ile kilitsiz sahiplenme |
 
-Gerçekten eksik olan üç şey var, ve üçü de dar:
+Gerçekten eksik olan üç şey vardı, ve üçü de dar:
 
-- **Uyandırma** — `.skein/queue` dizinini izlemek (ya da 1 sn'lik yoklama;
-  ilk sürüm için yeterli ve taşınabilir).
-- **Kontrol yüzeyi** — localhost'ta küçük bir HTTP/soket: "durum ver", "kapıyı
-  aç", "kartı durdur".
-- **Adaptörlerde akış modu** — `capture()` bugün çıktıyı biriktirip sonunda
-  veriyor; satır geldikçe olay yayan bir kardeşi gerekiyor.
+- **Uyandırma** — ✅ adım 1. Doğruluğu yoklama sağlıyor, `fs.watch` yalnızca
+  gecikmeyi kısaltıyor. Tersi kurulsaydı, izlemenin çalışmadığı bir dosya
+  sisteminde gözcü kartı hiç görmezdi — ve bu **sessiz** bir arıza olurdu.
+- **Kontrol yüzeyi** — adım 4. localhost'ta küçük bir soket: "durum ver",
+  "kapıyı aç". Şimdilik `card release` bu işi görüyor ve gözcü açıkken
+  çalışıyor.
+- **Adaptörlerde akış modu** — adım 2. `capture()` bugün çıktıyı biriktirip
+  sonunda veriyor; satır geldikçe olay yayan bir kardeşi gerekiyor.
+
+### Adım 1'de öğrenilen: asıl tehlike `take()` değil `recover()`
+
+Tek yazıcı kuralı, "iki gözcü aynı kartı alır" diye düşünülüyordu; atomik
+`rename` bunu zaten engelliyor. Gerçek tehlike başka: ikinci koşunun
+`recover()`'ı, birincinin **elindeki** (`active/` dizinindeki) kartı çökmüş
+sanıp kuyruğa geri atar — ve aynı iş ikinci kez, para harcayarak yapılır.
+
+Sonuç: kilit `recover()`'dan **önce** alınıyor ve yazan her koşu (gözcü de,
+toplu koşu da) alıyor. `--plan` almıyor, çünkü yazmıyor — ve artık gerçekten
+yazmıyor: `recover()` çağrısı plan yolundan çıkarıldı.
 
 ### Sabitlenen kısıt: daemon bir depo değildir
 
@@ -202,7 +224,7 @@ Ekran tartışması bunların üstüne gelir, bunları yeniden açmaz:
 | # | Adım | Neden bu sırada |
 |---|---|---|
 | 0 | Bu belge | Yapı oturmadan ekran çizmek, ekranı yanlış yere bağlar |
-| 1 | `skeind` iskeleti — davranış aynı, süreç kalıcı | En küçük daemon; hâlâ toplu koşuyla aynı sonucu vermeli |
+| ~~1~~ | ✅ `--serve` — davranış aynı, süreç kalıcı | Canlı koşuda doğrulandı: gözcü uyurken açılan kart ikinci komut olmadan bitti |
 | 2 | Akış modunda adaptör + dar canlı olaylar | Canlı izlemenin ön koşulu; tip kümesi dar tutulur |
 | 3 | Okuyucu ekran: kart × rol panosu, son gerekçe, diff | En çok değeri en az riskle veren yüzey |
 | 4 | Kontrol: kapıyı ekrandan açmak | İlk *yazan* yüzey eylemi — komut olarak, durum olarak değil |
@@ -213,3 +235,29 @@ Adım 6'nın gerekçesi `PHILOSOPHY.md`'de: serbest sohbet maliyeti sınırsız
 büyütür, izlenebilirliği kaybeder ve modeller birbirine yakınsadıkça kör nokta
 tezini zayıflatır. Doğru biçimi, `reject` mekanizmasının kardeşi: kayıtlı,
 sayılı, gerekçeli turlar.
+
+---
+
+## Adım kayıtları
+
+### Adım 1 — `--serve` · 2026-09-17
+
+**Yazılanlar:** `src/watch/serve.ts` (uyu/uyan döngüsü),
+`src/watch/lock.ts` (tek yazıcı), `src/watch/cli.ts` (`--serve`, `--poll`).
+308 test yeşil (+18).
+
+**Biter kriteri karşılandı.** Canlı koşu, `claude-haiku-4.5`, iki rol:
+gözcü boş kuyrukta beklerken başka bir kabuktan kart açıldı; gözcü kendisi
+uyanıp kartı aldı, ajanı çağırdı, iş commit'lendi. İkinci turda kart insan
+kapısında beklerken `card release` ile bırakıldı — gözcü yine kendisi
+uyanıp 26 saniyede bitirdi. Hiçbir aşamada ikinci bir `watch` komutu
+verilmedi.
+
+**`kill -9` ölçütü:** kilit devralma testlerle, dosyanın bırakılması canlı
+koşuda doğrulandı. Gözcü durunca `npx tsx src/watch/cli.ts` toplu koşusu
+kaldığı yerden devam ediyor — durum süreçte değil, dizinde.
+
+**Bilinen sınır:** gözcü akış dosyasını **başlarken bir kez** okur. Koşarken
+akışa yeni bir rol eklenirse o rolün kuyruğu süpürülmez; gözcüyü yeniden
+başlatmak gerekir. Yoldaki kartlar etkilenmez — onlar kendi dondurulmuş
+topolojilerini taşır (değişmez 4).
