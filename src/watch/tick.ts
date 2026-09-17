@@ -54,7 +54,10 @@ const DEFAULT_TIMEOUT_MS = 20 * 60 * 1000;
 export async function tick(roleId: string, options: TickOptions): Promise<TickResult> {
   const result = await settle(roleId, options);
   if (result.status !== "idle") {
-    // Tek yazım noktası: her sonuçlanma yolu buradan geçer, hiçbiri kaydı atlayamaz.
+    // Tek yazım noktası: `settle()` bir sonuç DÖNDÜRDÜĞÜ her yol buradan
+    // geçer, hiçbiri kaydı atlayamaz. İstisna, sonuç hiç oluşmadan fırlayan
+    // yol: bozuk bir kart dosyası `queue.take()` içinde fırlatır ve o durumda
+    // kaydedilecek bir sonuç yoktur.
     await options.log?.append({
       type: "card.settled",
       cell: `${result.card.id}:${roleId}`,

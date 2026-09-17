@@ -194,6 +194,27 @@ sınamak üzere kuruldu; cevaplar olumsuz çıkarsa ilke değişir.
    denetim mekanizması boşta çalışıyor. Soruyu cevaplamak için üreticinin
    gerçekten kusur ürettiği görevler gerekiyor.
 
+   *Aynı gün, gerçek iş üzerinde tekrar.* Oyuncak görevin kolay olduğu
+   itirazına karşı, kart bu kez Skein'in kendi backlog'undan seçildi: tur
+   sonuçlarının olay günlüğüne yazılmaması — iki dosyada değişiklik, bir
+   birleşim tipiyle doğrulama haritasının birlikte güncellenmesi, mevcut
+   testlerin kırılmaması. Üretici (opus) `card.settled` olayını ekledi ve
+   karttan **daha iyi** bir karar verdi: her `return`'e log serpmek yerine
+   `tick()`'i sarmalayıp tek çıkışta yazdı. Denetçi (codex) kabul etti.
+
+   Sonra çıktıyı bir insan-yönlendirmeli üçüncü göz inceledi: testler ve
+   typecheck bağımsız koşturuldu, iki küçük bulgu çıktı (`state` alanı
+   `string` yerine `CardState` olmalıydı; bir yorum kodun verdiğinden
+   fazlasını iddia ediyordu). **İkisi de ret sebebi değildi.** Yani:
+
+   > Üç görevin üçünde de üretici kusur üretmedi; çapraz denetimin
+   > yakalayacağı bir şey oluşmadı.
+
+   Örüntünün kendisi artık bir bulgu. Belki soru yanlış çerçevelenmişti:
+   "çapraz denetim daha çok yakalar mı" yerine "bu güçteki modellerde
+   denetim katmanı hangi görev sınıfında karşılığını verir" diye sormak
+   gerekiyor. Üç veri noktası az, ama üçü de aynı yöne bakıyor.
+
 3. **Rol ayrımı, iyi bir kontrol listesine sahip tek ajandan daha mı iyi?**
    Ayrı rol, taze bağlam demek — ama aynı zamanda bağlam kaybı ve merge
    maliyeti demek. Ölçüm: iki rollük akış ile tek ajan + denetim promptunun

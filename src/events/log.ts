@@ -1,5 +1,6 @@
 import { appendFile, readFile } from "node:fs/promises";
 import type { Usage } from "../adapters/contract.js";
+import type { CardState } from "../card/card.js";
 
 /** Kayıt biçimi sürümü. Eski günlükler okunabilir kalsın diye her satırda. */
 export const EVENT_SCHEMA = 1;
@@ -42,8 +43,14 @@ export type EventInput =
       card: string;
       role: string;
       outcome: "accepted" | "rejected" | "escalated";
-      /** Kartın turdan sonraki durumu (queued | gate | done …). */
-      state: string;
+      /**
+       * Kartın turdan sonraki durumu.
+       *
+       * `string` değil `CardState`: birlik zaten dışa açık ve `validate()`
+       * yalnızca "boş olmayan metin mi" diye bakıyor, yani bir yazım hatası
+       * çalışma zamanında geçerdi. Derleyicinin yardımını atmaya gerek yok.
+       */
+      state: CardState;
       /** Ret ya da kapı gerekçesi. */
       reason?: string;
       summary?: string;
