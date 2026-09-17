@@ -258,3 +258,59 @@ describe("serveUi — yetim kart", () => {
     expect(res.status).toBe(403);
   });
 });
+
+describe("serveUi — yaşayan akış", () => {
+  /** Topolojiyi sonradan değiştirebilen sahte bir kaynak. */
+  function sahteLive(baslangic: TopologySnapshot) {
+    return {
+      topology: baslangic,
+      flow: { name: "test", hash: "aaa" },
+      error: null as string | null,
+      yoklandi: 0,
+      async refresh() {
+        this.yoklandi += 1;
+      },
+    };
+  }
+
+  it("her okumada akışı yokluyor", async () => {
+    const live = sahteLive(topology);
+    const s = await serveUi({ root, queue, topology, flowName: "test", flowHash: "aaa", live });
+    try {
+      await fetch(`${s.url}durum`);
+      await fetch(`${s.url}durum`);
+      expect(live.yoklandi).toBe(2);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it("yeniden yüklenen topolojiyi çizime yansıtır", async () => {
+    const live = sahteLive({ ...topology, roles: [] });
+    const s = await serveUi({ root, queue, topology, flowName: "test", flowHash: "aaa", live });
+    try {
+      const once = (await (await fetch(`${s.url}durum`)).json()) as { roles: unknown[] };
+      expect(once.roles).toHaveLength(0);
+
+      live.topology = topology; // dosya değişti
+      const sonra = (await (await fetch(`${s.url}durum`)).json()) as { roles: { id: string }[] };
+      expect(sonra.roles.map((r) => r.id)).toEqual(["coder"]);
+    } finally {
+      await s.close();
+    }
+  });
+
+  // Kullanıcı YAML'ı bozduğunda hiçbir şey olmuyordu; düzenlemenin neden
+  // tutmadığı görünmüyordu.
+  it("akış geçersizse gerekçeyi modele koyar", async () => {
+    const live = sahteLive(topology);
+    live.error = "[kural 4] tam olarak bir rolün `next` değeri `done` olmalı";
+    const s = await serveUi({ root, queue, topology, flowName: "test", flowHash: "aaa", live });
+    try {
+      const model = (await (await fetch(`${s.url}durum`)).json()) as { flow: { error?: string } };
+      expect(model.flow.error).toContain("kural 4");
+    } finally {
+      await s.close();
+    }
+  });
+});

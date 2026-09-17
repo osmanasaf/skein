@@ -460,9 +460,53 @@ sürtünmesi olması gereken bir şeyi (işi yarıda bırakmak) sürtünmesiz ya
 Koşan kart da kapatılamaz: altından kartı çekmek, parası ödenmiş bir turu
 ortada bırakmak olurdu.
 
-#### Sırada kalan: akışı yeniden yükleme (adım 5'in ön koşulu)
+#### Sırada kalan: akışı yeniden yükleme — ✅ yapıldı (aşağıya bak)
 
-Bu kayıt sınırı **görünür** kıldı, kaldırmadı. Kaldırmak gözcünün ve ekranın
-akış dosyasını izleyip yeniden okuması demek — ve yeniden yükleme **atomik ve
-doğrulanmış** olmalı: oku, 16 kuralı geçir, geçerse değiştir; geçmezse
-eskisiyle devam et ve söyle. Yarım kaydedilmiş bir YAML gözcüyü düşürmemeli.
+Bu kayıt sınırı **görünür** kıldı, kaldırmadı. Kaldırması bir sonraki
+kayıtta.
+
+### Akışın yaşayan hâli — `LiveFlow` · 2026-09-17
+
+Adım 5'in ön koşulu. `src/flow/live.ts`: gözcü ve ekran akış dosyasını artık
+**yaşayan** tutuyor — gözcü geçişler arasında, ekran her okumadan önce
+yokluyor. 421 test yeşil (+18).
+
+**İki şart, ikisi de pazarlıksız:**
+
+1. **Doğrulanmış.** Yeni içerik 16 kuralın tamamından geçmeden geçerli
+   sayılmaz. Editör yarım kaydetmiş olabilir.
+2. **Atomik.** Geçiş ya tamamen olur ya hiç olmaz. Başarısızlıkta eldeki
+   topoloji **aynen** durur; "yarı yüklenmiş akış" diye bir durum yok.
+
+**Neden mtime değil içerik karşılaştırılıyor:** mtime çözünürlüğü bazı dosya
+sistemlerinde bir saniye, ve aynı saniyede yapılan bir düzenleme sessizce
+kaçardı. Akış dosyası küçük; okumak ucuz, kaçırmak pahalı.
+
+**Geçişin ORTASINDA değil, arasında.** `sweep()` rol listesini baştan alıyor;
+tur ortasında değişen bir topoloji, hangi anın geçerli olduğunu
+bulanıklaştırırdı.
+
+**Yoldaki kartlar etkilenmiyor** (değişmez 4). Değişen tek şey gözcünün hangi
+kuyrukları süpüreceği ve ekranın hangi sütunları çizeceği.
+
+**Canlı koşuda doğrulandı:** rol eklendi → gözcü `↻ akış yeniden yüklendi`
+dedi ve yeni rolü süpürmeye başladı; YAML bozuldu → `⚠ ESKİSİYLE devam
+ediliyor` deyip gerekçeyi yazdı ve çalışmaya devam etti; ekran bozuk akışta
+eski sütunları çizmeye devam edip hatayı şeritte gösterdi; dosya düzeltilince
+ikisi de kendiliğinden toparladı.
+
+**Canlı koşunun çıkardığı iki kusur:**
+
+1. **Uyarı spam'i.** Aynı hata her yoklamada yazılıyordu: 3 saniyede **48
+   satır**. Artık yalnızca DEĞİŞEN hata duyuruluyor (48 → 2, ve tam olarak iki
+   farklı hata vardı). Aynı disiplin yetim kart duyurusunda zaten vardı;
+   burada unutulmuştu.
+2. **Kalıcı hayalet hata.** Bozuk metin hiç kaydedilmiyor, dolayısıyla dosya
+   eski geçerli hâline döndüğünde içerik son başarılı hâlle eşleşiyor ve
+   `unchanged` dönüyordu — ama hata izi temizlenmiyordu. Ekran, geçerli bir
+   dosya için sonsuza kadar hata gösterirdi.
+
+**Bilinen davranış:** yeniden yükleme akışa YENİ BİR SAĞLAYICI getirirse
+adaptör haritası eski kalır ve o role düşen kart `adaptör yok` gerekçesiyle
+kaçış kapısına çıkar. Sessiz değil, görünür — ve doğrusu bu: model pinleri
+komut satırından geliyor, gözcü kendi başına model seçemez.

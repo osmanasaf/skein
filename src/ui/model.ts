@@ -14,7 +14,18 @@ import { pidAlive, readLock, type LockInfo } from "../watch/lock.js";
  * bir sonraki okumada aynen geri gelir (ARCHITECTURE, değişmez 1).
  */
 export interface UiModel {
-  flow: { name: string; hash: string };
+  flow: {
+    name: string;
+    hash: string;
+    /**
+     * Akış dosyası şu an geçersizse gerekçesi.
+     *
+     * Bu alan olmadan kullanıcı YAML'ı bozduğunda hiçbir şey olmuyordu:
+     * ekran eski topolojiyle çizmeye devam ediyor, düzenlemenin neden
+     * tutmadığı görünmüyordu.
+     */
+    error?: string;
+  };
   /** Gözcü açık mı. `null` ise hiç kilit yok. */
   daemon: { alive: boolean; info: LockInfo } | null;
   roles: UiRole[];
@@ -82,6 +93,8 @@ export interface BuildOptions {
   flowHash: string;
   /** Olay günlüğü yolu. Varsayılan `<root>/.skein/olaylar.jsonl`. */
   logPath?: string;
+  /** Akış dosyası şu an geçersizse gerekçesi. */
+  flowError?: string | null;
   /** Test edilebilirlik için; varsayılan `process.kill(pid, 0)`. */
   alive?: (pid: number) => boolean;
   now?: () => Date;
@@ -123,7 +136,13 @@ export async function buildModel(options: BuildOptions): Promise<UiModel> {
   );
 
   return {
-    flow: { name: options.flowName, hash: options.flowHash },
+    flow: {
+      name: options.flowName,
+      hash: options.flowHash,
+      ...(options.flowError === undefined || options.flowError === null
+        ? {}
+        : { error: options.flowError }),
+    },
     daemon: info === null ? null : { alive: isAlive(info.pid), info },
     roles,
     cards: ui,

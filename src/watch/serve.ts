@@ -1,5 +1,6 @@
 import { watch, type FSWatcher } from "node:fs";
 import { isOrphan } from "../card/orphan.js";
+import type { RefreshResult } from "../flow/live.js";
 import type { TopologySnapshot } from "../flow/snapshot.js";
 import { sweep, type SweepResult } from "./loop.js";
 import type { TickOptions } from "./tick.js";
@@ -25,6 +26,13 @@ export interface ServeOptions extends TickOptions {
    * sevmediği şey.
    */
   onOrphan?: (card: { id: string; title: string; role: string }) => void;
+  /**
+   * Akış dosyasını yoklar. Geçişler ARASINDA çağrılır, ortasında değil:
+   * `sweep()` rol listesini baştan alıyor ve tur ortasında değişen bir
+   * topoloji, hangi anın geçerli olduğunu bulanıklaştırırdı.
+   */
+  refresh?: () => Promise<RefreshResult>;
+  onReload?: (result: RefreshResult) => void;
 }
 
 export interface ServeSummary {
@@ -52,7 +60,12 @@ export interface ServeSummary {
  * para geri gelmez.
  */
 export async function serve(
-  topology: TopologySnapshot,
+  /**
+   * Topolojinin YAŞAYAN kaynağı. `LiveFlow` bunu karşılıyor; testler düz bir
+   * nesne verebiliyor. Her geçişte yeniden okunuyor, çünkü akış dosyası
+   * değişmiş olabilir.
+   */
+  source: { readonly topology: TopologySnapshot },
   options: ServeOptions,
 ): Promise<ServeSummary> {
   const pollMs = options.pollMs ?? 1000;
@@ -70,8 +83,29 @@ export async function serve(
   // Kart başına bir kez: her geçişte tekrarlanan uyarı, asıl çıktıyı
   // okunmaz hâle getirirdi.
   const duyurulan = new Set<string>();
+  // Aynı hata her yoklamada tekrarlanırsa terminal okunmaz olur: canlı
+  // koşuda 3 saniyede 48 kez yazdı. Yalnızca DEĞİŞEN hata duyurulur.
+  let sonHata: string | null = null;
 
   while (!aborted()) {
+    if (options.refresh !== undefined) {
+      const reload = await options.refresh();
+      // Yeni topoloji bu geçişten itibaren geçerli; yoldaki kartlar kendi
+      // dondurulmuş topolojileriyle yaşamaya devam ediyor (değişmez 4).
+      if (reload.kind === "reloaded") {
+        sonHata = null;
+        options.onReload?.(reload);
+      } else if (reload.kind === "failed") {
+        if (reload.message !== sonHata) {
+          sonHata = reload.message;
+          options.onReload?.(reload);
+        }
+      } else {
+        sonHata = null;
+      }
+    }
+
+    const topology = source.topology;
     const result = await sweep(topology, options);
     options.onSweep?.(result, sweeps);
     sweeps += 1;

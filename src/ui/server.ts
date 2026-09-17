@@ -4,6 +4,7 @@ import type { AddressInfo } from "node:net";
 import { QueueError, type ReleaseDecision } from "../card/queue.js";
 import { closeOrphan } from "../card/orphan.js";
 import { releaseCard } from "../card/release.js";
+import type { TopologySnapshot } from "../flow/snapshot.js";
 import { buildDetail, buildModel, type DetailOptions, type UiModel } from "./model.js";
 import { renderPage } from "./page.js";
 
@@ -16,6 +17,12 @@ export interface UiServer {
 }
 
 export interface ServeUiOptions extends DetailOptions {
+  /**
+   * Akışın yaşayan kaynağı. Verilirse her okumadan önce yokluyor: akış
+   * dosyası değiştiyse ekran yeni sütunları çiziyor, geçersizse eskisiyle
+   * çizmeye devam edip gerekçeyi gösteriyor.
+   */
+  live?: { topology: TopologySnapshot; flow: { name: string; hash: string }; error: string | null; refresh: () => Promise<unknown> };
   /** 0 = boş port seç. */
   port?: number;
   /**
@@ -85,6 +92,20 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
   const token = options.token ?? randomBytes(24).toString("hex");
   let self = "";
 
+  /** Yaşayan akış varsa yoklar ve o anki topolojiyle seçenekleri kurar. */
+  const guncel = async (): Promise<ServeUiOptions> => {
+    const live = options.live;
+    if (live === undefined) return options;
+    await live.refresh();
+    return {
+      ...options,
+      topology: live.topology,
+      flowName: live.flow.name,
+      flowHash: live.flow.hash,
+      flowError: live.error,
+    };
+  };
+
   const server: Server = createServer((req, res) => {
     const path = (req.url ?? "/").split("?")[0];
 
@@ -99,9 +120,12 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
         return;
       }
       const id = decodeURIComponent(kapat[1] as string);
-      closeOrphan(options.root, options.queue, options.topology, id, options.logPath)
-        .then(async ({ card, reason }) => {
-          const model = await buildModel(options);
+      guncel()
+        .then(async (o) => {
+          const { card, reason } = await closeOrphan(o.root, o.queue, o.topology, id, o.logPath);
+          return { card, reason, model: await buildModel(o) };
+        })
+        .then(({ card, reason, model }) => {
           res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
           res.end(JSON.stringify({ kart: { id: card.id, state: card.state }, reason, model }));
         })
@@ -136,7 +160,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
             karar as ReleaseDecision | undefined,
             options.logPath,
           );
-          const model = await buildModel(options);
+          const model = await buildModel(await guncel());
           res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
           res.end(JSON.stringify({ kart: { id: card.id, role: card.role, state: card.state }, model }));
         })
@@ -157,7 +181,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
     }
 
     if (path === "/durum") {
-      buildModel(options).then(
+      guncel().then(buildModel).then(
         (model: UiModel) => {
           res.writeHead(200, {
             "content-type": "application/json; charset=utf-8",
@@ -178,7 +202,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
 
     if (path !== undefined && path.startsWith("/kart/")) {
       const id = decodeURIComponent(path.slice("/kart/".length));
-      buildDetail(options, id).then(
+      guncel().then((o) => buildDetail(o, id)).then(
         (detail) => {
           if (detail === null) {
             res.writeHead(404, { "content-type": "application/json; charset=utf-8" });

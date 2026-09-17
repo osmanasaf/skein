@@ -5,7 +5,7 @@ import { adapterFor, knownProviderSet } from "../adapters/factory.js";
 import { CardQueue } from "../card/queue.js";
 import { EventLog } from "../events/log.js";
 import { FlowError, loadFlow } from "../flow/load.js";
-import { snapshot, type TopologySnapshot } from "../flow/snapshot.js";
+import { LiveFlow } from "../flow/live.js";
 import { acquireLock, releaseLock, type LockInfo } from "./lock.js";
 import { runUntilIdle, sweep } from "./loop.js";
 import type { TickOptions } from "./tick.js";
@@ -197,7 +197,7 @@ function describe(role: string, result: TickResult): string {
  */
 async function runServer(
   root: string,
-  topology: TopologySnapshot,
+  live: LiveFlow,
   options: TickOptions,
   onSweep: (s: SweepResult, i: number) => void,
   pollMs?: number,
@@ -222,13 +222,26 @@ async function runServer(
   console.log(`gözcü açık · pid ${process.pid} · durdurmak için Ctrl-C\n`);
 
   try {
-    const summary = await serve(topology, {
+    const summary = await serve(live, {
       ...options,
       signal: stop.signal,
       watchDir: join(root, ".skein", "queue"),
       ...(pollMs === undefined ? {} : { pollMs }),
       onSweep,
       onIdle: () => console.log("· kuyruk boş, bekleniyor"),
+      refresh: () => live.refresh(),
+      onReload: (r) => {
+        if (r.kind === "reloaded") {
+          console.log(
+            `\n↻ akış yeniden yüklendi: ${r.from.slice(0, 12)}… → ${r.to.slice(0, 12)}…\n` +
+              `  Yoldaki kartlar kendi topolojileriyle devam ediyor.\n`,
+          );
+        } else if (r.kind === "failed") {
+          console.log(
+            `\n⚠ akış dosyası şu an geçersiz, ESKİSİYLE devam ediliyor:\n  ${r.message}\n`,
+          );
+        }
+      },
       onOrphan: (card) =>
         console.log(
           `\n⚠ \`${card.id}\` (${card.title}) \`${card.role}\` rolünde bekliyor ama bu akışta\n` +
@@ -277,11 +290,14 @@ async function main(argv: string[]): Promise<number> {
   }
 
   const root = resolve(process.cwd());
-  const flow = await loadFlow(join(root, "hub", "flows", `${args.flow}.yaml`), {
+  // Akış açılışta doğrulanıyor; `--serve` ise onu yaşayan tutuyor ve her
+  // geçiş arasında yeniden yokluyor.
+  const live = await LiveFlow.open(join(root, "hub", "flows", `${args.flow}.yaml`), {
     root,
     providers: knownProviderSet(),
   });
-  const topology = snapshot(flow, root);
+  const flow = live.flow;
+  const topology = live.topology;
 
   const queue = new CardQueue(join(root, ".skein"));
   await queue.init();
@@ -328,20 +344,17 @@ async function main(argv: string[]): Promise<number> {
   }
 
   try {
-    return await run(root, flow, topology, queue, args);
+    return await run(root, live, queue, args);
   } finally {
     await releaseLock(lockPath, process.pid);
   }
 }
 
 /** Kilit alındıktan sonraki asıl koşu. */
-async function run(
-  root: string,
-  flow: { name: string; hash: string },
-  topology: TopologySnapshot,
-  queue: CardQueue,
-  args: Args,
-): Promise<number> {
+async function run(root: string, live: LiveFlow, queue: CardQueue, args: Args): Promise<number> {
+  const flow = live.flow;
+  const topology = live.topology;
+
   const recovered = await queue.recover();
   if (recovered.length > 0) {
     console.log(`kurtarıldı: ${recovered.length} kart kuyruğa geri kondu\n`);
@@ -391,7 +404,7 @@ async function run(
     report(s.results);
   };
 
-  if (args.serve) return runServer(root, topology, options, onSweep, args.pollMs);
+  if (args.serve) return runServer(root, live, options, onSweep, args.pollMs);
 
   if (args.once) {
     report((await sweep(topology, options)).results);

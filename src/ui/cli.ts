@@ -2,8 +2,8 @@
 import { join, resolve } from "node:path";
 import { knownProviderSet } from "../adapters/factory.js";
 import { CardQueue } from "../card/queue.js";
-import { FlowError, loadFlow } from "../flow/load.js";
-import { snapshot } from "../flow/snapshot.js";
+import { FlowError } from "../flow/load.js";
+import { LiveFlow } from "../flow/live.js";
 import { serveUi } from "./server.js";
 
 const USAGE = `Kullanım:
@@ -41,11 +41,14 @@ async function main(argv: string[]): Promise<number> {
   }
 
   const root = resolve(process.cwd());
-  const flow = await loadFlow(join(root, "hub", "flows", `${flowName}.yaml`), {
+  // Akış yaşayan: her okumadan önce yoklanıyor. Dosya değişirse ekran yeni
+  // sütunları çiziyor; geçersizse eskisiyle çizip gerekçeyi gösteriyor.
+  const live = await LiveFlow.open(join(root, "hub", "flows", `${flowName}.yaml`), {
     root,
     providers: knownProviderSet(),
   });
-  const topology = snapshot(flow, root);
+  const flow = live.flow;
+  const topology = live.topology;
 
   const queue = new CardQueue(join(root, ".skein"));
   // `init` yalnızca eksik dizinleri yaratır — kuyruğa dokunmaz. `recover()`
@@ -58,6 +61,7 @@ async function main(argv: string[]): Promise<number> {
     topology,
     flowName: flow.name,
     flowHash: flow.hash,
+    live,
     ...(port === undefined ? {} : { port }),
     ...(host === undefined ? {} : { host }),
   });

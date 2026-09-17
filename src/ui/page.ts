@@ -145,6 +145,7 @@ const PAGE = `<!doctype html>
   .err {
     background: var(--gate-bg); border: 1px solid var(--gate-line); color: var(--gate-ink);
     border-radius: 4px; padding: 12px 14px; margin-bottom: 16px; font-size: 13px;
+    white-space: pre-wrap; overflow-wrap: anywhere;
   }
   /* detay paneli */
   .ust { position: fixed; inset: 0; background: rgba(10,20,18,.42); display: flex; justify-content: flex-end; z-index: 9; }
@@ -183,6 +184,7 @@ const PAGE = `<!doctype html>
 <body>
 <div class="wrap">
   <div class="bar" id="bar"></div>
+  <div id="kopuk"></div>
   <div id="hata"></div>
   <div id="uyari"></div>
   <div class="board" id="board"></div>
@@ -474,6 +476,16 @@ function ciz(m) {
   akis.append(el("div", "mono", m.flow.name + "  " + m.flow.hash.slice(0, 12) + "…"));
   bar.append(akis);
 
+  // Akış dosyası bozulduysa ekran eski topolojiyle çizmeye devam ediyor;
+  // bunu söylemezse kullanıcı düzenlemesinin neden tutmadığını bilemez.
+  const hataKabi = document.getElementById("hata");
+  if (m.flow.error) {
+    hataKabi.replaceChildren(el("div", "err",
+      "Akış dosyası şu an geçersiz — ekran ve gözcü ESKİ topolojiyle devam ediyor:\n" + m.flow.error));
+  } else {
+    hataKabi.replaceChildren();
+  }
+
   const g = m.daemon;
   const pill = el("span", "pill " + (g && g.alive ? "on" : "off"));
   pill.append(el("span", "dot" + (g && g.alive ? "" : " dead")));
@@ -549,7 +561,7 @@ function ciz(m) {
 }
 
 async function yokla() {
-  const uyari = document.getElementById("hata");
+  const uyari = document.getElementById("kopuk");
   try {
     const cevap = await fetch("/durum", { cache: "no-store" });
     const veri = await cevap.json();

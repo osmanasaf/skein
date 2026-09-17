@@ -4,7 +4,7 @@ Bu dosya bir sonraki oturumun giriş noktası. Durum ajanın kafasında değil,
 burada ve git'te (PHILOSOPHY 1).
 
 **Dal:** `claude/project-plan-brainstorm-pthvoc`
-**Durum:** 403 test yeşil, typecheck temiz, origin ile senkron.
+**Durum:** 421 test yeşil, typecheck temiz, origin ile senkron.
 **Kod:** 5037 satır (testler hariç).
 **Çizimler:** [kartın yolu](https://claude.ai/code/artifact/185e9279-510a-4544-a20c-831ecf1cdfd3) ·
 [genel bakış](https://claude.ai/code/artifact/2e7575af-84ee-40d8-aab4-5c3bdce0fe50)
@@ -105,6 +105,7 @@ var.
 | Ekran — okuma modeli, yerel sunucu, sayfa | `src/ui/` |
 | Kapı kararı — kartı taşır, kaydı düşer | `src/card/release.ts` |
 | Yetim kart — tanım, kapatma, gerekçe | `src/card/orphan.ts` |
+| Akışın yaşayan hâli — atomik, doğrulanmış | `src/flow/live.ts` |
 | Akan çıktıyı satıra bölme | `src/proc/lines.ts` |
 | Tek yazıcı kilidi — bayat kilidi devralır | `src/watch/lock.ts` |
 | Git katmanı — ileri birleştirme, syncBack, worktree, kirlilik | `src/watch/git.ts` |

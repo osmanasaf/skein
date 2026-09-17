@@ -103,7 +103,7 @@ async function put(title = "iş"): Promise<Card> {
 describe("serve — uyku", () => {
   it("kuyruk boşken ölmez, uyur", async () => {
     const stop = new AbortController();
-    const running = serve(topology, { ...base, signal: stop.signal });
+    const running = serve({ topology }, { ...base, signal: stop.signal });
 
     // Toplu koşu burada çıkardı. Gözcü çıkmamalı: birkaç uyku turu sonra
     // hâlâ koşuyor olmalı.
@@ -120,7 +120,7 @@ describe("serve — uyku", () => {
 
   it("uykudayken durdurma sinyali hemen döner", async () => {
     const stop = new AbortController();
-    const running = serve(topology, { ...base, pollMs: 60_000, signal: stop.signal });
+    const running = serve({ topology }, { ...base, pollMs: 60_000, signal: stop.signal });
 
     await new Promise((r) => setTimeout(r, 20));
     const started = Date.now();
@@ -137,7 +137,7 @@ describe("serve — uyanma", () => {
   it("koşarken açılan kartı ikinci bir komut olmadan işler", async () => {
     const stop = new AbortController();
     const done: string[] = [];
-    const running = serve(topology, {
+    const running = serve({ topology }, {
       ...base,
       signal: stop.signal,
       onSweep: (s) => {
@@ -165,7 +165,7 @@ describe("serve — uyanma", () => {
 
   it("işi bitirince tekrar uykuya döner", async () => {
     const stop = new AbortController();
-    const running = serve(topology, { ...base, signal: stop.signal });
+    const running = serve({ topology }, { ...base, signal: stop.signal });
 
     await new Promise((r) => setTimeout(r, 30));
     await put();
@@ -192,7 +192,7 @@ describe("serve — emniyet", () => {
     };
     await put();
 
-    const summary = await serve(topology, { ...base, maxBusySweeps: 5 });
+    const summary = await serve({ topology }, { ...base, maxBusySweeps: 5 });
 
     expect(summary.stopped).toBe("runaway");
     expect(summary.sweeps).toBe(5);
@@ -207,7 +207,7 @@ describe("serve — durum süreçte tutulmaz", () => {
 
     // Birinci gözcü: yalnızca coder'ın turunu koşacak kadar yaşıyor.
     const first = new AbortController();
-    const running = serve(topology, {
+    const running = serve({ topology }, {
       ...base,
       signal: first.signal,
       onSweep: () => first.abort(),
@@ -217,7 +217,7 @@ describe("serve — durum süreçte tutulmaz", () => {
 
     // İkinci gözcü sıfırdan başlıyor: elinde birinciden hiçbir bellek yok.
     const second = new AbortController();
-    const rest = serve(topology, {
+    const rest = serve({ topology }, {
       ...base,
       signal: second.signal,
       onSweep: (s) => {
@@ -247,7 +247,7 @@ describe("serve — yetim kart", () => {
     const stop = new AbortController();
     const gorulen: { id: string; role: string }[] = [];
 
-    const running = serve(topology, {
+    const running = serve({ topology }, {
       ...base,
       signal: stop.signal,
       onOrphan: (c) => gorulen.push({ id: c.id, role: c.role }),
@@ -266,7 +266,7 @@ describe("serve — yetim kart", () => {
     const stop = new AbortController();
     let sayac = 0;
 
-    const running = serve(topology, { ...base, signal: stop.signal, onOrphan: () => (sayac += 1) });
+    const running = serve({ topology }, { ...base, signal: stop.signal, onOrphan: () => (sayac += 1) });
     await new Promise((r) => setTimeout(r, 120));
     stop.abort();
     const summary = await running;
@@ -278,10 +278,95 @@ describe("serve — yetim kart", () => {
   it("yetim yoksa hiç duyurmaz", async () => {
     const stop = new AbortController();
     let sayac = 0;
-    const running = serve(topology, { ...base, signal: stop.signal, onOrphan: () => (sayac += 1) });
+    const running = serve({ topology }, { ...base, signal: stop.signal, onOrphan: () => (sayac += 1) });
     await new Promise((r) => setTimeout(r, 60));
     stop.abort();
     await running;
     expect(sayac).toBe(0);
+  });
+});
+
+describe("serve — akışı yeniden yükleme", () => {
+  it("geçişler arasında yokluyor ve yeni topolojiyi kullanıyor", async () => {
+    const stop = new AbortController();
+    const tekRol: TopologySnapshot = { ...topology, roles: [topology.roles[0] as TopologySnapshot["roles"][number]] };
+    // Kaynak canlı: ilk geçişte tek rol, yeniden yükleme sonrası iki rol.
+    const source = { topology: tekRol };
+    let yuklendi = 0;
+
+    const running = serve(source, {
+      ...base,
+      signal: stop.signal,
+      refresh: async () => {
+        if (yuklendi > 0) return { kind: "unchanged" as const };
+        yuklendi += 1;
+        source.topology = topology;
+        return { kind: "reloaded" as const, from: "aaa", to: "bbb" };
+      },
+      onReload: () => {},
+    });
+    await new Promise((r) => setTimeout(r, 80));
+    stop.abort();
+    await running;
+
+    expect(yuklendi).toBe(1);
+    expect(source.topology.roles).toHaveLength(2);
+  });
+
+  // Canlı koşuda aynı uyarı 3 saniyede 48 kez yazdı; terminal okunmaz oldu.
+  it("aynı hata tekrar tekrar duyurulmaz", async () => {
+    const stop = new AbortController();
+    let sayac = 0;
+
+    const running = serve({ topology }, {
+      ...base,
+      signal: stop.signal,
+      refresh: async () => ({ kind: "failed" as const, message: "hep aynı hata" }),
+      onReload: () => (sayac += 1),
+    });
+    await new Promise((r) => setTimeout(r, 120));
+    stop.abort();
+    const summary = await running;
+
+    expect(summary.sweeps).toBeGreaterThan(2);
+    expect(sayac).toBe(1);
+  });
+
+  it("hata değişirse yeniden duyurulur", async () => {
+    const stop = new AbortController();
+    const gorulen: string[] = [];
+    let n = 0;
+
+    const running = serve({ topology }, {
+      ...base,
+      signal: stop.signal,
+      refresh: async () => ({ kind: "failed" as const, message: `hata ${++n > 2 ? "B" : "A"}` }),
+      onReload: (r) => gorulen.push(r.kind === "failed" ? r.message : r.kind),
+    });
+    await new Promise((r) => setTimeout(r, 140));
+    stop.abort();
+    await running;
+
+    expect(gorulen).toEqual(["hata A", "hata B"]);
+  });
+
+  it("yeniden yükleme sonucu bildirilir, `unchanged` bildirilmez", async () => {
+    const stop = new AbortController();
+    const gorulen: string[] = [];
+
+    const running = serve({ topology }, {
+      ...base,
+      signal: stop.signal,
+      refresh: async () =>
+        gorulen.length === 0
+          ? { kind: "failed" as const, message: "yarım YAML" }
+          : { kind: "unchanged" as const },
+      onReload: (r) => gorulen.push(r.kind),
+    });
+    await new Promise((r) => setTimeout(r, 80));
+    stop.abort();
+    await running;
+
+    expect(gorulen).toEqual(["failed"]);
   });
 });

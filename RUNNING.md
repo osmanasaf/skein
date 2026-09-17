@@ -25,7 +25,7 @@ npm install
 npm test
 ```
 
-`npm test` testlerin tamamını geçmeli (şu an 403). Geçmiyorsa çıktıyı
+`npm test` testlerin tamamını geçmeli (şu an 421). Geçmiyorsa çıktıyı
 sakla.
 
 ---
@@ -129,12 +129,17 @@ Gözcü ile ekran ayrı süreçler; ekran kilidi almaz, kuyruğa dokunmaz.
 
 ### Akış dosyasını değiştirdiysen
 
-**Gözcüyü ve ekranı yeniden başlat.** İkisi de akışı açılışta bir kez okuyor.
-Akışa rol eklediysen gözcü o rolün kuyruğunu HİÇ açmaz — kart sessizce
-takılır.
+**Yeniden başlatmana gerek yok.** Gözcü geçişler arasında, ekran her okumadan
+önce dosyayı yokluyor:
 
-Gözcü bunu artık söylüyor (kart başına bir kez) ve ekran kartı kendi
-şeridinde gösteriyor. Rol gerçekten silindiyse kartın tek çıkışı var:
+- Geçerli bir değişiklik → gözcü `↻ akış yeniden yüklendi` der, ekran yeni
+  sütunları çizer.
+- Geçersiz (yarım kaydedilmiş YAML) → ikisi de **eskisiyle devam eder** ve
+  gerekçeyi gösterir. Düzeltince kendiliğinden toparlar.
+
+Yoldaki kartlar etkilenmez: her kart açılırken topolojisini dondurur.
+Rolü artık var olmayan kart varsa gözcü onu bir kez duyurur, ekran kendi
+şeridinde gösterir. Rol gerçekten silindiyse kartın tek çıkışı var:
 
 ```powershell
 npx tsx src/card/cli.ts kapat <kart-id>
