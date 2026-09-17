@@ -298,7 +298,18 @@ sağlayıcı CLI'ı yok), ve deneyin kendisi (Açık Soru #2).
 
 **Çalıştırılmış ajan: 6 koşu + 7 denetim turu, toplam ~$1.79.**
 
-Adım 1, 2, 3 tamam. Aşama 2 (akış yükleyici, kuyruk, devir teslim,
-worktree) ve Aşama 3 (adaptörler + yürütücü) tamam. Orkestratör uçtan uca
-koşuyor. Sıradaki: **Aşama 5 — merkez ekranı**, ya da **Açık Soru #2**
-(çapraz sağlayıcı deneyi; ikinci bir CLI gerektiriyor).
+**2026-09-17: ilk çapraz satıcı koşusu tamamlandı.** Kullanıcının
+makinesinde, `daily` akışı: `coder` claude-opus-5'te üretti ve commit attı
+(`aa1852b`, 62 sn), kod `reviewer`'ın worktree'sine birleştirildi, `codex`
+gpt-5.5 orada okudu, testleri ve typecheck'i koşturdu, kabul etti (89 sn).
+Toplam 2 dk 36 sn, insan eli değmeden.
+
+Bu, boru hattının kanıtı — tezin değil. Denetçi kabul etti çünkü yakalayacak
+bir şey yoktu (bkz. PHILOSOPHY açık soru #2).
+
+Adım 1, 2, 3 tamam. Aşama 2 (akış yükleyici, kuyruk, devir teslim, worktree)
+ve Aşama 3 (adaptörler + yürütücü) tamam. Sıradaki iki aday:
+
+- **Görev kalibrasyonu** — üreticinin kusur ürettiği görevler olmadan çapraz
+  denetim ölçülemez. Bench'in darboğazı aynıydı; orkestratörde de aynı.
+- **Aşama 5 — merkez ekranı.**
