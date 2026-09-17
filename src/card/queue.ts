@@ -2,7 +2,15 @@ import { randomBytes } from "node:crypto";
 import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join, sep } from "node:path";
 import { DONE, edgeKey, gateAfter, roleOf } from "../flow/snapshot.js";
-import { parseCard, rejectCount, serializeCard, type Card, type HistoryEntry } from "./card.js";
+import { gateKind, parseCard, rejectCount, serializeCard, type Card, type HistoryEntry } from "./card.js";
+
+/**
+ * İnsanın kapıdaki karta verdiği karar.
+ *
+ * `retry` yalnızca kaçış kapısında anlamlı: tur tamamlanmadı, sebebi
+ * giderildi, aynı rol baştan koşsun.
+ */
+export type ReleaseDecision = "forward" | "back" | "retry";
 
 export class QueueError extends Error {
   constructor(message: string) {
@@ -289,6 +297,9 @@ export class CardQueue {
           event: "gate",
           role: role.id,
           reason: `ret limiti doldu (${limit}): ${reason}`,
+          // Tur tamamlandı; kod devredildiği yerde duruyor. "Üretici haklı"
+          // denip ileri bırakılabilir.
+          kind: "deadlock",
         }),
         state: "gate" as const,
       };
@@ -318,7 +329,7 @@ export class CardQueue {
   async escalate(card: Card, reason: string): Promise<Card> {
     const { role, path } = this.#requireActive(card);
     const gated = {
-      ...this.#push(card, { at: now(), event: "gate", role: role.id, reason }),
+      ...this.#push(card, { at: now(), event: "gate", role: role.id, reason, kind: "escalation" }),
       state: "gate" as const,
     };
     return this.#move(gated, join(this.#root, "gate"), `${card.id}.json`, path);
@@ -336,7 +347,7 @@ export class CardQueue {
    * Hangi yön seçilirse seçilsin ilgili kenarın ret sayacı sıfırlanır:
    * insan seriyi kırdı, kart hemen yeniden kapıya düşmemeli.
    */
-  async release(id: string, opts: { decision?: "forward" | "back" } = {}): Promise<Card> {
+  async release(id: string, opts: { decision?: ReleaseDecision } = {}): Promise<Card> {
     const path = join(this.#root, "gate", `${id}.json`);
     const card = await this.#readCard(path).catch(() => {
       throw new QueueError(`Kapıda böyle bir kart yok: ${id}`);
@@ -347,10 +358,27 @@ export class CardQueue {
       throw new QueueError(`Kartın rolü topolojisinde yok: ${card.role} (kart ${id})`);
     }
 
-    const decision = opts.decision ?? "forward";
+    const kind = gateKind(card);
+    // Kaçış kapısında tur TAMAMLANMADI: kod bir sonraki worktree'ye hiç
+    // birleştirilmedi. İleri bırakmak, sonraki role bayat bir ağaçta
+    // çalıştırmak olurdu — ve hiçbir yerde görünmezdi.
+    const decision = opts.decision ?? (kind === "escalation" ? "retry" : "forward");
+    if (kind === "escalation" && decision === "forward") {
+      const reason = lastGateReason(card);
+      throw new QueueError(
+        `Bu kart kaçış kapısında, onay kapısında değil — ileri bırakılamaz.\n\n` +
+          `  Tur tamamlanmadı, yani kod \`${role.next}\` worktree'sine HİÇ taşınmadı;\n` +
+          `  ileri bırakılsa sonraki rol bayat bir ağaçta çalışırdı.\n\n` +
+          (reason === null ? "" : `  Sebep: ${reason}\n\n`) +
+          `  Sebebi giderip \`retry\` ile aynı role geri ver (varsayılan), ya da\n` +
+          `  \`back\` ile önceki role gönder.`,
+      );
+    }
+
     // `back` hedefi: rolün ret hedefi. Zincirin başında geri dönecek rol
     // olmadığı için rol işi kendisi yeniden yapar.
-    const target = decision === "forward" ? role.next : (role.reject ?? role.id);
+    const target =
+      decision === "retry" ? role.id : decision === "forward" ? role.next : (role.reject ?? role.id);
 
     const rejects = { ...card.rejects };
     if (role.reject !== null) delete rejects[edgeKey(role.id, role.reject)];
@@ -415,6 +443,12 @@ export class CardQueue {
     }
     return requeued;
   }
+}
+
+/** Kaçış kapısındaki kartın gerekçesi — hata mesajında gösterilir. */
+function lastGateReason(card: Card): string | null {
+  const last = card.history[card.history.length - 1];
+  return last?.event === "gate" ? last.reason : null;
 }
 
 function now(): string {

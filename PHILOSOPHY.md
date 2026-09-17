@@ -242,6 +242,23 @@ sınamak üzere kuruldu; cevaplar olumsuz çıkarsa ilke değişir.
    çerçevelenen sorunun aday sınıflarından ikisi. İlk kez üretici kusur
    üretti, ilk kez denetim katmanının yakalayacağı bir şey vardı.
 
+   *Aynı kart tamamlandığında denetçi **iki kez** haklı çıkmıştı.* İkinci ret:
+
+   > Compensation calculation produces NaN when sum is infinite… The check
+   > should verify `!Number.isFinite(sum)` in addition to `!Number.isFinite(num)`,
+   > otherwise `[Infinity, 2, 3]` returns NaN instead of Infinity.
+
+   İkisi de bağımsız koşturularak doğrulandı: `[Infinity, Infinity]` düz
+   Kahan'da NaN veriyor; kısmi düzeltmede `[Infinity, 2, 3]` hâlâ NaN
+   veriyor. Yani üretici aynı kusurun iki ayrı yüzünü ardarda kaçırdı ve
+   denetçi ikisini de yakaladı. Kart 8 turda, 2 retle, 1 insan müdahalesiyle
+   bitti; son kodda 12 test yeşil.
+
+   **Bu, denetim katmanının değerine dair projedeki ilk somut veri.** Sınırı
+   yine aynı: aynı model, dolayısıyla ölçülen şey çeşitlilik değil, **ayrı
+   bir denetim turu**. Çapraz satıcı sorusu hâlâ açık — ama artık "denetim
+   katmanı hiç bir şey yakalamıyor" diye bir bulgu YOK.
+
 3. **Rol ayrımı, iyi bir kontrol listesine sahip tek ajandan daha mı iyi?**
    Ayrı rol, taze bağlam demek — ama aynı zamanda bağlam kaybı ve merge
    maliyeti demek. Ölçüm: iki rollük akış ile tek ajan + denetim promptunun

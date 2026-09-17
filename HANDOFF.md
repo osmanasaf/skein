@@ -4,7 +4,7 @@ Bu dosya bir sonraki oturumun giriş noktası. Durum ajanın kafasında değil,
 burada ve git'te (PHILOSOPHY 1).
 
 **Dal:** `claude/project-plan-brainstorm-pthvoc`
-**Durum:** 336 test yeşil, typecheck temiz, origin ile senkron.
+**Durum:** 341 test yeşil, typecheck temiz, origin ile senkron.
 **Kod:** 5037 satır (testler hariç).
 **Çizimler:** [kartın yolu](https://claude.ai/code/artifact/185e9279-510a-4544-a20c-831ecf1cdfd3) ·
 [genel bakış](https://claude.ai/code/artifact/2e7575af-84ee-40d8-aab4-5c3bdce0fe50)
@@ -139,13 +139,17 @@ yazıp commit'liyor; (b) `handoff` kabul özetini kartın devir kaydına yazıyo
 devir commit'ini görüp spec dosyasını kendi okudu. Ayrıntı `ARCHITECTURE.md`
 "Belge üreten rolün çıktısı" kaydında.
 
-**Kusur 3 — kaçırılan kapı: kaçış (escalate) sonrası `release forward`
-kodu taşımıyor. AÇIK.** Normal kapıda kod devirden ÖNCE birleştiriliyor
-(`handOverCode` → `handoff` → gate). Ama kirli ağaç gibi bir sebeple kart
-kaçışla kapıya çıktığında birleştirme HİÇ koşmuyor; insan `release forward`
-derse sonraki rol bayat bir worktree'de çalışır ve bunu kimse söylemez.
-Seçenekler: kaçış kapısından ileri bırakmayı yasaklamak, bırakırken
-birleştirmeyi tetiklemek, ya da turun başında gelen kodu doğrulamak.
+**Kusur 3 — kaçış kapısı ile onay kapısı karışıyordu. ÇÖZÜLDÜ.**
+İkisi de `state: "gate"` bırakıyor ve rolü değiştirmiyordu, ama onay
+kapısında kod devirden ÖNCE birleştirilmiş oluyor; kaçışta hiç
+birleştirilmiyor. `release forward` bu yüzden sessizce bayat worktree
+üretebiliyordu. Artık kapı tipi kayda yazılıyor (`gate.kind`), kaçıştan
+ileri bırakmak gerekçesiyle birlikte REDDEDİLİYOR ve yeni bir karar var:
+`retry` — aynı rol baştan koşar (kaçış kapısının varsayılanı).
+
+Gerçek bir kartta doğrulandı: kaçış kapısındaki kart `forward` ile
+reddedildi, sebebi giderilip `retry` verildi, zincir kaldığı yerden devam
+edip bitti.
 
 ---
 
@@ -156,6 +160,7 @@ birleştirmeyi tetiklemek, ya da turun başında gelen kodu doğrulamak.
 | 1 | `backoff` (4 satır) | claude-opus-5 | codex gpt-5.5 | kabul, 2 dk 36 sn |
 | 2 | token bucket | claude-haiku | claude-haiku | kabul |
 | 3 | `card.settled` (Skein'in kendi backlog'u) | claude-opus-5 | codex gpt-5.5 | kabul |
+| 4 | `spec` akışı, 4 rol, belirsiz görev | haiku | haiku | **2 ret** — ikisi de gerçek kusur |
 
 **Üçünde de üretici kusur üretmedi.** Çapraz denetimin yakalayacağı bir şey
 oluşmadı. Üçüncüsünde çıktı ayrıca insan-yönlendirmeli bir üçüncü gözden

@@ -39,7 +39,26 @@ export type HistoryEntry =
       commit?: string;
       reason: string;
     }
-  | { at: string; event: "gate"; role: string; reason: string }
+  | {
+      at: string;
+      event: "gate";
+      role: string;
+      reason: string;
+      /**
+       * Kartı hangi sebep durdurdu.
+       *
+       * - `deadlock` — tur TAMAMLANDI, kart politika yüzünden durdu (ret
+       *   limiti doldu). Kod yerinde; "üretici haklı" denip ileri
+       *   bırakılabilir.
+       * - `escalation` — tur tamamlanmadı (kirli ağaç, verdikt yok, çakışma).
+       *   Kod bir sonraki worktree'ye HİÇ taşınmadı.
+       *
+       * İkisi de `state: "gate"` bırakıyor ve rolü değiştirmiyordu; fark
+       * kayıtta yazmadığı için ileri bırakma sessizce bayat ağaç
+       * üretebiliyordu. Alan eksikse `escalation` varsayılır — güvenli yön.
+       */
+      kind?: "deadlock" | "escalation";
+    }
   | { at: string; event: "released"; role: string }
   | { at: string; event: "requeued"; role: string; reason: string }
   | { at: string; event: "done"; from: string };
@@ -119,6 +138,30 @@ export function newCard(input: NewCardInput): Card {
     history: [{ at, event: "created", role }],
     topology: input.topology,
   };
+}
+
+/**
+ * Kart kapıda duruyorsa HANGİ kapıda.
+ *
+ * İki kapı var ve karıştırılmaları pahalıya mal oluyor:
+ *
+ * - **onay** — rol işini bitirdi, kod bir sonraki worktree'ye BİRLEŞTİRİLDİ,
+ *   kart devredilmeden önce insana soruluyor. Son kayıt bir `handoff`.
+ * - **kilit** (`deadlock`) — ret limiti doldu. Tur tamamlandı, kod yerinde;
+ *   karar "kim haklı".
+ * - **kaçış** (`escalation`) — tur tamamlanmadı (kirli ağaç, verdikt yok,
+ *   çakışma). Kod HİÇ taşınmadı ve kart hâlâ aynı rolde.
+ *
+ * Fark görünmezdi: ikisinde de `state: "gate"` ve rol değişmemiş oluyor.
+ * Kaçıştan sonra "ileri bırak" denince kod taşınmadığı için sonraki rol
+ * bayat bir ağaçta çalışıyor ve bunu kimse söylemiyordu.
+ */
+export function gateKind(card: Card): "approval" | "deadlock" | "escalation" | null {
+  if (card.state !== "gate") return null;
+  const last = card.history[card.history.length - 1];
+  if (last?.event === "gate") return last.kind ?? "escalation";
+  if (last?.event === "handoff") return "approval";
+  return null;
 }
 
 export function rejectCount(card: Card, from: string, to: string): number {

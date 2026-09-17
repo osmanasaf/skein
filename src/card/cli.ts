@@ -3,8 +3,8 @@ import { join, resolve } from "node:path";
 import { knownProviderSet } from "../adapters/factory.js";
 import { loadFlow } from "../flow/load.js";
 import { snapshot } from "../flow/snapshot.js";
-import { newCard, type Card } from "./card.js";
-import { CardQueue, QueueError } from "./queue.js";
+import { gateKind, newCard, type Card } from "./card.js";
+import { CardQueue, QueueError, type ReleaseDecision } from "./queue.js";
 import { FlowError } from "../flow/load.js";
 
 const USAGE = `Kullanım:
@@ -14,7 +14,10 @@ const USAGE = `Kullanım:
   npm run card -- take <rol>                          kuyruğun başındaki kartı alır
   npm run card -- handoff <kart-id> [commit]          kabul: kart ileri gider
   npm run card -- reject <kart-id> <gerekçe>          ret: KART geri döner
-  npm run card -- release <kart-id> [forward|back]    kapıdaki kartı karara bağlar
+  npm run card -- release <kart-id> [forward|back|retry]  kapıdaki kartı karara bağlar
+       forward  bir sonraki role geçsin (yalnızca onay/kilit kapısında)
+       back     önceki role dönsün
+       retry    aynı rol baştan koşsun (kaçış kapısının varsayılanı)
   npm run card -- recover                             yarıda kalanları toplar
 
 Kuyruk .skein/ altında. Akış adı hub/flows/<ad>.yaml'a karşılık gelir.`;
@@ -171,12 +174,21 @@ async function run(argv: string[], root: string): Promise<number> {
 
     case "release": {
       const card = await need(rest[0]);
-      const decision = rest[1] === "back" ? "back" : "forward";
-      const released = await queue.release(card.id, { decision });
+      // Karar verilmediyse kapının tipi belirler: kaçış kapısında tur
+      // tamamlanmadı, yani doğru varsayılan "aynı rol baştan koşsun".
+      const asked = rest[1];
+      const decision: ReleaseDecision | undefined =
+        asked === "back" || asked === "forward" || asked === "retry" ? asked : undefined;
+      if (asked !== undefined && decision === undefined) {
+        console.error(`✗ Bilinmeyen karar: ${asked}. Beklenen: forward, back, retry`);
+        return 1;
+      }
+      const released = await queue.release(card.id, decision === undefined ? {} : { decision });
+      const taken = decision ?? (gateKind(card) === "escalation" ? "retry" : "forward");
       console.log(
         released.state === "done"
           ? `✓ ${released.id} bitti`
-          : `→ ${released.id} bırakıldı (${decision}): ${released.role} kuyruğunda`,
+          : `→ ${released.id} bırakıldı (${taken}): ${released.role} kuyruğunda`,
       );
       return 0;
     }

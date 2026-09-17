@@ -25,7 +25,7 @@ npm install
 npm test
 ```
 
-`npm test` testlerin tamamını geçmeli (şu an 328). Geçmiyorsa çıktıyı
+`npm test` testlerin tamamını geçmeli (şu an 341). Geçmiyorsa çıktıyı
 sakla.
 
 ---
@@ -143,9 +143,23 @@ açıklaması dahil**. Sık görülen iki sebep:
 Kapıdaki kartı karara bağlamak:
 
 ```powershell
+npx tsx src/card/cli.ts release <kart-id>           # kapının tipine göre karar
 npx tsx src/card/cli.ts release <kart-id> forward   # geçsin
 npx tsx src/card/cli.ts release <kart-id> back      # geri dönsün
+npx tsx src/card/cli.ts release <kart-id> retry     # aynı rol baştan koşsun
 ```
+
+**İki tür kapı var ve çıkışları farklı:**
+
+| Kapı | Ne oldu | Kod nerede | Çıkış |
+|---|---|---|---|
+| **onay** | Rol işini bitirdi, `gates:` burada durmanı istedi | Sonraki worktree'ye taşındı | `forward` (varsayılan) · `back` |
+| **kilit** | Ret limiti doldu | Yerinde | `forward` ("üretici haklı") · `back` |
+| **kaçış** | Tur tamamlanmadı: kirli ağaç, verdikt yok, çakışma | **Hiç taşınmadı** | `retry` (varsayılan) · `back` |
+
+Kaçış kapısında `forward` **reddedilir** — kod taşınmadığı için sonraki rol
+bayat bir ağaçta çalışırdı. Sebebi gider (dosyayı işle ya da sil), sonra
+`retry` ver.
 
 ### Modeli ve izinleri pinlemek
 

@@ -227,6 +227,62 @@ describe("CardQueue — ret", () => {
     expect(await queue.depth("coder")).toBe(0);
   });
 
+  // Kaçış kapısı ile kilit kapısı ikisi de `state: "gate"` bırakıyor ve rolü
+  // değiştirmiyor. Farkı kayıt söylüyor; söylemeseydi ileri bırakma sessizce
+  // bayat bir ağaç üretirdi.
+  describe("kaçış kapısı ≠ onay/kilit kapısı", () => {
+    async function escalated(): Promise<Card> {
+      await put(daily);
+      const card = (await queue.take("coder")) as Card;
+      return queue.escalate(card, "ağaçta işlenmemiş değişiklik var: README.md");
+    }
+
+    it("kaçış kapısında ileri bırakmak REDDEDİLİR", async () => {
+      const card = await escalated();
+      await expect(queue.release(card.id, { decision: "forward" })).rejects.toThrow(
+        /kaçış kapısında/,
+      );
+      // Kart yerinde kaldı: reddedilen bir karar kartı oynatmamalı.
+      expect((await queue.get(card.id))?.state).toBe("gate");
+    });
+
+    it("hata mesajı sebebi ve çıkış yolunu söyler", async () => {
+      const card = await escalated();
+      const error = await queue.release(card.id, { decision: "forward" }).catch((e: Error) => e);
+      expect(String(error)).toContain("README.md");
+      expect(String(error)).toContain("retry");
+    });
+
+    it("kaçış kapısının varsayılanı retry — aynı rol baştan koşar", async () => {
+      const card = await escalated();
+      const released = await queue.release(card.id);
+      expect(released.role).toBe("coder");
+      expect(released.state).toBe("queued");
+      expect(await queue.depth("coder")).toBe(1);
+    });
+
+    it("kaçış kapısından geri göndermek serbest", async () => {
+      await put(daily);
+      await queue.handoff((await queue.take("coder")) as Card, {});
+      const card = await queue.escalate((await queue.take("reviewer")) as Card, "verdikt yok");
+
+      const released = await queue.release(card.id, { decision: "back" });
+
+      expect(released.role).toBe("coder");
+    });
+
+    it("onay kapısında ileri bırakmak serbest — kod zaten taşındı", async () => {
+      await put(spec);
+      const card = (await queue.take("analyst")) as Card;
+      const gated = await queue.handoff(card, { commit: "abc1234" });
+      expect(gated.state).toBe("gate");
+
+      const released = await queue.release(gated.id, { decision: "forward" });
+
+      expect(released.role).toBe("coder");
+    });
+  });
+
   it("kapıdaki kilidi insan iki yönde de çözebilir", async () => {
     /** daily akışında kartı ret limiti dolana kadar döndürür. */
     async function deadlock(): Promise<Card> {
