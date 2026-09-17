@@ -61,6 +61,21 @@ describe("EventLog", () => {
     expect(events[0]).toMatchObject({ durationMs: 1200, usage: { costUsd: 0.25 } });
   });
 
+  it("kart sonuç kaydı gerekçe ve uyarılarla yazılır", async () => {
+    await log().append({
+      type: "card.settled", cell: "k1:coder", card: "k1", role: "coder",
+      outcome: "rejected", state: "queued", reason: "test yok", warnings: ["w"],
+    });
+    const { events } = await readEvents(path);
+    expect(events[0]).toMatchObject({ type: "card.settled", outcome: "rejected", reason: "test yok", warnings: ["w"] });
+  });
+
+  it("kart sonuç kaydında sonuç eksikse reddeder", async () => {
+    await expect(
+      log().append({ type: "card.settled", cell: "k1:coder", card: "k1", role: "coder", state: "gate" } as never),
+    ).rejects.toThrow(/outcome/);
+  });
+
   // Ölçüm yalnızca bu günlükten geliyor: alanı eksik bir kayıt, analiz
   // anında fark edilen bir çöp satır olmaktan kötüdür — yazarken patlamalı.
   it("bilinmeyen olay tipini yazmayı reddeder", async () => {

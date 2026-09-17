@@ -540,7 +540,7 @@ describe("tick — olay günlüğü", () => {
     await tick("coder", { ...options, log: new EventLog(logPath, "kosu-1") });
 
     const { events } = await readEvents(logPath);
-    expect(events.map((e) => e.type)).toEqual(["agent.started", "agent.finished"]);
+    expect(events.map((e) => e.type)).toEqual(["agent.started", "agent.finished", "card.settled"]);
     const started = events[0] as { promptHash: string; provider: string; model: string; role: string };
     expect(started.role).toBe("coder");
     expect(started.provider).toBe("claude");
@@ -568,6 +568,83 @@ describe("tick — olay günlüğü", () => {
     // Görev metni değişti (ret kaydı eklendi) ama ROL PROMPTU değişmedi.
     expect(coderHashes).toHaveLength(2);
     expect(coderHashes[0]).toBe(coderHashes[1]);
+  });
+});
+
+describe("tick — sonuç günlüğe yazılır", () => {
+  let logPath: string;
+  let logged: TickOptions;
+  beforeEach(() => {
+    logPath = join(root, "olaylar.jsonl");
+    logged = { ...options, log: new EventLog(logPath, "kosu-1") };
+  });
+  const settled = async (): Promise<Record<string, unknown>[]> =>
+    (await readEvents(logPath)).events.filter((e) => e.type === "card.settled") as unknown as Record<string, unknown>[];
+
+  it("kabul: kart id, rol, sonuç, durum ve özet", async () => {
+    const card = await put();
+    claude.answer = writes({ decision: "accept", summary: "jitter eklendi" });
+
+    await tick("coder", logged);
+
+    expect(await settled()).toEqual([
+      expect.objectContaining({
+        cell: `${card.id}:coder`, card: card.id, role: "coder",
+        outcome: "accepted", state: "queued", summary: "jitter eklendi",
+      }),
+    ]);
+  });
+
+  it("ret: gerekçe kaydedilir", async () => {
+    await put();
+    claude.answer = writes({ decision: "accept" });
+    codex.answer = writes({ decision: "reject", reason: "test yok" });
+
+    await tick("coder", logged);
+    await tick("reviewer", logged);
+
+    expect((await settled())[1]).toMatchObject({ role: "reviewer", outcome: "rejected", reason: "test yok" });
+  });
+
+  it("insan kapısı: gerekçe ve gate durumu kaydedilir", async () => {
+    await put();
+    claude.answer = null;
+
+    await tick("coder", logged);
+
+    const [event] = await settled();
+    expect(event).toMatchObject({ outcome: "escalated", state: "gate" });
+    expect(event?.["reason"]).toMatch(/verdikt yazmadı/);
+  });
+
+  it("adaptör yoksa da kapı sonucu kaydedilir", async () => {
+    await put();
+
+    await tick("coder", { ...logged, adapters: new Map() });
+
+    expect(await settled()).toEqual([expect.objectContaining({ outcome: "escalated", role: "coder" })]);
+  });
+
+  it("syncBack uyarıları kaydedilir", async () => {
+    await put();
+    claude.answer = writes({ decision: "accept" });
+    codex.answer = writes({ decision: "accept" });
+
+    await tick("coder", logged);
+    await tick("reviewer", {
+      ...logged,
+      mergeForward: async (o) =>
+        o.message.includes("syncBack") ? { kind: "conflict", paths: ["src/retry.ts"] } : { kind: "merged" },
+    });
+
+    const event = (await settled())[1];
+    expect(event).toMatchObject({ outcome: "accepted", state: "done" });
+    expect((event?.["warnings"] as string[])[0]).toContain("çakıştı");
+  });
+
+  it("boş kuyruk günlüğe hiçbir şey yazmaz", async () => {
+    await tick("coder", logged);
+    expect(await settled()).toEqual([]);
   });
 });
 
