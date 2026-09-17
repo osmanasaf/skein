@@ -4,7 +4,7 @@ Bu dosya bir sonraki oturumun giriş noktası. Durum ajanın kafasında değil,
 burada ve git'te (PHILOSOPHY 1).
 
 **Dal:** `claude/project-plan-brainstorm-pthvoc`
-**Durum:** 328 test yeşil, typecheck temiz, origin ile senkron.
+**Durum:** 331 test yeşil, typecheck temiz, origin ile senkron.
 **Kod:** 5037 satır (testler hariç).
 **Çizimler:** [kartın yolu](https://claude.ai/code/artifact/185e9279-510a-4544-a20c-831ecf1cdfd3) ·
 [genel bakış](https://claude.ai/code/artifact/2e7575af-84ee-40d8-aab4-5c3bdce0fe50)
@@ -104,6 +104,39 @@ var.
 | Olay günlüğü — `card.settled` dahil | `src/events/log.ts` |
 
 Yazılmamış: **ekran**. Ve deneyin kendisi (aşağıya bak).
+
+---
+
+## 4 rollü akış ilk kez koşuldu — ve iki kusur çıkardı
+
+`spec.yaml` (analyst → coder → reviewer → guard, kapı analyst sonrasında)
+17 Eylül'de ilk kez gerçek ajanlarla koştu. Hepsi haiku (konteynerde codex
+yok), belirsiz bir görev: *"toplam() büyük listelerde kayan nokta hatası
+biriktiriyor, düzelt"*.
+
+**Mekanizma tamamen çalıştı:** kapı durdu ve insan bıraktı, kod üç worktree
+arasında taşındı, syncBack üç dala da ulaştı, testler yeşil bitti.
+4 aktivasyon · 4 dk 20 sn · $0.42.
+
+**Kusur 1 — maliyet tahmini 2.75 kat şişikti.** Model 11 aktivasyon diyordu,
+gerçek 4. İki sebep: uygulanmayan audit turları sayılıyordu (`src/audit/gate.ts`
+yalnızca bench'te; `src/watch/` onu hiç çağırmıyor) ve syncBack alıcıları
+aktivasyon sanılıyordu (git birleştirmesi, ajan çağrısı değil). Düzeltildi;
+`flow check` artık `audit.enabled: true` yazıp hiçbir şey yapmadığını da
+söylüyor.
+
+**Kusur 2 — belge üreten rolün çıktısı devirde kayboluyor. AÇIK.**
+`specifier.md` rolü dosya yazmayı açıkça yasaklıyor ("Kod, test ya da dosya
+yazmak" sahiplenmediklerinde), `handoff` kabul özetini kartın geçmişine
+YAZMIYOR, ve `buildTaskText` yalnızca **ret** gerekçesini ileri taşıyor.
+Sonuç: analyst'in kabul kriterleri `.skein-verdict.json` içinde kalıyor ve
+coder özgün belirsiz görevi alıyor. Koşuda coder Kahan toplamını kendi
+buldu — yani kayıp maskelendi, ama analyst rolü kâğıt üstünde kaldı.
+
+İki aday çözüm `ARCHITECTURE.md`'de tartışılmayı bekliyor: (a) belge üreten
+rol çıktısını dosyaya yazıp commit'ler — "kod git'te taşınır" değişmezinin
+belgelere uygulanması; (b) çekirdek, bir önceki devrin özetini ret kaydıyla
+simetrik biçimde iş metnine taşır.
 
 ---
 

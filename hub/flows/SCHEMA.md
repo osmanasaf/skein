@@ -236,14 +236,24 @@ Topolojiyi çalıştırmadan önce ne kadara mal olacağını görebilmelisin. K
 tahmin, kart başına ajan uyandırması:
 
 ```
-temel ≈ (rol sayısı × audit tur sayısı) + toplam syncBack alıcısı
+temel ≈ rol sayısı × rol başına tur
 ```
 
 | Topoloji | Roller | syncBack toplamı | ~Temel |
 |---|---:|---:|---:|
-| `daily` (2 adım) | 2 | 1 | ~5 |
-| `spec` (4 adım) | 4 | 3 | ~11 |
-| 6 adım, her denetim rolü tüm öncekilere syncBack | 6 | 9 | ~21 |
+| `daily` (2 adım) | 2 | 1 | ~2 |
+| `spec` (4 adım) | 4 | 3 | ~4 |
+| 6 adım, her denetim rolü tüm öncekilere syncBack | 6 | 9 | ~6 |
+
+**`syncBack` bu toplama girmez** — git birleştirmesidir, ajan çağrısı değil.
+Eskiden alıcı başına bir aktivasyon sayılıyordu; 3 syncBack alıcılı 4 rollü
+akışın canlı koşusu tam 4 ajan çağırdı.
+
+**Rol başına tur bugün 1.** Audit kapısı (PHILOSOPHY 6) rol başına iki
+uyandırma demek olurdu, ama **gözcü o kapıyı henüz uygulamıyor**:
+`src/audit/gate.ts` yalnızca deneyde kullanılıyor. `audit.enabled: true`
+yazmak bugün gözcünün davranışını DEĞİŞTİRMEZ; `flow check` bunu uyarı
+olarak söyler.
 
 **Ret bu sayının üstüne biner.** Bir ret, reddeden rolle hedefi arasındaki
 zincir parçasını baştan koşturur. Varsayılan hedef gönderen olduğu için

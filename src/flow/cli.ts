@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { resolve } from "node:path";
 import { knownProviderSet } from "../adapters/factory.js";
-import { estimateCost } from "./cost.js";
+import { AUDIT_IMPLEMENTED, estimateCost } from "./cost.js";
 import { DONE, FlowError, loadFlow, type Flow } from "./load.js";
 
 const USAGE = `Kullanım:
@@ -55,7 +55,13 @@ function printFlow(flow: Flow, root: string): void {
   }
   console.log(`ret:   limit ${flow.reject.limit}, dolunca ${flow.reject.onExhausted} (insan kapısı)`);
   console.log(
-    `audit: ${flow.audit.enabled ? "açık" : "KAPALI"} — parmak izi: ${flow.audit.fingerprint.join(", ")}`,
+    // "açık" yazıp hiçbir şey yapmamak sessiz bir yalandı: kullanıcı kapıyı
+    // kurduğunu sanıyor, maliyet tahmini şişiyor, gözcü hiçbir şey
+    // değiştirmiyor. Uygulanmadığı SÖYLENİYOR.
+    `audit: ${flow.audit.enabled ? "açık" : "KAPALI"} — parmak izi: ${flow.audit.fingerprint.join(", ")}` +
+      (flow.audit.enabled && !AUDIT_IMPLEMENTED
+        ? "\n       ⚠ gözcü bu kapıyı HENÜZ UYGULAMIYOR — yalnızca bench'te var"
+        : ""),
   );
   console.log("");
 

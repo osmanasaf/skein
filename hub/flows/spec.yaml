@@ -62,6 +62,8 @@ audit:
   enabled: true
   fingerprint: [task, recipients, commit, draft]
 
-# Maliyet: ~11 aktivasyon/kart (4 rol × 2 audit turu + 3 syncBack alıcısı).
+# Maliyet: ~4 aktivasyon/kart (rol başına bir tur; syncBack ajan çağırmaz).
 # Ret kenarları (başı dışında HER rol bir kenardır; varsayılan hedef gönderen):
-# coder→analyst (+4), reviewer→coder (+4), guard→coder (+6). Limit 2 → en kötü ~39.
+# coder→analyst (+2), reviewer→coder (+2), guard→coder (+3). Limit 2 → en kötü ~18.
+#
+# Canlı koşuldu (17 Eylül, hepsi haiku): 4 aktivasyon, 4 dk 20 sn, $0.42.

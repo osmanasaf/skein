@@ -10,6 +10,21 @@ import type { Flow } from "./load.js";
  */
 export const AUDIT_ROUNDS = 2;
 
+/**
+ * Gözcü audit kapısını uyguluyor mu.
+ *
+ * `false`, ve bunu bir canlı koşu ortaya çıkardı: 4 rollü `spec` akışı
+ * `audit.enabled: true` ile koştu, tahmin 11 aktivasyon dedi, gerçekte **4**
+ * oldu. `src/audit/gate.ts` yalnızca deneyde kullanılıyor; `src/watch/` onu
+ * hiç çağırmıyor.
+ *
+ * Tahmin, tasarımın niyetini değil kodun yaptığını anlatmak zorunda:
+ * kullanıcı topoloji derinliğine bu sayıya bakarak karar veriyor ve şişirilmiş
+ * bir sayı, rol eklemekten gereksiz yere caydırır. Kapı uygulandığı gün bu
+ * sabit `true` olur ve tahmin kendiliğinden düzelir.
+ */
+export const AUDIT_IMPLEMENTED = false;
+
 export interface RejectEdge {
   from: string;
   to: string;
@@ -35,13 +50,18 @@ export interface CostEstimate {
  * limiti, farkında olmadan verilen bir bütçe kararıdır.
  *
  * SCHEMA.md'deki formülün kod karşılığı:
- *   temel   ≈ (rol × audit turu) + toplam syncBack alıcısı
+ *   temel   ≈ rol × audit turu
  *   en kötü ≈ temel + Σ (kenarın ret limiti × o parçanın maliyeti)
+ *
+ * `syncBack` bu toplama GİRMEZ: git birleştirmesi, ajan çağrısı değil.
+ * Eskiden alıcı başına bir aktivasyon sayılıyordu ve canlı koşu bunun yanlış
+ * olduğunu gösterdi — 3 syncBack alıcılı 4 rollü akış tam 4 ajan çağırdı.
  */
 export function estimateCost(flow: Flow): CostEstimate {
-  const perRole = flow.audit.enabled ? AUDIT_ROUNDS : 1;
+  const perRole = flow.audit.enabled && AUDIT_IMPLEMENTED ? AUDIT_ROUNDS : 1;
+  // Bilgi olarak duruyor (akış kaç kopyalama yapacak), maliyete girmiyor.
   const syncBacks = flow.roles.reduce((sum, role) => sum + role.syncBack.length, 0);
-  const base = flow.roles.length * perRole + syncBacks;
+  const base = flow.roles.length * perRole;
 
   const indexOf = new Map(flow.order.map((id, i) => [id, i]));
   const rejectEdges: RejectEdge[] = [];
