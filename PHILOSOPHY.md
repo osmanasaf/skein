@@ -215,6 +215,33 @@ sınamak üzere kuruldu; cevaplar olumsuz çıkarsa ilke değişir.
    denetim katmanı hangi görev sınıfında karşılığını verir" diye sormak
    gerekiyor. Üç veri noktası az, ama üçü de aynı yöne bakıyor.
 
+   *Aynı gün, dördüncü koşu — ve denetim katmanı İLK KEZ gerçek bir kusur
+   yakaladı.* 4 rollü `spec` akışı, belirsiz bir görev: *"toplam() sonsuz
+   değer içeren girdilerde ne yapmalı belli değil, karar ver ve uygula."*
+   `analyst` kabul kriterlerini yazdı (`Infinity + (-Infinity) = NaN`,
+   `sonlu + Infinity = Infinity`), `coder` uyguladı — ve `reviewer`
+   **reddetti**:
+
+   > Kahan summation kompensasyon hesabı sonsuz değerlerde NaN üretiyor;
+   > Test 3, 4, 7, 8 başarısız olacak — örneğin `toplam([Infinity, Infinity])`
+   > NaN döner, Infinity döndürmesi gerekiyorsa.
+
+   Bulgu doğru, ve aritmetiği bağımsız koşturularak doğrulandı: Kahan'ın
+   `compensation = (t - sum) - y` satırı `Infinity - Infinity` hesaplar ve
+   NaN verir. Naif toplama aynı girdide Infinity döndürüyordu — yani kusur
+   **bir önceki kartın düzeltmesiyle yeni gereksinimin etkileşiminden**
+   doğdu. Üretici düzeltmeyi bir sonraki turda yaptı.
+
+   **Dürüst sınır:** üretici ve denetçi burada aynı modeldi (haiku; konteynerde
+   codex yok). Yani bu, ÇAPRAZ denetimin değil, **ayrı bir denetim turunun**
+   kusur yakaladığının kanıtı. Tezin kendisi hâlâ ölçülmedi.
+
+   Ama örüntüyü kıran şey görev sınıfı: ilk üç görev küçük, tam tanımlı ve
+   kendi kendine yeterdi. Bu görev **belirsiz gereksinim** ile **mevcut koda
+   derin dokunan değişiklik** sınıflarının kesişimindeydi — yeniden
+   çerçevelenen sorunun aday sınıflarından ikisi. İlk kez üretici kusur
+   üretti, ilk kez denetim katmanının yakalayacağı bir şey vardı.
+
 3. **Rol ayrımı, iyi bir kontrol listesine sahip tek ajandan daha mı iyi?**
    Ayrı rol, taze bağlam demek — ama aynı zamanda bağlam kaybı ve merge
    maliyeti demek. Ölçüm: iki rollük akış ile tek ajan + denetim promptunun

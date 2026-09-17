@@ -213,6 +213,74 @@ describe("tick — ret", () => {
     expect(first).toBeLessThan(work);
   });
 
+  // 4 rollü canlı koşunun bulgusu: `analyst` kabul kriterlerini yazdı,
+  // verdikt dosyası silindi, `coder` özgün belirsiz görevi aldı ve kendi
+  // kriterlerini uydurdu. Kod git'te taşınıyordu; belge hiçbir yerde.
+  it("devreden rolün özeti bir sonraki role gider", async () => {
+    await put();
+    claude.answer = writes({
+      decision: "accept",
+      summary: "Kabul kriteri: 1e6 elemanda hata ±1.0 içinde. Kapsam dışı: imza değişikliği.",
+    });
+    codex.answer = writes({ decision: "accept" });
+
+    await tick("coder", options);
+    await tick("reviewer", options);
+
+    const text = codex.calls[0]?.taskText as string;
+    expect(text).toContain("Önceki rolün devri");
+    expect(text).toContain("1e6 elemanda hata ±1.0 içinde");
+    expect(text).toContain("coder");
+  });
+
+  it("özet kartın devir kaydında saklanır", async () => {
+    const card = await put();
+    claude.answer = writes({ decision: "accept", summary: "kriterler yazıldı" });
+
+    await tick("coder", options);
+
+    const moved = await queue.get(card.id);
+    const handoff = moved?.history.find((h) => h.event === "handoff");
+    expect(handoff).toMatchObject({ from: "coder", to: "reviewer", summary: "kriterler yazıldı" });
+  });
+
+  // Altı rollü bir akışta zincir boyunca biriken özetler iş metnini rapora
+  // çevirirdi. Yalnızca EN SON devir taşınır.
+  it("özet zincir boyunca birikmez", async () => {
+    await put();
+    claude.answer = writes({ decision: "accept", summary: "coder özeti" });
+    codex.answer = writes({ decision: "reject", reason: "olmadı" });
+
+    await tick("coder", options);       // coder → reviewer  (özet: "coder özeti")
+    await tick("reviewer", options);    // RET → coder
+    claude.answer = writes({ decision: "accept", summary: "ikinci tur özeti" });
+    await tick("coder", options);       // coder → reviewer  (özet: "ikinci tur özeti")
+    await tick("reviewer", options);
+
+    const latest = codex.calls[1]?.taskText as string;
+    expect(latest).toContain("ikinci tur özeti");
+    expect(latest).not.toContain("coder özeti");
+  });
+
+  it("özetsiz kabulde devir bölümü hiç yazılmaz", async () => {
+    await put();
+    claude.answer = writes({ decision: "accept" });
+    codex.answer = writes({ decision: "accept" });
+
+    await tick("coder", options);
+    await tick("reviewer", options);
+
+    expect(codex.calls[0]?.taskText).not.toContain("Önceki rolün devri");
+  });
+
+  // Belge üreten rol çıktısını dosyaya yazacak; adını iş metninden okuyor.
+  it("kart kimliği iş metninde geçer", async () => {
+    const card = await put();
+    claude.answer = writes({ decision: "accept" });
+    await tick("coder", options);
+    expect(claude.calls[0]?.taskText).toContain(card.id);
+  });
+
   it("ilk turda ret kaydı yoktur", async () => {
     await put();
     claude.answer = writes({ decision: "accept" });

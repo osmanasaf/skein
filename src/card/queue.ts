@@ -216,7 +216,7 @@ export class CardQueue {
    * Bu rolün ret kenarının sayacı sıfırlanır — `reject.limit` "üst üste kaç
    * ret" demek. Kabul, seriyi kırar.
    */
-  async handoff(card: Card, opts: { commit?: string }): Promise<Card> {
+  async handoff(card: Card, opts: { commit?: string; summary?: string }): Promise<Card> {
     const { role, path } = this.#requireActive(card);
 
     const rejects = { ...card.rejects };
@@ -230,9 +230,14 @@ export class CardQueue {
       return this.#move(done, join(this.#root, "done"), `${card.id}.json`, path);
     }
 
-    const entry: HistoryEntry = opts.commit === undefined
-      ? { at: now(), event: "handoff", from: role.id, to: role.next }
-      : { at: now(), event: "handoff", from: role.id, to: role.next, commit: opts.commit };
+    const entry: HistoryEntry = {
+      at: now(),
+      event: "handoff",
+      from: role.id,
+      to: role.next,
+      ...(opts.commit === undefined ? {} : { commit: opts.commit }),
+      ...(opts.summary === undefined ? {} : { summary: opts.summary }),
+    };
 
     // Kapı, kartın rolden ÇIKIŞINDA durur: iş bitti ama teslim edilmedi.
     // Bu yüzden kartın rolü değişmez; onaylandığında `release` taşır.

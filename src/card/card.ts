@@ -10,7 +10,25 @@ export type CardState = "queued" | "active" | "gate" | "done";
 export type HistoryEntry =
   | { at: string; event: "created"; role: string }
   | { at: string; event: "taken"; role: string }
-  | { at: string; event: "handoff"; from: string; to: string; commit?: string }
+  | {
+      at: string;
+      event: "handoff";
+      from: string;
+      to: string;
+      commit?: string;
+      /**
+       * Devreden rolün kendi özeti — sonraki role iletilir.
+       *
+       * Kod git'te taşınıyor, ama BELGE üreten bir rolün çıktısı (kabul
+       * kriterleri, kapsam sınırı) hiçbir yere taşınmıyordu: verdikt
+       * dosyasında kalıp siliniyordu. 4 rollü canlı koşu bunu ortaya
+       * çıkardı — `analyst` kriterleri yazdı, `coder` özgün belirsiz görevi
+       * aldı ve kendi kriterlerini uydurdu.
+       *
+       * Ret gerekçesi zaten böyle taşınıyordu; bu onun simetriği.
+       */
+      summary?: string;
+    }
   | {
       at: string;
       event: "reject";

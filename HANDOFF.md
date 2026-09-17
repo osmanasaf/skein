@@ -4,7 +4,7 @@ Bu dosya bir sonraki oturumun giriş noktası. Durum ajanın kafasında değil,
 burada ve git'te (PHILOSOPHY 1).
 
 **Dal:** `claude/project-plan-brainstorm-pthvoc`
-**Durum:** 331 test yeşil, typecheck temiz, origin ile senkron.
+**Durum:** 336 test yeşil, typecheck temiz, origin ile senkron.
 **Kod:** 5037 satır (testler hariç).
 **Çizimler:** [kartın yolu](https://claude.ai/code/artifact/185e9279-510a-4544-a20c-831ecf1cdfd3) ·
 [genel bakış](https://claude.ai/code/artifact/2e7575af-84ee-40d8-aab4-5c3bdce0fe50)
@@ -125,7 +125,7 @@ aktivasyon sanılıyordu (git birleştirmesi, ajan çağrısı değil). Düzelti
 `flow check` artık `audit.enabled: true` yazıp hiçbir şey yapmadığını da
 söylüyor.
 
-**Kusur 2 — belge üreten rolün çıktısı devirde kayboluyor. AÇIK.**
+**Kusur 2 — belge üreten rolün çıktısı devirde kayboluyordu. ÇÖZÜLDÜ.**
 `specifier.md` rolü dosya yazmayı açıkça yasaklıyor ("Kod, test ya da dosya
 yazmak" sahiplenmediklerinde), `handoff` kabul özetini kartın geçmişine
 YAZMIYOR, ve `buildTaskText` yalnızca **ret** gerekçesini ileri taşıyor.
@@ -133,10 +133,19 @@ Sonuç: analyst'in kabul kriterleri `.skein-verdict.json` içinde kalıyor ve
 coder özgün belirsiz görevi alıyor. Koşuda coder Kahan toplamını kendi
 buldu — yani kayıp maskelendi, ama analyst rolü kâğıt üstünde kaldı.
 
-İki aday çözüm `ARCHITECTURE.md`'de tartışılmayı bekliyor: (a) belge üreten
-rol çıktısını dosyaya yazıp commit'ler — "kod git'te taşınır" değişmezinin
-belgelere uygulanması; (b) çekirdek, bir önceki devrin özetini ret kaydıyla
-simetrik biçimde iş metnine taşır.
+İkisi de yapıldı: (a) `specifier.md` artık spec'i `docs/spec/<kart-id>.md`'ye
+yazıp commit'liyor; (b) `handoff` kabul özetini kartın devir kaydına yazıyor ve
+`buildTaskText` onu sonraki role taşıyor. Canlı koşuda doğrulandı: `coder`
+devir commit'ini görüp spec dosyasını kendi okudu. Ayrıntı `ARCHITECTURE.md`
+"Belge üreten rolün çıktısı" kaydında.
+
+**Kusur 3 — kaçırılan kapı: kaçış (escalate) sonrası `release forward`
+kodu taşımıyor. AÇIK.** Normal kapıda kod devirden ÖNCE birleştiriliyor
+(`handOverCode` → `handoff` → gate). Ama kirli ağaç gibi bir sebeple kart
+kaçışla kapıya çıktığında birleştirme HİÇ koşmuyor; insan `release forward`
+derse sonraki rol bayat bir worktree'de çalışır ve bunu kimse söylemez.
+Seçenekler: kaçış kapısından ileri bırakmayı yasaklamak, bırakırken
+birleştirmeyi tetiklemek, ya da turun başında gelen kodu doğrulamak.
 
 ---
 

@@ -19,6 +19,23 @@ function lastRejectTo(card: Card, roleId: string): Extract<Card["history"][numbe
 }
 
 /**
+ * Kartı BU role teslim eden devri bulur.
+ *
+ * Yalnızca en sonuncusu: zincir boyunca biriken özetler, altı rollü bir
+ * akışta iş metnini rapora çevirirdi. Belgenin kalıcı hâli dosyada durur
+ * (bkz. `specifier.md`); bu yalnızca "önceki rol ne dedi".
+ */
+function lastHandoffTo(card: Card, roleId: string): Extract<Card["history"][number], { event: "handoff" }> | null {
+  for (let i = card.history.length - 1; i >= 0; i -= 1) {
+    const entry = card.history[i];
+    if (entry?.event === "handoff" && entry.to === roleId) return entry;
+    // Bu rol işi bir kez devrettiyse öncesi kapanmıştır.
+    if (entry?.event === "handoff" && entry.from === roleId) return null;
+  }
+  return null;
+}
+
+/**
  * Role verilecek iş metnini kurar.
  *
  * Rol promptuna (anayasa + rol tanımı) KARIŞMAZ: o katman görevden
@@ -34,6 +51,10 @@ export function buildTaskText(card: Card, role: SnapshotRole): string {
   // bir kapı, kapı değil duvardır.
   const parts: string[] = [
     `# ${card.title}`,
+    "",
+    // Kart kimliği metinde: belge üreten rol çıktısını bu adla dosyaya
+    // yazabilsin diye (`docs/spec/<kart>.md`).
+    `Kart: \`${card.id}\``,
     "",
     `> **Bu turun zorunlu çıktısı:** çalıştığın dizinin köküne \`${VERDICT_FILE}\``,
     "> dosyasını yaz. Ne yaparsan yap, bu dosya yoksa tur sonuçsuz sayılır ve",
@@ -59,6 +80,23 @@ export function buildTaskText(card: Card, role: SnapshotRole): string {
       "",
       "Bu itirazı ele al. Katılmıyorsan da sessizce görmezden gelme — ne",
       "yaptığını özetinde söyle.",
+    );
+  }
+
+  const handoff = lastHandoffTo(card, role.id);
+  if (handoff?.summary !== undefined && handoff.summary.trim() !== "") {
+    parts.push(
+      "",
+      "## Önceki rolün devri",
+      "",
+      `\`${handoff.from}\` işi sana devretti` +
+        (handoff.commit === undefined ? "" : ` (commit \`${handoff.commit}\`)`) +
+        " ve şunu söyledi:",
+      "",
+      handoff.summary,
+      "",
+      "Bu, o rolün KENDİ özeti — senin işini tanımlamaz ama bağlamını verir.",
+      "Bir belgeye işaret ediyorsa önce onu oku.",
     );
   }
 

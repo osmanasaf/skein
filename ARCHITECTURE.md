@@ -307,3 +307,42 @@ Daha önce bu aralık — çoğu zaman dakikalar — günlükte tamamen boştu.
 2. **`result` son satır değil.** Gerçek koşuda `type: "result"` satırından
    SONRA bir `system` satırı daha geliyor. "Sonuncusu sonuçtur" varsayımı
    maliyeti ve ajanın son mesajını sessizce kaybettirirdi.
+
+### Belge üreten rolün çıktısı — iki yönlü çözüm · 2026-09-17
+
+4 rollü canlı koşu bir boşluk gösterdi: **kod git'te taşınıyordu, belge
+hiçbir yerde.** `analyst` kabul kriterlerini üretti, kriterler
+`.skein-verdict.json` içinde kaldı (her tur başında silinen, git'e girmeyen
+bir dosya), `coder` özgün belirsiz görevi aldı ve kendi kriterlerini uydurdu.
+
+Üç yerden birden doğrulandı: `specifier.md` dosya yazmayı yasaklıyordu,
+`handoff` kabul özetini kaydetmiyordu, `buildTaskText` yalnızca **ret**
+gerekçesini taşıyordu.
+
+Çözüm iki parçalı, çünkü tek başına ikisi de yetmiyor:
+
+| | Ne yapar | Olmazsa |
+|---|---|---|
+| **(a) Belge dosyaya yazılır ve commit'lenir** | Spec `docs/spec/<kart-id>.md`'de; git'le taşınır, diff'lenir, kalıcıdır | Belge kalıcı olmaz |
+| **(b) Devir özeti iş metnine taşınır** | Sonraki rol "önceki rol ne dedi"yi ve devir commit'ini görür | Sonraki rol belgenin varlığını bilmez |
+
+**Değişmeze uyum:** (a), "kod git'te taşınır" kuralının belgelere
+uygulanması — yeni bir durum kanalı açmıyor. (b) ret kaydının simetriği ve
+**yalnızca en son devri** taşıyor: zincir boyunca biriken özetler, altı rollü
+bir akışta iş metnini rapora çevirirdi.
+
+**Canlı koşuda doğrulandı.** `analyst` yalnızca spec dosyasını commit'ledi;
+`coder` iş metnindeki devir commit'ini gördü, `git show <commit> --stat`
+çalıştırdı ve `docs/spec/c-…md`'yi okudu. Zincir kendiliğinden kapandı.
+
+**Yol boyunca çıkan iki şey:**
+
+1. **Rol promptunda kısıt sona yazılırsa tutmuyor.** İlk denemede yasak
+   "Sahiplenmediğin" başlığı altındaydı; ajan spec'i yazdı ama `src/` altına
+   da dokundu ve devir çakışmayla durdu. Kısıt promptun BAŞINA alınınca
+   ikinci koşuda yalnızca spec dosyası commit'lendi. Aynı ders iş metninde de
+   öğrenilmişti (zorunlu çıktı başa alınmıştı).
+2. **Mekanizma değil, ikna.** "Yalnızca şu yolu değiştir" bugün yalnızca
+   prompt'ta yazıyor; çekirdek doğrulamıyor. Rol başına yazma izni
+   (`writes: [docs/spec/**]`) akış diline eklenip devir öncesi commit'in
+   dokunduğu yollar denetlenebilir. Şema değişikliği olduğu için ayrı karar.

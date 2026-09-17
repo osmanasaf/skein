@@ -274,13 +274,19 @@ async function runRole(card: Card, role: SnapshotRole, options: TickOptions): Pr
     return { status: "escalated", card: await queue.escalate(card, merge), reason: merge };
   }
 
-  const moved = await queue.handoff(card, commit === undefined ? {} : { commit });
+  const summary = verdict.verdict.summary;
+
+  // Özet kartın devir kaydına yazılıyor: bir sonraki rol bunu iş metninde
+  // görecek. Kod git'te taşınıyordu, belge hiçbir yerde taşınmıyordu.
+  const moved = await queue.handoff(card, {
+    ...(commit === undefined ? {} : { commit }),
+    ...(summary === undefined ? {} : { summary }),
+  });
 
   // syncBack devir teslimden SONRA: kart zaten yerine ulaştı, kopyanın
   // başarısızlığı onu geri alamaz. Ama sessiz de kalamaz — ağacı güncel
   // kalmayan bir rol, sıradaki kartına bayat bir ağaçtan başlar.
   const warnings = await syncBack(card, role, options, workdir);
-  const summary = verdict.verdict.summary;
   return {
     status: "accepted",
     card: moved,
