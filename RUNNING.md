@@ -246,9 +246,15 @@ sağlar; root olarak koşuyorsan CLI onu reddeder, o zaman `acceptEdits` +
 
 ## Önce doğrula, sonra koş
 
-Codex adaptörünün bayrakları **codex'in kurulu olmadığı bir makinede
-yazıldı**. `hub/adapters/CONTRACT.md` "bayrakları doğrulayarak yaz, ezberden
-yazılan bayrak sessizce yanlış çalışır" diyor — o doğrulama sende:
+Codex adaptörünün çağrı bayrakları artık gerçek bir çağrıda **doğrulandı**
+(`codex-cli 0.155.0`): CLI hepsini kabul etti, oturumu açtı ve stdin'den
+giden rol promptu + görev metnini doğru yerde gösterdi. Çağrı yalnızca ağ
+katmanında durdu.
+
+Doğrulanmayan tek şey **çıktı biçimi**: `--json` ve `--output-last-message`
+yalnızca `--help` çıktısında görüldü, ürettikleri biçim görülmedi. Kendi
+makinende bir kez koş — hem sürüm farkı bayrak adlarını değiştirebiliyor,
+hem de maliyet alanının dolup dolmadığını ancak gerçek bir çağrı söyler:
 
 ```powershell
 npm run bench -- doctor codex:gpt-5.5
@@ -260,7 +266,11 @@ kurulum sormaz. `--` şart: ondan sonrası komuta gider.)
 Bu komut çağıracağı tam komut satırını basar ve küçük bir deneme çağrısı
 yapar. **ÇALIŞIYOR** derse hazırsın.
 
-**ÇALIŞMIYOR** derse bayraklar yanlış demektir. `codex --help` çıktısına bakıp
+**"ÇALIŞMIYOR — ama bayraklar yüzünden değil"** derse CLI argümanları kabul
+etmiş, çağrı ağ katmanında durmuştur: vekil, DNS, TLS ya da kimlik
+doğrulama. Adaptöre dokunma; çıkışın açık olup olmadığına bak.
+
+**"ÇALIŞMIYOR. Bayraklar yanlış olabilir"** derse `codex --help` çıktısına bakıp
 `src/adapters/codex.ts` içindeki `DEFAULT_ARGS` dizisini düzelt — TypeScript
 bilmeye gerek yok, sadece bir metin dizisi:
 

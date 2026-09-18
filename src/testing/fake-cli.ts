@@ -29,6 +29,13 @@ export interface FakeCliSpec {
   sleepMs?: number;
   /** `--help` çağrısında basılacak metin. Bayrak tespitini sınamak için. */
   help?: string;
+  /**
+   * `--output-last-message <yol>` verilmişse o dosyaya yazılacak metin.
+   *
+   * Codex son mesajı stdout'a değil ayrı bir dosyaya yazıyor; adaptörün
+   * onu okuduğunu sınamak için taklidin de aynı yere yazması gerekiyor.
+   */
+  lastMessage?: string;
 }
 
 /**
@@ -56,6 +63,10 @@ let input = "";
 process.stdin.setEncoding("utf8");
 for await (const chunk of process.stdin) input += chunk;
 if (spec.stdinTo) await writeFile(spec.stdinTo, input);
+const lastAt = process.argv.indexOf("--output-last-message");
+if (spec.lastMessage !== undefined && lastAt !== -1 && process.argv[lastAt + 1]) {
+  await writeFile(process.argv[lastAt + 1], spec.lastMessage);
+}
 if (spec.cwdTo) await writeFile(spec.cwdTo, process.cwd());
 if (spec.stdout) process.stdout.write(spec.stdout);
 const chunks = spec.chunks ?? [];

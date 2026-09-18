@@ -1,3 +1,6 @@
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { killTree, spawnPortable, stdinOf } from "../proc/process.js";
 import type { Adapter, InvokeRequest, InvokeResult, Usage } from "./contract.js";
 
@@ -17,13 +20,24 @@ export interface CodexCliOptions {
 /**
  * Codex CLI adaptörü — headless çağrı.
  *
- * DİKKAT: Buradaki bayraklar DOĞRULANMADI. `hub/adapters/CONTRACT.md`
- * "bayrakları doğrulayarak yaz, ezberden yazılan bayrak sessizce yanlış
- * çalışır" diyor ve bu adaptör codex'in kurulu OLMADIĞI bir makinede
- * yazıldı. Kullanmadan önce `cli.ts doctor codex` çalıştır: gerçek argümanları
- * basar ve küçük bir çağrı dener.
+ * Bayraklar `codex-cli 0.155.0` üzerinde doğrulandı — ama iki farklı
+ * güçte, ve aradaki fark kayda değer:
  *
- * Bayraklar yanlışsa `argsTemplate` ile TypeScript'e dokunmadan düzeltilir.
+ * - `exec`, `--model`, `--skip-git-repo-check`,
+ *   `--dangerously-bypass-approvals-and-sandbox`: GERÇEK bir çağrıda
+ *   sınandı. CLI hepsini kabul etti, oturumu açtı (`approval: never`,
+ *   `sandbox: danger-full-access`) ve stdin'den giden rol promptu + görev
+ *   metnini doğru yerde gösterdi. Çağrı yalnızca ağ katmanında durdu:
+ *   kurumsal vekil `api.openai.com`'a CONNECT'i reddediyor.
+ * - `--json`, `--output-last-message`: yalnızca `codex exec --help`
+ *   çıktısında doğrulandı. Var oldukları kesin, ürettikleri BİÇİM
+ *   görülmedi. Bu yüzden ikisi de kırılırsa sessizce değil, boş dönecek
+ *   şekilde okunuyor: usage bulunamazsa alan yazılmaz, son mesaj dosyası
+ *   yoksa `message` boş kalır ve çağıran stdout'a düşer.
+ *
+ * Başka bir sürümde biçim değişirse `argsTemplate` ile TypeScript'e
+ * dokunmadan düzeltilir; `cli.ts doctor codex:<model>` gerçek argümanları
+ * basar ve küçük bir çağrı dener.
  *
  * Usage ayrıştırması kasıtlı olarak "elinden geleni yapar": codex'in çıktı
  * biçimi farklıysa maliyet alanı boş kalır ama deney yine çalışır — ölçüm
@@ -35,12 +49,22 @@ export class CodexCliAdapter implements Adapter {
   readonly #bin: string;
   readonly #template: string[];
 
-  /** Doğrulanmamış varsayılan. doctor ile sına, gerekiyorsa argsTemplate ile değiştir. */
+  /**
+   * `codex-cli 0.155.0` üzerinde doğrulanmış varsayılan.
+   *
+   * `--json` olmadan stdout insan için biçimlenmiş metin oluyor ve
+   * `bestEffortUsage` arayacak tek bir JSON satırı bulamıyor: codex
+   * hücrelerinin maliyeti sessizce boş kalırdı. `{lastMessage}` ise
+   * ajanın son mesajını ayrı bir dosyaya yazdırıyor — `--json` ile stdout
+   * artık JSONL olduğu için denetim raporunun metni oradan okunamaz.
+   */
   static readonly DEFAULT_ARGS = [
     "exec",
     "--model", "{model}",
     "--skip-git-repo-check",
     "--dangerously-bypass-approvals-and-sandbox",
+    "--json",
+    "--output-last-message", "{lastMessage}",
   ];
 
   constructor(options: CodexCliOptions) {
@@ -54,9 +78,19 @@ export class CodexCliAdapter implements Adapter {
     return this.#bin;
   }
 
-  argsFor(req: InvokeRequest): string[] {
+  /**
+   * `lastMessagePath` verilmezse görünür bir yer tutucu konur.
+   *
+   * Boş bırakmak, `doctor`ın "--output-last-message " diye ucu boş bir
+   * bayrak basmasına yol açardı — ve doctor'ın tek işi çağrıyı olduğu gibi
+   * göstermek. Aynı tuzağa `--system-prompt` tarafında bir kez düşülmüş.
+   */
+  argsFor(req: InvokeRequest, lastMessagePath = "<koşuda-geçici-dosya>"): string[] {
     return this.#template.map((a) =>
-      a.replace("{model}", this.model).replace("{promptFile}", req.promptFile),
+      a
+        .replace("{model}", this.model)
+        .replace("{promptFile}", req.promptFile)
+        .replace("{lastMessage}", lastMessagePath),
     );
   }
 
@@ -66,8 +100,13 @@ export class CodexCliAdapter implements Adapter {
     // yakalanmamış istisnaya dönüşür. Testte böyle yakalandı.
     const rolePrompt = await readPrompt(req.promptFile);
 
+    // Son mesaj dosyası çalışma dizininin DIŞINDA: `produce` artefakt
+    // dizinine yazılan dosyaları listeliyor ve oraya konsa "ajan ne yazdı"
+    // sayımına karışırdı.
+    const lastMessagePath = join(await mkdtemp(join(tmpdir(), "skein-codex-")), "last-message.txt");
+
     const started = Date.now();
-    const child = spawnPortable(this.#bin, this.argsFor(req), {
+    const child = spawnPortable(this.#bin, this.argsFor(req, lastMessagePath), {
       cwd: req.workdir,
       env: { ...process.env, ...req.env },
       stdin: "pipe",
@@ -105,13 +144,29 @@ export class CodexCliAdapter implements Adapter {
     const result: InvokeResult = { exitCode, stdout, stderr, durationMs: Date.now() - started };
     const usage = bestEffortUsage(stdout);
     if (usage) result.usage = usage;
+    // Dosya yoksa ya da boşsa `message` boş bırakılır ve çağıran stdout'a
+    // düşer. Uydurmaktansa eksik bırakmak: bir denetim raporunun yerine
+    // JSONL geçmesi, pahalı bir koşuyu fark edilmeden çöpe çevirirdi.
+    const message = await readLastMessage(lastMessagePath);
+    if (message !== undefined) result.message = message;
     if (timedOut) result.timedOut = true;
     return result;
   }
 }
 
+/** Codex'in yazdığı son mesaj dosyası; yoksa ya da boşsa undefined. */
+async function readLastMessage(path: string): Promise<string | undefined> {
+  try {
+    const text = (await readFile(path, "utf8")).trim();
+    return text === "" ? undefined : text;
+  } catch {
+    return undefined;
+  } finally {
+    await rm(dirname(path), { recursive: true, force: true });
+  }
+}
+
 async function readPrompt(path: string): Promise<string> {
-  const { readFile } = await import("node:fs/promises");
   return readFile(path, "utf8");
 }
 

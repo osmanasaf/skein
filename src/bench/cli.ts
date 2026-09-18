@@ -10,6 +10,7 @@ import { runHidden } from "./hidden.js";
 import { auditLoop } from "./audit-loop.js";
 import { runMatrix, diagnose } from "./matrix.js";
 import { selfTest } from "./selftest.js";
+import { networkFailure } from "./failure.js";
 import { adapterFor } from "../adapters/factory.js";
 
 const REPO = resolve(import.meta.dirname, "../..");
@@ -220,8 +221,18 @@ async function doctor(spec: string): Promise<void> {
     console.log("\n  ÇALIŞIYOR. Matriste kullanabilirsin.");
   } else {
     console.error(`  stderr: ${r.stderr.slice(0, 600)}`);
-    console.error("\n  ÇALIŞMIYOR. Bayraklar yanlış olabilir — `codex --help` çıktısına bakıp");
-    console.error("  src/adapters/codex.ts içindeki DEFAULT_ARGS'ı düzelt (TypeScript bilmeden de olur).");
+    // Başarısızlığın sebebini söylemek doctor'ın tek işi. "Bayraklar yanlış
+    // olabilir" her durumda basılıyordu ve gerçek bir koşuda yanılttı:
+    // bayraklar doğruydu, çağrıyı kurumsal vekil 403 ile kesmişti.
+    const ag = networkFailure(`${r.stderr}\n${r.stdout}`);
+    if (ag !== undefined) {
+      console.error(`\n  ÇALIŞMIYOR — ama bayraklar yüzünden değil: ${ag}`);
+      console.error("  CLI argümanları kabul etti; çağrı ağ katmanında durdu.");
+      console.error("  Bu makinenin ağ politikası sağlayıcıya çıkışa izin vermiyor olabilir.");
+    } else {
+      console.error("\n  ÇALIŞMIYOR. Bayraklar yanlış olabilir — `codex --help` çıktısına bakıp");
+      console.error("  src/adapters/codex.ts içindeki DEFAULT_ARGS'ı düzelt (TypeScript bilmeden de olur).");
+    }
     process.exit(1);
   }
 }

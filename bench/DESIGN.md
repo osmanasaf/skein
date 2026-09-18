@@ -530,6 +530,28 @@ Sıralama önemli: (1) bugün bir cevap verir, (2) daha genel bir cevap
 verir. Birinciyi koşmadan ikinciye yatırım yapmak, ölçüm takımının
 çalıştığını hiç görmeden görev yazmak demek.
 
+## Çapraz satıcı nerede koşulabilir
+
+`codex` CLI'ın API anahtarına ihtiyacı yok — ChatGPT oturumuyla da çalışıyor.
+Ama Claude Code'un uzak çalışma ortamında **hiçbir kimlik yöntemi işe
+yaramıyor**: konteynerin çıkış vekili `api.openai.com` ve `chatgpt.com`
+için CONNECT'i 403 ile reddediyor (kurum politikası). Tarayıcı oturumu
+açılamıyor, anahtarla da çıkış yok.
+
+Doğrulandı (2026-09-18): `codex-cli 0.155.0` kuruldu, `codex exec` çağrı
+bayraklarının hepsini kabul etti, oturumu açtı, stdin'den giden rol
+promptunu ve görev metnini doğru yerde gösterdi — çağrı yalnızca websocket
+açılırken durdu. Devir teslim belgesinin "bayraklar doğrulanmadı" riski
+böylece kapandı.
+
+Kapanmayan kısım **çıktı biçimi**: `--json` ve `--output-last-message`
+yalnızca `--help` çıktısında doğrulandı, ürettikleri biçim görülmedi.
+Adaptör ikisini de "bulamazsa boş bırak" diye okuyor, yani biçim farklıysa
+codex hücrelerinde maliyet boş kalır ama deney yürür.
+
+Çapraz satıcı koşusu operatörün kendi makinesinde yapılmalı. Uzak oturumda
+yalnızca aynı satıcının iki modeliyle (ör. `haiku × sonnet`) koşulabilir.
+
 ## Durum
 
 - [x] Tasarım — 2×2 çapraz kurgu, iki katmanlı yer gerçeği, karar kuralı
@@ -537,6 +559,8 @@ verir. Birinciyi koşmadan ikinciye yatırım yapmak, ölçüm takımının
 - [x] Görev formatı + katı yükleyici (`src/bench/`)
 - [x] Örnek görev — `retry-backoff` (9 kusur kancası)
 - [x] Sağlayıcı adaptörü — `claude` CLI, headless, bayrakları doğrulanmış
+- [x] Sağlayıcı adaptörü — `codex` CLI, bayrakları `0.155.0`'da doğrulandı
+      (gerçek çağrı hâlâ denenmedi: ağ)
 - [x] Üretim koşucusu (artefakt üretimi, gizli testleri izole tutma)
 - [x] Gizli test çalıştırıcı + JSON çıktı ayrıştırma (test bazlı yeşil/kırmızı)
 - [x] **İlk uçtan uca koşu** — gerçek ajan, gerçek artefakt, gerçek sayı

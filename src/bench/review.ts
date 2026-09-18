@@ -54,7 +54,10 @@ export async function review(options: ReviewOptions): Promise<ReviewResult> {
     reviewer: reviewer.id,
     model: reviewer.model,
     promptHash: prompt.hash,
-    text: invoke.stdout,
+    // Adaptör ajanın son mesajını ayırabiliyorsa rapor odur. Codex `--json`
+    // ile koşuyor, yani onun stdout'u JSONL olay akışı — raporun yerine onu
+    // kaydetmek dört hücreden ikisini okunamaz hâle getirirdi.
+    text: invoke.message ?? invoke.stdout,
     invoke,
   };
 }

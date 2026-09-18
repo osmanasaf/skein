@@ -82,4 +82,21 @@ describe("review", () => {
     const r = await run(reviewer("claude", "claude-sonnet-5"));
     expect(r).toMatchObject({ reviewer: "claude", model: "claude-sonnet-5", text: "BULGU: x" });
   });
+
+  // Codex `--json` ile koşuyor: stdout'u JSONL olay akışı, rapor ayrı bir
+  // dosyada. Rapor yerine olay akışını kaydetmek dört hücreden ikisini
+  // okunamaz hâle getirirdi ve bunu ancak koşu bittikten sonra görürdük.
+  it("adaptör son mesajı ayırabiliyorsa raporu ondan alır", async () => {
+    const r = await run({
+      id: "codex", model: "gpt-5.5",
+      async invoke() {
+        return {
+          exitCode: 0, durationMs: 1, stderr: "",
+          stdout: '{"type":"item.started"}\n{"type":"item.completed"}\n',
+          message: "BULGU: gerçek rapor",
+        };
+      },
+    });
+    expect(r.text).toBe("BULGU: gerçek rapor");
+  });
 });

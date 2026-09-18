@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import { mkdtemp, writeFile, rm, readFile } from "node:fs/promises";
+import { mkdtemp, writeFile, rm, readFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CodexCliAdapter, bestEffortUsage } from "./codex.js";
@@ -86,5 +86,38 @@ describe("bestEffortUsage", () => {
   it("JSONL içinde son geçerli sayımı alır", () => {
     expect(bestEffortUsage('{"a":1}\nsatır\n{"input_tokens":9,"output_tokens":1}'))
       .toEqual({ inputTokens: 9, outputTokens: 1 });
+  });
+});
+
+describe("CodexCliAdapter — son mesaj dosyası", () => {
+  // `--json` ile stdout JSONL olay akışı oluyor; raporun metni oradan
+  // okunamaz. Codex son mesajı ayrı bir dosyaya yazıyor, adaptör onu alıyor.
+  it("codex'in yazdığı son mesajı message alanına taşır", async () => {
+    const bin = await fakeCli({ lastMessage: "DENETIM RAPORU", stdout: '{"type":"item"}\n' });
+    const r = await new CodexCliAdapter({ model: "m", bin }).invoke(req());
+    expect(r.message).toBe("DENETIM RAPORU");
+  });
+
+  // Biçim görülmedi, yani bu yol kırılabilir. Kırıldığında uydurmamalı:
+  // çağıran stdout'a düşsün diye message boş kalır.
+  it("dosya yazılmazsa message boş kalır", async () => {
+    const bin = await fakeCli({ stdout: "duz metin" });
+    const r = await new CodexCliAdapter({ model: "m", bin }).invoke(req());
+    expect(r.message).toBeUndefined();
+  });
+
+  it("boş dosyayı mesaj saymaz", async () => {
+    const bin = await fakeCli({ lastMessage: "   \n" });
+    const r = await new CodexCliAdapter({ model: "m", bin }).invoke(req());
+    expect(r.message).toBeUndefined();
+  });
+
+  // Geçici dosya artefakt dizininin dışında olmalı: `produce` oraya yazılan
+  // dosyaları sayıyor ve "ajan ne yazdı" teşhisini ondan üretiyor.
+  it("son mesaj dosyasını çalışma dizinine bırakmaz", async () => {
+    const bin = await fakeCli({ lastMessage: "x" });
+    await new CodexCliAdapter({ model: "m", bin }).invoke(req());
+    const kalanlar = await readdir(root);
+    expect(kalanlar.filter((f) => f.includes("last-message"))).toEqual([]);
   });
 });
