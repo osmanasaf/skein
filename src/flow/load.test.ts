@@ -430,3 +430,63 @@ describe("loadFlow — gönderilen örnekler", () => {
     expect(daily.hash).not.toBe(spec.hash);
   });
 });
+
+// PLANLAMA.md 6a: tek rol planı yazar, alışveriş yok. Kurallar 17-20.
+describe("loadFlow — planlama (kural 17-20)", () => {
+  const withPlan = (blok: string) => `${VALID}\n${blok}\n`;
+
+  it("geçerli planlama bloğunu çözer ve hash'e katar", async () => {
+    const yaml = withPlan("planlama:\n  katilimcilar: [coder]\n  plan: docs/plan/{kart}.md");
+    const flow = await load(await write(yaml));
+    expect(flow.plan).toEqual({ katilimcilar: ["coder"], plan: "docs/plan/{kart}.md" });
+
+    // Plan politikası topolojinin parçası: değişirse yoldaki kart eskisiyle yaşar.
+    const plansiz = await load(await write(VALID, "plansiz.yaml"));
+    expect(flow.hash).not.toBe(plansiz.hash);
+  });
+
+  it("planlama yoksa alan da yok", async () => {
+    const flow = await load(await write(VALID));
+    expect(flow.plan).toBeUndefined();
+  });
+
+  // Yazılmamış bir alanı sessizce yok saymak, çalıştığı sanılan bir alan
+  // bırakır. `audit.enabled` bir dönem tam bunu yaptı.
+  it("`tur` alanını açıkça reddeder — 6b henüz yazılmadı", async () => {
+    const yaml = withPlan("planlama:\n  katilimcilar: [coder]\n  tur: 2\n  plan: docs/plan/{kart}.md");
+    await expect(load(await write(yaml))).rejects.toThrow(/kural 18.*henüz uygulanmadı/s);
+  });
+
+  it("iki katılımcıyı reddeder — alışveriş 6b'nin konusu", async () => {
+    const yaml = withPlan("planlama:\n  katilimcilar: [coder, reviewer]\n  plan: docs/plan/{kart}.md");
+    await expect(load(await write(yaml))).rejects.toThrow(/kural 17.*tek rol/s);
+  });
+
+  it("var olmayan role işaret eden katılımcıyı reddeder", async () => {
+    const yaml = withPlan("planlama:\n  katilimcilar: [yok]\n  plan: docs/plan/{kart}.md");
+    await expect(load(await write(yaml))).rejects.toThrow(/kural 17/);
+  });
+
+  // Kural 19: plan, iş yapıldıktan sonra tartışılmaz.
+  it("zincirin başında olmayan katılımcıyı reddeder", async () => {
+    const yaml = withPlan("planlama:\n  katilimcilar: [reviewer]\n  plan: docs/plan/{kart}.md");
+    await expect(load(await write(yaml))).rejects.toThrow(/kural 19/);
+  });
+
+  it("`src/` altındaki plan yolunu reddeder", async () => {
+    const yaml = withPlan("planlama:\n  katilimcilar: [coder]\n  plan: src/plan/{kart}.md");
+    await expect(load(await write(yaml))).rejects.toThrow(/kural 20.*src/s);
+  });
+
+  // `{kart}` olmadan iki kart aynı dosyayı ezer ve ikincisi birincisinin
+  // planını okur.
+  it("`{kart}` içermeyen plan yolunu reddeder", async () => {
+    const yaml = withPlan("planlama:\n  katilimcilar: [coder]\n  plan: docs/plan.md");
+    await expect(load(await write(yaml))).rejects.toThrow(/kural 20.*\{kart\}/s);
+  });
+
+  it("depo dışına çıkan plan yolunu reddeder", async () => {
+    const yaml = withPlan("planlama:\n  katilimcilar: [coder]\n  plan: ../disari/{kart}.md");
+    await expect(load(await write(yaml))).rejects.toThrow(/kural 20/);
+  });
+});

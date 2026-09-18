@@ -101,6 +101,14 @@ export interface Card {
    * olan kartı bozamaz.
    */
   topology: TopologySnapshot;
+  /**
+   * Planın dondurulmuş hâli — planı yazan rol devrettiğinde konur.
+   *
+   * Topoloji hash'inin kardeşi: kartın hangi planla yürüdüğü, plan dosyası
+   * sonradan düzenlense bile sonradan bilinebilsin. Sonraki roller planı
+   * dosyadan okur; bu alan "hangi sürümünü okuması gerekiyordu"nun kaydı.
+   */
+  plan?: { path: string; hash: string };
 }
 
 export class CardError extends Error {
@@ -253,6 +261,19 @@ export function parseCard(text: string): Card {
     throw new CardError("Kart alanı eksik: `topology.hash`");
   }
 
+  // Plan isteğe bağlı ama varsa KATI: yarım bir plan kaydı, "hangi planla
+  // yürüdü" sorusunu cevaplıyormuş gibi görünüp cevaplamaz.
+  const planRaw = doc["plan"];
+  let plan: { path: string; hash: string } | undefined;
+  if (planRaw !== undefined && planRaw !== null) {
+    const rec = planRaw as Record<string, unknown>;
+    if (typeof rec["path"] !== "string" || typeof rec["hash"] !== "string"
+      || rec["path"].trim() === "" || rec["hash"].trim() === "") {
+      throw new CardError("Kart alanı geçersiz: `plan` — `path` ve `hash` boş olmayan metin olmalı");
+    }
+    plan = { path: rec["path"], hash: rec["hash"] };
+  }
+
   return {
     id,
     title,
@@ -263,5 +284,6 @@ export function parseCard(text: string): Card {
     rejects: rejects as Record<string, number>,
     history: history as HistoryEntry[],
     topology: topology as unknown as TopologySnapshot,
+    ...(plan === undefined ? {} : { plan }),
   };
 }

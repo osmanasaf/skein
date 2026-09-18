@@ -1,5 +1,5 @@
 import { join, relative, sep } from "node:path";
-import type { AuditPolicy, Flow, GateType, Receive, RejectPolicy } from "./load.js";
+import type { AuditPolicy, Flow, GateType, PlanPolicy, Receive, RejectPolicy } from "./load.js";
 import { DONE } from "./load.js";
 
 /**
@@ -41,6 +41,8 @@ export interface TopologySnapshot {
   gates: SnapshotGate[];
   reject: RejectPolicy;
   audit: AuditPolicy;
+  /** Planlama politikası; akış tanımlamadıysa yok. */
+  plan?: PlanPolicy;
   /** Kök dizine göre relatif anayasa katmanları, sıra anlamlı. */
   constitution: string[];
 }
@@ -67,6 +69,9 @@ export function snapshot(flow: Flow, root: string): TopologySnapshot {
     gates: flow.gates.map((gate) => ({ after: gate.after, type: gate.type })),
     reject: { ...flow.reject },
     audit: { enabled: flow.audit.enabled, fingerprint: [...flow.audit.fingerprint] },
+    ...(flow.plan === undefined
+      ? {}
+      : { plan: { katilimcilar: [...flow.plan.katilimcilar], plan: flow.plan.plan } }),
     constitution: flow.constitution.map((path) => rel(root, path)),
   };
 }
@@ -104,6 +109,23 @@ export function promptLayers(
   }));
   layers.push({ name: `rol:${role.id}`, path: join(root, role.prompt) });
   return layers;
+}
+
+/** Bu rol planı yazan rol mü. */
+export function isPlanner(topology: TopologySnapshot, roleId: string): boolean {
+  return topology.plan?.katilimcilar.includes(roleId) ?? false;
+}
+
+/**
+ * Kartın plan dosyasının yolu — `{kart}` yerine kart kimliği.
+ *
+ * Yol karta göre çözülüyor, akışa göre değil: aynı akıştan geçen iki kart
+ * aynı dosyayı ezmemeli (kural 20 bunu zaten şart koşuyor).
+ */
+export function planPathFor(topology: TopologySnapshot, cardId: string): string | null {
+  const plan = topology.plan;
+  if (plan === undefined) return null;
+  return plan.plan.replaceAll("{kart}", cardId);
 }
 
 export { DONE };

@@ -1,5 +1,5 @@
 import type { Card } from "../card/card.js";
-import type { SnapshotRole } from "../flow/snapshot.js";
+import { isPlanner, planPathFor, type SnapshotRole } from "../flow/snapshot.js";
 import { verdictInstructions, VERDICT_FILE } from "./verdict.js";
 
 /**
@@ -64,6 +64,38 @@ export function buildTaskText(card: Card, role: SnapshotRole): string {
     "",
     card.task,
   ];
+
+  // Plan, iş metninin BAŞINDA — sonda değil.
+  //
+  // Aynı ders iki kez öğrenildi: uzun bir görev metninin sonundaki talimat,
+  // iş bittiğinde unutulan talimattır (verdikt dosyası) ve rol promptunun
+  // sonundaki kısıt tutmaz (`specifier.md`). Planı yazacak rol için bu
+  // zorunlu çıktı; okuyacak rol için işin tanımının yarısı.
+  const planPath = planPathFor(card.topology, card.id);
+  if (planPath !== null) {
+    parts.push(...(isPlanner(card.topology, role.id)
+      ? [
+          "",
+          "## Planı yaz",
+          "",
+          `Bu turun kalıcı çıktısı bir **plan belgesi**: \`${planPath}\`.`,
+          "Dosyayı yaz ve **commit'le** — commit'lenmeyen plan sonraki role",
+          "ulaşmaz ve tur kabul edilmez.",
+          "",
+          "Planda olması gerekenler: ne yapılacak, hangi dosyalara dokunulacak,",
+          "hangi sözleşmelerin korunması gerekiyor, ve kapsam dışı ne var.",
+          "Kod yazma — bu tur planlama turu.",
+        ]
+      : [
+          "",
+          "## Plan",
+          "",
+          `Bu kartın planı \`${planPath}\` dosyasında.` +
+            (card.plan === undefined ? "" : ` (sürüm \`${card.plan.hash.slice(0, 12)}\`)`),
+          "**Önce onu oku.** İşin tanımı görev metniyle o belgenin birleşimidir.",
+          "Planla çelişen bir şey yapman gerekiyorsa gerekçesini özetine yaz.",
+        ]));
+  }
 
   const rejection = lastRejectTo(card, role.id);
   if (rejection !== null) {

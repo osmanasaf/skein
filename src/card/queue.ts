@@ -224,15 +224,22 @@ export class CardQueue {
    * Bu rolün ret kenarının sayacı sıfırlanır — `reject.limit` "üst üste kaç
    * ret" demek. Kabul, seriyi kırar.
    */
-  async handoff(card: Card, opts: { commit?: string; summary?: string }): Promise<Card> {
+  async handoff(
+    card: Card,
+    opts: { commit?: string; summary?: string; plan?: { path: string; hash: string } },
+  ): Promise<Card> {
     const { role, path } = this.#requireActive(card);
 
     const rejects = { ...card.rejects };
     if (role.reject !== null) delete rejects[edgeKey(role.id, role.reject)];
 
+    // Plan, kartın üstünde donuyor: hangi planla yürüdüğü, dosya sonradan
+    // düzenlense bile bilinsin (topoloji hash'inin kardeşi).
+    const withPlan = opts.plan === undefined ? card : { ...card, plan: opts.plan };
+
     if (role.next === DONE) {
       const done = {
-        ...this.#push({ ...card, rejects }, { at: now(), event: "done", from: role.id }),
+        ...this.#push({ ...withPlan, rejects }, { at: now(), event: "done", from: role.id }),
         state: "done" as const,
       };
       return this.#move(done, join(this.#root, "done"), `${card.id}.json`, path);
@@ -251,14 +258,14 @@ export class CardQueue {
     // Bu yüzden kartın rolü değişmez; onaylandığında `release` taşır.
     if (gateAfter(card.topology, role.id) !== null) {
       const gated = {
-        ...this.#push({ ...card, rejects }, entry),
+        ...this.#push({ ...withPlan, rejects }, entry),
         state: "gate" as const,
       };
       return this.#move(gated, join(this.#root, "gate"), `${card.id}.json`, path);
     }
 
     const moved = {
-      ...this.#push({ ...card, rejects }, entry),
+      ...this.#push({ ...withPlan, rejects }, entry),
       role: role.next,
       state: "queued" as const,
     };

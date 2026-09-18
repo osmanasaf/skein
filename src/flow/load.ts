@@ -68,6 +68,22 @@ export interface AuditPolicy {
   fingerprint: string[];
 }
 
+/**
+ * Planlama politikası — `PLANLAMA.md`'nin 6a aşaması.
+ *
+ * Bugün taşıdığı tek şey: planı kimin yazacağı ve nereye. Alışveriş (itiraz
+ * turları) 6b'de gelecek; o gelene kadar `tur` ve `ilk-tur-kor` alanları
+ * AÇIKÇA reddediliyor. Sessizce yok saymak, akış dosyasına yazılmış ama
+ * hiçbir şey yapmayan bir alan bırakırdı — `audit.enabled`'ın bir dönem
+ * yaptığı ve bir kez yakalanan hata bu.
+ */
+export interface PlanPolicy {
+  /** Planı yazan roller. 6a'da tam olarak bir tane, zincirin başı. */
+  katilimcilar: string[];
+  /** Plan dosyasının yolu; `{kart}` kart kimliğiyle değişir. */
+  plan: string;
+}
+
 export interface Flow {
   name: string;
   description?: string;
@@ -80,6 +96,8 @@ export interface Flow {
   gates: FlowGate[];
   reject: RejectPolicy;
   audit: AuditPolicy;
+  /** Planlama politikası; akış tanımlamadıysa yok. */
+  plan?: PlanPolicy;
   /**
    * Topolojinin SHA-256'sı. Koşan bir kart bunu yanında taşır: akış dosyası
    * değişse bile kartın hangi topolojiyle koştuğu sonradan bilinebilir.
@@ -282,6 +300,93 @@ function parseRejectPolicy(doc: Record<string, unknown>, file: string): RejectPo
     );
   }
   return { limit, onExhausted };
+}
+
+/**
+ * `planlama` bloğu — kural 17-20.
+ *
+ * `order` zincir sırası; katılımcıların zincirin BAŞINDA olması buradan
+ * doğrulanıyor: plan, iş yapıldıktan sonra tartışılmaz.
+ */
+function parsePlan(
+  doc: Record<string, unknown>,
+  order: string[],
+  ids: Set<string>,
+  file: string,
+): PlanPolicy | null {
+  const raw = asRecord(doc["planlama"]);
+  if (doc["planlama"] === undefined || doc["planlama"] === null) return null;
+  if (!raw) throw new FlowError(file, "`planlama` bir eşleme olmalı");
+
+  for (const alan of ["tur", "ilk-tur-kor"]) {
+    if (raw[alan] !== undefined) {
+      throw new FlowError(
+        file,
+        rule(18, `\`planlama.${alan}\` henüz uygulanmadı. Bugün yazılı olan 6a: ` +
+          `tek rol planı yazar, alışveriş yoktur. İtiraz turları 6b'de gelecek ` +
+          `(bkz. PLANLAMA.md). Alanı yazıp hiçbir şey yapmamasındansa reddetmek ` +
+          `doğru: akışta duran ama işlemeyen bir alan, çalıştığı sanılan bir alandır.`),
+      );
+    }
+  }
+
+  const katilimcilar = optionalStringList(raw["katilimcilar"], "planlama.katilimcilar", file);
+  if (katilimcilar.length === 0) {
+    throw new FlowError(file, rule(17, "`planlama.katilimcilar` boş olamaz"));
+  }
+  if (new Set(katilimcilar).size !== katilimcilar.length) {
+    throw new FlowError(file, rule(17, "`planlama.katilimcilar` aynı rolü iki kez sayamaz"));
+  }
+  if (katilimcilar.length > 1) {
+    throw new FlowError(
+      file,
+      rule(17, `\`planlama.katilimcilar\` bugün tek rol alabilir; ${katilimcilar.length} verildi. ` +
+        `İki katılımcı arasındaki yazılı tur 6b'nin konusu (bkz. PLANLAMA.md).`),
+    );
+  }
+  for (const id of katilimcilar) {
+    if (!ids.has(id)) {
+      throw new FlowError(file, rule(17, `\`planlama.katilimcilar\` var olmayan bir role işaret ediyor: ${id}`));
+    }
+  }
+
+  // --- kural 19: zincirin başında ve ardışık ---
+  for (const [i, id] of katilimcilar.entries()) {
+    if (order[i] !== id) {
+      throw new FlowError(
+        file,
+        rule(19, `\`planlama.katilimcilar\` zincirin başında ve zincir sırasında olmalı: ` +
+          `${i + 1}. sırada \`${order[i] ?? "(yok)"}\` var, \`${id}\` yazılmış. ` +
+          `Plan, iş yapıldıktan sonra tartışılmaz.`),
+      );
+    }
+  }
+
+  // --- kural 20: plan yolu ---
+  const plan = raw["plan"];
+  if (typeof plan !== "string" || plan.trim() === "") {
+    throw new FlowError(file, rule(20, "`planlama.plan` boş olmayan bir yol olmalı"));
+  }
+  const yol = plan.trim();
+  if (yol.startsWith("/") || yol.includes("..")) {
+    throw new FlowError(file, rule(20, `\`planlama.plan\` depo içinde kalmalı: ${yol}`));
+  }
+  if (yol.startsWith("src/")) {
+    throw new FlowError(
+      file,
+      rule(20, `\`planlama.plan\` \`src/\` altında olamaz: ${yol}. Plan bir belge; ` +
+        `kod taşıma yolu git, dosya değil.`),
+    );
+  }
+  if (!yol.includes("{kart}")) {
+    throw new FlowError(
+      file,
+      rule(20, `\`planlama.plan\` \`{kart}\` içermeli: ${yol}. İçermezse iki kart ` +
+        `aynı dosyayı ezer ve ikincisi birincisinin planını okur.`),
+    );
+  }
+
+  return { katilimcilar, plan: yol };
 }
 
 function parseAudit(doc: Record<string, unknown>, file: string): AuditPolicy {
@@ -538,7 +643,12 @@ export async function loadFlow(path: string, options: LoadOptions): Promise<Flow
     };
   });
 
-  const hash = topologyHash({ root, name, constitution, roles: ordered, gates, reject: rejectPolicy, audit });
+  const plan = parsePlan(doc, order, ids, file);
+
+  const hash = topologyHash({
+    root, name, constitution, roles: ordered, gates, reject: rejectPolicy, audit,
+    ...(plan === null ? {} : { plan }),
+  });
 
   return {
     name,
@@ -549,6 +659,7 @@ export async function loadFlow(path: string, options: LoadOptions): Promise<Flow
     gates,
     reject: rejectPolicy,
     audit,
+    ...(plan === null ? {} : { plan }),
     hash,
     path: flowPath,
   };
@@ -574,6 +685,7 @@ function topologyHash(input: {
   gates: FlowGate[];
   reject: RejectPolicy;
   audit: AuditPolicy;
+  plan?: PlanPolicy;
 }): string {
   const F = " "; // alan ayracı
   const L = ""; // satır ayracı
@@ -595,6 +707,11 @@ function topologyHash(input: {
   }
   lines.push(["reject", String(input.reject.limit), input.reject.onExhausted].join(F));
   lines.push(["audit", String(input.audit.enabled), input.audit.fingerprint.join(M)].join(F));
+  // Plan politikası hash'e giriyor: planın yolu ve yazarı, kartın hangi
+  // topolojiden geçtiğinin parçası. Değişirse yoldaki kart eskisiyle yaşar.
+  if (input.plan !== undefined) {
+    lines.push(["plan", input.plan.katilimcilar.join(M), input.plan.plan].join(F));
+  }
 
   return createHash("sha256").update(lines.join(L), "utf8").digest("hex");
 }

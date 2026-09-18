@@ -63,6 +63,12 @@ function printFlow(flow: Flow, root: string): void {
         ? "\n       ⚠ gözcü bu kapıyı HENÜZ UYGULAMIYOR — yalnızca bench'te var"
         : ""),
   );
+  if (flow.plan !== undefined) {
+    console.log(
+      `plan:  ${flow.plan.katilimcilar.join(", ")} yazar → ${flow.plan.plan}` +
+        "\n       (6a: alışveriş yok, ayrı aktivasyon yok — planı zincirin rolü yazıyor)",
+    );
+  }
   console.log("");
 
   const cost = estimateCost(flow);

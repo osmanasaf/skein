@@ -137,6 +137,27 @@ export type EventInput =
       addedLines: number;
       removedLines: number;
     }
+  | {
+      /**
+       * Planlama bitti ve kart ilerliyor (PLANLAMA.md).
+       *
+       * 6a'da alışveriş yok: `rounds` 0, `objections` 0. Olay yine de
+       * yazılıyor çünkü "plan gerçekten yazıldı mı" sorusu kartlar arası
+       * bir sorudur ve tek kartın izinden okunmaz. 6b geldiğinde aynı olay
+       * tur ve itiraz sayılarıyla dolacak.
+       */
+      type: "plan.settled";
+      card: string;
+      /** Planı yazan rol. */
+      role: string;
+      outcome: "anlasma" | "tukendi" | "kacis";
+      rounds: number;
+      objections: number;
+      accepted: number;
+      /** Plan dosyasının yolu ve içeriğinin SHA-256'sı. */
+      path: string;
+      planHash: string;
+    }
   | { type: "hooks.measured"; cell: string; ran: boolean; total: number; red: string[] }
   | {
       type: "review.done";
@@ -232,6 +253,10 @@ const REQUIRED: Record<EventInput["type"], { strings: string[]; numbers: string[
   "gate.released": { strings: ["card", "role", "decision", "kind"], numbers: [] },
   "card.closed": { strings: ["card", "role", "reason"], numbers: [] },
   "hooks.measured": { strings: ["cell"], numbers: ["total"] },
+  "plan.settled": {
+    strings: ["card", "role", "outcome", "path", "planHash"],
+    numbers: ["rounds", "objections", "accepted"],
+  },
   "artifact.snapshot": {
     strings: ["cell", "label", "path", "fingerprint"],
     numbers: ["turn", "files", "changed", "addedLines", "removedLines"],

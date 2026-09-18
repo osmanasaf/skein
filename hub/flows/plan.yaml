@@ -1,0 +1,51 @@
+# Örnek akış — planlama turu (PLANLAMA.md, aşama 6a).
+#
+# Zincirin başındaki rol bir PLAN BELGESİ yazar ve commit'ler; sonraki
+# roller planın yolunu iş metninde alır ve okur. Alışveriş (itiraz turları)
+# henüz yok — `planlama.tur` yazarsan akış reddedilir, çünkü yazılmamış bir
+# alanı sessizce yok saymak, çalıştığı sanılan bir alan bırakır.
+
+name: plan
+description: Kod yazılmadan önce yazılı plan. Dokunulacak dosyalar ve korunacak sözleşmeler belgede.
+
+constitution:
+  - ../prompts/constitution/base.md
+  - ../prompts/constitution/engineering-ts.md
+
+roles:
+  - id: planner
+    provider: claude
+    workspace: main
+    prompt: ../prompts/roles/planner.md
+    receive: task
+    next: coder
+
+  - id: coder
+    provider: claude
+    workspace: coder
+    prompt: ../prompts/roles/coder.md
+    receive: task
+    next: reviewer
+
+  - id: reviewer
+    provider: claude
+    workspace: reviewer
+    prompt: ../prompts/roles/reviewer.md
+    receive: batch
+    syncBack: [coder]
+    reject: coder
+    next: done
+
+planlama:
+  katilimcilar: [planner]       # 6a: tek rol. İki katılımcı 6b'nin konusu.
+  plan: docs/plan/{kart}.md     # `{kart}` zorunlu: iki kart birbirini ezmesin
+
+reject:
+  limit: 2
+  onExhausted: gate
+
+audit:
+  enabled: false                # audit gate yalnızca bench'te; akışta çağrılmıyor
+
+# Maliyet: 3 aktivasyon/kart. Planlama AYRI aktivasyon getirmiyor — planı
+# zincirin ilk rolü yazıyor. 6b'de iki katılımcı × tur kadar eklenecek.

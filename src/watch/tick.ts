@@ -1,11 +1,12 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Adapter, AgentStep, InvokeResult } from "../adapters/contract.js";
 import type { Card } from "../card/card.js";
 import type { CardQueue } from "../card/queue.js";
 import type { EventLog } from "../events/log.js";
-import { DONE, promptLayers, roleOf, type SnapshotRole } from "../flow/snapshot.js";
+import { DONE, isPlanner, planPathFor, promptLayers, roleOf, type SnapshotRole } from "../flow/snapshot.js";
 import { assemblePrompt } from "../prompt/assemble.js";
 import { dirtyPaths, head, isTracked, mergeForward, ORCHESTRATOR_PATHS } from "./git.js";
 import { buildTaskText } from "./task-text.js";
@@ -34,6 +35,8 @@ export interface TickOptions {
   mergeForward?: typeof mergeForward;
   /** Test edilebilirlik için; varsayılan `git ls-files --cached`. */
   isTracked?: (workdir: string, path: string) => Promise<boolean>;
+  /** Test edilebilirlik için; varsayılan dosyayı diskten okumak. */
+  readPlan?: (path: string) => Promise<string>;
 }
 
 const DEFAULT_TIMEOUT_MS = 20 * 60 * 1000;
@@ -268,6 +271,17 @@ async function runRole(card: Card, role: SnapshotRole, options: TickOptions): Pr
     return { status: "escalated", card: await queue.escalate(card, reason), reason };
   }
 
+  // Planlama turunun kapısı: plan gerçekten yazıldı mı.
+  //
+  // "Belge üreten rolün çıktısı kayboluyor" kusuru bir kez yaşandı ve
+  // çözümü prompta yazmaktı; prompt bir talimattır, kapı değil. Burası
+  // kapısı: planı yazmadan kabul eden rol devredemez. Dosya diskte
+  // aranıyor, ajanın "yazdım" demesine bakılmıyor (PHILOSOPHY 8).
+  const plan = await checkPlan(card, role, options, workdir);
+  if (typeof plan === "string") {
+    return { status: "escalated", card: await queue.escalate(card, plan), reason: plan };
+  }
+
   // KUSUR 2'nin kapısı: devir teslim kodu da taşır.
   const merge = await handOverCode(card, role, options, workdir);
   if (merge !== null) {
@@ -281,7 +295,17 @@ async function runRole(card: Card, role: SnapshotRole, options: TickOptions): Pr
   const moved = await queue.handoff(card, {
     ...(commit === undefined ? {} : { commit }),
     ...(summary === undefined ? {} : { summary }),
+    ...(plan === null ? {} : { plan }),
   });
+
+  if (plan !== null) {
+    // 6a'da alışveriş yok: tur ve itiraz sayıları sıfır. Olay yine de
+    // yazılıyor — "plan gerçekten yazıldı mı" kartlar arası bir soru.
+    await options.log?.append({
+      type: "plan.settled", card: card.id, role: role.id, outcome: "anlasma",
+      rounds: 0, objections: 0, accepted: 0, path: plan.path, planHash: plan.hash,
+    });
+  }
 
   // syncBack devir teslimden SONRA: kart zaten yerine ulaştı, kopyanın
   // başarısızlığı onu geri alamaz. Ama sessiz de kalamaz — ağacı güncel
@@ -293,6 +317,40 @@ async function runRole(card: Card, role: SnapshotRole, options: TickOptions): Pr
     ...(summary === undefined ? {} : { summary }),
     ...(warnings.length === 0 ? {} : { warnings }),
   };
+}
+
+/**
+ * Planı yazan rol planı gerçekten yazdı mı.
+ *
+ * Üç sonuç: planlama yoksa ya da bu rol planı yazan rol değilse `null`
+ * (yapacak bir şey yok), plan varsa yolu ve içeriğinin hash'i, yoksa
+ * hata metni.
+ *
+ * Hash içerikten alınıyor, commit'ten değil: plan dosyasının o turdaki
+ * hâli, sonradan düzenlense bile bilinsin.
+ */
+async function checkPlan(
+  card: Card,
+  role: SnapshotRole,
+  options: TickOptions,
+  workdir: string,
+): Promise<{ path: string; hash: string } | string | null> {
+  if (!isPlanner(card.topology, role.id)) return null;
+  const path = planPathFor(card.topology, card.id);
+  if (path === null) return null;
+
+  const read = options.readPlan ?? ((p: string) => readFile(p, "utf8"));
+  let text: string;
+  try {
+    text = await read(join(workdir, path));
+  } catch {
+    return `\`${role.id}\` kabul etti ama plan dosyası yok: \`${path}\`. ` +
+      `Planlama turu plan belgesiyle biter — sonraki rol onu okuyacak.`;
+  }
+  if (text.trim() === "") {
+    return `\`${role.id}\` boş bir plan dosyası bıraktı: \`${path}\`.`;
+  }
+  return { path, hash: createHash("sha256").update(text, "utf8").digest("hex") };
 }
 
 /**
