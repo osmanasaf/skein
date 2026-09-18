@@ -64,15 +64,20 @@ function printFlow(flow: Flow, root: string): void {
         : ""),
   );
   if (flow.plan !== undefined) {
+    const [yazan, ...itirazcilar] = flow.plan.katilimcilar;
+    console.log(`plan:  ${yazan} yazar → ${flow.plan.plan}`);
     console.log(
-      `plan:  ${flow.plan.katilimcilar.join(", ")} yazar → ${flow.plan.plan}` +
-        "\n       (6a: alışveriş yok, ayrı aktivasyon yok — planı zincirin rolü yazıyor)",
+      itirazcilar.length === 0
+        ? "       alışveriş yok (tek katılımcı) — ayrı aktivasyon getirmiyor"
+        : `       ${itirazcilar.join(", ")} itiraz eder → ${flow.plan.itiraz}` +
+          `\n       ${flow.plan.tur} tur (itiraz → cevap); açık itiraz kalırsa kilit kapısı`,
     );
   }
   console.log("");
 
   const cost = estimateCost(flow);
-  console.log(`maliyet: ~${cost.base} aktivasyon/kart (retsiz)`);
+  console.log(`maliyet: ~${cost.base} aktivasyon/kart (retsiz)` +
+    (cost.planning > 0 ? ` — ${cost.planning}'i planlama alışverişi` : ""));
   console.log(`         ~${cost.worst} en kötü — her kenar limitine kadar tetiklenirse`);
   for (const edge of cost.rejectEdges) {
     console.log(`           ${edge.from} → ${edge.to}: kenar başına ${edge.segment}`);

@@ -35,6 +35,8 @@ export interface RejectEdge {
 export interface CostEstimate {
   /** Hiç ret olmazsa kart başına ajan uyandırması. */
   base: number;
+  /** Planlama alışverişinin eklediği aktivasyon; alışveriş yoksa 0. */
+  planning: number;
   /** Her ret kenarı limitine kadar tetiklenirse. */
   worst: number;
   perRole: number;
@@ -61,7 +63,15 @@ export function estimateCost(flow: Flow): CostEstimate {
   const perRole = flow.audit.enabled && AUDIT_IMPLEMENTED ? AUDIT_ROUNDS : 1;
   // Bilgi olarak duruyor (akış kaç kopyalama yapacak), maliyete girmiyor.
   const syncBacks = flow.roles.reduce((sum, role) => sum + role.syncBack.length, 0);
-  const base = flow.roles.length * perRole;
+  // Planlama alışverişi: itiraz eden roller zincirdeki turlarını zaten
+  // kullanıyor, ama planı YAZAN rol her tur için bir kez daha uyanıyor
+  // (cevap turu). İkinci ve sonraki turlarda itiraz edenler de tekrar
+  // uyanır — bugün tur 1, o yüzden tek kalem.
+  const plan = flow.plan;
+  const planning = plan === undefined || plan.katilimcilar.length < 2
+    ? 0
+    : plan.tur * perRole + (plan.tur - 1) * (plan.katilimcilar.length - 1) * perRole;
+  const base = flow.roles.length * perRole + planning;
 
   const indexOf = new Map(flow.order.map((id, i) => [id, i]));
   const rejectEdges: RejectEdge[] = [];
@@ -74,5 +84,5 @@ export function estimateCost(flow: Flow): CostEstimate {
   }
 
   const worst = rejectEdges.reduce((sum, edge) => sum + flow.reject.limit * edge.segment, base);
-  return { base, worst, perRole, syncBacks, rejectEdges };
+  return { base, planning, worst, perRole, syncBacks, rejectEdges };
 }

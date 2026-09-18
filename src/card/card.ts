@@ -30,6 +30,27 @@ export type HistoryEntry =
       summary?: string;
     }
   | {
+      /**
+       * Planlama alışverişinde bir tur (PLANLAMA.md 6b).
+       *
+       * `reject` değil: ret, işin reddidir ve kenar sayacını ilerletir.
+       * Bu, plan üzerinde yürüyen ayrı bir döngü — sayacı kendi `round`u.
+       */
+      at: string;
+      event: "plan";
+      role: string;
+      /** `yazdi` planı yazdı, `itiraz` itiraz etti, `cevap` itirazları yanıtladı. */
+      action: "yazdi" | "itiraz" | "cevap";
+      /** İtiraz→cevap döngüsünün sırası; plan yazma turunda 0. */
+      round: number;
+      /** Bu turdan sonra geçerli itiraz sayısı. */
+      objections?: number;
+      /** Kabul edilmiş itiraz sayısı. */
+      accepted?: number;
+      /** Plan dosyasının o turdaki hash'i. */
+      planHash?: string;
+    }
+  | {
       at: string;
       event: "reject";
       from: string;

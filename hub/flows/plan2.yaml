@@ -1,0 +1,63 @@
+# Örnek akış — planlamada yazılı tur (PLANLAMA.md, aşama 6b).
+#
+# `planner` planı yazar, `architect` ona itiraz eder, `planner` itirazları
+# yanıtlar (kabul → planı düzeltir / ret → gerekçe / insana → kapı), sonra
+# iş `coder`a geçer. Alışveriş katılımcılar arasında döner; zincir ancak
+# alışveriş kapandığında devreye girer.
+#
+# Tur sınırı bugün 1: çok turlu alışveriş ve tur sayacı 6c'nin konusu.
+
+name: plan2
+description: Plan yazılır, ikinci rol itiraz eder, yazan yanıtlar. Sonra kod.
+
+constitution:
+  - ../prompts/constitution/base.md
+  - ../prompts/constitution/engineering-ts.md
+
+roles:
+  - id: planner
+    provider: claude
+    workspace: main
+    prompt: ../prompts/roles/planner.md
+    receive: task
+    next: architect
+
+  - id: architect
+    provider: claude
+    workspace: architect
+    prompt: ../prompts/roles/plan-itiraz.md
+    receive: task
+    reject: planner
+    next: coder
+
+  - id: coder
+    provider: claude
+    workspace: coder
+    prompt: ../prompts/roles/coder.md
+    receive: task
+    reject: planner
+    next: reviewer
+
+  - id: reviewer
+    provider: claude
+    workspace: reviewer
+    prompt: ../prompts/roles/reviewer.md
+    receive: batch
+    syncBack: [coder]
+    reject: coder
+    next: done
+
+planlama:
+  katilimcilar: [planner, architect]   # ilki yazar, ikincisi itiraz eder
+  tur: 1                                # itiraz → cevap: bir döngü
+  plan: docs/plan/{kart}.md             # itirazlar: docs/plan/{kart}.itiraz.md
+
+reject:
+  limit: 2
+  onExhausted: gate
+
+audit:
+  enabled: false
+
+# Maliyet: 5 aktivasyon/kart (planner ×2, architect, coder, reviewer).
+# Planlama alışverişi 2 aktivasyon ekliyor — tipik kartın üçte biri kadar.

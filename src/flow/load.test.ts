@@ -438,7 +438,13 @@ describe("loadFlow — planlama (kural 17-20)", () => {
   it("geçerli planlama bloğunu çözer ve hash'e katar", async () => {
     const yaml = withPlan("planlama:\n  katilimcilar: [coder]\n  plan: docs/plan/{kart}.md");
     const flow = await load(await write(yaml));
-    expect(flow.plan).toEqual({ katilimcilar: ["coder"], plan: "docs/plan/{kart}.md" });
+    expect(flow.plan).toEqual({
+      katilimcilar: ["coder"],
+      plan: "docs/plan/{kart}.md",
+      // İtiraz dosyası plan yolundan türetiliyor: tek alan, tek hata yüzeyi.
+      itiraz: "docs/plan/{kart}.itiraz.md",
+      tur: 1,
+    });
 
     // Plan politikası topolojinin parçası: değişirse yoldaki kart eskisiyle yaşar.
     const plansiz = await load(await write(VALID, "plansiz.yaml"));
@@ -452,14 +458,30 @@ describe("loadFlow — planlama (kural 17-20)", () => {
 
   // Yazılmamış bir alanı sessizce yok saymak, çalıştığı sanılan bir alan
   // bırakır. `audit.enabled` bir dönem tam bunu yaptı.
-  it("`tur` alanını açıkça reddeder — 6b henüz yazılmadı", async () => {
-    const yaml = withPlan("planlama:\n  katilimcilar: [coder]\n  tur: 2\n  plan: docs/plan/{kart}.md");
-    await expect(load(await write(yaml))).rejects.toThrow(/kural 18.*henüz uygulanmadı/s);
+  it("iki katılımcıyı ve tek turu kabul eder — 6b", async () => {
+    const yaml = withPlan("planlama:\n  katilimcilar: [coder, reviewer]\n  tur: 1\n  plan: docs/plan/{kart}.md");
+    const flow = await load(await write(yaml));
+    expect(flow.plan?.katilimcilar).toEqual(["coder", "reviewer"]);
+    expect(flow.plan?.tur).toBe(1);
   });
 
-  it("iki katılımcıyı reddeder — alışveriş 6b'nin konusu", async () => {
-    const yaml = withPlan("planlama:\n  katilimcilar: [coder, reviewer]\n  plan: docs/plan/{kart}.md");
-    await expect(load(await write(yaml))).rejects.toThrow(/kural 17.*tek rol/s);
+  it("birden çok turu açıkça reddeder — sayaç ve kilit kapısı 6c", async () => {
+    const yaml = withPlan("planlama:\n  katilimcilar: [coder]\n  tur: 2\n  plan: docs/plan/{kart}.md");
+    await expect(load(await write(yaml))).rejects.toThrow(/kural 18.*yalnızca 1/s);
+  });
+
+  it("üç katılımcıyı reddeder — körleme ve sayaç 6c'nin konusu", async () => {
+    const yaml = withPlan(
+      "planlama:\n  katilimcilar: [coder, reviewer, guard]\n  plan: docs/plan/{kart}.md");
+    await expect(load(await write(yaml))).rejects.toThrow(/kural 17.*en fazla iki/s);
+  });
+
+  // Varsayılan körleme atıl (itiraz eden tek rol var); kapatılmış SANILAN
+  // bir körleme diye bir şey olmasın diye açık kapatma reddediliyor.
+  it("körlemeyi açıkça kapatmayı reddeder", async () => {
+    const yaml = withPlan(
+      "planlama:\n  katilimcilar: [coder]\n  ilk-tur-kor: false\n  plan: docs/plan/{kart}.md");
+    await expect(load(await write(yaml))).rejects.toThrow(/kural 18.*körlemenin etkisi yok/s);
   });
 
   it("var olmayan role işaret eden katılımcıyı reddeder", async () => {

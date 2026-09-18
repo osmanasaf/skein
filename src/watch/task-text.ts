@@ -1,5 +1,6 @@
 import type { Card } from "../card/card.js";
-import { isPlanner, planPathFor, type SnapshotRole } from "../flow/snapshot.js";
+import { isPlanner, itirazPathFor, planPathFor, type SnapshotRole } from "../flow/snapshot.js";
+import { planPhase } from "../plan/phase.js";
 import { verdictInstructions, VERDICT_FILE } from "./verdict.js";
 
 /**
@@ -34,6 +35,79 @@ function lastHandoffTo(card: Card, roleId: string): Extract<Card["history"][numb
   }
   return null;
 }
+
+const planYazBolumu = (planPath: string): string[] => [
+  "",
+  "## Planı yaz",
+  "",
+  `Bu turun kalıcı çıktısı bir **plan belgesi**: \`${planPath}\`.`,
+  "Dosyayı yaz ve **commit'le** — commit'lenmeyen plan sonraki role",
+  "ulaşmaz ve tur kabul edilmez.",
+  "",
+  "Planda olması gerekenler: ne yapılacak, hangi dosyalara dokunulacak,",
+  "hangi sözleşmelerin korunması gerekiyor, ve kapsam dışı ne var.",
+  "Kod yazma — bu tur planlama turu.",
+];
+
+const planOkuBolumu = (planPath: string, card: Card): string[] => [
+  "",
+  "## Plan",
+  "",
+  `Bu kartın planı \`${planPath}\` dosyasında.` +
+    (card.plan === undefined ? "" : ` (sürüm \`${card.plan.hash.slice(0, 12)}\`)`),
+  "**Önce onu oku.** İşin tanımı görev metniyle o belgenin birleşimidir.",
+  "Planla çelişen bir şey yapman gerekiyorsa gerekçesini özetine yaz.",
+];
+
+/**
+ * İtiraz turu.
+ *
+ * Biçim pazarlık konusu değil: mekanizma itirazları sayıyor ve kanıt
+ * alanının depoda karşılığı olup olmadığına bakıyor. Bu yüzden biçim
+ * metnin içinde, örneğiyle birlikte veriliyor.
+ */
+const itirazBolumu = (planPath: string, itirazPath: string, roleId: string): string[] => [
+  "",
+  "## Plana itiraz et",
+  "",
+  `Bu tur **kod yazma turu değil.** \`${planPath}\` dosyasındaki planı oku,`,
+  `itirazlarını \`${itirazPath}\` dosyasına yaz ve **commit'le**.`,
+  "",
+  "Her itiraz tam olarak şu biçimde:",
+  "",
+  "```markdown",
+  `## İtiraz 1 — ${roleId}`,
+  "**Ne:** Planın hangi kararı yanlış.",
+  "**Neden:** Neden yanlış.",
+  "**Neyi yanlışlar:** `src/bir/dosya.ts:42` — orada ne var.",
+  "**Durum:** açık",
+  "```",
+  "",
+  "**`Neyi yanlışlar` depodan bir yere işaret etmek zorunda** — bir dosya,",
+  "bir satır, bir test. Yolu var olmayan itiraz sayılmaz. \"Sınır durumlarına",
+  "dikkat edilmeli\" gibi her plana uyan bir itiraz hiçbir plana uymaz.",
+  "",
+  "Planı SEN düzenlemiyorsun; itirazı yazan ile planı düzelten ayrı roller.",
+  "İtirazın yoksa dosyayı yine yaz ve itirazın olmadığını açıkça söyle —",
+  "sessizlik anlaşma sayılmaz.",
+];
+
+/** Cevap turu: her açık itiraz üç cevaptan birini alır. */
+const cevapBolumu = (planPath: string, itirazPath: string): string[] => [
+  "",
+  "## İtirazları yanıtla",
+  "",
+  `\`${itirazPath}\` dosyasında planına itirazlar var. Her birinin`,
+  "`**Durum:**` satırını düzenleyerek yanıtla, sonra **commit'le**:",
+  "",
+  "- `**Durum:** kabul` — haklı. **Bu durumda planı da düzenle**;",
+  `  \`${planPath}\` değişmemişse kabul sayılmaz ve tur kabul edilmez.`,
+  "- `**Durum:** ret: <gerekçe>` — katılmıyorsun. Gerekçe zorunlu.",
+  "- `**Durum:** insana: <gerekçe>` — bu bir değer kararı; iş insana çıkar.",
+  "",
+  "Açık bıraktığın itiraz kabul SAYILMAZ: tur dolduğunda kart insan",
+  "kapısında bekler. Bu tur da kod yazma turu değil.",
+];
 
 /**
  * Role verilecek iş metnini kurar.
@@ -72,29 +146,13 @@ export function buildTaskText(card: Card, role: SnapshotRole): string {
   // sonundaki kısıt tutmaz (`specifier.md`). Planı yazacak rol için bu
   // zorunlu çıktı; okuyacak rol için işin tanımının yarısı.
   const planPath = planPathFor(card.topology, card.id);
-  if (planPath !== null) {
-    parts.push(...(isPlanner(card.topology, role.id)
-      ? [
-          "",
-          "## Planı yaz",
-          "",
-          `Bu turun kalıcı çıktısı bir **plan belgesi**: \`${planPath}\`.`,
-          "Dosyayı yaz ve **commit'le** — commit'lenmeyen plan sonraki role",
-          "ulaşmaz ve tur kabul edilmez.",
-          "",
-          "Planda olması gerekenler: ne yapılacak, hangi dosyalara dokunulacak,",
-          "hangi sözleşmelerin korunması gerekiyor, ve kapsam dışı ne var.",
-          "Kod yazma — bu tur planlama turu.",
-        ]
-      : [
-          "",
-          "## Plan",
-          "",
-          `Bu kartın planı \`${planPath}\` dosyasında.` +
-            (card.plan === undefined ? "" : ` (sürüm \`${card.plan.hash.slice(0, 12)}\`)`),
-          "**Önce onu oku.** İşin tanımı görev metniyle o belgenin birleşimidir.",
-          "Planla çelişen bir şey yapman gerekiyorsa gerekçesini özetine yaz.",
-        ]));
+  const itirazPath = itirazPathFor(card.topology, card.id);
+  if (planPath !== null && itirazPath !== null) {
+    const phase = planPhase(card, role.id, card.topology);
+    if (phase.kind === "yaz") parts.push(...planYazBolumu(planPath));
+    else if (phase.kind === "itiraz") parts.push(...itirazBolumu(planPath, itirazPath, role.id));
+    else if (phase.kind === "cevap") parts.push(...cevapBolumu(planPath, itirazPath));
+    else if (!isPlanner(card.topology, role.id)) parts.push(...planOkuBolumu(planPath, card));
   }
 
   const rejection = lastRejectTo(card, role.id);

@@ -71,7 +71,14 @@ export function snapshot(flow: Flow, root: string): TopologySnapshot {
     audit: { enabled: flow.audit.enabled, fingerprint: [...flow.audit.fingerprint] },
     ...(flow.plan === undefined
       ? {}
-      : { plan: { katilimcilar: [...flow.plan.katilimcilar], plan: flow.plan.plan } }),
+      : {
+          plan: {
+            katilimcilar: [...flow.plan.katilimcilar],
+            plan: flow.plan.plan,
+            tur: flow.plan.tur,
+            itiraz: flow.plan.itiraz,
+          },
+        }),
     constitution: flow.constitution.map((path) => rel(root, path)),
   };
 }
@@ -111,9 +118,30 @@ export function promptLayers(
   return layers;
 }
 
-/** Bu rol planı yazan rol mü. */
+/** Bu rol planlamaya katılıyor mu (yazan ya da itiraz eden). */
 export function isPlanner(topology: TopologySnapshot, roleId: string): boolean {
   return topology.plan?.katilimcilar.includes(roleId) ?? false;
+}
+
+/** Planı YAZAN rol — katılımcıların ilki, yani zincirin başı. */
+export function planAuthor(topology: TopologySnapshot): string | null {
+  return topology.plan?.katilimcilar[0] ?? null;
+}
+
+/** İtiraz eden roller — yazan dışındaki katılımcılar. */
+export function planObjectors(topology: TopologySnapshot): string[] {
+  return topology.plan?.katilimcilar.slice(1) ?? [];
+}
+
+/**
+ * Planlama bittiğinde kartın gideceği rol: SON katılımcının zincirdeki
+ * ardılı. Alışveriş katılımcılar arasında dönüyor; zincir ancak alışveriş
+ * kapandığında devreye giriyor.
+ */
+export function afterPlanning(topology: TopologySnapshot): string | null {
+  const son = topology.plan?.katilimcilar[topology.plan.katilimcilar.length - 1];
+  if (son === undefined) return null;
+  return roleOf(topology, son)?.next ?? null;
 }
 
 /**
@@ -126,6 +154,13 @@ export function planPathFor(topology: TopologySnapshot, cardId: string): string 
   const plan = topology.plan;
   if (plan === undefined) return null;
   return plan.plan.replaceAll("{kart}", cardId);
+}
+
+/** İtiraz dosyasının yolu, aynı kuralla. */
+export function itirazPathFor(topology: TopologySnapshot, cardId: string): string | null {
+  const plan = topology.plan;
+  if (plan === undefined) return null;
+  return plan.itiraz.replaceAll("{kart}", cardId);
 }
 
 export { DONE };

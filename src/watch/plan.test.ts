@@ -107,7 +107,10 @@ const writes = (verdict: unknown) => async (req: InvokeRequest): Promise<void> =
 
 describe("topoloji — plan politikası donuyor", () => {
   it("anlık görüntü plan politikasını taşır", () => {
-    expect(topology.plan).toEqual({ katilimcilar: ["planner"], plan: "docs/plan/{kart}.md" });
+    expect(topology.plan).toEqual({
+      katilimcilar: ["planner"], plan: "docs/plan/{kart}.md",
+      itiraz: "docs/plan/{kart}.itiraz.md", tur: 1,
+    });
   });
 
   // `{kart}` yerine kart kimliği: aynı akıştan geçen iki kart aynı dosyayı

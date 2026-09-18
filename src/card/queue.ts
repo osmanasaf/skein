@@ -273,6 +273,32 @@ export class CardQueue {
   }
 
   /**
+   * Planlama alışverişinde kartı bir katılımcıdan diğerine taşır.
+   *
+   * `handoff` değil: devir teslim zincirin `next`ini izler ve kapı
+   * kontrolünden geçer. Planlama kendi döngüsü — kart katılımcılar arasında
+   * gidip geliyor ve zincir ancak alışveriş kapandığında devreye giriyor.
+   * `reject` de değil: ret kenar sayacını ilerletir, bu ilerletmemeli.
+   */
+  async planTurn(
+    card: Card,
+    to: string,
+    entry: Extract<HistoryEntry, { event: "plan" }>,
+    plan?: { path: string; hash: string },
+  ): Promise<Card> {
+    const { path } = this.#requireActive(card);
+    const withPlan = plan === undefined ? card : { ...card, plan };
+    const moved = {
+      ...this.#push(withPlan, entry),
+      role: to,
+      state: "queued" as const,
+    };
+    // Yarım kalmış alışveriş, taze kartın önünde: bir kartı planlamada
+    // asılı bırakıp yenisine başlamak, iki yarım iş demek.
+    return this.#move(moved, this.#queueDir(to), this.#queueName(moved, PRIO_RETURNED), path);
+  }
+
+  /**
    * Rol işi kabul etmedi: KART geri gider, gerekçesiyle.
    *
    * Hedef kartın kendi topolojisinden okunur; akış dosyası o sırada
@@ -333,6 +359,24 @@ export class CardQueue {
    * yakar; "cevap vermedi"yi kabul saymak ise deneyde en pahalıya mal olan
    * hataydı. İkisi de yasak — kart durur ve görünür olur.
    */
+  /**
+   * Tur tamamlandı ama anlaşma çıkmadı: KİLİT kapısı.
+   *
+   * Kaçış kapısından farkı, insanın elindeki seçenek: kaçışta kod hiç
+   * taşınmadı ve "ileri bırak" yasak; burada tur bitti, kod yerinde ve
+   * insan planı olduğu gibi kabul edip ilerletebilir. Planlama alışverişi
+   * turu dolduğunda buraya çıkıyor (PLANLAMA.md).
+   */
+  async deadlock(card: Card, reason: string, entry?: Extract<HistoryEntry, { event: "plan" }>): Promise<Card> {
+    const { role, path } = this.#requireActive(card);
+    const kayitli = entry === undefined ? card : this.#push(card, entry);
+    const gated = {
+      ...this.#push(kayitli, { at: now(), event: "gate", role: role.id, reason, kind: "deadlock" }),
+      state: "gate" as const,
+    };
+    return this.#move(gated, join(this.#root, "gate"), `${card.id}.json`, path);
+  }
+
   async escalate(card: Card, reason: string): Promise<Card> {
     const { role, path } = this.#requireActive(card);
     const gated = {

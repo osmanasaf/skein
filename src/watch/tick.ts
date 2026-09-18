@@ -6,7 +6,12 @@ import type { Adapter, AgentStep, InvokeResult } from "../adapters/contract.js";
 import type { Card } from "../card/card.js";
 import type { CardQueue } from "../card/queue.js";
 import type { EventLog } from "../events/log.js";
-import { DONE, isPlanner, planPathFor, promptLayers, roleOf, type SnapshotRole } from "../flow/snapshot.js";
+import {
+  DONE, afterPlanning, isPlanner, itirazPathFor, planAuthor, planObjectors, planPathFor,
+  promptLayers, roleOf, type SnapshotRole,
+} from "../flow/snapshot.js";
+import { planPhase } from "../plan/phase.js";
+import { parseItirazlar } from "../plan/itiraz.js";
 import { assemblePrompt } from "../prompt/assemble.js";
 import { dirtyPaths, head, isTracked, mergeForward, ORCHESTRATOR_PATHS } from "./git.js";
 import { buildTaskText } from "./task-text.js";
@@ -37,6 +42,8 @@ export interface TickOptions {
   isTracked?: (workdir: string, path: string) => Promise<boolean>;
   /** Test edilebilirlik için; varsayılan dosyayı diskten okumak. */
   readPlan?: (path: string) => Promise<string>;
+  /** Test edilebilirlik için; varsayılan dosya sisteminde bakmak. */
+  pathExists?: (path: string) => Promise<boolean>;
 }
 
 const DEFAULT_TIMEOUT_MS = 20 * 60 * 1000;
@@ -262,6 +269,8 @@ async function runRole(card: Card, role: SnapshotRole, options: TickOptions): Pr
   // yazdım" ile "işi teslim ettim" ayrı şeyler. Kural "her kabul commit
   // üretmeli" DEĞİL — değişiklik yapmadan kabul eden bir denetçi meşru;
   // yasak olan, ortada duran ve hiçbir yere gidemeyecek iş bırakmak.
+  const summary = verdict.verdict.summary;
+
   const dirty = await (options.dirtyPaths ?? dirtyPaths)(workdir, ORCHESTRATOR_PATHS);
   if (dirty.length > 0) {
     const reason =
@@ -271,24 +280,25 @@ async function runRole(card: Card, role: SnapshotRole, options: TickOptions): Pr
     return { status: "escalated", card: await queue.escalate(card, reason), reason };
   }
 
-  // Planlama turunun kapısı: plan gerçekten yazıldı mı.
+  // Planlama turunun kapıları: plan gerçekten yazıldı mı, itirazlar
+  // gerçekten yanıtlandı mı.
   //
   // "Belge üreten rolün çıktısı kayboluyor" kusuru bir kez yaşandı ve
   // çözümü prompta yazmaktı; prompt bir talimattır, kapı değil. Burası
-  // kapısı: planı yazmadan kabul eden rol devredemez. Dosya diskte
-  // aranıyor, ajanın "yazdım" demesine bakılmıyor (PHILOSOPHY 8).
-  const plan = await checkPlan(card, role, options, workdir);
-  if (typeof plan === "string") {
-    return { status: "escalated", card: await queue.escalate(card, plan), reason: plan };
+  // kapısı: dosyalar diskte aranıyor, ajanın "yazdım" demesine
+  // bakılmıyor (PHILOSOPHY 8).
+  const adim = await planStep(card, role, options, workdir, summary);
+  if (adim.kind === "hata") {
+    return { status: "escalated", card: await queue.escalate(card, adim.reason), reason: adim.reason };
   }
+  if (adim.kind === "tasindi") return adim.result;
+  const plan = adim.kind === "devam" ? adim.plan : null;
 
   // KUSUR 2'nin kapısı: devir teslim kodu da taşır.
   const merge = await handOverCode(card, role, options, workdir);
   if (merge !== null) {
     return { status: "escalated", card: await queue.escalate(card, merge), reason: merge };
   }
-
-  const summary = verdict.verdict.summary;
 
   // Özet kartın devir kaydına yazılıyor: bir sonraki rol bunu iş metninde
   // görecek. Kod git'te taşınıyordu, belge hiçbir yerde taşınmıyordu.
@@ -319,38 +329,222 @@ async function runRole(card: Card, role: SnapshotRole, options: TickOptions): Pr
   };
 }
 
+type PlanAdim =
+  | { kind: "yok" }
+  | { kind: "devam"; plan: { path: string; hash: string } }
+  | { kind: "tasindi"; result: TickResult }
+  | { kind: "hata"; reason: string };
+
+const sha = (text: string): string => createHash("sha256").update(text, "utf8").digest("hex");
+
 /**
- * Planı yazan rol planı gerçekten yazdı mı.
+ * Planlama alışverişinin bir adımı (PLANLAMA.md 6b).
  *
- * Üç sonuç: planlama yoksa ya da bu rol planı yazan rol değilse `null`
- * (yapacak bir şey yok), plan varsa yolu ve içeriğinin hash'i, yoksa
- * hata metni.
- *
- * Hash içerikten alınıyor, commit'ten değil: plan dosyasının o turdaki
- * hâli, sonradan düzenlense bile bilinsin.
+ * Üç tur var ve üçü de kartın geçmişinden okunuyor: planı YAZMA, İTİRAZ ve
+ * CEVAP. Her turun kendi kapısı var; kapıların ortak ilkesi, ajanın
+ * söylediğine değil diskteki dosyaya bakmak.
  */
-async function checkPlan(
+async function planStep(
   card: Card,
   role: SnapshotRole,
   options: TickOptions,
   workdir: string,
-): Promise<{ path: string; hash: string } | string | null> {
-  if (!isPlanner(card.topology, role.id)) return null;
-  const path = planPathFor(card.topology, card.id);
-  if (path === null) return null;
+  summary?: string,
+): Promise<PlanAdim> {
+  const phase = planPhase(card, role.id, card.topology);
+  if (phase.kind === "yok") return { kind: "yok" };
 
-  const read = options.readPlan ?? ((p: string) => readFile(p, "utf8"));
-  let text: string;
-  try {
-    text = await read(join(workdir, path));
-  } catch {
-    return `\`${role.id}\` kabul etti ama plan dosyası yok: \`${path}\`. ` +
-      `Planlama turu plan belgesiyle biter — sonraki rol onu okuyacak.`;
+  const planPath = planPathFor(card.topology, card.id);
+  const itirazPath = itirazPathFor(card.topology, card.id);
+  if (planPath === null || itirazPath === null) return { kind: "yok" };
+
+  const oku = options.readPlan ?? ((p: string) => readFile(p, "utf8"));
+  const planMetni = await oku(join(workdir, planPath)).catch(() => undefined);
+
+  if (phase.kind === "yaz") {
+    if (planMetni === undefined) {
+      return {
+        kind: "hata",
+        reason: `\`${role.id}\` kabul etti ama plan dosyası yok: \`${planPath}\`. ` +
+          `Planlama turu plan belgesiyle biter — sonraki rol onu okuyacak.`,
+      };
+    }
+    if (planMetni.trim() === "") {
+      return { kind: "hata", reason: `\`${role.id}\` boş bir plan dosyası bıraktı: \`${planPath}\`.` };
+    }
+    const plan = { path: planPath, hash: sha(planMetni) };
+
+    const itirazcilar = planObjectors(card.topology);
+    const hedef = itirazcilar[0];
+    // 6a: itiraz edecek rol yok, kart zincirden devam ediyor.
+    if (hedef === undefined) return { kind: "devam", plan };
+
+    return {
+      kind: "tasindi",
+      result: await planMove(card, role, options, workdir, hedef, {
+        at: new Date().toISOString(), event: "plan", role: role.id,
+        action: "yazdi", round: 0, planHash: plan.hash,
+      }, plan, summary),
+    };
   }
-  if (text.trim() === "") {
-    return `\`${role.id}\` boş bir plan dosyası bıraktı: \`${path}\`.`;
+
+  // İtiraz ve cevap turlarının ikisi de itiraz dosyasını okur.
+  const itirazMetni = await oku(join(workdir, itirazPath)).catch(() => undefined);
+  if (itirazMetni === undefined) {
+    return {
+      kind: "hata",
+      reason: `\`${role.id}\` kabul etti ama itiraz dosyası yok: \`${itirazPath}\`. ` +
+        `İtirazın yoksa da dosyayı yaz ve bunu söyle — sessizlik anlaşma değildir.`,
+    };
   }
-  return { path, hash: createHash("sha256").update(text, "utf8").digest("hex") };
+  const exists = options.pathExists ?? (async (p: string) => {
+    try {
+      await readFile(p);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  // Kanıt yolları TEK TEK denetleniyor; "sınır durumlarına dikkat" diyen bir
+  // itiraz hiçbir dosyaya işaret edemez ve planı durduramaz.
+  const yollar = new Map<string, boolean>();
+  for (const parca of itirazMetni.split(/\r?\n/u)) {
+    const m = /`([^`]+)`/u.exec(parca);
+    const aday = m?.[1]?.split(":")[0];
+    if (aday !== undefined && !yollar.has(aday)) {
+      yollar.set(aday, await exists(join(workdir, aday)));
+    }
+  }
+  const dosya = parseItirazlar(itirazMetni, { varMi: (yol) => yollar.get(yol) === true });
+
+  if (phase.kind === "itiraz") {
+    const yazar = planAuthor(card.topology) as string;
+    const sonra = afterPlanning(card.topology);
+    if (dosya.gecerli.length === 0) {
+      // İtirazsız alışveriş: mekanizmanın tören olup olmadığının ölçüsü.
+      // Sayılıyor ve günlüğe düşüyor.
+      if (sonra === null) return { kind: "yok" };
+      await options.log?.append({
+        type: "plan.settled", card: card.id, role: role.id, outcome: "anlasma",
+        rounds: phase.round, objections: 0, accepted: 0,
+        path: planPath, planHash: planMetni === undefined ? "" : sha(planMetni),
+      });
+      return {
+        kind: "tasindi",
+        result: await planMove(card, role, options, workdir, sonra, {
+          at: new Date().toISOString(), event: "plan", role: role.id,
+          action: "itiraz", round: phase.round, objections: 0,
+        }, undefined, summary),
+      };
+    }
+
+    await options.log?.append({
+      type: "plan.round", card: card.id, role: role.id, round: phase.round,
+      blind: true, newObjections: dosya.gecerli.length, openObjections: dosya.acik.length,
+    });
+    return {
+      kind: "tasindi",
+      result: await planMove(card, role, options, workdir, yazar, {
+        at: new Date().toISOString(), event: "plan", role: role.id,
+        action: "itiraz", round: phase.round, objections: dosya.gecerli.length,
+      }, undefined, summary),
+    };
+  }
+
+  // CEVAP turu.
+  const acik = dosya.acik;
+  const insana = dosya.insana;
+  const kabul = dosya.kabul;
+
+  if (acik.length > 0) {
+    // Tur sınırı 1: açık kalan itirazla alışveriş tükenmiştir. Kaçış değil
+    // kilit — tur tamamlandı, kod yerinde, insan planı olduğu gibi kabul
+    // edip ilerletebilir.
+    const reason = `Planlama turu doldu, ${acik.length} itiraz açık kaldı: ` +
+      acik.map((i) => `#${i.no} ${i.ne}`).join(" · ") +
+      `. Cevapsız bırakılan itiraz kabul sayılmaz.`;
+    return {
+      kind: "tasindi",
+      result: {
+        status: "escalated",
+        card: await options.queue.deadlock(card, reason, {
+          at: new Date().toISOString(), event: "plan", role: role.id,
+          action: "cevap", round: phase.round,
+          objections: dosya.gecerli.length, accepted: kabul.length,
+        }),
+        reason,
+      },
+    };
+  }
+  if (insana.length > 0) {
+    const reason = `Planlamada ${insana.length} itiraz insana çıktı: ` +
+      insana.map((i) => `#${i.no} ${i.ne} — ${i.gerekce ?? ""}`).join(" · ");
+    return {
+      kind: "tasindi",
+      result: {
+        status: "escalated",
+        card: await options.queue.deadlock(card, reason, {
+          at: new Date().toISOString(), event: "plan", role: role.id,
+          action: "cevap", round: phase.round,
+          objections: dosya.gecerli.length, accepted: kabul.length,
+        }),
+        reason,
+      },
+    };
+  }
+
+  const oncekiHash = card.plan?.hash;
+  const yeniHash = planMetni === undefined ? undefined : sha(planMetni);
+  if (kabul.length > 0 && yeniHash !== undefined && yeniHash === oncekiHash) {
+    // Nezaket çöküşünün kapısı: "haklısın" demek planı değiştirmek demektir.
+    return {
+      kind: "hata",
+      reason: `\`${role.id}\` ${kabul.length} itirazı KABUL etti ama planı değiştirmedi ` +
+        `(\`${planPath}\` aynı). Kabul, planı düzenlemek demektir; değilse ret gerekçesi yaz.`,
+    };
+  }
+
+  const sonra = afterPlanning(card.topology);
+  if (sonra === null) return { kind: "yok" };
+  await options.log?.append({
+    type: "plan.settled", card: card.id, role: role.id, outcome: "anlasma",
+    rounds: phase.round, objections: dosya.gecerli.length, accepted: kabul.length,
+    path: planPath, planHash: yeniHash ?? "",
+  });
+  return {
+    kind: "tasindi",
+    result: await planMove(card, role, options, workdir, sonra, {
+      at: new Date().toISOString(), event: "plan", role: role.id,
+      action: "cevap", round: phase.round,
+      objections: dosya.gecerli.length, accepted: kabul.length,
+      ...(yeniHash === undefined ? {} : { planHash: yeniHash }),
+    }, yeniHash === undefined ? undefined : { path: planPath, hash: yeniHash }, summary),
+  };
+}
+
+/** Kartı planlama döngüsü içinde taşır; kodu da hedefin ağacına götürür. */
+async function planMove(
+  card: Card,
+  role: SnapshotRole,
+  options: TickOptions,
+  workdir: string,
+  hedef: string,
+  entry: Extract<Card["history"][number], { event: "plan" }>,
+  plan: { path: string; hash: string } | undefined,
+  summary?: string,
+): Promise<TickResult> {
+  const merge = await handOverCode(card, role, options, workdir, hedef);
+  if (merge !== null) {
+    return { status: "escalated", card: await options.queue.escalate(card, merge), reason: merge };
+  }
+  const moved = await options.queue.planTurn(card, hedef, entry, plan);
+  const warnings = await syncBack(card, role, options, workdir);
+  return {
+    status: "accepted",
+    card: moved,
+    ...(summary === undefined ? {} : { summary }),
+    ...(warnings.length === 0 ? {} : { warnings }),
+  };
 }
 
 /**
@@ -412,11 +606,13 @@ async function handOverCode(
   role: SnapshotRole,
   options: TickOptions,
   fromDir: string,
+  /** Hedef rol; verilmezse zincirdeki ardıl. Planlama kendi hedefini verir. */
+  targetId: string = role.next,
 ): Promise<string | null> {
-  if (role.next === DONE) return null;
+  if (targetId === DONE) return null;
 
-  const next = roleOf(card.topology, role.next);
-  if (next === null) return `Sonraki rol topolojide yok: ${role.next}`;
+  const next = roleOf(card.topology, targetId);
+  if (next === null) return `Sonraki rol topolojide yok: ${targetId}`;
   if (next.workspace === role.workspace) return null;
 
   const toDir = await resolveWorkspace(options.root, next.workspace);

@@ -139,6 +139,24 @@ export type EventInput =
     }
   | {
       /**
+       * Planlama alışverişinde bir itiraz turu (PLANLAMA.md 6b).
+       *
+       * İtiraz METNİ dosyada; burada yalnızca sayılar. Günlüğün dar
+       * kalması kasıtlı: içerik git'te, sayı günlükte.
+       */
+      type: "plan.round";
+      card: string;
+      role: string;
+      round: number;
+      /** İlk tur kör mü — katılımcılar birbirinin itirazını görmeden yazdı mı. */
+      blind: boolean;
+      /** Bu turda eklenen geçerli itiraz sayısı. */
+      newObjections: number;
+      /** Tur sonunda açık kalan itiraz sayısı. */
+      openObjections: number;
+    }
+  | {
+      /**
        * Planlama bitti ve kart ilerliyor (PLANLAMA.md).
        *
        * 6a'da alışveriş yok: `rounds` 0, `objections` 0. Olay yine de
@@ -253,6 +271,10 @@ const REQUIRED: Record<EventInput["type"], { strings: string[]; numbers: string[
   "gate.released": { strings: ["card", "role", "decision", "kind"], numbers: [] },
   "card.closed": { strings: ["card", "role", "reason"], numbers: [] },
   "hooks.measured": { strings: ["cell"], numbers: ["total"] },
+  "plan.round": {
+    strings: ["card", "role"],
+    numbers: ["round", "newObjections", "openObjections"],
+  },
   "plan.settled": {
     strings: ["card", "role", "outcome", "path", "planHash"],
     numbers: ["rounds", "objections", "accepted"],
