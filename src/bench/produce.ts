@@ -4,6 +4,7 @@ import { listFilesRelative } from "../proc/files.js";
 import type { Adapter, InvokeResult } from "../adapters/contract.js";
 import { assemblePrompt, type PromptLayer } from "../prompt/assemble.js";
 import { HIDDEN_DIR, type Task } from "./task.js";
+import type { TurnRecorder } from "./snapshot.js";
 
 export interface ProduceOptions {
   task: Task;
@@ -18,6 +19,13 @@ export interface ProduceOptions {
    * üretim sonrası kontrol edilir.
    */
   repo?: string;
+  /**
+   * Verilirse her tur diske saklanır. Üretim iki tur bırakır: "tohum"
+   * (ajan koşmadan önceki hâl) ve "uretim". Tohum turu olmadan "ajan
+   * mevcut kodda neyi değiştirdi" sorusu cevaplanamaz — `seed/` verilen
+   * görevlerde ölçmek istediğimiz şeyin ta kendisi bu.
+   */
+  recorder?: TurnRecorder;
 }
 
 export interface ProduceResult {
@@ -64,6 +72,8 @@ export async function produce(options: ProduceOptions): Promise<ProduceResult> {
     seeded = await listFilesRelative(artifactDir);
   }
 
+  await options.recorder?.record(artifactDir, "tohum");
+
   const prompt = await assemblePrompt(layers);
   const promptFile = join(cellDir, "prompt.txt");
   await writeFile(promptFile, prompt.text);
@@ -84,6 +94,10 @@ export async function produce(options: ProduceOptions): Promise<ProduceResult> {
   // dosya "eski" görünüp denetimden kaçardı.
   const oncekiHal = await fileStamp(options.repo, task.entry);
   const invoke = await adapter.invoke({ workdir: artifactDir, promptFile, taskText, timeoutMs });
+
+  // Anlık görüntü gizli testler KOPYALANMADAN önce: sonra alınsaydı her
+  // üretim turu, ajanın hiç görmediği dosyaları da değişmiş gibi gösterirdi.
+  await options.recorder?.record(artifactDir, "uretim");
 
   // Ancak şimdi: üretim bitti, ajan çıktı.
   await cp(task.hiddenDir, join(cellDir, HIDDEN_DIR), { recursive: true });

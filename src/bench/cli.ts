@@ -9,6 +9,8 @@ import { produce } from "./produce.js";
 import { runHidden } from "./hidden.js";
 import { auditLoop } from "./audit-loop.js";
 import { runMatrix, diagnose } from "./matrix.js";
+import { TurnRecorder, diffLines, diffSnapshots, loadSnapshot,
+  type Snapshot, type SnapshotDiff } from "./snapshot.js";
 import { selfTest } from "./selftest.js";
 import { networkFailure } from "./failure.js";
 import { scoreTargets, scoreAll, classifyTargets, classifyAll } from "./score.js";
@@ -94,6 +96,35 @@ async function report(taskFilter?: string): Promise<void> {
   printNoise(noiseReport(events));
 }
 
+/**
+ * Tur kaydedicisi — her turun sonundaki artefaktı saklar ve günlüğe düşer.
+ *
+ * Ekrana basılan satır kasıtlı olarak kısa: "hangi dosyada kaç satır"
+ * yeter, tam fark diskte duruyor ve `cli.ts turlar` ile okunuyor.
+ */
+function recorderFor(log: EventLog, cellDir: string): TurnRecorder {
+  return new TurnRecorder(join(cellDir, "turlar"), async (snapshot, diff) => {
+    await log.append({
+      type: "artifact.snapshot",
+      cell: rel(cellDir),
+      turn: snapshot.turn,
+      label: snapshot.label,
+      path: rel(snapshot.dir),
+      fingerprint: snapshot.fingerprint,
+      files: snapshot.files.length,
+      changed: diff?.changes.length ?? 0,
+      addedLines: diff?.addedLines ?? 0,
+      removedLines: diff?.removedLines ?? 0,
+    });
+    if (diff !== null) {
+      const what = diff.changes.length === 0
+        ? "hiçbir dosya değişmedi"
+        : diff.changes.map((c) => `${c.path} (${c.kind}, +${c.addedLines}/−${c.removedLines})`).join(", ");
+      console.log(`  tur ${snapshot.turn} (${snapshot.label}): ${what}`);
+    }
+  });
+}
+
 async function run(taskId: string, provider: string, model: string, audit: boolean): Promise<void> {
   const task = await loadTask(join(REPO, "bench/tasks", taskId));
   const adapter: Adapter = new AdapterRegistry()
@@ -113,11 +144,13 @@ async function run(taskId: string, provider: string, model: string, audit: boole
 
   await log.append({ type: "run.started", taskId: task.id });
 
+  const recorder = recorderFor(log, cellDir);
+
   console.log("üretim koşuyor…");
   const p = await produce({
     task, adapter, cellDir,
     layers: [{ name: "produce", path: join(REPO, "bench/prompts/produce.md") }],
-    timeoutMs: 10 * 60_000, repo: REPO,
+    timeoutMs: 10 * 60_000, repo: REPO, recorder,
   });
   await log.append({
     type: "agent.started", cell: rel(cellDir), role: "uretici",
@@ -147,7 +180,7 @@ async function run(taskId: string, provider: string, model: string, audit: boole
     const outcome = await auditLoop({
       task, adapter, cellDir, artifactDir: p.artifactDir,
       layers: [{ name: "audit", path: join(REPO, "bench/prompts/audit.md") }],
-      maxRounds: 4, timeoutMs: 10 * 60_000,
+      maxRounds: 4, timeoutMs: 10 * 60_000, recorder,
       onRound: async (d, inv) => {
         await log.append({
           type: "audit.round", cell: rel(cellDir), round: d.round, reason: d.reason, accepted: d.accepted,
@@ -190,6 +223,78 @@ async function run(taskId: string, provider: string, model: string, audit: boole
  * yazıldı. CONTRACT.md "bayrakları doğrulayarak yaz" diyor; bu komut o
  * doğrulamayı senin makinene taşıyor.
  */
+/**
+ * Turları ve turlar arası farkı okur.
+ *
+ * Kaldırdığı sınır: "denetim turunda tam olarak ne değişti" sorusu, ajan
+ * dosyayı yerinde değiştirdiği için SON artefakta bakıp çıkarsanıyordu.
+ * Artık her turun kopyası diskte; bu komut kopyaları karşılaştırıyor,
+ * günlüğün özetini değil — özet yanlış yazılmış olsa bile fark doğru kalır.
+ */
+async function turlar(cellFilter: string | undefined, showDiff: boolean): Promise<void> {
+  const { events } = await readEvents(LOG);
+  const snaps = events.filter((e) => e.type === "artifact.snapshot");
+  if (snaps.length === 0) {
+    console.log("Günlükte anlık görüntü yok. Turlar `cli.ts <görev-id>` ve `matrix` koşularında saklanıyor.");
+    return;
+  }
+
+  const all = [...new Set(snaps.map((e) => e.cell))];
+  const cells = all.filter((c) => cellFilter === undefined || c.includes(cellFilter));
+  if (cells.length === 0) {
+    console.log(`"${cellFilter ?? ""}" ile eşleşen hücre yok. Hücreler:`);
+    for (const c of all) console.log(`  ${c}`);
+    return;
+  }
+
+  for (const cell of cells) {
+    const own = snaps.filter((e) => e.cell === cell).sort((a, b) => a.turn - b.turn);
+    console.log(`\n=== ${cell} ===`);
+    let prev: Snapshot | undefined;
+    for (const e of own) {
+      const snapshot = await loadSnapshot(join(REPO, e.path), e.turn, e.label);
+      // Kopyanın parmak izi günlüktekiyle tutmuyorsa, tur dizini koşudan
+      // sonra değişmiş demektir; fark yine hesaplanır ama artık koşunun
+      // kaydı değildir ve bunu söylemeden geçmek yanıltıcı olur.
+      if (snapshot.fingerprint !== e.fingerprint) {
+        console.log(`  ! tur ${e.turn}: kopyanın parmak izi günlüktekiyle tutmuyor`);
+      }
+      const diff = prev === undefined ? null : await diffSnapshots(prev, snapshot);
+      if (diff === null) {
+        console.log(`  tur ${e.turn} (${e.label}): ${snapshot.files.length} dosya — başlangıç`);
+      } else if (diff.changes.length === 0) {
+        // Denetim kapısının kabul turu tam olarak burası: ajan koştu ve
+        // hiçbir şey değiştirmedi. Mekanizmanın tören mi gerçek mi olduğu
+        // bu satırdan okunuyor.
+        console.log(`  tur ${e.turn} (${e.label}): HİÇBİR ŞEY DEĞİŞMEDİ`);
+      } else {
+        console.log(`  tur ${e.turn} (${e.label}): ${diff.changes.length} dosya, ` +
+          `+${diff.addedLines}/−${diff.removedLines}`);
+        for (const c of diff.changes) {
+          console.log(`      ${c.kind.padEnd(8)} ${c.path}  +${c.addedLines}/−${c.removedLines}`);
+        }
+        if (showDiff && prev !== undefined) await printDiff(prev, snapshot, diff);
+      }
+      prev = snapshot;
+    }
+  }
+}
+
+/** Değişen dosyaların satır satır farkı; uzun farklar kırpılır. */
+async function printDiff(before: Snapshot, after: Snapshot, diff: SnapshotDiff): Promise<void> {
+  const LIMIT = 60;
+  for (const c of diff.changes) {
+    const oldText = c.kind === "eklendi" ? "" : await readFile(join(before.dir, c.path), "utf8");
+    const newText = c.kind === "silindi" ? "" : await readFile(join(after.dir, c.path), "utf8");
+    const d = diffLines(oldText, newText);
+    console.log(`\n      --- ${c.path}`);
+    const lines = [...d.removed.map((l) => `−${l}`), ...d.added.map((l) => `+${l}`)];
+    for (const l of lines.slice(0, LIMIT)) console.log(`      ${l}`);
+    if (lines.length > LIMIT) console.log(`      … ${lines.length - LIMIT} satır daha`);
+  }
+  console.log();
+}
+
 async function doctor(spec: string): Promise<void> {
   const adapter = adapterFor(spec, adapterEnv());
   const dir = join(REPO, ".skein/doctor");
@@ -574,6 +679,8 @@ if (cmd === "report") {
   await report(argv.find((a) => a.startsWith("--gorev="))?.slice("--gorev=".length));
 } else if (cmd === "doctor") {
   await doctor(rest[0] ?? "codex:gpt-5.5");
+} else if (cmd === "turlar") {
+  await turlar(rest[0], argv.includes("--diff"));
 } else if (cmd === "siniflandir") {
   await siniflandir(rest[0] ?? "claude:claude-opus-5", argv.includes("--yeniden"), argv.includes("--kuru"));
 } else if (cmd === "puanla") {
@@ -585,6 +692,6 @@ if (cmd === "report") {
 } else if (cmd) {
   await run(cmd, rest[0] ?? "claude", rest[1] ?? "claude-opus-5", audit);
 } else {
-  console.error("kullanım: cli.ts <görev-id> [sağlayıcı] [model] [--audit]\n         cli.ts matrix <görev-id> [sağlayıcı:model] [sağlayıcı:model]\n         cli.ts doctor <sağlayıcı:model>\n         cli.ts puanla [hakem-modeli] [--kuru] [--yeniden]\n         cli.ts siniflandir [hakem-modeli] [--kuru] [--yeniden]\n         cli.ts selftest [görev-id]\n         cli.ts report [--gorev=<görev-id>]");
+  console.error("kullanım: cli.ts <görev-id> [sağlayıcı] [model] [--audit]\n         cli.ts matrix <görev-id> [sağlayıcı:model] [sağlayıcı:model]\n         cli.ts doctor <sağlayıcı:model>\n         cli.ts puanla [hakem-modeli] [--kuru] [--yeniden]\n         cli.ts siniflandir [hakem-modeli] [--kuru] [--yeniden]\n         cli.ts selftest [görev-id]\n         cli.ts turlar [hücre-parçası] [--diff]\n         cli.ts report [--gorev=<görev-id>]");
   process.exit(2);
 }

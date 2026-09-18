@@ -5,6 +5,7 @@ import { AuditGate, type GateDecision } from "../audit/gate.js";
 import { fingerprintDir } from "../audit/fingerprint.js";
 import { assemblePrompt, type PromptLayer } from "../prompt/assemble.js";
 import type { Task } from "./task.js";
+import type { TurnRecorder } from "./snapshot.js";
 
 export interface AuditLoopOptions {
   task: Task;
@@ -17,6 +18,8 @@ export interface AuditLoopOptions {
   maxRounds: number;
   timeoutMs: number;
   onRound?: (decision: GateDecision, invoke?: InvokeResult) => Promise<void>;
+  /** Verilirse her denetim turundan sonraki hâl saklanır. */
+  recorder?: TurnRecorder;
 }
 
 export interface AuditOutcome {
@@ -71,6 +74,9 @@ export async function auditLoop(options: AuditLoopOptions): Promise<AuditOutcome
       timeoutMs,
     });
     invocations.push(invoke);
+    // Tur numarası kapının turu değil, kaydedicinin sayacı: üretim de tur
+    // bırakıyor ve iki sayaç olsaydı denetim turları üretimin üstüne yazardı.
+    await options.recorder?.record(artifactDir, `denetim-${decision.round}`);
     await onRound?.(decision, invoke);
 
     if (invoke.exitCode !== 0) {

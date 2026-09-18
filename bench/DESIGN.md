@@ -226,6 +226,54 @@ saymak, denetçiyi hakemin hatasıyla cezalandırmak olurdu.
   (`noise.test.ts`: sınıflama olayları eklendiğinde kararın ve sayıların
   değişmediği doğrulanıyor).
 
+## Tur başına artefakt anlık görüntüsü
+
+Ajan dosyayı **yerinde** değiştiriyor, yani bir turun sonundaki hâl bir
+sonraki turda kayboluyordu. Koşu bittikten sonra elde yalnızca son artefakt
+kalıyor ve "denetim turunda tam olarak ne değişti" sorusu ona bakıp
+çıkarsanıyordu. Parmak izi (`audit/fingerprint.ts`) zaten "değişti mi"yi
+söylüyordu; eksik olan **neye dönüştü**ydü.
+
+Artık her tur, hücrenin altındaki `turlar/` dizinine kopyalanıyor:
+
+```
+<hücre>/turlar/00-tohum/      ajan koşmadan önceki hâl (seed ya da boş)
+<hücre>/turlar/01-uretim/     üretim turunun sonucu
+<hücre>/turlar/02-denetim-1/  kapının birinci turu
+```
+
+Okumak: `cli.ts turlar [hücre-parçası] [--diff]`.
+
+**Üç karar:**
+
+1. **Kopya, damganın yerine geçmez.** Damga "değişti mi"yi ucuza cevaplar,
+   kopya "neye dönüştü"yü **sonradan** cevaplanabilir kılar. Yalnızca damga
+   saklansaydı sınır kalkmazdı, yalnızca ölçülmüş olurdu.
+2. **Tohum turu ayrı.** `seed/` verilen görevlerde ölçmek istediğimiz şey
+   ajanın MEVCUT kodda neyi değiştirdiği; tohum turu olmadan bu fark yok.
+3. **Anlık görüntü gizli testler kopyalanmadan ÖNCE alınır.** Sonra
+   alınsaydı her üretim turu, ajanın hiç görmediği dosyaları da değişmiş
+   gösterirdi.
+
+**Fark satır satır (LCS).** "Kaç satır arttı" gibi kaba bir ölçü, aynı
+uzunlukta yeniden yazılmış bir dosyayı "değişmemiş" gösterirdi. Artefaktlar
+birkaç yüz satır olduğu için kareli maliyet sorun değil; yine de 4000
+satırlık bir üst sınır var ve üstünde "hepsi değişti" deniyor — abartır ama
+sessizce yanlış olmaz.
+
+**Okuma kopyalardan, günlükten değil.** `turlar` komutu özet alanlarına
+(`changed`, `addedLines`) değil, iki tur dizinine bakarak farkı yeniden
+hesaplıyor: özet yanlış yazılmış olsa bile fark doğru kalsın.
+
+**Neden yalnızca deneyde.** Orkestratörde kartın turu zaten git'te: rol
+kendi worktree'sinde çalışıp commit atıyor, ekran da `git show --numstat`
+ile turu gösteriyor. Aynı mekanizmayı ikinci kez kurmak, "kod git'te
+taşınır" değişmezinin yanına ikinci bir tarih kaynağı koymak olurdu.
+
+**Bedeli:** her tur artefaktın tam kopyası. Artefaktlar birkaç KB olduğu
+için bugün ölçülemeyecek kadar küçük; büyük artefaktlı bir görev sınıfı
+gelirse bu karar yeniden bakılmalı.
+
 ## Örneklem ve tekrar
 
 LLM çıktısı stokastik; tek koşuluk fark gürültü olabilir.
@@ -715,7 +763,7 @@ yalnızca aynı satıcının iki modeliyle (ör. `haiku × sonnet`) koşulabilir
 - [x] **İlk uçtan uca koşu** — gerçek ajan, gerçek artefakt, gerçek sayı
 - [x] Olay günlüğü — yalnızca-ekleme JSONL, katı doğrulama, özet görünümü
 - [x] Audit gate — parmak izi, kilitli durum, tur sayacı, üst sınır
-- [ ] Tur başına artefakt anlık görüntüsü (yukarıdaki boşluk)
+- [x] Tur başına artefakt anlık görüntüsü — `turlar/` kopyaları + `cli.ts turlar`
 - [x] Kanca sağlamlığı — `hidden/reference/` + `selftest`, 5/5 görev geçiyor
 - [x] Görev formatında `seed/` — mevcut koda dokunan görev sınıfı
 - [ ] Görev zorluk kalibrasyonu — `snapshot-store` × `claude-haiku-4-5`

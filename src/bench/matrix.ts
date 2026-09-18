@@ -7,6 +7,7 @@ import { loadTask } from "./task.js";
 import { produce } from "./produce.js";
 import { runHidden } from "./hidden.js";
 import { review } from "./review.js";
+import { TurnRecorder } from "./snapshot.js";
 
 export interface MatrixOptions {
   repo: string;
@@ -97,10 +98,22 @@ export async function runMatrix(options: MatrixOptions): Promise<MatrixOutcome> 
   for (const adapter of adapters) {
     const cellDir = join(runRoot, task.id, safe(adapter.id));
     console.log(`üretim: ${adapter.model}`);
+    // Üretim hücresinde iki tur kalıyor: "tohum" ve "uretim". `seed/` verilen
+    // görevlerde ölçmek istediğimiz şey tam olarak ikisinin farkı — ajanın
+    // mevcut kodda NEYİ değiştirdiği.
+    const recorder = new TurnRecorder(join(cellDir, "turlar"), async (snapshot, diff) => {
+      await log.append({
+        type: "artifact.snapshot", cell: rel(cellDir),
+        turn: snapshot.turn, label: snapshot.label, path: rel(snapshot.dir),
+        fingerprint: snapshot.fingerprint, files: snapshot.files.length,
+        changed: diff?.changes.length ?? 0,
+        addedLines: diff?.addedLines ?? 0, removedLines: diff?.removedLines ?? 0,
+      });
+    });
     const p = await produce({
       task, adapter, cellDir,
       layers: [{ name: "produce", path: join(repo, "bench/prompts/produce.md") }],
-      timeoutMs, repo,
+      timeoutMs, repo, recorder,
     });
     await log.append({
       type: "agent.started", cell: rel(cellDir), role: "uretici",

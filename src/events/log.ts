@@ -110,6 +110,33 @@ export type EventInput =
       role: string;
       reason: string;
     }
+  | {
+      /**
+       * Bir turun sonundaki artefaktın anlık görüntüsü.
+       *
+       * Bu olay olmadan "denetim turunda tam olarak ne değişti" sorusu
+       * ancak SON artefakta bakıp çıkarsanıyordu: ajan dosyayı yerinde
+       * değiştirdiği için önceki hâl kayboluyor, ve kapının gerçekten bir
+       * şey değiştirip değiştirmediği tahmine kalıyordu. Parmak izi
+       * "değişti mi"yi zaten söylüyordu; eksik olan "neye dönüştü"ydü.
+       *
+       * GÖZLEM, durum değil: kaydın kaybı turun sonucunu değiştirmez.
+       */
+      type: "artifact.snapshot";
+      cell: string;
+      /** Sıfırdan başlayan tur numarası. */
+      turn: number;
+      /** Turun adı: "tohum", "uretim", "denetim-1"… */
+      label: string;
+      /** Anlık görüntünün dizini. */
+      path: string;
+      fingerprint: string;
+      files: number;
+      /** Bir önceki tura göre değişen dosya sayısı; ilk turda 0. */
+      changed: number;
+      addedLines: number;
+      removedLines: number;
+    }
   | { type: "hooks.measured"; cell: string; ran: boolean; total: number; red: string[] }
   | {
       type: "review.done";
@@ -205,6 +232,10 @@ const REQUIRED: Record<EventInput["type"], { strings: string[]; numbers: string[
   "gate.released": { strings: ["card", "role", "decision", "kind"], numbers: [] },
   "card.closed": { strings: ["card", "role", "reason"], numbers: [] },
   "hooks.measured": { strings: ["cell"], numbers: ["total"] },
+  "artifact.snapshot": {
+    strings: ["cell", "label", "path", "fingerprint"],
+    numbers: ["turn", "files", "changed", "addedLines", "removedLines"],
+  },
   "audit.round": { strings: ["cell", "reason"], numbers: ["round"] },
   "review.done": { strings: ["cell", "producer", "reviewer", "promptHash", "path"], numbers: [] },
   "judge.scored": { strings: ["cell", "judge"], numbers: ["hooks"] },

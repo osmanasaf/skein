@@ -7,7 +7,7 @@ yapıştırılabilsin diye yazıldı: aşağısı Skein'i tanımayan birine de y
 **Dal:** `claude/project-plan-brainstorm-pthvoc` — `claude/project-thread-sc56cs`
 ileri sarılıp üstüne devam edildi, yani iki dalın işi bu dalda birleşti.
 `sc56cs` olduğu yerde duruyor; yeni iş burada.
-**Durum:** 529 test yeşil, typecheck temiz, `selftest` 5/5, ağaç temiz.
+**Durum:** 542 test yeşil, typecheck temiz, `selftest` 5/5, ağaç temiz.
 **Kod:** ~9.3k satır ürün + ~6.1k satır test.
 
 ---
@@ -33,14 +33,14 @@ gördüğün yer. Kod editörü **değil** — bu sınır kasıtlı (`ARCHITECTU
 
 ## Tek cümlede nerede kaldık
 
-**Deney artık cevap üretebiliyor — ve cevabı doğru sayıyor.** Önceki
-oturum körlenmiş puanlamayı ve karar kuralını yazmıştı; bu oturumda kuralın
-kendisinde bir sessiz hata bulundu: "k≥3" şartı koşu sayısıyla ölçülüyordu,
-yani **üç farklı görevi birer kez koşmak k=3 görünüyor** ve karar kuralını
-açıyordu. Artık tekrar, görev × model kurgusu grubunun içinde sayılıyor.
-**Kalan tek iş hâlâ aynı: çapraz satıcı 2x2'sini koşmak** — ve o, uzak
-konteynerde değil senin makinende yapılmalı (aşağıda sebebi; bugün bir kez
-daha sınandı, vekil `api.openai.com` CONNECT'ini hâlâ 403 ile kesiyor).
+**Ölçüm takımı bitti; kalan tek iş koşmak.** Bu oturumda üç eksik
+kapandı: tekrarın görev × kurgu grubu içinde sayılması, 2. yer gerçeği
+(bulguları gerçek/nit/yanlış ayıran hakem katmanı) ve tur başına artefakt
+anlık görüntüsü. DESIGN'ın yapılacaklar listesinde deneyle ilgili açık
+madde kalmadı. **Kalan tek iş hâlâ aynı: çapraz satıcı 2x2'sini koşmak** —
+ve o, uzak konteynerde değil senin makinende yapılmalı (aşağıda sebebi;
+bugün bir kez daha sınandı, vekil `api.openai.com` CONNECT'ini hâlâ 403 ile
+kesiyor).
 
 | # | Adım | Durum |
 |---|---|---|
@@ -52,7 +52,8 @@ daha sınandı, vekil `api.openai.com` CONNECT'ini hâlâ 403 ile kesiyor).
 | — | Kusur üreten görev seti | ✅ |
 | — | Körlenmiş puanlama + karar kuralı | ✅ |
 | — | Tekrar grup içinde sayılıyor | ✅ |
-| — | **Hakem katmanı — 2. yer gerçeği** | ✅ **bu oturum** |
+| — | Hakem katmanı — 2. yer gerçeği | ✅ |
+| — | **Tur başına artefakt anlık görüntüsü** | ✅ **bu oturum** |
 | 6 | Planlamada ajanlar arası yazılı tur | ⬜ ölçümden sonra |
 
 ---
@@ -147,6 +148,7 @@ npx tsx src/bench/cli.ts doctor <sağ:model>     CLI çağrılabiliyor mu
 npx tsx src/bench/cli.ts <görev> [sağ] [model]  tek üretim + gizli testler
 npx tsx src/bench/cli.ts matrix <görev> A B     2x2 çapraz kurgu
 npx tsx src/bench/cli.ts puanla [model] [--kuru] raporları körlenmiş puanla
+npx tsx src/bench/cli.ts turlar [hücre] [--diff] turlar arası fark
 npx tsx src/bench/cli.ts report                 ölçüm özeti + karar
 ```
 
@@ -179,6 +181,7 @@ ve Windows notlarını içeriyor.
 | Körlenmiş puanlama + alıntı doğrulaması (1. katman) | `src/bench/judge.ts` |
 | Bulgu sınıflaması — gerçek/nit/yanlış (2. katman) | `src/bench/classify.ts` |
 | Gürültü raporu — karara girmeyen taraf | `src/bench/noise.ts` |
+| Tur anlık görüntüsü — kopya, LCS farkı, sayaç | `src/bench/snapshot.ts` |
 | Puanlanacak hücreleri günlükten çıkarma | `src/bench/score.ts` |
 | Ölçüm grupları, etkileşim terimi, ilan edilmiş karar | `src/bench/effect.ts` |
 | Ağ hatasını bayrak hatasından ayırma | `src/bench/failure.ts` |
@@ -251,7 +254,62 @@ geldiği demek.
 
 ---
 
-## Bu oturumda ne yapıldı — 2. yer gerçeği
+## Bu oturumda ne yapıldı — tur başına anlık görüntü
+
+**Sınır şuydu:** ajan dosyayı **yerinde** değiştiriyor, yani bir turun
+sonundaki hâl bir sonraki turda kayboluyor. Koşu bittikten sonra elde
+yalnızca son artefakt kalıyordu ve "denetim turunda tam olarak ne değişti"
+sorusu ona bakıp tahmin ediliyordu. Parmak izi zaten "değişti mi"yi
+söylüyordu; eksik olan **neye dönüştü**ydü.
+
+Artık her tur hücrenin altına kopyalanıyor (`turlar/00-tohum`,
+`01-uretim`, `02-denetim-1`…) ve `cli.ts turlar [hücre] [--diff]` ile
+okunuyor. Gerçek çıktı:
+
+```
+tur 1 (uretim): 1 dosya, +3/−0
+tur 2 (denetim-1): 1 dosya, +1/−0
+    +  if (limit < 1) throw new RangeError('limit');
+tur 3 (denetim-2): HİÇBİR ŞEY DEĞİŞMEDİ
+```
+
+Son satır ayrıca bir ölçü: kapının kabul turu tam olarak orası, ve
+"mekanizma tören mi gerçek mi" sorusu artık `changedRounds` sayısından
+değil turun kendisinden okunuyor.
+
+**Üç karar:**
+
+1. **Kopya, damganın yerine geçmez.** Damga "değişti mi"yi ucuza cevaplar;
+   kopya "neye dönüştü"yü **sonradan** cevaplanabilir kılar. Yalnızca damga
+   saklansaydı sınır kalkmaz, ölçülmüş olurdu.
+2. **Tohum turu ayrı saklanıyor.** `seed/` verilen görevlerde ölçmek
+   istediğimiz şey ajanın MEVCUT kodda neyi değiştirdiği; tohum turu
+   olmadan o fark hiç yok.
+3. **Anlık görüntü gizli testler kopyalanmadan ÖNCE alınıyor.** Sonra
+   alınsaydı her üretim turu, ajanın hiç görmediği dosyaları da değişmiş
+   gösterirdi — testle bağlandı.
+
+**Fark satır satır (LCS), kaba sayım değil:** "kaç satır arttı" ölçüsü aynı
+uzunlukta yeniden yazılmış bir dosyayı "değişmemiş" gösterirdi. 4000 satır
+üst sınırı var; üstünde "hepsi değişti" der — abartır ama sessizce yanlış
+olmaz.
+
+**Okuma kopyalardan, günlükten değil:** `turlar` özet alanlarına değil iki
+tur dizinine bakıp farkı yeniden hesaplıyor.
+
+**Kopyanın bütünlüğü sınanıyor:** `turlar`, tur dizininin parmak izini
+günlüktekiyle karşılaştırıyor. Tutmuyorsa fark yine hesaplanıyor ama
+"bu artık koşunun kaydı değil" diye uyarıyor — koşudan sonra elle
+değiştirilmiş bir tur sessizce kanıt yerine geçmesin.
+
+**Orkestratörde bilerek yok.** Kartın turu zaten git'te: rol kendi
+worktree'sinde commit atıyor, ekran `git show --numstat` ile gösteriyor.
+Aynı mekanizmayı ikinci kez kurmak "kod git'te taşınır" değişmezinin yanına
+ikinci bir tarih kaynağı koymak olurdu.
+
+---
+
+## Önceki oturumda ne yapıldı — 2. yer gerçeği
 
 **DESIGN'ın iki katmanından ikincisi yazıldı.** Nesnel katman yalnızca
 kanıtlanmış kusurları görüyor (kırmızı gizli test); raporun geri kalanı —
@@ -305,7 +363,7 @@ Kampanyada önce tek görevde koş, faturayı gör, sonra kalanına geç.
 
 ---
 
-## Önceki oturumda ne yapıldı — tekrarın sayılma biçimi
+## Daha önce — tekrarın sayılma biçimi
 
 **Bulunan hata, ölçümün kendisindeydi.** Karar kuralının "k≥3" şartı kodda
 **koşu sayısıyla** ölçülüyordu, ve bir koşu = bir matris = bir görev.
@@ -341,7 +399,7 @@ görülmeden** yazıldı — dört hücre hâlâ koşulmadı. `bench/DESIGN.md`'
 
 ---
 
-## Daha önce ne yapıldı — puanlama katmanı
+## Daha önce — puanlama katmanı
 
 **Boşluk şuydu:** `matrix` bitiyor, elde dört `rapor.txt` kalıyor, ve ana
 metriği (kaçırma) hesaplayan hiçbir şey yok. Puanlama elle yapılacaktı —
@@ -474,12 +532,11 @@ Doğrulama iki eksik çıkardı:
 - **Rol promptlarını ekrandan düzenlemek.** Prompt içeriği her tur taze
   okunuyor, yani düzenleme yoldaki kartın **sonraki turunu** etkiler.
   Dondurma değişmezinin kenarında duruyor, kendi kararını hak ediyor.
-- ~~Hakem katmanı — 2. yer gerçeği.~~ Yazıldı (aşağıda). Kalan sınırı:
-  bulgu sınırını hakem çiziyor, yani ham bulgu sayısı değil oranlar
-  okunmalı.
-- Kalan bench görevleri.
-- **Tur başına artefakt anlık görüntüsü.** "Denetim turunda tam olarak ne
-  değişti" hâlâ son artefakta bakıp çıkarsanıyor.
+- Kalan bench görevleri (12 hedeflenmişti, 5 var).
+- **Büyük artefaktlı görev sınıfı.** Tur anlık görüntüsü her turda tam
+  kopya alıyor; bugünkü artefaktlar birkaç KB olduğu için bedeli
+  ölçülemeyecek kadar küçük, ama büyük artefaktlı bir görev gelirse bu
+  karar yeniden bakılmalı.
 
 ---
 
