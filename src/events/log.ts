@@ -125,6 +125,31 @@ export type EventInput =
       path: string;
     }
   | {
+      /**
+       * Bir denetim raporu, kanıtlanmış kusurlara karşı puanlandı.
+       *
+       * `review.done` raporun nerede olduğunu söyler, ne söylediğini
+       * söylemez — ve deneyin ana metriği (kaçırma) tam olarak orada.
+       * Puanlama günlüğe düşmezse sonuç, raporları elle okuyan kişinin
+       * belleğinde kalır.
+       *
+       * `hooks` alanı ile `caught + missed` toplamı eşittir; eşit değilse
+       * puanlama eksik kalmıştır. `unverified`, hakemin "yakalandı" deyip
+       * raporda bulunamayan bir alıntı verdiği kancalar — bunlar kaçırma
+       * sayılır ve ayrıca sayılır, çünkü yükselmesi hakemin kendisinin
+       * bozulduğunu gösterir.
+       */
+      type: "judge.scored";
+      cell: string;
+      /** Puanlayan model. */
+      judge: string;
+      /** Puanlanan kanca sayısı = o üretimde kanıtlanmış kusur sayısı. */
+      hooks: number;
+      caught: string[];
+      missed: string[];
+      unverified: string[];
+    }
+  | {
       type: "audit.round";
       cell: string;
       round: number;
@@ -147,6 +172,7 @@ const REQUIRED: Record<EventInput["type"], { strings: string[]; numbers: string[
   "hooks.measured": { strings: ["cell"], numbers: ["total"] },
   "audit.round": { strings: ["cell", "reason"], numbers: ["round"] },
   "review.done": { strings: ["cell", "producer", "reviewer", "promptHash", "path"], numbers: [] },
+  "judge.scored": { strings: ["cell", "judge"], numbers: ["hooks"] },
 };
 
 class EventError extends Error {

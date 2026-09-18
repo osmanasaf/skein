@@ -109,6 +109,72 @@ bunu söylüyor. Prompt çekirdeğe aittir.
 Ana metrik **kaçırma azalması**dır, ham bulgu sayısı değil. Bulgu saymak
 gevezeliği ödüllendirir.
 
+## Puanlama körlenmiş ve makineyle doğrulanabilir
+
+> **Bu, yukarıdaki 2. katman değildir.** Yazılan şey **1. (nesnel)
+> katmanın okuyucusu**: raporu kırmızı gizli testlere karşı eşleştirir.
+> Nit / yanlış pozitif sınıflaması yapan hakem katmanı hâlâ yazılmadı ve
+> ayrı raporlanacak — iki katman harmanlanmaz.
+
+Ana metrik ("kaçırma") rapor metninden okunur: kanıtlanmış kusuru rapor
+söylüyor mu, söylemiyor mu. Bu okuma iki şekilde bozulabilir ve ikisi de
+sonucu sessizce üretir:
+
+1. **Körlenmemiş okuma.** Raporları deneyi yapan kişi okursa, hangi hücrenin
+   çapraz olduğunu bilerek okur. Beklentinin lehine bir cümleyi "yakaladı"
+   saymak için kötü niyet gerekmez.
+2. **Doğrulanmamış hakem.** Puanlamayı bir modele yaptırmak birinciyi çözer
+   ama yenisini açar: model, raporda olmayan bir cümleyi hatırladığını
+   sanabilir ya da kusuru raporun yerine kendi bilgisinden tarif edebilir.
+
+`src/bench/judge.ts` ikisini birden kapatıyor:
+
+| Koruma | Nasıl |
+|---|---|
+| Körleme | Hakem kimin ürettiğini, kimin incelediğini ve hücrenin çapraz olup olmadığını görmez. Rapor metnindeki model/satıcı adları (`claude`, `gpt`, `haiku`, …) maskelenir ve kaç yerde maskelendiği kaydedilir |
+| Kanıt zorunluluğu | "Yakalandı" diyen her karar, rapordan **birebir** bir alıntıya bağlı. Alıntı raporda bulunamazsa yakalama sayılmaz |
+| Hakemin kendi sağlığı | Doğrulanamayan alıntılar ayrıca sayılır (`unverified`). Bu sayının yükselmesi, hakemin bozulduğunun göstergesi |
+| Puanlanamayan ≠ kaçırılmış | Hakemin çıktısı ayrıştırılamazsa hücre ölçüm dışı kalır, kaçırma sayılmaz — gizli süitteki "ÖLÇÜLEMEDİ ≠ kusur yok" ayrımının puanlama tarafındaki karşılığı |
+
+Puanlama `matrix`'ten ayrı bir komut (`cli.ts puanla`), çünkü denetim koşusu
+zaten pahalı: ayrıştırma hatası yüzünden o parayı ikinci kez harcamamak
+için puanlama tekrar edilebilir olmalı. Her karar `judge.scored` olayıyla
+günlüğe düşer; sonuç, raporları okuyan kişinin belleğinde değil.
+
+### Bunun ölçüme getirdiği yanlılık — ve neden sorun değil
+
+Alıntı şartı **muhafazakâr**: kusuru doğru tarif edip de hakemin alıntıyı
+beceremediği bir rapor, kaçırma sayılır. Yani ölçülen kaçırma oranı
+gerçeğin üstünde olabilir.
+
+Önemli olan, bu yanlılığın **dört hücrede de aynı** olması. Karşılaştırdığımız
+şey hücreler arası fark; her hücreye eşit binen bir sapma farkı kaydırmaz.
+Mutlak "kaçırma oranı %35" sayısı bu yüzden tek başına alıntılanmamalı.
+
+### Karar kuralı artık kodda
+
+`src/bench/effect.ts` eşikleri sabit tutuyor (%20 / %10) ve iki şeyi
+makineye bağlıyor:
+
+- **k < 3 iken karar yok.** Sayı gösterilir, "yetersiz" denir. Bu kural
+  DESIGN'da zaten yazılıydı ve bir kez ihlal edildi (tek koşudan "bu görev
+  kolay" sonucu çıkarılmıştı); artık ihlal edilemiyor.
+- **"Varyansın dışında" şartının işletilebilir hâli:** azalmanın işareti her
+  tekrarda aynı olmalı. Güven aralığı değil — havuzlanmış sayı eşiği geçse
+  bile üç koşunun birinde etki ters yöndeyse karar "belirsiz" olur.
+
+Etkileşim terimi ((AA+BB)/2 − (AB+BA)/2) yalnızca dört hücrenin dördü de
+puanlanmışsa hesaplanır; eksik hücreyle hesaplanan "etkileşim", ana etkinin
+kılık değiştirmiş hâlidir.
+
+### Hakemin kendisi de bir sınır
+
+Hakem bir model, ve tek satıcıyla koşulan bir deneyde denetçilerle aynı
+aileden. İki koruma bunu tamamen kaldırmıyor, yalnızca zararını sınırlıyor:
+alıntı doğrulaması hakemin uydurmasını eler, körleme hücre kimliğini eler.
+Kalan risk, hakemin bir kusur sınıfını sistematik olarak tanımaması — bu da
+dört hücreye eşit bineceği için farkı değil, düzeyi etkiler.
+
 ## Örneklem ve tekrar
 
 LLM çıktısı stokastik; tek koşuluk fark gürültü olabilir.
@@ -574,7 +640,8 @@ yalnızca aynı satıcının iki modeliyle (ör. `haiku × sonnet`) koşulabilir
 - [ ] Görev zorluk kalibrasyonu — `snapshot-store` × `claude-haiku-4-5`
       kusur üretiyor (k=1); `claude-opus-5` beş görevde de temiz
 - [x] Denetim koşucusu (aynı artefakt → iki denetçi), 2x2 orkestrasyonu
-- [ ] Hakem katmanı (körlenmiş puanlama)
+- [x] Nesnel katmanın puanlayıcısı — körlenmiş, alıntı doğrulamalı
+- [ ] Hakem katmanı — 2. yer gerçeği (nit / yanlış pozitif sınıflaması)
 - [ ] Kalan görevler — darboğaz hâlâ burası, ama artık daha dar: elde
       ölçüm gücü olan bir hücre var (`snapshot-store` × haiku)
-- [ ] Rapor: hücre tablosu + etkileşim terimi
+- [x] Rapor: hücre tablosu + etkileşim terimi + önceden ilan edilmiş karar
