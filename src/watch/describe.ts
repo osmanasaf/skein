@@ -48,7 +48,16 @@ export function thisTurnPlanEntry(card: Card): PlanEntry | null {
  */
 function planNote(card: Card): string {
   const entry = thisTurnPlanEntry(card);
-  return entry === null ? "" : `  (planlama, tur ${entry.round})`;
+  if (entry === null) return "";
+  // Yazma turunun `round`u 0 ve "tur 0" okuyana bir şey söylemiyor: o tur
+  // sayacın dışında, alışveriş ondan sonra başlıyor.
+  if (entry.action === "yazdi") return "  (planlama: plan yazıldı)";
+  const kac = entry.objections;
+  const sayi = kac === undefined
+    ? ""
+    : `, ${kac} itiraz${entry.accepted ? ` / ${entry.accepted} kabul` : ""}` +
+      (entry.invalid ? ` / ${entry.invalid} sayılmadı` : "");
+  return `  (planlama, tur ${entry.round}${sayi})`;
 }
 
 export function describeTick(role: string, result: TickResult): string {

@@ -50,7 +50,7 @@ describe("describeTick", () => {
       { at: "t2", event: "plan", role: "coder", action: "yazdi", round: 0 },
     ]);
     const result: TickResult = { status: "accepted", card: c };
-    expect(describeTick("coder", result)).toContain("(planlama, tur 0)");
+    expect(describeTick("coder", result)).toContain("(planlama: plan yazıldı)");
   });
 
   it("itiraz turundan sonraki kabulde 'tur 1' gösterir (yazdi'yle karışmaz)", () => {

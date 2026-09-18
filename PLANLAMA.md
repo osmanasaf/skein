@@ -346,6 +346,28 @@ Kural değişiklikleri: `katilimcilar` iki olabiliyor, `tur: 1` kabul
 ediliyor. `tur > 1`, üç ve fazla katılımcı, ve `ilk-tur-kor: false` hâlâ
 AÇIKÇA reddediliyor — üçü de 6c'nin konusu.
 
+**Canlı koşu (18 Eylül, `claude-sonnet-5`, `plan2.yaml`):** `planner` planı
+yazdı ve commit'ledi; `architect` itiraz turunu koştu; alışveriş kapandı;
+`coder` ve `reviewer` işi bitirdi. Mekanizma uçtan uca çalıştı.
+
+**Ama bitiş testi tam olarak geçilmedi.** Tasarımın istediği "en az bir
+itiraz `kabul` ile kapansın ve plan hash'i değişsin" olmadı: `architect`
+planın her iddiasını depodaki kodla tek tek karşılaştırdı, hepsini
+doğruladı ve **itirazım yok** dedi — uydurma itiraz da eklemedi ("Uydurma
+bir itiraz eklemiyorum"). Yani `itirazsız` yolu koştu, `kabul` yolu değil.
+`kabul`, `ret`, `insana` ve kilit kapısı yolları testlerle kapalı
+(`src/watch/exchange.test.ts`), canlı koşuyla değil.
+
+Koşunun kendisi iki kusur çıkardı, ikisi de düzeltildi:
+
+- **"İtiraz yok" ile "itirazların hiçbiri sayılmadı" tek sayıya eriyordu.**
+  Geçersiz itirazlar artık ayrı sayılıyor (`invalid`) ve günlüğe,
+  kart izine, gözcü satırına düşüyor. Ayrım şart: ilki anlaşma, ikincisi
+  ya biçimi öğrenmemiş bir rol ya da genel öğüt üreten bir mekanizma.
+- **Alışveriş kartın kendi izinde görünmüyordu:** `card show` `plan`
+  kaydını sessizce atlıyordu. Bunu itiraz eden rol kendi raporunda tespit
+  etti ("`printCard`'ın switch'i … `plan` yok — sessizce atlanıyor").
+
 **Körleme bugün atıl, ve bu dürüstçe yazılı:** iki katılımcıda itiraz eden
 tek rol var, yani kimsenin görmeyeceği bir itiraz yok. Körleme üç ve
 fazlasında anlam kazanıyor; o yüzden varsayılan `true` duruyor ama

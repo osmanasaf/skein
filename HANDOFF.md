@@ -7,7 +7,7 @@ yapıştırılabilsin diye yazıldı: aşağısı Skein'i tanımayan birine de y
 **Dal:** `claude/project-plan-brainstorm-pthvoc` — `claude/project-thread-sc56cs`
 ileri sarılıp üstüne devam edildi, yani iki dalın işi bu dalda birleşti.
 `sc56cs` olduğu yerde duruyor; yeni iş burada.
-**Durum:** 592 test yeşil, typecheck temiz, `selftest` 5/5, ağaç temiz.
+**Durum:** 599 test yeşil, typecheck temiz, `selftest` 5/5, ağaç temiz.
 **Kod:** ~9.3k satır ürün + ~6.1k satır test.
 
 ---
@@ -360,6 +360,61 @@ bulgu sayılamaz** ve DESIGN'daki bölümün başına bu uyarı düşüldü. Yen
 koşu başına ~$0.07. Çapraz satıcıda üretici olarak sonnet kullanmak sonucu
 daha güçlü bir sınıfa taşır ve "zaten zayıf model kusur üretti" itirazını
 zayıflatır.
+
+### 6b: plana itiraz turu
+
+Alışveriş kodda. `planlama.katilimcilar` iki rol alabiliyor: ilki planı
+yazar, ikincisi **itiraz eder**, yazan itirazları yanıtlar, sonra iş kodu
+yazan role geçer. Kart bu sırada zincirden ayrılıp katılımcılar arasında
+dolaşıyor; zincirin `next`i ancak alışveriş kapanınca devreye giriyor.
+
+**İtiraz serbest yorum değil**, dört alanlı bir kayıt — ve mekanizma onu
+makineyle okuyor (`src/plan/itiraz.ts`):
+
+```markdown
+## İtiraz 1 — architect
+**Ne:** Planın hangi kararı yanlış.
+**Neden:** Neden yanlış.
+**Neyi yanlışlar:** `src/selector.ts:12` — orada ne var.
+**Durum:** açık
+```
+
+`Neyi yanlışlar` **depodan bir yere işaret etmek zorunda**: yol depoda
+aranıyor, yoksa itiraz sayılmıyor — ne lehte (planı durdurmaz) ne aleyhte
+(reddedilmiş sayılmaz). Bu kural doğrudan eşik ölçümünden geldi: "sınır
+durumlarına dikkat" diyen bir itiraz hiçbir dosyaya işaret edemez.
+
+**Üç kapı:** itiraz dosyası yoksa tur kabul edilmez (sessizlik anlaşma
+değil); `kabul` denip plan değişmemişse tur kabul edilmez (nezaket
+çöküşü); açık kalan ya da `insana` denen itiraz **kilit kapısına** çıkar —
+kaçış değil, çünkü tur tamamlandı ve kod yerinde, insan planı olduğu gibi
+ileri bırakabilir.
+
+Hangi turda olunduğu **kartın geçmişinden** okunuyor (`src/plan/phase.ts`),
+bellekte tutulan bir durumdan değil: gözcü çökse de kart nerede kaldığını
+kendi taşır.
+
+**Canlı koşu — ve dürüst sonuç.** `plan2.yaml` gerçek ajanlarla koştu:
+planner planı yazdı, architect itiraz turunu koştu, alışveriş kapandı,
+coder ve reviewer işi bitirdi. **Ama tasarımın bitiş testi tam geçilmedi:**
+architect planın her iddiasını depodaki kodla karşılaştırdı, hepsini
+doğruladı ve "itirazım yok" dedi (uydurma itiraz da eklemedi). Yani
+`itirazsız` yolu koştu; `kabul` / `ret` / `insana` / kilit kapısı yolları
+yalnızca testlerle kapalı. Çekişmeli bir kartta canlı doğrulama duruyor.
+
+Koşu iki kusur çıkardı, ikisi de düzeltildi:
+
+- **"İtiraz yok" ile "itirazların hiçbiri sayılmadı" tek sayıya eriyordu.**
+  Geçersiz itirazlar artık ayrı sayılıyor ve günlüğe, kart izine, gözcü
+  satırına düşüyor.
+- **Alışveriş kartın kendi izinde görünmüyordu** (`card show` `plan`
+  kaydını atlıyordu). Bunu **itiraz eden rol kendi raporunda tespit etti.**
+
+Ajanların ürettiği iş (gözcü geçiş satırında planlama turu) birleştirildi;
+testleri yine ben koşturdum. Üstelik ürettikleri modül, benim yazdığım
+`lastPlanEntry`'nin bu iş için yanlış araç olduğunu gösteriyor: planlaması
+bitmiş bir kart her sıradan geçişte eski turu göstermeye devam ederdi.
+Ayrı bir `thisTurnPlanEntry` yazıp gerekçesini yorumda anlatmışlar.
 
 ### Ve 6a yazıldı: plan belgesi akışın parçası
 
