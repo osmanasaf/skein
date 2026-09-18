@@ -4,11 +4,11 @@ Bu dosya bir sonraki oturumun giriş noktası. Durum ajanın kafasında değil,
 burada ve git'te (PHILOSOPHY 1). Yeni bir sohbete/projeye tek başına
 yapıştırılabilsin diye yazıldı: aşağısı Skein'i tanımayan birine de yeter.
 
-**Dal:** `claude/project-thread-sc56cs` (origin ile senkron; ucu bu dosyanın
-son hâlidir — bir devir teslim kendi commit'ini adlandıramaz)
-**Durum:** 471 test yeşil, typecheck temiz, ağaç temiz.
-**Kod:** ~8.6k satır ürün + ~5.7k satır test.
-**Taban:** `claude/project-plan-brainstorm-pthvoc` (`462aa7c`) üzerine üç commit.
+**Dal:** `claude/project-plan-brainstorm-pthvoc` — `claude/project-thread-sc56cs`
+ileri sarılıp üstüne devam edildi, yani iki dalın işi bu dalda birleşti.
+`sc56cs` olduğu yerde duruyor; yeni iş burada.
+**Durum:** 501 test yeşil, typecheck temiz, `selftest` 5/5, ağaç temiz.
+**Kod:** ~9.3k satır ürün + ~6.1k satır test.
 
 ---
 
@@ -33,11 +33,13 @@ gördüğün yer. Kod editörü **değil** — bu sınır kasıtlı (`ARCHITECTU
 
 ## Tek cümlede nerede kaldık
 
-**Darboğaz kalktı.** Önceki devir teslim "kusur üreten bir görev sınıfı
-eksik" diyordu; artık üç tane var ve üçü de kusur üretiyor. Deney koşum
-takımı hazır, kancalar kanıtlı, `codex` adaptörü gerçek CLI'a karşı
-doğrulandı. **Kalan tek iş, çapraz satıcı 2x2'sini koşmak** — ve o,
-uzak konteynerde değil senin makinende yapılmalı (aşağıda sebebi).
+**Deney artık cevap üretebiliyor.** Önceki devir teslim koşum takımını
+hazır bırakmıştı ama bir boşluk vardı: 2x2 bitince elde dört serbest metin
+rapor kalıyordu ve onları **hiçbir şey puanlamıyordu** — ana metrik
+(kaçırma) elle, hangi hücrenin çapraz olduğu bilinerek okunacaktı. Bu
+oturumda körlenmiş ve alıntıyla doğrulanan puanlama katmanı ile karar
+kuralı yazıldı. **Kalan tek iş hâlâ aynı: çapraz satıcı 2x2'sini koşmak**
+— ve o, uzak konteynerde değil senin makinende yapılmalı (aşağıda sebebi).
 
 | # | Adım | Durum |
 |---|---|---|
@@ -46,7 +48,8 @@ uzak konteynerde değil senin makinende yapılmalı (aşağıda sebebi).
 | 3 | Okuyucu ekran — pano, canlı adım, iz, diff | ✅ |
 | 4 | Kapı ekrandan açılıyor | ✅ |
 | 5 | Akış ekrandan kuruluyor | ✅ |
-| — | **Kusur üreten görev seti** | ✅ **bu oturum** |
+| — | Kusur üreten görev seti | ✅ |
+| — | **Körlenmiş puanlama + karar kuralı** | ✅ **bu oturum** |
 | 6 | Planlamada ajanlar arası yazılı tur | ⬜ ölçümden sonra |
 
 ---
@@ -73,7 +76,19 @@ npx tsx src/bench/cli.ts doctor codex:gpt-5.5
 
 # 4. çapraz satıcı 2x2
 npx tsx src/bench/cli.ts matrix snapshot-store claude:claude-haiku-4-5-20251001 codex:<model>
+
+# 5. raporları puanla — önce kuru koş (ajan çağırmaz, PARA HARCAMAZ)
+npx tsx src/bench/cli.ts puanla --kuru
+npx tsx src/bench/cli.ts puanla claude:claude-opus-5
+
+# 6. sonuç
+npx tsx src/bench/cli.ts report
 ```
+
+**İzin modu:** konteynerde `--dangerously-skip-permissions` root altında
+reddediliyor; kendi makinende gerekmeyebilir. Gerekirse
+`SKEIN_PERMISSION_MODE=acceptEdits` ver. Dört hücrede de aynı olmalı,
+yoksa karşılaştırma bozulur — koşuda ekrana basılıyor, bir bak.
 
 **Neden `haiku`:** `claude-opus-5` beş görevin hepsini altı koşuda temiz
 çözdü. Kusur üretmeyen üreticiyle denetim ölçülemez ve `matrix` bunu fark
@@ -91,8 +106,12 @@ Tek görevlik sonuç "bu görevde" der.
 **Ölçüm gücü yoksa** `matrix` denetimi atlar ve sebebini yazar. Yine de
 koşturmak istersen `--force`.
 
-**Sonrasında:** `npx tsx src/bench/cli.ts report` — sayılar
-`.skein/events.jsonl`'den gelir, ekrana basılan metinden değil.
+**Sonrasında:** `report` hücre tablosunu, göreli azalmayı, etkileşim
+terimini ve önceden ilan edilmiş karar kuralının verdiği kararı basar.
+Sayılar `.skein/events.jsonl`'den gelir, ekrana basılan metinden değil.
+
+**k=1 ile karar çıkmaz, bilerek:** tek koşuda `report` sayıyı gösterir ama
+"YETERSİZ" der. Karar için k≥3 — DESIGN'ın kendi kuralı, artık kodda.
 
 ---
 
@@ -109,7 +128,8 @@ npx tsx src/bench/cli.ts selftest [görev]       kancalar sağlam mı (bedava)
 npx tsx src/bench/cli.ts doctor <sağ:model>     CLI çağrılabiliyor mu
 npx tsx src/bench/cli.ts <görev> [sağ] [model]  tek üretim + gizli testler
 npx tsx src/bench/cli.ts matrix <görev> A B     2x2 çapraz kurgu
-npx tsx src/bench/cli.ts report                 ölçüm özeti
+npx tsx src/bench/cli.ts puanla [model] [--kuru] raporları körlenmiş puanla
+npx tsx src/bench/cli.ts report                 ölçüm özeti + karar
 ```
 
 **Bayrak verirken `npm run` kullanma** — bazı npm sürümleri `--` sonrasını
@@ -138,6 +158,9 @@ ve Windows notlarını içeriyor.
 | Üretim — seed önce, gizli test sonra, kaçış denetimi | `src/bench/produce.ts` |
 | Kanca doğrulama — referans çözüme karşı koşar | `src/bench/selftest.ts` |
 | 2x2 orkestrasyonu + ölçüm gücü koruması | `src/bench/matrix.ts` |
+| Körlenmiş puanlama + alıntı doğrulaması | `src/bench/judge.ts` |
+| Puanlanacak hücreleri günlükten çıkarma | `src/bench/score.ts` |
+| Etkileşim terimi + önceden ilan edilmiş karar | `src/bench/effect.ts` |
 | Ağ hatasını bayrak hatasından ayırma | `src/bench/failure.ts` |
 
 ---
@@ -181,7 +204,7 @@ kırmızı / $0.5361 (7.2x maliyet). Denetim katmanı ilk kez gerçek bir kusur
 yakaladı — ama üretici ile denetçi **aynı modeldi**. Yani bulgu *ayrı bir
 denetim turunun* değerini gösteriyor, *çapraz satıcı denetiminin* değil.
 
-**Ölçülmüş — görev kalibrasyonu (bu oturum, k=1):**
+**Ölçülmüş — görev kalibrasyonu (17-18 Eylül, k=1):**
 
 | Görev | Kanca | `claude-opus-5` | `claude-haiku-4-5` |
 |---|---:|---|---|
@@ -197,7 +220,9 @@ ve tahmin tuttu. `snapshot-store`'da geri alma geçmişi baştan oynattı ve
 gerektiği türetilemedi; `async-pool`'da hata yolunda kuyruk beslenmeye
 devam etti.
 
-**Ölçülmemiş:** merkezî tezin kendisi. Dört hücre hiç koşmadı.
+**Ölçülmemiş:** merkezî tezin kendisi. Dört hücre hiç koşmadı. Artık
+eksik olan tek şey **koşunun kendisi**: ölçen, puanlayan ve karar veren
+katmanların üçü de yazılı ve testli.
 
 **Bilinmeyen:** frontier modelde kusurun hangi ölçekte başladığı.
 `claude-opus-5` beş görevde altı koşuda bir kez bile kusur üretmedi. Bu,
@@ -206,7 +231,68 @@ geldiği demek.
 
 ---
 
-## Bu oturumda ne yapıldı
+## Bu oturumda ne yapıldı — puanlama katmanı
+
+**Boşluk şuydu:** `matrix` bitiyor, elde dört `rapor.txt` kalıyor, ve ana
+metriği (kaçırma) hesaplayan hiçbir şey yok. Puanlama elle yapılacaktı —
+raporu okuyan kişi hangi hücrenin çapraz olduğunu bilerek okuyarak. Deneyin
+en pahalı adımı bitmiş, cevabı veren adım yazılmamıştı.
+
+**Yazılan üç parça:**
+
+- `judge.ts` — bir raporu kanıtlanmış kusurlara karşı puanlar. Puanlayıcı
+  kimin ürettiğini, kimin incelediğini, hücrenin çapraz olup olmadığını
+  **görmez**; rapordaki model ve satıcı adları maskelenir (kaç yerde
+  maskelendiği kaydedilir).
+- `score.ts` — hangi hücrelerin puanlanacağını **günlükten** çıkarır.
+  Kusursuz üretimin hücrelerini atlar (payda şişerdi), ÖLÇÜLEMEDİ olanları
+  atlar (yer gerçeği yok), koşu sınırını geçip eşleştirmez.
+- `effect.ts` — hücre tablosu, göreli azalma, etkileşim terimi ve
+  **önceden ilan edilmiş** karar kuralı.
+
+**İki koruma, ikisi de tezin lehine çalışmıyor — doğrunun lehine:**
+
+1. **Alıntı zorunlu ve makineyle doğrulanıyor.** "Yakalandı" diyen her
+   karar rapordan birebir bir alıntıya bağlı; alıntı raporda bulunamazsa
+   yakalama **sayılmaz** ve ayrıca sayılır. Bu sayının yükselmesi
+   puanlayıcının kendisinin bozulduğunu gösterir.
+2. **k<3 iken karar yok.** `report` sayıyı basar, kararı "YETERSİZ" der.
+   DESIGN'ın kendi kuralıydı ve bir kez ihlal edilmişti (tek koşudan "bu
+   görev kolay" sonucu çıkarılmıştı); artık ihlal edilemiyor. "Varyansın
+   dışında" şartı da işletilebilir hâle getirildi: azalmanın işareti her
+   tekrarda aynı olmalı, yoksa karar "belirsiz".
+
+**Puanlanamayan hücre, kaçırılmış hücre değil.** Puanlayıcının çıktısı
+ayrıştırılamazsa hücre ölçüm dışı kalır ve günlüğe hiçbir şey yazılmaz —
+gizli süitteki "ÖLÇÜLEMEDİ ≠ kusur yok" ayrımının puanlama tarafındaki
+karşılığı.
+
+**Yanlılık kaydı:** alıntı şartı muhafazakâr — kusuru doğru tarif edip
+alıntısı tutmayan bir rapor kaçırma sayılır, yani ölçülen kaçırma oranı
+gerçeğin üstünde olabilir. Önemli olan sapmanın dört hücreye **eşit**
+binmesi; karşılaştırdığımız şey hücreler arası fark. Mutlak oran tek başına
+alıntılanmamalı.
+
+### Doğrulanan ve doğrulanmayan
+
+**Doğrulandı:** 30 yeni test (501 toplam), sahte CLI ile uçtan uca puanlama
+(karar günlüğe düşüyor, `review.done` ile birleşiyor, etki raporuna
+taşınıyor), uydurma alıntının elenmesi, ayrıştırma hatasının koşuyu
+düşürmemesi, ve `report` çıktısının **gerçekten** basıldığı hâli (sentetik
+bir günlükle ekrana bakıldı — "testler yeşildi ama ekran boştu" dersi).
+
+**Doğrulanmadı — sırada bu var:** puanlama promptunun **canlı bir modele**
+karşı çalışıp çalışmadığı. Yani gerçek bir model, istenen JSON'u üretiyor
+mu, alıntıyı birebir kopyalıyor mu? Bu oturumda hiç ajan çağrılamadı: kök
+kullanıcı altında `--dangerously-skip-permissions` reddediliyor, izin modu
+verilerek yapılan çağrı da ortamın kendi korumasına takıldı. **Senin
+koşunda ilk bakacağın yer bu:** `puanla` çıktısında "PUANLANAMADI" satırı
+varsa prompt tutmamış demektir; hücre puansız kalır ama rapor durur, yani
+`--yeniden` ile tekrar puanlanabilir. Para ikinci kez üretime harcanmaz.
+
+---
+
+## Önceki oturumda ne yapıldı
 
 **Üç yeni görev sınıfı**, her biri ayrı bir hipotez:
 
@@ -265,8 +351,10 @@ Doğrulama iki eksik çıkardı:
   devam eder. Şekli kayıtlı: serbest sohbet **değil**, `reject`
   mekanizmasının kardeşi — kayıtlı, sayılı, gerekçeli turlar.
 - **Çıkmazsa** → `PHILOSOPHY.md` 3. ilkesi değişir. Karar kuralı sonucu
-  görmeden yazıldı ve `bench/DESIGN.md`'de duruyor: kaçırma oranında ≥%20
-  göreli azalma olumlu, <%10 olumsuz.
+  görmeden yazıldı, `bench/DESIGN.md`'de duruyor ve artık `effect.ts`'te
+  kodda: kaçırma oranında ≥%20 göreli azalma olumlu, <%10 olumsuz. Kararı
+  `report` veriyor, ben değil — sayıyı görüp eşiği sonradan seçme imkânı
+  kapalı.
 - **Ölçüm gücü yetmezse** → görev setini büyütmek. Aday yön: `seed/`
   zaten var, daha büyük ve iki modülün etkileşimini içeren bir görev
   frontier modelde de kusur üretebilir.
@@ -276,7 +364,11 @@ Doğrulama iki eksik çıkardı:
 - **Rol promptlarını ekrandan düzenlemek.** Prompt içeriği her tur taze
   okunuyor, yani düzenleme yoldaki kartın **sonraki turunu** etkiler.
   Dondurma değişmezinin kenarında duruyor, kendi kararını hak ediyor.
-- Yargıç (judge) katmanı, kalan bench görevleri, 2×2 etkileşim raporu.
+- **Hakem katmanı — 2. yer gerçeği.** Bu oturumda yazılan puanlayıcı
+  NESNEL katmanı okuyor (rapor ↔ kırmızı kanca). Gizli testin göremediği
+  bulguları (tasarım, sızıntı) nit / yanlış pozitif diye sınıflayan ikinci
+  katman hâlâ yok ve ayrı raporlanacak — iki katman harmanlanmaz.
+- Kalan bench görevleri.
 - **Tur başına artefakt anlık görüntüsü.** "Denetim turunda tam olarak ne
   değişti" hâlâ son artefakta bakıp çıkarsanıyor.
 
@@ -304,6 +396,12 @@ Doğrulama iki eksik çıkardı:
   `doctor` çağrısı `claude-haiku-4-5`'te $0.06 tuttu: CLI'ın kendi sistem
   promptu her çağrıda önbelleğe yazılıyor. Koşu sayısı tahmin ederken
   çarpan bu taban.
+- **Kök kullanıcı altında varsayılan izin modu reddediliyor.** Konteynerde
+  `matrix` iki üretimi de anında "ÖLÇÜLEMEDİ" bıraktı; sebebi tek satır
+  stderr'de duruyordu: `--dangerously-skip-permissions cannot be used with
+  root/sudo privileges`. Para harcanmadı çünkü çağrı hiç başlamadı, ama
+  koruma olmasaydı bu "kusur yok" diye okunurdu. Kendi makinende sorun
+  çıkarsa `SKEIN_PERMISSION_MODE=acceptEdits`.
 - **Uzak konteynerde çapraz satıcı koşulamaz.** `codex` kuruluyor ve
   anahtar da gerekmiyor (ChatGPT oturumu yeterli), ama konteynerin çıkış
   vekili `api.openai.com` ve `chatgpt.com` için CONNECT'i 403 ile
