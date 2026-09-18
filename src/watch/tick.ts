@@ -313,7 +313,7 @@ async function runRole(card: Card, role: SnapshotRole, options: TickOptions): Pr
     // yazılıyor — "plan gerçekten yazıldı mı" kartlar arası bir soru.
     await options.log?.append({
       type: "plan.settled", card: card.id, role: role.id, outcome: "anlasma",
-      rounds: 0, objections: 0, accepted: 0, path: plan.path, planHash: plan.hash,
+      rounds: 0, objections: 0, accepted: 0, invalid: 0, path: plan.path, planHash: plan.hash,
     });
   }
 
@@ -416,6 +416,8 @@ async function planStep(
     }
   }
   const dosya = parseItirazlar(itirazMetni, { varMi: (yol) => yollar.get(yol) === true });
+  // "İtiraz yok" ile "itiraz var ama hiçbiri sayılmadı" aynı şey değil.
+  const gecersiz = dosya.itirazlar.length - dosya.gecerli.length;
 
   if (phase.kind === "itiraz") {
     const yazar = planAuthor(card.topology) as string;
@@ -424,16 +426,19 @@ async function planStep(
       // İtirazsız alışveriş: mekanizmanın tören olup olmadığının ölçüsü.
       // Sayılıyor ve günlüğe düşüyor.
       if (sonra === null) return { kind: "yok" };
+      // Hash kartın dondurduğu plandan okunuyor, itiraz edenin ağacındaki
+      // kopyadan değil: itiraz turu planı değiştirmiyor ve o ağaçta plan
+      // dosyası hiç bulunmayabilir.
       await options.log?.append({
         type: "plan.settled", card: card.id, role: role.id, outcome: "anlasma",
-        rounds: phase.round, objections: 0, accepted: 0,
-        path: planPath, planHash: planMetni === undefined ? "" : sha(planMetni),
+        rounds: phase.round, objections: 0, accepted: 0, invalid: gecersiz,
+        path: planPath, planHash: card.plan?.hash ?? (planMetni === undefined ? "-" : sha(planMetni)),
       });
       return {
         kind: "tasindi",
         result: await planMove(card, role, options, workdir, sonra, {
           at: new Date().toISOString(), event: "plan", role: role.id,
-          action: "itiraz", round: phase.round, objections: 0,
+          action: "itiraz", round: phase.round, objections: 0, invalid: gecersiz,
         }, undefined, summary),
       };
     }
@@ -441,12 +446,14 @@ async function planStep(
     await options.log?.append({
       type: "plan.round", card: card.id, role: role.id, round: phase.round,
       blind: true, newObjections: dosya.gecerli.length, openObjections: dosya.acik.length,
+      invalid: gecersiz,
     });
     return {
       kind: "tasindi",
       result: await planMove(card, role, options, workdir, yazar, {
         at: new Date().toISOString(), event: "plan", role: role.id,
         action: "itiraz", round: phase.round, objections: dosya.gecerli.length,
+        invalid: gecersiz,
       }, undefined, summary),
     };
   }
@@ -469,7 +476,7 @@ async function planStep(
         status: "escalated",
         card: await options.queue.deadlock(card, reason, {
           at: new Date().toISOString(), event: "plan", role: role.id,
-          action: "cevap", round: phase.round,
+          action: "cevap", round: phase.round, invalid: gecersiz,
           objections: dosya.gecerli.length, accepted: kabul.length,
         }),
         reason,
@@ -485,7 +492,7 @@ async function planStep(
         status: "escalated",
         card: await options.queue.deadlock(card, reason, {
           at: new Date().toISOString(), event: "plan", role: role.id,
-          action: "cevap", round: phase.round,
+          action: "cevap", round: phase.round, invalid: gecersiz,
           objections: dosya.gecerli.length, accepted: kabul.length,
         }),
         reason,
@@ -509,13 +516,13 @@ async function planStep(
   await options.log?.append({
     type: "plan.settled", card: card.id, role: role.id, outcome: "anlasma",
     rounds: phase.round, objections: dosya.gecerli.length, accepted: kabul.length,
-    path: planPath, planHash: yeniHash ?? "",
+    invalid: gecersiz, path: planPath, planHash: yeniHash ?? "",
   });
   return {
     kind: "tasindi",
     result: await planMove(card, role, options, workdir, sonra, {
       at: new Date().toISOString(), event: "plan", role: role.id,
-      action: "cevap", round: phase.round,
+      action: "cevap", round: phase.round, invalid: gecersiz,
       objections: dosya.gecerli.length, accepted: kabul.length,
       ...(yeniHash === undefined ? {} : { planHash: yeniHash }),
     }, yeniHash === undefined ? undefined : { path: planPath, hash: yeniHash }, summary),

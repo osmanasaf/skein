@@ -199,6 +199,24 @@ describe("alışveriş — itiraz turu", () => {
     expect((await queue.get(card.id))?.role).toBe("coder");
   });
 
+  // "İtiraz yok" ile "itiraz var ama hiçbiri sayılmadı" aynı şey değil:
+  // ilki anlaşma, ikincisi ya biçimi öğrenmemiş bir rol ya da genel öğüt
+  // üreten bir mekanizma. Tek sayıya erirse mekanizmanın tören olup
+  // olmadığı sorusu cevapsız kalır.
+  it("sayılmayan itirazları ayrı sayar", async () => {
+    const card = await put();
+    const logPath = join(root, "olaylar.jsonl");
+    await planYaz(card);
+    dosyalar.set(at("architect", ITIRAZ_YOLU(card.id)), itiraz("açık", "`src/olmayan.ts:3`"));
+    claude.answer = kabulEt("itiraz ettim");
+
+    await tick("architect", { ...options, log: new EventLog(logPath, "r1") });
+
+    const { events } = await readEvents(logPath);
+    const settled = events.find((e) => e.type === "plan.settled");
+    expect(settled).toMatchObject({ objections: 0, invalid: 1 });
+  });
+
   it("itirazsız tur alışverişi kapatır ve kart zincirden devam eder", async () => {
     const card = await put();
     await planYaz(card);

@@ -7,7 +7,7 @@ yapıştırılabilsin diye yazıldı: aşağısı Skein'i tanımayan birine de y
 **Dal:** `claude/project-plan-brainstorm-pthvoc` — `claude/project-thread-sc56cs`
 ileri sarılıp üstüne devam edildi, yani iki dalın işi bu dalda birleşti.
 `sc56cs` olduğu yerde duruyor; yeni iş burada.
-**Durum:** 565 test yeşil, typecheck temiz, `selftest` 5/5, ağaç temiz.
+**Durum:** 592 test yeşil, typecheck temiz, `selftest` 5/5, ağaç temiz.
 **Kod:** ~9.3k satır ürün + ~6.1k satır test.
 
 ---
@@ -59,8 +59,9 @@ kesiyor).
 | — | Tur başına artefakt anlık görüntüsü | ✅ |
 | — | Görev seti 5 → 8 | ✅ |
 | — | **Eşik ölçümü: sonnet-5** | ✅ **bu oturum** |
-| 6a | Plan belgesi akışın parçası | ✅ **bu oturum** — canlı koşuda doğrulandı |
-| 6b-d | Ajanlar arası itiraz turları | 📐 tasarım hazır (`PLANLAMA.md`), kod ölçümden sonra |
+| 6a | Plan belgesi akışın parçası | ✅ canlı koşuda doğrulandı |
+| 6b | Plana itiraz turu (iki katılımcı, tek tur) | ✅ **bu oturum** |
+| 6c-d | Çok tur, sayaç, körleme, ölçüm | 📐 tasarım hazır (`PLANLAMA.md`) |
 
 ---
 
@@ -177,7 +178,8 @@ npx tsx src/flow/cli.ts check <akış>            topolojiyi doğrula + maliyet
 npx tsx src/card/cli.ts new|ls|show|kapat …     kartı elle sür
 npx tsx src/watch/cli.ts <akış> --model …       orkestratör (toplu koşu)
 npx tsx src/watch/cli.ts <akış> --serve …       gözcüyü açık bırak
-npx tsx src/flow/cli.ts check hub/flows/plan.yaml   planlı örnek akış
+npx tsx src/flow/cli.ts check hub/flows/plan.yaml   planlı örnek akış (6a)
+npx tsx src/flow/cli.ts check hub/flows/plan2.yaml  itiraz turlu akış (6b)
 npx tsx src/ui/cli.ts <akış> [--port N]         ekran (127.0.0.1)
 
 npx tsx src/bench/cli.ts selftest [görev]       kancalar sağlam mı (bedava)

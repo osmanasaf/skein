@@ -45,6 +45,8 @@ export type HistoryEntry =
       round: number;
       /** Bu turdan sonra geçerli itiraz sayısı. */
       objections?: number;
+      /** Sayılmayan itirazlar: biçimi tutmayan ya da kanıtı bulunmayan. */
+      invalid?: number;
       /** Kabul edilmiş itiraz sayısı. */
       accepted?: number;
       /** Plan dosyasının o turdaki hash'i. */

@@ -317,10 +317,40 @@ Koşuda öğrenilen iki şey belgeye değil koda yazıldı:
   topluyor ve canlı koşudan sonra `npm test` 16 uydurma kırmızı veriyordu.
   Yapılandırmaya dışlama eklendi.
 
-**6b — İki katılımcı, kör tur 1, tek tur.** İkinci rol itirazlarını yazar,
-birincisi cevaplar, alışveriş biter. Bitiş testi: gerçek bir kartta en az
-bir itiraz açılıp `kabul` ile kapanıyor ve plan dosyasının hash'i
-değişiyor.
+**6b — İki katılımcı, tek tur. ✅ YAZILDI.** İkinci rol itirazlarını yazar,
+birincisi cevaplar, alışveriş biter.
+
+Yazılanlar:
+
+- **İtiraz dosyası ve makine okuyucusu** (`src/plan/itiraz.ts`). Dört alan
+  sabit; eksik alanlı itiraz `geçersiz` sayılır ve **hiçbir yöne**
+  sayılmaz — ne açık itiraz diye planı durdurur, ne reddedilmiş sayılır.
+- **Kanıt denetimi.** `Neyi yanlışlar` alanındaki yol depoda aranıyor;
+  yoksa itiraz sayılmıyor. Tasarımın en keskin kuralı kodda: "sınır
+  durumlarına dikkat" diyen bir itiraz hiçbir dosyaya işaret edemez.
+- **Tur makinesi** (`src/plan/phase.ts`). Hangi turda olunduğu **kartın
+  geçmişinden** okunuyor, bellekte tutulan bir durumdan değil: gözcü çökse
+  de kart nerede kaldığını kendi taşır.
+- **Üç kapı.** İtiraz dosyası yoksa tur kabul edilmez (sessizlik anlaşma
+  değil); kabul edilen itiraz planı değiştirmemişse tur kabul edilmez
+  (nezaket çöküşü); açık kalan ya da `insana` denen itiraz **kilit
+  kapısına** çıkar — kaçış değil, çünkü tur tamamlandı ve kod yerinde.
+- **Kartın zincirden ayrı dolaşması.** Alışveriş sırasında kart
+  katılımcılar arasında gidip geliyor (`queue.planTurn`); zincirin `next`i
+  ancak alışveriş kapandığında devreye giriyor. Kod da her adımda hedefin
+  ağacına taşınıyor.
+- **Maliyet modeli** alışverişi sayıyor: `flow check` artık "5 aktivasyon,
+  1'i planlama alışverişi" diyor.
+
+Kural değişiklikleri: `katilimcilar` iki olabiliyor, `tur: 1` kabul
+ediliyor. `tur > 1`, üç ve fazla katılımcı, ve `ilk-tur-kor: false` hâlâ
+AÇIKÇA reddediliyor — üçü de 6c'nin konusu.
+
+**Körleme bugün atıl, ve bu dürüstçe yazılı:** iki katılımcıda itiraz eden
+tek rol var, yani kimsenin görmeyeceği bir itiraz yok. Körleme üç ve
+fazlasında anlam kazanıyor; o yüzden varsayılan `true` duruyor ama
+kapatılması reddediliyor — "kapatılmış sanılan körleme" diye bir şey
+olmasın.
 
 **6c — Çok tur + sayaçlar + kapı.** Tur limiti, yeni itiraz sayacı,
 `tukendi` → deadlock kapısı. Bitiş testi: limit dolduğunda kart kapıda

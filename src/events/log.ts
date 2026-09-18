@@ -154,6 +154,17 @@ export type EventInput =
       newObjections: number;
       /** Tur sonunda açık kalan itiraz sayısı. */
       openObjections: number;
+      /**
+       * Biçimi tutmadığı ya da kanıtı depoda bulunmadığı için SAYILMAYAN
+       * itirazlar.
+       *
+       * Ayrı sayılıyor çünkü "itiraz yok" ile "itiraz var ama hiçbiri
+       * geçerli değil" aynı şey değil: ilki anlaşma, ikincisi ya biçimi
+       * öğrenmemiş bir rol ya da genel öğüt üreten bir mekanizma. İkisi
+       * tek sayıya erirse, mekanizmanın tören olup olmadığı sorusu
+       * cevapsız kalır.
+       */
+      invalid: number;
     }
   | {
       /**
@@ -172,6 +183,8 @@ export type EventInput =
       rounds: number;
       objections: number;
       accepted: number;
+      /** Sayılmayan itirazlar — biçimi tutmayan ya da kanıtı bulunmayan. */
+      invalid: number;
       /** Plan dosyasının yolu ve içeriğinin SHA-256'sı. */
       path: string;
       planHash: string;
@@ -273,11 +286,11 @@ const REQUIRED: Record<EventInput["type"], { strings: string[]; numbers: string[
   "hooks.measured": { strings: ["cell"], numbers: ["total"] },
   "plan.round": {
     strings: ["card", "role"],
-    numbers: ["round", "newObjections", "openObjections"],
+    numbers: ["round", "newObjections", "openObjections", "invalid"],
   },
   "plan.settled": {
     strings: ["card", "role", "outcome", "path", "planHash"],
-    numbers: ["rounds", "objections", "accepted"],
+    numbers: ["rounds", "objections", "accepted", "invalid"],
   },
   "artifact.snapshot": {
     strings: ["cell", "label", "path", "fingerprint"],

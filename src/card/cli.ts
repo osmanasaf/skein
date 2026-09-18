@@ -74,6 +74,23 @@ function printCard(card: Card): void {
       case "requeued":
         console.log(`    ${when}  kuyruğa geri kondu @ ${entry.role} (${entry.reason})`);
         break;
+      case "plan": {
+        // Alışveriş kartın izinde görünmeliydi ve görünmüyordu: `switch`
+        // bu kaydı sessizce atlıyordu. Canlı koşuda plana itiraz eden rol
+        // bu boşluğu kendi buldu ve raporuna yazdı.
+        const sayi = entry.objections === undefined
+          ? ""
+          : `  (${entry.objections} itiraz` +
+            (entry.accepted === undefined ? "" : `, ${entry.accepted} kabul`) +
+            (entry.invalid ? `, ${entry.invalid} sayılmadı` : "") + ")";
+        const ne = entry.action === "yazdi"
+          ? "planı yazdı"
+          : entry.action === "itiraz"
+            ? `plana itiraz turu (tur ${entry.round})`
+            : `itirazları yanıtladı (tur ${entry.round})`;
+        console.log(`    ${when}  ${entry.role} ${ne}${sayi}`);
+        break;
+      }
       case "done":
         console.log(`    ${when}  bitti (${entry.from})`);
         break;
