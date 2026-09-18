@@ -276,6 +276,20 @@ export interface UiHistory {
   who: string;
   note: string | null;
   commit: string | null;
+  /**
+   * Planlama alışverişi turu (PLANLAMA.md 6b) — yalnızca `event: "plan"`
+   * kayıtlarında dolu, diğer her kayıtta `null`.
+   *
+   * Alan adları `HistoryEntry`'nin `plan` olayıyla birebir aynı; ekran bu
+   * sayıları yeniden yorumlamaz, olduğu gibi taşır.
+   */
+  plan: {
+    action: "yazdi" | "itiraz" | "cevap";
+    round: number;
+    objections: number | null;
+    accepted: number | null;
+    invalid: number | null;
+  } | null;
 }
 
 export interface UiDiff {
@@ -325,6 +339,15 @@ export async function buildDetail(options: DetailOptions, id: string): Promise<U
       who,
       note,
       commit: "commit" in entry && entry.commit !== undefined ? entry.commit : null,
+      plan: entry.event === "plan"
+        ? {
+            action: entry.action,
+            round: entry.round,
+            objections: entry.objections ?? null,
+            accepted: entry.accepted ?? null,
+            invalid: entry.invalid ?? null,
+          }
+        : null,
     };
   });
 

@@ -399,6 +399,7 @@ function kartCiz(c) {
 const OLAY = {
   created: "açıldı", taken: "alındı", handoff: "devredildi", reject: "REDDEDİLDİ",
   gate: "KAPI", released: "bırakıldı", requeued: "kuyruğa döndü", done: "bitti",
+  plan: "planlama",
 };
 const IZ_RENK = { reject: "var(--reject)", gate: "var(--gate)", released: "var(--gate)", done: "var(--accept)" };
 
@@ -458,6 +459,15 @@ function detayCiz(d) {
     bas.append(el("b", null, OLAY[h.event] || h.event));
     if (h.who) bas.append(el("em", null, h.who));
     if (h.commit) bas.append(el("em", null, h.commit));
+    if (h.plan) {
+      // Alışverişin kendi sayıları — kaydın taşımadığı (`null`) alanlar hiç
+      // basılmaz, "0" ile "hiç ölçülmedi" karışmasın.
+      let ozet = "tur " + h.plan.round;
+      if (h.plan.objections !== null) ozet += ", " + h.plan.objections + " itiraz";
+      if (h.plan.accepted !== null) ozet += ", " + h.plan.accepted + " kabul";
+      if (h.plan.invalid !== null) ozet += ", " + h.plan.invalid + " sayılmadı";
+      bas.append(el("em", null, "(" + ozet + ")"));
+    }
     gov.append(bas);
     if (h.note) gov.append(el("p", null, h.note));
     satir.append(gov);

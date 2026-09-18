@@ -52,4 +52,15 @@ describe("renderPage", () => {
     expect(src).toContain("d.card.plan");
     expect(src).toContain("d.card.plan.hash.slice(0, 12)");
   });
+
+  // İz satırındaki plan olayı ham "plan" sözcüğü yerine tur numarasını ve
+  // dolu olan itiraz sayılarını taşımalı (bkz. PLANLAMA.md 6b).
+  it("iz satırı plan olayı için tur numarasını ve dolu sayıları çizer", () => {
+    const src = betik(renderPage("x"));
+    expect(src).toContain("h.plan");
+    expect(src).toContain("h.plan.round");
+    expect(src).toContain("h.plan.objections");
+    expect(src).toContain("h.plan.accepted");
+    expect(src).toContain("h.plan.invalid");
+  });
 });

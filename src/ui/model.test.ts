@@ -286,6 +286,101 @@ describe("buildDetail — plan", () => {
   });
 });
 
+describe("buildDetail — planlama alışverişi", () => {
+  const numstat = async () => "";
+
+  it("action: yazdi, round 0 — objections/accepted/invalid hiç verilmemişse üçü de null", async () => {
+    await put();
+    const taken = (await queue.take("coder")) as Card;
+    await queue.planTurn(taken, "coder", {
+      at: new Date().toISOString(),
+      event: "plan",
+      role: "coder",
+      action: "yazdi",
+      round: 0,
+    });
+    const card = (await queue.list())[0] as Card;
+
+    const detail = await buildDetail({ ...base, numstat }, card.id);
+
+    const kayit = detail?.history.find((h) => h.event === "plan");
+    expect(kayit?.plan).toEqual({
+      action: "yazdi",
+      round: 0,
+      objections: null,
+      accepted: null,
+      invalid: null,
+    });
+  });
+
+  it("action: itiraz — accepted verilmemişse null, objections/invalid sayı olarak döner", async () => {
+    await put();
+    const taken = (await queue.take("coder")) as Card;
+    await queue.planTurn(taken, "coder", {
+      at: new Date().toISOString(),
+      event: "plan",
+      role: "coder",
+      action: "itiraz",
+      round: 1,
+      objections: 2,
+      invalid: 1,
+    });
+    const card = (await queue.list())[0] as Card;
+
+    const detail = await buildDetail({ ...base, numstat }, card.id);
+
+    const kayit = detail?.history.find((h) => h.event === "plan");
+    expect(kayit?.plan).toEqual({
+      action: "itiraz",
+      round: 1,
+      objections: 2,
+      accepted: null,
+      invalid: 1,
+    });
+  });
+
+  it("action: cevap — invalid: 0 null'a düşmez (?? kullanımı, || değil)", async () => {
+    await put();
+    const taken = (await queue.take("coder")) as Card;
+    await queue.planTurn(taken, "coder", {
+      at: new Date().toISOString(),
+      event: "plan",
+      role: "coder",
+      action: "cevap",
+      round: 1,
+      objections: 2,
+      accepted: 1,
+      invalid: 0,
+    });
+    const card = (await queue.list())[0] as Card;
+
+    const detail = await buildDetail({ ...base, numstat }, card.id);
+
+    const kayit = detail?.history.find((h) => h.event === "plan");
+    expect(kayit?.plan?.invalid).toBe(0);
+    expect(kayit?.plan).toEqual({
+      action: "cevap",
+      round: 1,
+      objections: 2,
+      accepted: 1,
+      invalid: 0,
+    });
+  });
+
+  it("hiç plan olayı geçmemiş kartta HER kaydın plan alanı null'dur", async () => {
+    await put();
+    await queue.handoff((await queue.take("coder")) as Card, { commit: "abc1234" });
+    const card = (await queue.list())[0] as Card;
+
+    const detail = await buildDetail({ ...base, numstat }, card.id);
+
+    expect(detail?.history.length).toBeGreaterThan(0);
+    for (const h of detail?.history ?? []) {
+      expect(h.plan).toBeNull();
+    }
+  });
+});
+
 describe("buildDetail — iz ve diff", () => {
   const numstat = async () => "24\t1\tsrc/events/log.ts\n19\t0\tsrc/watch/tick.ts\n";
 
