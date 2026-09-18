@@ -1,7 +1,8 @@
 # Adım 6 — Planlamada ajanlar arası yazılı tur (TASARIM)
 
-**Durum: yazılmadı.** Bu belge ne yapılacağını, hangi şekilde ve neden o
-şekilde yapılacağını sabitliyor. Kod yok; kararlar var.
+**Durum: 6a yazıldı ve canlı koşuda doğrulandı (18 Eylül); 6b-6d tasarım.**
+Bu belge ne yapılacağını, hangi şekilde ve neden o şekilde yapılacağını
+sabitliyor.
 
 `ARCHITECTURE.md` "Sıra" tablosunun 6. maddesi. En sonda olmasının sebebi
 `PHILOSOPHY.md`'de: serbest sohbet maliyeti sınırsız büyütür,
@@ -286,10 +287,35 @@ yavaş görünür; yeniden üretilebilir olması o yavaşlığa değer.
 
 Her aşamanın bitiş testi var; testi geçmeden sonrakine geçilmez.
 
-**6a — Plan dosyası (alışveriş yok).** Tek rol plan yazar ve commit'ler;
-sonraki roller yolu görev metninde alır. Bitiş testi: canlı koşuda `coder`
-plan dosyasını okuyup ona atıf yapıyor. *(Bugün `specifier` rolüyle
-neredeyse var; ayrıca yazılacak yeni şey az.)*
+**6a — Plan dosyası (alışveriş yok). ✅ YAZILDI.** Tek rol plan yazar ve
+commit'ler; sonraki roller yolu görev metninde alır.
+
+Bitiş testi geçildi: `hub/flows/plan.yaml` (planner → coder → reviewer)
+gerçek ajanlarla koştu (`claude-sonnet-5`). `planner`
+`docs/plan/c-20260918-4abcb2.md` dosyasını yazıp commit'ledi; `coder`
+devir özetinde plana atıf yaptı ("model.ts tam hash taşır" — planın
+koyduğu sözleşme); `reviewer` işi **plana karşı** denetledi ("testler
+planın izin verdiği stile uygun", "kapsam dışı alanlar"). Yani plan yalnızca
+bir sonraki role bilgi taşımadı, denetimin ölçütü de oldu — tasarımda
+beklenmeyen bir yan etki.
+
+Yazılanlar: akış dilinde `planlama` bloğu + kural 17-20, plan politikasının
+topoloji hash'ine ve kart anlık görüntüsüne girmesi, iş metninin iki yüzü
+(yazan role zorunlu çıktı, okuyan role "önce oku"), **plan kapısı**
+(`tick`: planı yazan rol kabul dediğinde dosya diskte aranır; yoksa ya da
+boşsa devir teslim olmaz, kart insana çıkar), kartta donan `plan.hash`,
+`plan.settled` olayı ve `planner.md` rol promptu.
+
+Koşuda öğrenilen iki şey belgeye değil koda yazıldı:
+
+- **İzin modu ile git.** `acceptEdits` dosya yazdırır ama `git add`
+  yaptırmaz; planı yazan ajan dosyayı yazdı, commit atamadı ve doğru
+  davranıp "yapamadım" dedi. Orkestratörü canlı koşarken
+  `--allow-tool "Bash(git:*)"` gerekiyor.
+- **`.worktrees/` vitest'e giriyordu.** Orkestratör her rol için deponun
+  bir worktree'sini açıyor; kökten koşan vitest oradaki kopyaları da
+  topluyor ve canlı koşudan sonra `npm test` 16 uydurma kırmızı veriyordu.
+  Yapılandırmaya dışlama eklendi.
 
 **6b — İki katılımcı, kör tur 1, tek tur.** İkinci rol itirazlarını yazar,
 birincisi cevaplar, alışveriş biter. Bitiş testi: gerçek bir kartta en az

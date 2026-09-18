@@ -7,7 +7,7 @@ yapıştırılabilsin diye yazıldı: aşağısı Skein'i tanımayan birine de y
 **Dal:** `claude/project-plan-brainstorm-pthvoc` — `claude/project-thread-sc56cs`
 ileri sarılıp üstüne devam edildi, yani iki dalın işi bu dalda birleşti.
 `sc56cs` olduğu yerde duruyor; yeni iş burada.
-**Durum:** 542 test yeşil, typecheck temiz, `selftest` 5/5, ağaç temiz.
+**Durum:** 565 test yeşil, typecheck temiz, `selftest` 5/5, ağaç temiz.
 **Kod:** ~9.3k satır ürün + ~6.1k satır test.
 
 ---
@@ -59,7 +59,8 @@ kesiyor).
 | — | Tur başına artefakt anlık görüntüsü | ✅ |
 | — | Görev seti 5 → 8 | ✅ |
 | — | **Eşik ölçümü: sonnet-5** | ✅ **bu oturum** |
-| 6 | Planlamada ajanlar arası yazılı tur | 📐 **tasarımı yazıldı** (`PLANLAMA.md`), kod ölçümden sonra |
+| 6a | Plan belgesi akışın parçası | ✅ **bu oturum** — canlı koşuda doğrulandı |
+| 6b-d | Ajanlar arası itiraz turları | 📐 tasarım hazır (`PLANLAMA.md`), kod ölçümden sonra |
 
 ---
 
@@ -176,6 +177,7 @@ npx tsx src/flow/cli.ts check <akış>            topolojiyi doğrula + maliyet
 npx tsx src/card/cli.ts new|ls|show|kapat …     kartı elle sür
 npx tsx src/watch/cli.ts <akış> --model …       orkestratör (toplu koşu)
 npx tsx src/watch/cli.ts <akış> --serve …       gözcüyü açık bırak
+npx tsx src/flow/cli.ts check hub/flows/plan.yaml   planlı örnek akış
 npx tsx src/ui/cli.ts <akış> [--port N]         ekran (127.0.0.1)
 
 npx tsx src/bench/cli.ts selftest [görev]       kancalar sağlam mı (bedava)
@@ -356,6 +358,47 @@ bulgu sayılamaz** ve DESIGN'daki bölümün başına bu uyarı düşüldü. Yen
 koşu başına ~$0.07. Çapraz satıcıda üretici olarak sonnet kullanmak sonucu
 daha güçlü bir sınıfa taşır ve "zaten zayıf model kusur üretti" itirazını
 zayıflatır.
+
+### Ve 6a yazıldı: plan belgesi akışın parçası
+
+Tasarımın ilk aşaması kodda. Akış artık `planlama` bloğu tanımlayabiliyor;
+zincirin başındaki rol bir plan belgesi yazıp commit'liyor, sonraki roller
+planın yolunu iş metninde alıp okuyor.
+
+**Asıl mekanizma bir kapı, talimat değil:** planı yazan rol "kabul" dediğinde
+plan dosyası **diskte aranıyor**. Yoksa ya da boşsa devir teslim olmuyor,
+kart insana çıkıyor. "Belge üreten rolün çıktısı kayboluyor" kusuru bir kez
+yaşanmıştı ve çözümü prompta yazmaktı — prompt talimattır, kapı değil.
+
+Yazılmamış alanlar sessizce yok sayılmıyor: `planlama.tur` yazarsan akış
+"henüz uygulanmadı, 6b'nin konusu" diyen bir hatayla reddediliyor.
+
+**Bitiş testi canlı koşuda geçildi** (`plan.yaml`, planner → coder →
+reviewer, `claude-sonnet-5`):
+
+- `planner` planı yazıp commit'ledi (107 satır: dokunulacak dosyalar,
+  satır aralıkları, korunacak sözleşme, kapsam dışı).
+- `coder` devir özetinde plana atıf yaptı — planın koyduğu sözleşmeyi
+  ("model.ts tam hash taşır, kısaltma page.ts'in işi") uyguladı.
+- `reviewer` işi **plana karşı** denetledi ("testler planın izin verdiği
+  stile uygun", "kapsam dışı alanlar"). Plan yalnızca bilgi taşımadı,
+  denetimin ölçütü oldu — tasarımda beklenmeyen bir yan etki.
+
+Ajanların ürettiği iş (ekranın kart detayında plan yolu + sürüm) bu dala
+birleştirildi; **testleri ve typecheck'i ben koşturdum** — ajanlar
+koşturamadı (sandbox'ta Bash izni yok) ve "statik okumayla doğruladım"
+dediler. 565 test yeşil.
+
+Koşunun çıkardığı iki tuzak:
+
+- **İzin modu ile git.** `acceptEdits` dosya yazdırır ama `git add`
+  yaptırmaz. Orkestratörü canlı koşarken `--allow-tool "Bash(git:*)"`
+  gerekiyor; `SKEIN_PERMISSION_MODE` yalnızca bench yolunda okunuyor,
+  orkestratörde bayrak var: `--permission-mode`.
+- **`.worktrees/` vitest'e giriyordu.** Orkestratör her rol için deponun
+  bir worktree'sini açıyor; kökten koşan vitest oradaki kopyaları da
+  topluyordu ve canlı koşudan sonra `npm test` 16 uydurma kırmızı
+  veriyordu. Yapılandırmaya dışlama eklendi.
 
 ### Ayrıca: adım 6'nın tasarımı yazıldı (`PLANLAMA.md`)
 
