@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SkeinEvent } from "../events/log.js";
-import { effectReport } from "./effect.js";
+import { effectReport, UNKNOWN_TASK } from "./effect.js";
 
 const ev = (e: Partial<SkeinEvent> & { type: string }, runId: string): SkeinEvent =>
   ({ v: 1, at: "2026-01-01T00:00:00.000Z", runId, ...e }) as SkeinEvent;
@@ -35,6 +35,18 @@ const threeRuns = (crossedMissed = 2): SkeinEvent[] =>
     ...cell(r, "A", "B", 10, crossedMissed),
     ...cell(r, "B", "A", 10, crossedMissed),
   ]);
+
+/** Bir koşuyu görevine bağlar; `run.started` olmadan görev bilinmez. */
+const run = (runId: string, taskId: string): SkeinEvent =>
+  ev({ type: "run.started", taskId }, runId);
+
+/** Tam bir 2x2: iki model, dört hücre. */
+const square = (runId: string, a: string, b: string, hooks: number, sameMissed: number, crossedMissed: number): SkeinEvent[] => [
+  ...cell(runId, a, a, hooks, sameMissed),
+  ...cell(runId, b, b, hooks, sameMissed),
+  ...cell(runId, a, b, hooks, crossedMissed),
+  ...cell(runId, b, a, hooks, crossedMissed),
+];
 
 describe("effectReport", () => {
   it("çiftleri, iki tarafı ve göreli azalmayı hesaplar", () => {
@@ -112,5 +124,71 @@ describe("effectReport", () => {
     ]);
     expect(e.pairs).toHaveLength(0);
     expect(e.verdict.code).toBe("yetersiz");
+  });
+});
+
+// Tekrarın enflasyonu: DESIGN'ın k'sı stokastikliğe karşı, yani AYNI
+// kurgunun tekrarı. Üç ayrı görevi birer kez koşmak eski hesapta k=3
+// görünüyordu ve karar kuralını açıyordu — üç ayrı k=1'i sonuç sanmak,
+// kuralın engellemek için yazıldığı hatanın ta kendisi.
+describe("ölçüm grupları", () => {
+  it("farklı görevleri birer kez koşmak k'yı artırmaz", () => {
+    const e = effectReport([
+      run("r1", "gorev-1"), ...square("r1", "A", "B", 10, 6, 2),
+      run("r2", "gorev-2"), ...square("r2", "A", "B", 10, 6, 2),
+      run("r3", "gorev-3"), ...square("r3", "A", "B", 10, 6, 2),
+    ]);
+    expect(e.groups).toHaveLength(3);
+    expect(e.groups.every((g) => g.repeats === 1)).toBe(true);
+    expect(e.relativeReduction).toBeCloseTo(0.667); // havuzda sayı var
+    expect(e.verdict.code).toBe("yetersiz"); // ama karar yok
+    expect(e.verdict.reason).toMatch(/grup içinde sayılır/);
+  });
+
+  it("aynı görev üç kez koşulunca karar verir", () => {
+    const e = effectReport(["r1", "r2", "r3"].flatMap((r) => [
+      run(r, "gorev-1"), ...square(r, "A", "B", 10, 6, 2),
+    ]));
+    expect(e.groups).toHaveLength(1);
+    expect(e.groups[0]?.repeats).toBe(3);
+    expect(e.verdict.code).toBe("olumlu");
+  });
+
+  // Ölçüm gücü çıkmayınca güçlü modelden zayıfına geçmek gerçek bir
+  // senaryo; iki kurgunun hücreleri tek sayıda toplanırsa karşılaştırma
+  // sessizce kirlenir.
+  it("model kurgusu değişince ayrı grup sayar", () => {
+    const e = effectReport([
+      run("r1", "gorev-1"), ...square("r1", "A", "B", 10, 6, 2),
+      run("r2", "gorev-1"), ...square("r2", "A", "B", 10, 6, 2),
+      run("r3", "gorev-1"), ...square("r3", "A", "C", 10, 6, 2),
+      run("r4", "gorev-1"), ...square("r4", "A", "C", 10, 6, 2),
+    ]);
+    expect(e.groups).toHaveLength(2);
+    expect(e.groups.map((g) => g.models)).toEqual([["A", "B"], ["A", "C"]]);
+    expect(e.groups.every((g) => g.repeats === 2)).toBe(true);
+    expect(e.verdict.code).toBe("yetersiz");
+  });
+
+  // Havuz, ağırlığı kanca çoğunluğu olan göreve verir: 16 kancalı görevde
+  // çapraz denetim kazanırken 4 kancalıda kaybediyorsa, tek oran bunu
+  // yutar. Ayrışma kararın kendisinde görünmeli.
+  it("görev sınıfları ayrışıyorsa havuzun sayısını sonuç saymaz", () => {
+    const e = effectReport(["r1", "r2", "r3"].flatMap((r) => [
+      run(`${r}a`, "genis"), ...square(`${r}a`, "A", "B", 16, 8, 3),
+      run(`${r}b`, "dar"), ...square(`${r}b`, "A", "B", 4, 1, 3),
+    ]));
+    expect(e.relativeReduction).toBeGreaterThan(0.2); // havuzda olumlu görünüyor
+    expect(e.verdict.code).toBe("belirsiz");
+    expect(e.verdict.reason).toMatch(/ayrışıyor/);
+    const dar = e.groups.find((g) => g.taskId === "dar");
+    expect(dar?.verdict.code).toBe("olumsuz");
+  });
+
+  it("görevi bilinmeyen koşuları kendi grubunda toplar", () => {
+    const e = effectReport(["r1", "r2", "r3"].flatMap((r) => square(r, "A", "B", 10, 6, 2)));
+    expect(e.groups).toHaveLength(1);
+    expect(e.groups[0]?.taskId).toBe(UNKNOWN_TASK);
+    expect(e.verdict.code).toBe("olumlu");
   });
 });

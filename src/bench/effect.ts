@@ -25,7 +25,40 @@ export interface Side {
 
 export type VerdictCode = "olumlu" | "olumsuz" | "belirsiz" | "yetersiz";
 
+/** Görev id'si günlükten okunamayan koşular için. */
+export const UNKNOWN_TASK = "(bilinmeyen görev)";
+
+/**
+ * Bir ölçüm grubunun sayıları ve kararı.
+ *
+ * Grup = **aynı görev** × **aynı model kurgusu**. Tekrar (k) yalnızca grubun
+ * içinde sayılır: üç farklı görevi birer kez koşmak "k=3" değildir, üç ayrı
+ * k=1'dir. Karar da bu seviyede verilir; havuzlanmış sayı yalnızca bilgi.
+ */
+export interface GroupReport {
+  taskId: string;
+  /** Gruptaki modeller (üretici ∪ denetçi), sıralı. */
+  models: string[];
+  pairs: PairScore[];
+  same: Side | null;
+  crossed: Side | null;
+  relativeReduction: number | null;
+  interaction: number | null;
+  perRun: { runId: string; relativeReduction: number | null }[];
+  repeats: number;
+  unverified: number;
+  verdict: { code: VerdictCode; reason: string };
+}
+
 export interface EffectReport {
+  /** Görev × kurgu grupları; kararın verildiği seviye. */
+  groups: GroupReport[];
+  /**
+   * Aşağıdaki alanlar HAVUZLANMIŞ: bütün gruplar tek torbada. Farklı görev
+   * sınıflarının kanca sayıları eşit olmadığı için havuz, ağırlığı kanca
+   * çoğunluğu olan göreve verir ve bir sınıftaki ters yönü gizleyebilir.
+   * Bu yüzden bilgi olarak duruyorlar; karar `groups`'tan çıkıyor.
+   */
   pairs: PairScore[];
   same: Side | null;
   crossed: Side | null;
@@ -43,6 +76,8 @@ export interface EffectReport {
 
 interface ScoredCell {
   runId: string;
+  /** Koşunun görevi; `run.started` yoksa UNKNOWN_TASK. */
+  taskId: string;
   cell: string;
   producer: string;
   reviewer: string;
@@ -54,6 +89,15 @@ interface ScoredCell {
 
 const key = (...parts: string[]): string => JSON.stringify(parts);
 
+/** Koşu id'sinden görev id'sine; `run.started` yoksa görev bilinmiyordur. */
+export function tasksByRun(events: SkeinEvent[]): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const e of events) {
+    if (e.type === "run.started") out.set(e.runId, e.taskId);
+  }
+  return out;
+}
+
 /** Puanlanmış hücreleri günlükten toplar; `review.done` ile birleştirir. */
 export function scoredCells(events: SkeinEvent[]): ScoredCell[] {
   const meta = new Map<string, { producer: string; reviewer: string; crossed: boolean }>();
@@ -64,6 +108,7 @@ export function scoredCells(events: SkeinEvent[]): ScoredCell[] {
       });
     }
   }
+  const tasks = tasksByRun(events);
   const out: ScoredCell[] = [];
   for (const e of events) {
     if (e.type !== "judge.scored") continue;
@@ -72,11 +117,32 @@ export function scoredCells(events: SkeinEvent[]): ScoredCell[] {
     // söyleyemez — sayıya katılırsa "çapraz" sütunu sessizce kirlenir.
     if (m === undefined) continue;
     out.push({
-      runId: e.runId, cell: e.cell, ...m,
+      runId: e.runId, taskId: tasks.get(e.runId) ?? UNKNOWN_TASK, cell: e.cell, ...m,
       hooks: e.hooks, missed: e.missed.length, unverified: e.unverified.length,
     });
   }
   return out;
+}
+
+/**
+ * Günlüğü tek göreve daraltır — eski koşular aynı dosyada biriktiği için.
+ *
+ * Gruplama zaten karıştırmıyor; bu filtre okumayı kısaltmak için, sayıyı
+ * düzeltmek için değil.
+ */
+export function filterByTask(events: SkeinEvent[], taskId: string): SkeinEvent[] {
+  const tasks = tasksByRun(events);
+  return events.filter((e) => tasks.get(e.runId) === taskId);
+}
+
+/** Bir koşuda geçen modeller (üretici ∪ denetçi), sıralı. */
+function modelsOf(cells: ScoredCell[]): string[] {
+  const set = new Set<string>();
+  for (const c of cells) {
+    set.add(c.producer);
+    set.add(c.reviewer);
+  }
+  return [...set].sort();
 }
 
 function side(cells: ScoredCell[]): Side | null {
@@ -107,8 +173,8 @@ function reduction(same: Side | null, crossed: Side | null): number | null {
  * yazılıydı ve bir kez ihlal edildiği için (tek koşudan "bu görev kolay"
  * sonucu çıkarılmıştı) burada makineye bağlandı.
  */
-export function effectReport(events: SkeinEvent[]): EffectReport {
-  const cells = scoredCells(events);
+/** Bir hücre kümesinin sayıları — hem grup hem havuz için aynı hesap. */
+function analyse(cells: ScoredCell[]): Omit<GroupReport, "taskId" | "models" | "verdict"> {
   const byPair = new Map<string, ScoredCell[]>();
   for (const c of cells) {
     const k = key(c.producer, c.reviewer);
@@ -157,7 +223,108 @@ export function effectReport(events: SkeinEvent[]): EffectReport {
     pairs, same, crossed, relativeReduction, interaction, perRun,
     repeats: runIds.length,
     unverified: cells.reduce((s, c) => s + c.unverified, 0),
-    verdict: decide(cells.length, runIds.length, relativeReduction, perRun),
+  };
+}
+
+/**
+ * Puanlanmış hücreleri **görev × model kurgusu** gruplarına ayırır.
+ *
+ * Ayrım iki sessiz hatayı kapatıyor, ikisi de pahalı koşudan SONRA fark
+ * edilirdi:
+ *
+ * 1. **Tekrarın enflasyonu.** Üç görevi birer kez koşmak eski hesapta
+ *    "k=3" görünüyordu ve karar kuralı açılıyordu. Oysa DESIGN'ın k'sı
+ *    stokastikliğe karşı: aynı kurgunun tekrarı. Artık k grubun içinde
+ *    sayılıyor.
+ * 2. **Kurgu kirlenmesi.** Operatör ortada model değiştirirse (ölçüm gücü
+ *    çıkmayınca güçlü modelden zayıfına geçmek gerçek bir senaryo) eski
+ *    hesap iki kurguyu tek sayıda topluyordu. Artık ayrı gruplar.
+ */
+export function groupCells(cells: ScoredCell[]): GroupReport[] {
+  const byRun = new Map<string, ScoredCell[]>();
+  for (const c of cells) {
+    const list = byRun.get(c.runId);
+    if (list) list.push(c);
+    else byRun.set(c.runId, [c]);
+  }
+
+  const byGroup = new Map<string, { taskId: string; models: string[]; cells: ScoredCell[] }>();
+  for (const [, own] of byRun) {
+    const first = own[0] as ScoredCell;
+    const models = modelsOf(own);
+    const k = key(first.taskId, ...models);
+    const g = byGroup.get(k);
+    if (g) g.cells.push(...own);
+    else byGroup.set(k, { taskId: first.taskId, models, cells: [...own] });
+  }
+
+  return [...byGroup.values()].map((g) => {
+    const a = analyse(g.cells);
+    return {
+      taskId: g.taskId, models: g.models, ...a,
+      verdict: decide(g.cells.length, a.repeats, a.relativeReduction, a.perRun),
+    };
+  });
+}
+
+export function effectReport(events: SkeinEvent[]): EffectReport {
+  const cells = scoredCells(events);
+  const groups = groupCells(cells);
+  const pooled = analyse(cells);
+  return {
+    groups, ...pooled,
+    verdict: decideOverall(groups),
+  };
+}
+
+/**
+ * Grupların kararlarından tek karar.
+ *
+ * Tek grup varsa cevap o grubun kararıdır. Birden fazla grup varsa
+ * **anlaşmazlık gizlenmez**: bir görev sınıfında olumlu, ötekinde olumsuz
+ * çıkması havuzda tek sayıya eriyip kaybolurdu; burada "belirsiz" olur ve
+ * hangi sınıfın hangi yöne gittiği yazılır. Bu, sonucu görmeden yazıldı.
+ */
+export function decideOverall(groups: GroupReport[]): { code: VerdictCode; reason: string } {
+  if (groups.length === 0) {
+    return { code: "yetersiz", reason: "Puanlanmış denetim hücresi yok." };
+  }
+  const only = groups[0] as GroupReport;
+  if (groups.length === 1) return only.verdict;
+
+  const say = (g: GroupReport): string => `${g.taskId} (k=${g.repeats})`;
+  const decisive = groups.filter((g) => g.verdict.code === "olumlu" || g.verdict.code === "olumsuz");
+  if (decisive.length === 0) {
+    return {
+      code: "yetersiz",
+      reason:
+        `${groups.length} ölçüm grubunun hiçbiri karar verecek durumda değil: ` +
+        groups.map((g) => `${say(g)} → ${g.verdict.code}`).join(", ") + ". " +
+        `Tekrar (k) grup içinde sayılır; farklı görevleri birer kez koşmak k'yı artırmaz.`,
+    };
+  }
+  const positive = decisive.filter((g) => g.verdict.code === "olumlu");
+  const negative = decisive.filter((g) => g.verdict.code === "olumsuz");
+  if (negative.length === 0) {
+    return {
+      code: "olumlu",
+      reason: `Karar verebilen ${positive.length} grubun hepsi olumlu: ` +
+        positive.map(say).join(", ") + ".",
+    };
+  }
+  if (positive.length === 0) {
+    return {
+      code: "olumsuz",
+      reason: `Karar verebilen ${negative.length} grubun hepsi olumsuz: ` +
+        negative.map(say).join(", ") + ". PHILOSOPHY 3. ilkesi gözden geçirilmeli.",
+    };
+  }
+  return {
+    code: "belirsiz",
+    reason:
+      "Görev sınıfları ayrışıyor — olumlu: " + positive.map(say).join(", ") +
+      "; olumsuz: " + negative.map(say).join(", ") + ". " +
+      "Havuzlanmış sayı bu ayrışmayı tek orana eritir; sonuç sınıf başına okunmalı.",
   };
 }
 

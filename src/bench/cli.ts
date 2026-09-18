@@ -12,7 +12,7 @@ import { runMatrix, diagnose } from "./matrix.js";
 import { selfTest } from "./selftest.js";
 import { networkFailure } from "./failure.js";
 import { scoreTargets, scoreAll } from "./score.js";
-import { effectReport, type EffectReport } from "./effect.js";
+import { effectReport, filterByTask, type EffectReport, type PairScore, type Side } from "./effect.js";
 import { adapterFor } from "../adapters/factory.js";
 
 const REPO = resolve(import.meta.dirname, "../..");
@@ -60,12 +60,18 @@ function announceEnv(): void {
 const LOG = join(REPO, ".skein/events.jsonl");
 const rel = (p: string) => p.slice(REPO.length + 1);
 
-async function report(): Promise<void> {
-  const { events, malformed } = await readEvents(LOG);
-  if (events.length === 0) {
+async function report(taskFilter?: string): Promise<void> {
+  const { events: all, malformed } = await readEvents(LOG);
+  if (all.length === 0) {
     console.log("Günlük boş. Önce bir koşu yap: cli.ts <görev-id>");
     return;
   }
+  const events = taskFilter === undefined ? all : filterByTask(all, taskFilter);
+  if (events.length === 0) {
+    console.log(`Günlükte "${taskFilter}" görevine ait koşu yok.`);
+    return;
+  }
+  if (taskFilter !== undefined) console.log(`yalnızca ${taskFilter}\n`);
   const s = summarize(events);
   console.log(`${events.length} olay, ${s.runIds.length} koşu` +
     (malformed > 0 ? `, ${malformed} BOZUK SATIR` : "") + "\n");
@@ -415,43 +421,64 @@ async function puanla(judgeSpec: string, rescore: boolean, dry: boolean): Promis
 
   for (const f of out.failed) console.log(`  PUANLANAMADI ${f.cell}\n      ${f.error}`);
   console.log(`\n  ${out.scored} hücre puanlandı · $${out.costUsd.toFixed(4)}`);
-  console.log("  Sonuç için: cli.ts report");
+  console.log("  Sonuç için: cli.ts report [--gorev=<görev-id>]");
 }
 
 /** Hücre tablosu, etkileşim terimi ve önceden ilan edilmiş karar. */
-function printEffect(e: EffectReport): void {
-  if (e.pairs.length === 0) {
-    console.log("\nPuanlanmış denetim hücresi yok (cli.ts puanla).");
-    return;
-  }
+function printSide(e: { pairs: PairScore[]; same: Side | null; crossed: Side | null;
+  relativeReduction: number | null; interaction: number | null;
+  perRun: { relativeReduction: number | null }[]; repeats: number }, indent: string): void {
   const pct = (n: number): string => `%${(n * 100).toFixed(0)}`;
-  console.log("\n=== kaçırma tablosu ===");
-  console.log("  üretici → denetçi                         hücre  kanca  kaçan   oran");
+  console.log(`${indent}üretici → denetçi                         hücre  kanca  kaçan   oran`);
   for (const p of [...e.pairs].sort((a, b) => Number(a.crossed) - Number(b.crossed))) {
     const who = `${p.producer} → ${p.reviewer}${p.crossed ? "  ÇAPRAZ" : ""}`;
-    console.log(`  ${who.padEnd(42)}${String(p.cells).padStart(4)}` +
+    console.log(`${indent}${who.padEnd(42)}${String(p.cells).padStart(4)}` +
       `${String(p.hooks).padStart(7)}${String(p.missed).padStart(7)}` +
       `${pct(p.missRate).padStart(7)}`);
   }
   if (e.same && e.crossed) {
-    console.log(`\n  aynı  : ${e.same.missed}/${e.same.hooks} kaçtı (${pct(e.same.missRate)})`);
-    console.log(`  çapraz: ${e.crossed.missed}/${e.crossed.hooks} kaçtı (${pct(e.crossed.missRate)})`);
+    console.log(`${indent}aynı  : ${e.same.missed}/${e.same.hooks} kaçtı (${pct(e.same.missRate)})` +
+      `   çapraz: ${e.crossed.missed}/${e.crossed.hooks} kaçtı (${pct(e.crossed.missRate)})`);
   }
   if (e.relativeReduction !== null) {
-    console.log(`  göreli azalma: ${pct(e.relativeReduction)}`);
+    console.log(`${indent}göreli azalma: ${pct(e.relativeReduction)}`);
   }
   if (e.interaction !== null) {
-    console.log(`  etkileşim terimi: ${(e.interaction * 100).toFixed(1)} puan ` +
+    console.log(`${indent}etkileşim terimi: ${(e.interaction * 100).toFixed(1)} puan ` +
       "((AA+BB)/2 − (AB+BA)/2; pozitif = çeşitlilik lehine)");
   }
   if (e.repeats > 1) {
     const each = e.perRun
       .map((r) => (r.relativeReduction === null ? "—" : pct(r.relativeReduction)))
       .join(", ");
-    console.log(`  koşu başına azalma (k=${e.repeats}): ${each}`);
+    console.log(`${indent}koşu başına azalma (k=${e.repeats}): ${each}`);
+  }
+}
+
+/**
+ * Önce gruplar, sonra havuz.
+ *
+ * Sıra kasıtlı: karar grup seviyesinde veriliyor ve havuzlanmış oran —
+ * kanca sayıları eşit olmadığı için — bir görev sınıfındaki ters yönü
+ * gizleyebiliyor. Havuz sayısını üste koymak, okuyanı yanlış sayıya
+ * bakmaya davet ederdi.
+ */
+function printEffect(e: EffectReport): void {
+  if (e.groups.length === 0) {
+    console.log("\nPuanlanmış denetim hücresi yok (cli.ts puanla).");
+    return;
+  }
+  for (const g of e.groups) {
+    console.log(`\n=== ${g.taskId}  ·  ${g.models.join(" × ")}  ·  k=${g.repeats} ===`);
+    printSide(g, "  ");
+    console.log(`  karar: ${g.verdict.code.toUpperCase()} — ${g.verdict.reason}`);
+  }
+  if (e.groups.length > 1) {
+    console.log("\n=== havuzlanmış (yalnızca bilgi; karar buradan çıkmaz) ===");
+    printSide(e, "  ");
   }
   if (e.unverified > 0) {
-    console.log(`  ! ${e.unverified} alıntı raporda bulunamadı — puanlayıcının kendi sağlığına bak`);
+    console.log(`\n  ! ${e.unverified} alıntı raporda bulunamadı — puanlayıcının kendi sağlığına bak`);
   }
   console.log(`\n  KARAR: ${e.verdict.code.toUpperCase()}`);
   console.log(`  ${e.verdict.reason}`);
@@ -462,7 +489,7 @@ const audit = argv.includes("--audit");
 const force = argv.includes("--force");
 const [cmd, ...rest] = argv.filter((a) => !a.startsWith("--"));
 if (cmd === "report") {
-  await report();
+  await report(argv.find((a) => a.startsWith("--gorev="))?.slice("--gorev=".length));
 } else if (cmd === "doctor") {
   await doctor(rest[0] ?? "codex:gpt-5.5");
 } else if (cmd === "puanla") {
@@ -474,6 +501,6 @@ if (cmd === "report") {
 } else if (cmd) {
   await run(cmd, rest[0] ?? "claude", rest[1] ?? "claude-opus-5", audit);
 } else {
-  console.error("kullanım: cli.ts <görev-id> [sağlayıcı] [model] [--audit]\n         cli.ts matrix <görev-id> [sağlayıcı:model] [sağlayıcı:model]\n         cli.ts doctor <sağlayıcı:model>\n         cli.ts puanla [hakem-modeli] [--kuru] [--yeniden]\n         cli.ts selftest [görev-id]\n         cli.ts report");
+  console.error("kullanım: cli.ts <görev-id> [sağlayıcı] [model] [--audit]\n         cli.ts matrix <görev-id> [sağlayıcı:model] [sağlayıcı:model]\n         cli.ts doctor <sağlayıcı:model>\n         cli.ts puanla [hakem-modeli] [--kuru] [--yeniden]\n         cli.ts selftest [görev-id]\n         cli.ts report [--gorev=<görev-id>]");
   process.exit(2);
 }

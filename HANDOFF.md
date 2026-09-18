@@ -7,7 +7,7 @@ yapıştırılabilsin diye yazıldı: aşağısı Skein'i tanımayan birine de y
 **Dal:** `claude/project-plan-brainstorm-pthvoc` — `claude/project-thread-sc56cs`
 ileri sarılıp üstüne devam edildi, yani iki dalın işi bu dalda birleşti.
 `sc56cs` olduğu yerde duruyor; yeni iş burada.
-**Durum:** 501 test yeşil, typecheck temiz, `selftest` 5/5, ağaç temiz.
+**Durum:** 506 test yeşil, typecheck temiz, `selftest` 5/5, ağaç temiz.
 **Kod:** ~9.3k satır ürün + ~6.1k satır test.
 
 ---
@@ -33,13 +33,14 @@ gördüğün yer. Kod editörü **değil** — bu sınır kasıtlı (`ARCHITECTU
 
 ## Tek cümlede nerede kaldık
 
-**Deney artık cevap üretebiliyor.** Önceki devir teslim koşum takımını
-hazır bırakmıştı ama bir boşluk vardı: 2x2 bitince elde dört serbest metin
-rapor kalıyordu ve onları **hiçbir şey puanlamıyordu** — ana metrik
-(kaçırma) elle, hangi hücrenin çapraz olduğu bilinerek okunacaktı. Bu
-oturumda körlenmiş ve alıntıyla doğrulanan puanlama katmanı ile karar
-kuralı yazıldı. **Kalan tek iş hâlâ aynı: çapraz satıcı 2x2'sini koşmak**
-— ve o, uzak konteynerde değil senin makinende yapılmalı (aşağıda sebebi).
+**Deney artık cevap üretebiliyor — ve cevabı doğru sayıyor.** Önceki
+oturum körlenmiş puanlamayı ve karar kuralını yazmıştı; bu oturumda kuralın
+kendisinde bir sessiz hata bulundu: "k≥3" şartı koşu sayısıyla ölçülüyordu,
+yani **üç farklı görevi birer kez koşmak k=3 görünüyor** ve karar kuralını
+açıyordu. Artık tekrar, görev × model kurgusu grubunun içinde sayılıyor.
+**Kalan tek iş hâlâ aynı: çapraz satıcı 2x2'sini koşmak** — ve o, uzak
+konteynerde değil senin makinende yapılmalı (aşağıda sebebi; bugün bir kez
+daha sınandı, vekil `api.openai.com` CONNECT'ini hâlâ 403 ile kesiyor).
 
 | # | Adım | Durum |
 |---|---|---|
@@ -49,7 +50,8 @@ kuralı yazıldı. **Kalan tek iş hâlâ aynı: çapraz satıcı 2x2'sini koşm
 | 4 | Kapı ekrandan açılıyor | ✅ |
 | 5 | Akış ekrandan kuruluyor | ✅ |
 | — | Kusur üreten görev seti | ✅ |
-| — | **Körlenmiş puanlama + karar kuralı** | ✅ **bu oturum** |
+| — | Körlenmiş puanlama + karar kuralı | ✅ |
+| — | **Tekrar grup içinde sayılıyor** | ✅ **bu oturum** |
 | 6 | Planlamada ajanlar arası yazılı tur | ⬜ ölçümden sonra |
 
 ---
@@ -59,9 +61,9 @@ kuralı yazıldı. **Kalan tek iş hâlâ aynı: çapraz satıcı 2x2'sini koşm
 Bu bölüm sıradaki oturum için değil, senin için. Dört adım.
 
 ```bash
-# 1. dalı al
-git fetch origin claude/project-thread-sc56cs
-git checkout claude/project-thread-sc56cs
+# 1. dalı al  (iş bu dalda; sc56cs geride kaldı)
+git fetch origin claude/project-plan-brainstorm-pthvoc
+git checkout claude/project-plan-brainstorm-pthvoc
 npm install
 
 # 2. kancalar sağlam mı — ajan çağırmaz, PARA HARCAMAZ
@@ -74,15 +76,21 @@ npx tsx src/bench/cli.ts doctor codex:gpt-5.5
 #    "ÇALIŞMIYOR — ama bayraklar yüzünden değil" → ağ/oturum sorunu, adaptöre dokunma
 #    "ÇALIŞMIYOR. Bayraklar yanlış olabilir" → codex sürümün farklı, DEFAULT_ARGS'ı düzelt
 
-# 4. çapraz satıcı 2x2
-npx tsx src/bench/cli.ts matrix snapshot-store claude:claude-haiku-4-5-20251001 codex:<model>
+# 4. çapraz satıcı 2x2 — ÜÇ GÖREV × ÜÇ TEKRAR = 9 matris
+#    Model çiftini dokuzunda da AYNI yaz; değişirse ayrı ölçüm grubu olur.
+for g in snapshot-store csv-roundtrip async-pool; do
+  for k in 1 2 3; do
+    npx tsx src/bench/cli.ts matrix $g claude:claude-haiku-4-5-20251001 codex:<model>
+  done
+done
 
 # 5. raporları puanla — önce kuru koş (ajan çağırmaz, PARA HARCAMAZ)
 npx tsx src/bench/cli.ts puanla --kuru
 npx tsx src/bench/cli.ts puanla claude:claude-opus-5
 
-# 6. sonuç
+# 6. sonuç — hepsi, ya da tek görev
 npx tsx src/bench/cli.ts report
+npx tsx src/bench/cli.ts report --gorev=snapshot-store
 ```
 
 **İzin modu:** konteynerde `--dangerously-skip-permissions` root altında
@@ -112,6 +120,11 @@ Sayılar `.skein/events.jsonl`'den gelir, ekrana basılan metinden değil.
 
 **k=1 ile karar çıkmaz, bilerek:** tek koşuda `report` sayıyı gösterir ama
 "YETERSİZ" der. Karar için k≥3 — DESIGN'ın kendi kuralı, artık kodda.
+
+**k GÖREV BAŞINA sayılır.** Üç görevi birer kez koşmak k=3 değildir, üç ayrı
+k=1'dir; `report` bunu artık ayırt ediyor (18 Eylül düzeltmesi, aşağıda).
+Aynı sebeple: model çiftini kampanya ortasında değiştirirsen o koşular ayrı
+bir gruba düşer ve iki grubun da k'sı ayrı sayılır.
 
 ---
 
@@ -160,7 +173,7 @@ ve Windows notlarını içeriyor.
 | 2x2 orkestrasyonu + ölçüm gücü koruması | `src/bench/matrix.ts` |
 | Körlenmiş puanlama + alıntı doğrulaması | `src/bench/judge.ts` |
 | Puanlanacak hücreleri günlükten çıkarma | `src/bench/score.ts` |
-| Etkileşim terimi + önceden ilan edilmiş karar | `src/bench/effect.ts` |
+| Ölçüm grupları, etkileşim terimi, ilan edilmiş karar | `src/bench/effect.ts` |
 | Ağ hatasını bayrak hatasından ayırma | `src/bench/failure.ts` |
 
 ---
@@ -231,7 +244,43 @@ geldiği demek.
 
 ---
 
-## Bu oturumda ne yapıldı — puanlama katmanı
+## Bu oturumda ne yapıldı — tekrarın sayılma biçimi
+
+**Bulunan hata, ölçümün kendisindeydi.** Karar kuralının "k≥3" şartı kodda
+**koşu sayısıyla** ölçülüyordu, ve bir koşu = bir matris = bir görev.
+Yani üç farklı görevi birer kez koşmak "k=3" görünüyor ve karar kuralını
+açıyordu. Aynı sentetik günlük iki sürüme verildi:
+
+```
+ESKİ: k = 3   karar = OLUMLU   (%67 azalma, "3 tekrarın hepsinde aynı yönde")
+YENİ: gorev-1:k=1 gorev-2:k=1 gorev-3:k=1   karar = YETERSİZ
+```
+
+Kural, tam da engellemek için yazıldığı hatayı yapmaya izin veriyordu — ve
+bu, $12-15'lik koşu bittikten SONRA fark edilecekti.
+
+**Düzeltme:** ölçüm grubu = **görev × model kurgusu**. k grubun içinde
+sayılır, karar grup seviyesinde verilir (`src/bench/effect.ts`). Kurgu
+ayrımı ikinci bir sessiz hatayı da kapatıyor: ölçüm gücü çıkmayınca modeli
+değiştirmek gerçek bir senaryo ve eski hesap iki kurgunun hücrelerini tek
+oranda topluyordu.
+
+**Gruplar çelişirse karar `belirsiz`** ve hangi sınıfın hangi yöne gittiği
+yazılıyor. Havuzlanmış oran hâlâ basılıyor ama kararın kaynağı değil:
+görevlerin kanca sayıları eşit değil (16/18/12), yani havuz ağırlığı kanca
+çoğunluğu olan göreve verir. Gerçek bir örnekte havuz %25 azalma (olumlu
+görünüm) gösterirken alt sınıflardan biri %-200 çıkıyor.
+
+**Eşikler değişmedi** (%20 / %10) ve bu ek **hiçbir çapraz satıcı verisi
+görülmeden** yazıldı — dört hücre hâlâ koşulmadı. `bench/DESIGN.md`'de
+"Ek — 18 Eylül" olarak duruyor.
+
+**Ayrıca:** `report --gorev=<id>` ile günlük tek göreve daraltılabiliyor
+(eski koşular aynı dosyada birikiyor).
+
+---
+
+## Önceki oturumda ne yapıldı — puanlama katmanı
 
 **Boşluk şuydu:** `matrix` bitiyor, elde dört `rapor.txt` kalıyor, ve ana
 metriği (kaçırma) hesaplayan hiçbir şey yok. Puanlama elle yapılacaktı —
@@ -292,7 +341,7 @@ varsa prompt tutmamış demektir; hücre puansız kalır ama rapor durur, yani
 
 ---
 
-## Önceki oturumda ne yapıldı
+## Daha önce ne yapıldı — görev seti
 
 **Üç yeni görev sınıfı**, her biri ayrı bir hipotez:
 

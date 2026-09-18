@@ -200,6 +200,36 @@ Sonucu gördükten sonra eşik belirlemek, deneyi süse çevirir. Şimdiden:
   çerçevelenir.
 - Arada → k artırılır, görev seti genişletilir.
 
+### Ek — 18 Eylül: tekrar **grup içinde** sayılır
+
+Kuralın k'sı stokastikliğe karşıdır: aynı kurgunun tekrarı. Kodda ise koşu
+sayısıyla ölçülüyordu ve bir koşu = bir matris = bir görev. Sonuç: **üç
+farklı görevi birer kez koşmak "k=3" görünüyor ve karar kuralını
+açıyordu.** Aynı günlük iki sürüme verildiğinde:
+
+```
+ESKİ: k = 3   karar = olumlu   (%67 azalma, "3 tekrarın hepsinde aynı yönde")
+YENİ: gorev-1:k=1 gorev-2:k=1 gorev-3:k=1   karar = yetersiz
+```
+
+Yani kural, tam da engellemek için yazıldığı hatayı — tek koşudan sonuç
+çıkarmayı — üç kez üst üste yapmaya izin veriyordu.
+
+**Düzeltme:** ölçüm grubu = **görev × model kurgusu**. k grubun içinde
+sayılır, karar grup seviyesinde verilir. Kurgu ayrımı ikinci bir sessiz
+hatayı da kapatıyor: ölçüm gücü çıkmayınca modeli değiştirmek gerçek bir
+senaryo ve eski hesap iki kurgunun hücrelerini tek orana topluyordu.
+
+**Gruplar çelişirse** sonuç `belirsiz` ve sınıf başına okunur. Havuzlanmış
+oran yine basılıyor ama karar ondan çıkmıyor: görevlerin kanca sayıları eşit
+değil (16/18/12), yani havuz ağırlığı kanca çoğunluğu olan göreve verir ve
+bir sınıftaki ters yönü yutabilir.
+
+**Eşikler değişmedi** (%20 / %10). Bu ek kuralı gevşetmiyor, sıkıştırıyor —
+ve **hiçbir çapraz satıcı verisi görülmeden** yazıldı: dört hücre hâlâ
+koşulmadı.
+
+
 ## Bilinen sınırlar
 
 - **Görev dili TypeScript.** Koşum takımı ile aynı ekosistem olduğu için
