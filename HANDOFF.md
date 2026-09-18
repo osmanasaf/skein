@@ -33,11 +33,11 @@ gördüğün yer. Kod editörü **değil** — bu sınır kasıtlı (`ARCHITECTU
 
 ## Tek cümlede nerede kaldık
 
-**Ölçüm takımı bitti; kalan tek iş koşmak.** Bu oturumda üç eksik
-kapandı: tekrarın görev × kurgu grubu içinde sayılması, 2. yer gerçeği
+**Ölçüm takımı bitti; kalan tek iş koşmak.** Üç oturumda kapanan üç
+eksik: tekrarın görev × kurgu grubu içinde sayılması, 2. yer gerçeği
 (bulguları gerçek/nit/yanlış ayıran hakem katmanı) ve tur başına artefakt
-anlık görüntüsü. DESIGN'ın yapılacaklar listesinde deneyle ilgili açık
-madde kalmadı. **Kalan tek iş hâlâ aynı: çapraz satıcı 2x2'sini koşmak** —
+anlık görüntüsü. Bu oturumda görev seti 5'ten 8'e çıktı — biri (
+`cache-refresh`) elde ölçüm gücü en yüksek hücre; ikisi kalibre edilmedi. **Kalan tek iş hâlâ aynı: çapraz satıcı 2x2'sini koşmak** —
 ve o, uzak konteynerde değil senin makinende yapılmalı (aşağıda sebebi;
 bugün bir kez daha sınandı, vekil `api.openai.com` CONNECT'ini hâlâ 403 ile
 kesiyor).
@@ -53,7 +53,8 @@ kesiyor).
 | — | Körlenmiş puanlama + karar kuralı | ✅ |
 | — | Tekrar grup içinde sayılıyor | ✅ |
 | — | Hakem katmanı — 2. yer gerçeği | ✅ |
-| — | **Tur başına artefakt anlık görüntüsü** | ✅ **bu oturum** |
+| — | Tur başına artefakt anlık görüntüsü | ✅ |
+| — | **Görev seti 5 → 8** | ✅ **bu oturum** |
 | 6 | Planlamada ajanlar arası yazılı tur | ⬜ ölçümden sonra |
 
 ---
@@ -80,7 +81,7 @@ npx tsx src/bench/cli.ts doctor codex:gpt-5.5
 
 # 4. çapraz satıcı 2x2 — ÜÇ GÖREV × ÜÇ TEKRAR = 9 matris
 #    Model çiftini dokuzunda da AYNI yaz; değişirse ayrı ölçüm grubu olur.
-for g in snapshot-store csv-roundtrip async-pool; do
+for g in snapshot-store csv-roundtrip async-pool; do   # + cache-refresh (aşağıya bak)
   for k in 1 2 3; do
     npx tsx src/bench/cli.ts matrix $g claude:claude-haiku-4-5-20251001 codex:<model>
   done
@@ -116,6 +117,12 @@ toplamda $0.93 tutmuştu. Üç görev × k=3 kabaca **$12–15**.
 
 **Üç görev de koşulmalı** (`snapshot-store`, `csv-roundtrip`, `async-pool`).
 Tek görevlik sonuç "bu görevde" der.
+
+**Dördüncü aday: `cache-refresh`.** Haiku'da 22 kancanın 10'u kırmızı, yani
+en güçlü ölçüm hücresi elde bu. Kampanyaya eklemek maliyeti üçte bir
+artırır (~$4-5); bütçe elveriyorsa değer, çünkü kusur oranı yüksek olan
+hücre denetim farkını en net gösteren hücredir. `config-patch` ve
+`outbox-flush`'ı koşma: iki modelde de temiz, ölçüm gücü yok.
 
 **Ölçüm gücü yoksa** `matrix` denetimi atlar ve sebebini yazar. Yine de
 koşturmak istersen `--force`.
@@ -234,6 +241,9 @@ denetim turunun* değerini gösteriyor, *çapraz satıcı denetiminin* değil.
 | `snapshot-store` | 16 | temiz (×2) | **14/16** — 2 kırmızı |
 | `csv-roundtrip` | 18 | temiz (×2) | **17/18** — 1 kırmızı |
 | `async-pool` | 12 | temiz (×2) | **10/12** — 2 kırmızı |
+| `cache-refresh` | 22 | temiz | **12/22** — 10 kırmızı |
+| `config-patch` | 25 | temiz (×2) | temiz |
+| `outbox-flush` | 17 | temiz | temiz |
 | `retry-backoff` | 9 | 5 koşuda 4'ü kusurlu | — |
 | `token-bucket` | 14 | temiz | temiz |
 
@@ -248,13 +258,81 @@ eksik olan tek şey **koşunun kendisi**: ölçen, puanlayan ve karar veren
 katmanların üçü de yazılı ve testli.
 
 **Bilinmeyen:** frontier modelde kusurun hangi ölçekte başladığı.
-`claude-opus-5` beş görevde altı koşuda bir kez bile kusur üretmedi. Bu,
-"frontier model kusur üretmiyor" demek değil — bu beş görevin ona kolay
-geldiği demek.
+`claude-opus-5` sekiz görevde dokuz koşuda bir kez bile kusur üretmedi —
+üçü onu hedefleyerek yazılmış görevlerde. Bu "frontier model kusur
+üretmiyor" demek değil; bu sekiz görevin ona kolay geldiği demek. Bugünkü
+ders: zorluk, yazılmış kural sayısından gelmiyor (aşağıya bak).
 
 ---
 
-## Bu oturumda ne yapıldı — tur başına anlık görüntü
+## Bu oturumda ne yapıldı — görev seti 5'ten 8'e
+
+Üç yeni görev, üçü de "mevcut koda dokun" sınıfında ve her biri ayrı bir
+tuzağı hedefliyor:
+
+| Görev | Kanca | Tuzak |
+|---|---:|---|
+| `cache-refresh` | 22 | Geçersiz kılmadan önce başlamış yükleme, taze değerin üstüne yazabilir (çağ sayacı gerekiyor) |
+| `config-patch` | 25 | Değişmeyen alt ağaç kimliğini korumalı; `render.ts` kimliğe göre önbellekliyor |
+| `outbox-flush` | 17 | Taşıyıcı kimliğe göre tekilleştiriyor; yeniden deneme aynı kimlikle olmalı |
+
+`config-patch` yeni bir kanca biçimi de getirdi: **tohumu sabit rastgele
+diziler** (300 ağaç/yama çifti, bağımsız bir uygulamaya karşı). Gerekçe:
+elle yazılmış yirmi örnek, elle yazılmış bir çözümün *düşündüğü* yirmi
+durumu ölçer.
+
+### Kalibrasyon — ve dürüst sonuç
+
+| Görev | Naif çözüm | `claude-opus-5` | `claude-haiku-4-5` |
+|---|---|---|---|
+| `cache-refresh` | 18/22 | **22/22 temiz** | **12/22 — 10 kırmızı** |
+| `config-patch` | 17/25 | **25/25 temiz** | 25/25 temiz |
+| `outbox-flush` | — | **17/17 temiz** | 17/17 temiz |
+
+Naif çözümü elle yazıp kancalara karşı koştum: üçünde de hedeflenen tuzağa
+tam olarak düştü, yani kancalar ölçmek istedikleri şeyi ölçüyor.
+
+**Ama hedef tutmadı.** İş "frontier modelde de kusur üreten görev" idi;
+`claude-opus-5` üçünü de (config-patch'i rastgele kancalar eklendikten
+sonra tekrar) temiz çözdü. Sekiz görev, dokuz tek-atış koşu, sıfır
+kanıtlanmış kusur.
+
+### Bundan çıkan ders
+
+Tuzakları bilerek zor seçtim — çağ sayacı, yapısal paylaşım, kimlik
+kararlılığı. Üçü de işe yaramadı ve sebebi sonradan açık: **spec her köşeyi
+tek tek yazıyordu.** Her kural yazılıysa iş kuralları uygulamaktır ve
+frontier model bunu yapar. Kusur üreten örnekler bunun tersi: `snapshot-store`
+haiku'da kusur üretiyor çünkü kritik gereksinim spec'te değil
+`selector.ts`'te yaşıyor.
+
+`outbox-flush` bu ilkeyle tasarlandı (kimlik kuralı yalnızca `sink.ts`'te
+yazılı) ve yine de iki modelde de temiz çıktı — yani "yazılmamış gereksinim"
+tek başına yetmiyor; gereksinimin **türetilmesi de zor** olmalı. Sıradaki
+görev yazan bunu baştan bilsin.
+
+### `cache-refresh` × haiku: kusur sınıfı kayda değer
+
+Kusuru tur anlık görüntüsünden okudum (dün yazılan `cli.ts turlar`). Model
+çağ sayacını doğru kurmuş, ama yanına **hiç temizlenmeyen** bir küme
+koymuş: bir anahtar bir kez geçersiz kılındıysa bir daha asla önbelleğe
+yazılamıyor. On kırmızı kancanın kök sebebi tek. Doğru fikir + yanlış
+ikinci mekanizma — ve denetçinin "bu küme nerede temizleniyor" diye sorarak
+yakalayabileceği türden, yani ölçüm için aranan kusur.
+
+### Sete kabul durumu
+
+- **`cache-refresh` kampanyaya girer** (haiku tarafında ölçüm gücü var).
+- **`config-patch` ve `outbox-flush` kalibre edilmedi**: iki modelde de
+  temiz. Depoda duruyorlar, naif çözüme karşı güçleri kanıtlı, ama bugünkü
+  iki üreticiyle ölçüm üretmiyorlar — `matrix`in kendi koruması zaten
+  atlayacak.
+
+**Harcama:** 6 canlı koşu, toplam ~$1.87.
+
+---
+
+## Önceki oturumda ne yapıldı — tur başına anlık görüntü
 
 **Sınır şuydu:** ajan dosyayı **yerinde** değiştiriyor, yani bir turun
 sonundaki hâl bir sonraki turda kayboluyor. Koşu bittikten sonra elde
@@ -309,7 +387,7 @@ ikinci bir tarih kaynağı koymak olurdu.
 
 ---
 
-## Önceki oturumda ne yapıldı — 2. yer gerçeği
+## Daha önce — 2. yer gerçeği
 
 **DESIGN'ın iki katmanından ikincisi yazıldı.** Nesnel katman yalnızca
 kanıtlanmış kusurları görüyor (kırmızı gizli test); raporun geri kalanı —
@@ -532,7 +610,9 @@ Doğrulama iki eksik çıkardı:
 - **Rol promptlarını ekrandan düzenlemek.** Prompt içeriği her tur taze
   okunuyor, yani düzenleme yoldaki kartın **sonraki turunu** etkiler.
   Dondurma değişmezinin kenarında duruyor, kendi kararını hak ediyor.
-- Kalan bench görevleri (12 hedeflenmişti, 5 var).
+- Kalan bench görevleri (12 hedeflenmişti, 8 var) — ve asıl açık
+  soru sayı değil sınıf: frontier modelde kusur üreten bir görev hâlâ
+  yazılmadı (aşağıdaki oturum kaydına bak).
 - **Büyük artefaktlı görev sınıfı.** Tur anlık görüntüsü her turda tam
   kopya alıyor; bugünkü artefaktlar birkaç KB olduğu için bedeli
   ölçülemeyecek kadar küçük, ama büyük artefaktlı bir görev gelirse bu

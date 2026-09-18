@@ -1,0 +1,8 @@
+id: config-patch
+title: Ayar ağacına kimlik koruyan yama uygula
+language: ts
+spec: spec.md
+entry: src/patch.ts
+seed: seed
+hidden:
+  command: ["npx", "vitest", "run", "--reporter=json"]

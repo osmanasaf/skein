@@ -727,6 +727,95 @@ Sıralama önemli: (1) bugün bir cevap verir, (2) daha genel bir cevap
 verir. Birinciyi koşmadan ikinciye yatırım yapmak, ölçüm takımının
 çalıştığını hiç görmeden görev yazmak demek.
 
+## İkinci tur: üç görev daha — ve frontier duvarının teyidi
+
+Set 5'ten 8 göreve çıktı. Üçü de "mevcut koda dokun" sınıfında ve her biri
+ayrı bir tuzağı hedefliyor:
+
+| Görev | Kanca | Hedeflenen tuzak |
+|---|---:|---|
+| `cache-refresh` | 22 | **Bayat yazım.** Geçersiz kılmadan önce başlamış yükleme sonradan bitip taze değerin üstüne yazabilir; doğru çözüm anahtar başına bir çağ sayacı gerektiriyor. |
+| `config-patch` | 25 | **Yapısal paylaşım.** Değişmeyen alt ağaç kimliğini korumalı; `render.ts` çizimi düğüm kimliğine göre önbelleklediği için gereksiz yeniden kurma ekranı yeniden çizdiriyor. |
+| `outbox-flush` | 17 | **Kimlik kararlılığı.** Taşıyıcı kimliğe göre tekilleştiriyor, yani yeniden deneme aynı kimlikle yapılmalı; mesajı gövdesinden yeniden kuyruğa koymak aynı gövdeyi iki kez teslim ettirir. |
+
+`config-patch` ayrıca yeni bir kanca biçimi taşıyor: **tohumu sabit
+rastgele diziler.** 300 rastgele ağaç/yama çifti üretilip hem değer
+(bağımsız, kimliği umursamayan bir uygulamaya karşı) hem kimlik kuralı
+sınanıyor. Gerekçe: elle yazılmış yirmi örnek, elle yazılmış bir çözümün
+**düşündüğü** yirmi durumu ölçer; kusur yazarın aklına gelmeyen birleşimde
+çıkar.
+
+### Kalibrasyon — üçü de yazıldığı gibi çalışıyor, ama frontier duvarı yerinde
+
+| Görev | Naif çözüm | `claude-opus-5` | `claude-haiku-4-5` |
+|---|---|---|---|
+| `cache-refresh` | 18/22 (4 kırmızı) | **22/22 temiz** | **12/22 — 10 kırmızı** |
+| `config-patch` | 17/25 (8 kırmızı) | **25/25 temiz** | 25/25 temiz |
+| `outbox-flush` | — | **17/17 temiz** | 17/17 temiz |
+
+"Naif çözüm", bir modelin yazması muhtemel olan akla ilk gelen hâl; elle
+yazılıp kancalara karşı koşuldu. Üç görevde de hedeflenen tuzağa tam olarak
+düştü — yani kancalar ölçmek istedikleri şeyi ölçüyor.
+
+**Ama `claude-opus-5` dördünde de temiz çıktı** (`config-patch` rastgele
+kancalar eklendikten sonra tekrar koşuldu). Toplam: dokuz görev, dokuz
+tek-atış koşu, sıfır kanıtlanmış kusur.
+
+### Bundan çıkan ders: kusuru üreten şey kuralın zorluğu değil
+
+Bu turda tuzaklar bilerek "zor" seçildi — çağ sayacı, yapısal paylaşım,
+kimlik kararlılığı. Üçü de işe yaramadı, ve sebebi sonradan bakınca açık:
+**spec her köşeyi tek tek yazıyordu.** Her kural yazılıysa iş, kuralları
+uygulamaktır; frontier model bunu yapar.
+
+Kusur üreten iki örnek bunun tersi:
+
+- `snapshot-store` (haiku): `selector.ts` sürüme göre önbelleklediği için
+  geri almanın sürümü İLERLETMESİ gerekiyor — spec bunu söylemiyor,
+  `selector.ts` söylüyor.
+- `cache-refresh` (haiku): aşağıdaki kusur.
+
+Yani ölçüm gücü, **yazılmamış ama koddan türetilebilir** gereksinimden
+geliyor; yazılmış köşe sayısından değil. `outbox-flush` bu ilkeyle
+tasarlandı (kimlik kuralı yalnızca `sink.ts`'te yazılı) ve yine de iki
+modelde de temiz çıktı — yani ilke tek başına yetmiyor, gereksinimin
+**türetilmesi de zor** olmalı.
+
+### `cache-refresh` × haiku: mezar taşı hiç kaldırılmıyor
+
+Kusur, tur anlık görüntüsünden okundu (`cli.ts turlar`). Model çağ sayacını
+doğru kurmuş, ama yanına kalıcı bir küme koymuş:
+
+```ts
+readonly #invalidated = new Set<string>();
+...
+invalidate(key) { this.#lru.delete(key); this.#bump(key); this.#invalidated.add(key); }
+...
+if (!this.#invalidated.has(key) && this.#loadGen.get(key) === gen) this.#write(key, value);
+```
+
+Küme hiçbir yerde temizlenmiyor. Yani bir anahtar bir kez geçersiz
+kılındıysa **bir daha asla önbelleğe yazılamıyor**: sonraki `get` her
+seferinde yeniden yüklüyor, sürüm hiç artmıyor, `view.ts` bayat kalıyor,
+LRU hiç dolmadığı için kapasite kancaları da düşüyor. On kırmızı kancanın
+tek bir kök sebebi var.
+
+Kusur sınıfı olarak öğretici: **doğru fikir (çağ) + yanlış ikinci mekanizma
+(kalıcı mezar taşı)**. Denetçinin yakalaması için kodu okuyup "bu küme
+nerede temizleniyor" diye sorması yeterli — yani denetimin yakalayabileceği
+türden bir kusur, ki ölçüm için aranan tam olarak bu.
+
+### Sete kabul durumu
+
+`Görev seti kabul ölçütü` gereği:
+
+- **`cache-refresh` ölçüm gücü taşıyor** (haiku tarafında 10 kırmızı, hepsi
+  değil; kök sebep tek, yani rastgele değil). Kampanyaya girer.
+- **`config-patch` ve `outbox-flush` kalibre edilmedi**: iki modelde de
+  temiz (k=1). Depoda duruyorlar ve naif çözüme karşı güçleri kanıtlı, ama
+  bugünkü iki üreticiyle ölçüm üretmiyorlar. Matrisin kendi koruması
+  zaten atlayacak ("Ölçüm gücü yok").
+
 ## Çapraz satıcı nerede koşulabilir
 
 `codex` CLI'ın API anahtarına ihtiyacı yok — ChatGPT oturumuyla da çalışıyor.
@@ -764,13 +853,14 @@ yalnızca aynı satıcının iki modeliyle (ör. `haiku × sonnet`) koşulabilir
 - [x] Olay günlüğü — yalnızca-ekleme JSONL, katı doğrulama, özet görünümü
 - [x] Audit gate — parmak izi, kilitli durum, tur sayacı, üst sınır
 - [x] Tur başına artefakt anlık görüntüsü — `turlar/` kopyaları + `cli.ts turlar`
-- [x] Kanca sağlamlığı — `hidden/reference/` + `selftest`, 5/5 görev geçiyor
+- [x] Kanca sağlamlığı — `hidden/reference/` + `selftest`, 8/8 görev geçiyor
 - [x] Görev formatında `seed/` — mevcut koda dokunan görev sınıfı
-- [ ] Görev zorluk kalibrasyonu — `snapshot-store` × `claude-haiku-4-5`
-      kusur üretiyor (k=1); `claude-opus-5` beş görevde de temiz
+- [ ] Görev zorluk kalibrasyonu — haiku tarafında ölçüm gücü var
+      (`snapshot-store`, `csv-roundtrip`, `async-pool`, `cache-refresh`);
+      `claude-opus-5` sekiz görevin dokuz koşusunda da temiz
 - [x] Denetim koşucusu (aynı artefakt → iki denetçi), 2x2 orkestrasyonu
 - [x] Nesnel katmanın puanlayıcısı — körlenmiş, alıntı doğrulamalı
 - [x] Hakem katmanı — 2. yer gerçeği (nit / yanlış pozitif sınıflaması)
-- [ ] Kalan görevler — darboğaz hâlâ burası, ama artık daha dar: elde
-      ölçüm gücü olan bir hücre var (`snapshot-store` × haiku)
+- [ ] Kalan görevler — 8/12. Darboğaz artık sayı değil **sınıf**: haiku
+      düzeyinde ölçüm gücü var, frontier düzeyinde hâlâ yok
 - [x] Rapor: hücre tablosu + etkileşim terimi + önceden ilan edilmiş karar

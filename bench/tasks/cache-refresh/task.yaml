@@ -1,0 +1,8 @@
+id: cache-refresh
+title: Asenkron önbelleğe geçersiz kılma ve yenileme ekle
+language: ts
+spec: spec.md
+entry: src/cache.ts
+seed: seed
+hidden:
+  command: ["npx", "vitest", "run", "--reporter=json"]
