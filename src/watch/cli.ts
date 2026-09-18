@@ -6,6 +6,7 @@ import { CardQueue } from "../card/queue.js";
 import { EventLog } from "../events/log.js";
 import { FlowError, loadFlow } from "../flow/load.js";
 import { LiveFlow } from "../flow/live.js";
+import { describeTick } from "./describe.js";
 import { acquireLock, releaseLock, type LockInfo } from "./lock.js";
 import { runUntilIdle, sweep } from "./loop.js";
 import type { TickOptions } from "./tick.js";
@@ -41,13 +42,6 @@ Seçenekler:
   --plan          hiçbir ajan çağırmadan ne yapılacağını yaz
 
 Her sağlayıcı için \`--model\` zorunludur; akış dosyası model taşımaz.`;
-
-const MARK: Record<TickResult["status"], string> = {
-  idle: " ",
-  accepted: "→",
-  rejected: "←",
-  escalated: "⏸",
-};
 
 interface Args {
   flow?: string;
@@ -165,24 +159,6 @@ function buildAdapters(
     );
   }
   return adapters;
-}
-
-function describe(role: string, result: TickResult): string {
-  const head = `${MARK[result.status]} ${role.padEnd(10)}`;
-  switch (result.status) {
-    case "idle":
-      return `${head} —`;
-    case "accepted":
-      return `${head} kabul → ${result.card.state === "done" ? "bitti" : result.card.role}` +
-        (result.summary === undefined ? "" : `  (${result.summary})`) +
-        (result.warnings === undefined
-          ? ""
-          : result.warnings.map((w) => `\n             ⚠ ${w}`).join(""));
-    case "rejected":
-      return `${head} RET → ${result.card.role}\n             ${result.reason}`;
-    case "escalated":
-      return `${head} ⏸ insan kapısı\n             ${result.reason}`;
-  }
 }
 
 /**
@@ -395,7 +371,7 @@ async function run(root: string, live: LiveFlow, queue: CardQueue, args: Args): 
     for (const { role, result } of results) {
       if (result.status === "idle") continue;
       if (result.status === "escalated") gated += 1;
-      console.log(describe(role, result));
+      console.log(describeTick(role, result));
     }
   };
 
