@@ -192,3 +192,20 @@ describe("ölçüm grupları", () => {
     expect(e.verdict.code).toBe("olumlu");
   });
 });
+
+// `--yeniden` günlüğe ikinci bir puan bırakıyor; ikisi de sayılsaydı hücre
+// iki kez sayılır ve oran, düzeltilmiş puanla eskisinin ortalaması olurdu —
+// yani yeniden puanlama yarı yarıya geri alınırdı.
+describe("yeniden puanlama", () => {
+  it("hücre başına yalnızca son puanı sayar", () => {
+    const id = "r1/A-by-A";
+    const e = effectReport([
+      ev({ type: "review.done", cell: id, producer: "A", reviewer: "A", crossed: false, promptHash: "h", path: "p" }, "r1"),
+      ev({ type: "judge.scored", cell: id, judge: "J", hooks: 10, caught: [], missed: ["k1","k2","k3","k4","k5","k6","k7","k8"], unverified: [] }, "r1"),
+      ev({ type: "judge.scored", cell: id, judge: "J", hooks: 10, caught: [], missed: ["k1"], unverified: [] }, "r1"),
+    ]);
+    expect(e.pairs[0]?.cells).toBe(1);
+    expect(e.same?.hooks).toBe(10);
+    expect(e.same?.missed).toBe(1);
+  });
+});

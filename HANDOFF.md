@@ -7,7 +7,7 @@ yapıştırılabilsin diye yazıldı: aşağısı Skein'i tanımayan birine de y
 **Dal:** `claude/project-plan-brainstorm-pthvoc` — `claude/project-thread-sc56cs`
 ileri sarılıp üstüne devam edildi, yani iki dalın işi bu dalda birleşti.
 `sc56cs` olduğu yerde duruyor; yeni iş burada.
-**Durum:** 506 test yeşil, typecheck temiz, `selftest` 5/5, ağaç temiz.
+**Durum:** 529 test yeşil, typecheck temiz, `selftest` 5/5, ağaç temiz.
 **Kod:** ~9.3k satır ürün + ~6.1k satır test.
 
 ---
@@ -51,7 +51,8 @@ daha sınandı, vekil `api.openai.com` CONNECT'ini hâlâ 403 ile kesiyor).
 | 5 | Akış ekrandan kuruluyor | ✅ |
 | — | Kusur üreten görev seti | ✅ |
 | — | Körlenmiş puanlama + karar kuralı | ✅ |
-| — | **Tekrar grup içinde sayılıyor** | ✅ **bu oturum** |
+| — | Tekrar grup içinde sayılıyor | ✅ |
+| — | **Hakem katmanı — 2. yer gerçeği** | ✅ **bu oturum** |
 | 6 | Planlamada ajanlar arası yazılı tur | ⬜ ölçümden sonra |
 
 ---
@@ -87,6 +88,10 @@ done
 # 5. raporları puanla — önce kuru koş (ajan çağırmaz, PARA HARCAMAZ)
 npx tsx src/bench/cli.ts puanla --kuru
 npx tsx src/bench/cli.ts puanla claude:claude-opus-5
+
+# 5b. 2. katman: bulguların kalitesi (ayrı hakem çağrısı, kodu da okur)
+npx tsx src/bench/cli.ts siniflandir --kuru
+npx tsx src/bench/cli.ts siniflandir claude:claude-opus-5
 
 # 6. sonuç — hepsi, ya da tek görev
 npx tsx src/bench/cli.ts report
@@ -171,7 +176,9 @@ ve Windows notlarını içeriyor.
 | Üretim — seed önce, gizli test sonra, kaçış denetimi | `src/bench/produce.ts` |
 | Kanca doğrulama — referans çözüme karşı koşar | `src/bench/selftest.ts` |
 | 2x2 orkestrasyonu + ölçüm gücü koruması | `src/bench/matrix.ts` |
-| Körlenmiş puanlama + alıntı doğrulaması | `src/bench/judge.ts` |
+| Körlenmiş puanlama + alıntı doğrulaması (1. katman) | `src/bench/judge.ts` |
+| Bulgu sınıflaması — gerçek/nit/yanlış (2. katman) | `src/bench/classify.ts` |
+| Gürültü raporu — karara girmeyen taraf | `src/bench/noise.ts` |
 | Puanlanacak hücreleri günlükten çıkarma | `src/bench/score.ts` |
 | Ölçüm grupları, etkileşim terimi, ilan edilmiş karar | `src/bench/effect.ts` |
 | Ağ hatasını bayrak hatasından ayırma | `src/bench/failure.ts` |
@@ -244,7 +251,61 @@ geldiği demek.
 
 ---
 
-## Bu oturumda ne yapıldı — tekrarın sayılma biçimi
+## Bu oturumda ne yapıldı — 2. yer gerçeği
+
+**DESIGN'ın iki katmanından ikincisi yazıldı.** Nesnel katman yalnızca
+kanıtlanmış kusurları görüyor (kırmızı gizli test); raporun geri kalanı —
+tasarım itirazı, isim önerisi, uydurulmuş iddia — hiç sayılmıyordu.
+`siniflandir` komutu artık her bulguyu **gerçek / nit / yanlış / belirsiz**
+diye ayırıyor.
+
+**1. katmandan üç şeyde bilerek ayrı:**
+
+| | `puanla` (1. katman) | `siniflandir` (2. katman) |
+|---|---|---|
+| Yer gerçeği | Kırmızı test — tartışmaya kapalı | Hakem görüşü — itiraz edilebilir |
+| Hakem kodu görür mü | Hayır | **Evet** — yanlış pozitif ancak kod okunarak ayrılır |
+| Hücre şartı | Kanıtlanmış kusur olmalı | Kanıtlanmış kusur **aranmaz** |
+
+Üçüncüsü ters görünür ama sebebi net: kusursuz üretilmiş kodun raporu
+nesnel katman için ölçüm gücü taşımaz, gürültü için ise en temiz örnektir —
+oradaki her bulgu ya nit ya yanlış pozitiftir. O hücreleri atlamak gürültü
+ölçümünü sistematik olarak kusurlu kodlara daraltırdı.
+
+**Harmanlanmama bir yorum değil, sınanan bir özellik.** Ayrı olay
+(`judge.classified`), ayrı dizin (`siniflama/`), ayrı rapor bölümü, ve bir
+test: çapraz hücreleri gürültüyle dolduran, aynı hücreleri tertemiz
+gösteren bir sınıflama eklendiğinde kararın ve bütün nesnel sayıların
+**bit bit aynı** kaldığı doğrulanıyor.
+
+**Kanıtlı bulgular oranların dışında:** bir bulgu kırmızı kancayı tarif
+ediyorsa `kanitli` işaretlenip 2. katmanın paydasından çıkarılıyor. Aksi
+hâlde aynı bulgu iki katmanda birden puan üretirdi.
+
+**Körleme koda da uygulanıyor.** Üretim ajanının yorum satırına bıraktığı
+bir imza (`// claude tarafından yazıldı`) hakemin körlüğünü rapor tarafından
+değil kod tarafından bozardı; test bunu artık ajana giden metnin üstünde
+doğruluyor.
+
+**Alıntı kuralı aynı, yönü farklı:** alıntısı raporda bulunamayan bulgu
+1. katmanda denetçinin aleyhine sayılıyor (kaçırma), burada bulgunun kendisi
+düşüyor. Uydurulmuş bir bulguyu "yanlış pozitif" saymak, denetçiyi hakemin
+hatasıyla cezalandırmak olurdu.
+
+**Ayrıca — yolda çıkan bir kusur:** `--yeniden` ile yeniden puanlanan
+hücre günlüğe ikinci bir kayıt bırakıyor ve **ikisi de sayılıyordu**. Yani
+bir hücre iki kez sayılıyor, oran da düzeltilmiş puanla eskisinin
+ortalaması oluyordu — yeniden puanlama yarı yarıya geri alınıyordu.
+Doğrulandı (10 kancalık bir hücre 20 kanca sayıldı), düzeltildi: hücre
+başına **son** kayıt geçerli. Her iki katmanda da.
+
+**Maliyeti ölçülmedi.** Bu hakem koda da baktığı için promptu 1. katmandan
+büyük ve hücre sayısı da fazla (kanıtlanmış kusur şartı olmadığı için).
+Kampanyada önce tek görevde koş, faturayı gör, sonra kalanına geç.
+
+---
+
+## Önceki oturumda ne yapıldı — tekrarın sayılma biçimi
 
 **Bulunan hata, ölçümün kendisindeydi.** Karar kuralının "k≥3" şartı kodda
 **koşu sayısıyla** ölçülüyordu, ve bir koşu = bir matris = bir görev.
@@ -280,7 +341,7 @@ görülmeden** yazıldı — dört hücre hâlâ koşulmadı. `bench/DESIGN.md`'
 
 ---
 
-## Önceki oturumda ne yapıldı — puanlama katmanı
+## Daha önce ne yapıldı — puanlama katmanı
 
 **Boşluk şuydu:** `matrix` bitiyor, elde dört `rapor.txt` kalıyor, ve ana
 metriği (kaçırma) hesaplayan hiçbir şey yok. Puanlama elle yapılacaktı —
@@ -341,7 +402,7 @@ varsa prompt tutmamış demektir; hücre puansız kalır ama rapor durur, yani
 
 ---
 
-## Daha önce ne yapıldı — görev seti
+## Daha da önce — görev seti
 
 **Üç yeni görev sınıfı**, her biri ayrı bir hipotez:
 
@@ -413,10 +474,9 @@ Doğrulama iki eksik çıkardı:
 - **Rol promptlarını ekrandan düzenlemek.** Prompt içeriği her tur taze
   okunuyor, yani düzenleme yoldaki kartın **sonraki turunu** etkiler.
   Dondurma değişmezinin kenarında duruyor, kendi kararını hak ediyor.
-- **Hakem katmanı — 2. yer gerçeği.** Bu oturumda yazılan puanlayıcı
-  NESNEL katmanı okuyor (rapor ↔ kırmızı kanca). Gizli testin göremediği
-  bulguları (tasarım, sızıntı) nit / yanlış pozitif diye sınıflayan ikinci
-  katman hâlâ yok ve ayrı raporlanacak — iki katman harmanlanmaz.
+- ~~Hakem katmanı — 2. yer gerçeği.~~ Yazıldı (aşağıda). Kalan sınırı:
+  bulgu sınırını hakem çiziyor, yani ham bulgu sayısı değil oranlar
+  okunmalı.
 - Kalan bench görevleri.
 - **Tur başına artefakt anlık görüntüsü.** "Denetim turunda tam olarak ne
   değişti" hâlâ son artefakta bakıp çıkarsanıyor.

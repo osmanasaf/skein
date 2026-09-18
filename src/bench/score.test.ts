@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { join } from "node:path";
 import type { SkeinEvent } from "../events/log.js";
-import { scoreTargets } from "./score.js";
+import { classifyTargets, scoreTargets } from "./score.js";
 
 const ev = (e: Partial<SkeinEvent> & { type: string }, runId = "r1"): SkeinEvent =>
   ({ v: 1, at: "2026-01-01T00:00:00.000Z", runId, ...e }) as SkeinEvent;
@@ -72,5 +73,56 @@ describe("scoreTargets", () => {
     const { targets, skipped } = scoreTargets(log);
     expect(targets.map((t) => t.runId)).toEqual(["r1", "r1"]);
     expect(skipped.find((s) => s.cell === "runs2/d/A-by-A")?.reason).toMatch(/üretim hücresi bulunamadı/);
+  });
+});
+
+describe("classifyTargets — 2. katman", () => {
+  // 1. katmanla arasındaki tek şart farkı, ve kasıtlı: kusursuz üretilmiş
+  // kodun raporu nesnel katman için ölçüm gücü taşımaz ama gürültü için en
+  // temiz örnektir — oradaki her bulgu ya nit ya yanlış pozitiftir.
+  it("kanıtlanmış kusur olmasa da hücreyi hedefler", () => {
+    const log = [
+      ...matrixLog(),
+      ev({ type: "review.done", cell: "runs/d/B-by-A", producer: "B", reviewer: "A", crossed: true, promptHash: "h", path: "p" }),
+    ];
+    expect(scoreTargets(log).targets.map((t) => t.cell)).not.toContain("runs/d/B-by-A");
+    expect(classifyTargets(log).targets.map((t) => t.cell)).toContain("runs/d/B-by-A");
+  });
+
+  // Kod okunmadan yanlış pozitif ayrılamaz; hedefte artefaktın yolu olmazsa
+  // sınıflayıcı kodu hiç göremez.
+  it("üretim hücresinin artefakt dizinini taşır", () => {
+    const t = classifyTargets(matrixLog()).targets[0];
+    expect(t?.artifactDir).toBe(join("runs/A", "artifact"));
+  });
+
+  it("ÖLÇÜLEMEDİ hücrelerini yine atlar", () => {
+    const log: SkeinEvent[] = [
+      ev({ type: "run.started", taskId: "snapshot-store" }),
+      ev({ type: "agent.started", cell: "runs/A", role: "uretici", provider: "claude", model: "A", promptHash: "h" }),
+      ev({ type: "hooks.measured", cell: "runs/A", ran: false, total: 0, red: [] }),
+      ev({ type: "review.done", cell: "runs/d/A-by-A", producer: "A", reviewer: "A", crossed: false, promptHash: "h", path: "p" }),
+    ];
+    expect(classifyTargets(log).targets).toHaveLength(0);
+    expect(classifyTargets(log).skipped[0]?.reason).toMatch(/ÖLÇÜLEMEDİ/);
+  });
+
+  // İki katman ayrı olaylara yazılıyor; biri koşulduğunda öteki "yapılmış"
+  // sayılırsa katmanlardan biri sessizce eksik kalır.
+  it("1. katmanın puanı 2. katmanı atlatmaz", () => {
+    const log = [
+      ...matrixLog(),
+      ev({ type: "judge.scored", cell: "runs/d/A-by-A", judge: "J", hooks: 2, caught: ["k1"], missed: ["k2"], unverified: [] }),
+    ];
+    expect(classifyTargets(log).targets).toHaveLength(2);
+  });
+
+  it("zaten sınıflanmış hücreyi tekrar sınıflamaz", () => {
+    const log = [
+      ...matrixLog(),
+      ev({ type: "judge.classified", cell: "runs/d/A-by-A", judge: "J", findings: 3, real: 1, nit: 1, wrong: 1, proven: 0, uncertain: 0, unverified: 0, path: "p" }),
+    ];
+    expect(classifyTargets(log).targets.map((t) => t.cell)).toEqual(["runs/d/A-by-B"]);
+    expect(classifyTargets(log, { reclassify: true }).targets).toHaveLength(2);
   });
 });

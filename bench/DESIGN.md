@@ -113,8 +113,8 @@ gevezeliği ödüllendirir.
 
 > **Bu, yukarıdaki 2. katman değildir.** Yazılan şey **1. (nesnel)
 > katmanın okuyucusu**: raporu kırmızı gizli testlere karşı eşleştirir.
-> Nit / yanlış pozitif sınıflaması yapan hakem katmanı hâlâ yazılmadı ve
-> ayrı raporlanacak — iki katman harmanlanmaz.
+> 2. katman ayrıca yazıldı (aşağıda) ve ayrı raporlanıyor — iki katman
+> harmanlanmaz.
 
 Ana metrik ("kaçırma") rapor metninden okunur: kanıtlanmış kusuru rapor
 söylüyor mu, söylemiyor mu. Bu okuma iki şekilde bozulabilir ve ikisi de
@@ -174,6 +174,57 @@ aileden. İki koruma bunu tamamen kaldırmıyor, yalnızca zararını sınırlı
 alıntı doğrulaması hakemin uydurmasını eler, körleme hücre kimliğini eler.
 Kalan risk, hakemin bir kusur sınıfını sistematik olarak tanımaması — bu da
 dört hücreye eşit bineceği için farkı değil, düzeyi etkiler.
+
+## 2. katman — bulgu sınıflaması (`siniflandir`)
+
+Nesnel katman yalnızca **kanıtlanmış** kusurları görür: kırmızı gizli test.
+Raporun geri kalanı — tasarım itirazı, sızıntı uyarısı, isim önerisi,
+uydurulmuş iddia — o katmanda hiç sayılmaz. 2. katman orayı ölçer.
+
+**Sınıflar:** `gercek` (doğru ve önemli), `nit` (doğru ama önemsiz),
+`yanlis` (kodda karşılığı yok), `belirsiz` (hakem karar veremedi).
+
+**1. katmandan üç şeyde bilerek ayrılıyor:**
+
+| | 1. katman (`puanla`) | 2. katman (`siniflandir`) |
+|---|---|---|
+| Yer gerçeği | Kırmızı test — tartışmaya kapalı | Hakemin görüşü — itiraz edilebilir |
+| Hakem kodu görür mü | Hayır, gerekmiyor | **Evet** — "bu iddianın karşılığı yok" ancak kod okunarak söylenir |
+| Hücre şartı | Kanıtlanmış kusur **olmalı** | Kanıtlanmış kusur **aranmaz** |
+
+Üçüncü satır ilk bakışta ters görünür ama sebebi net: kusursuz üretilmiş
+kodun raporu nesnel katman için ölçüm gücü taşımaz (yakalanacak bir şey
+yok), oysa gürültü ölçümü için en temiz örnektir — oradaki her bulgu ya nit
+ya yanlış pozitiftir. O hücreleri atlamak, gürültü ölçümünü sistematik
+olarak kusurlu kodlara daraltırdı.
+
+**Kanıtlı bulgular oranların dışında.** Bir bulgu kırmızı bir kancayı tarif
+ediyorsa `kanitli` işaretlenir ve 2. katmanın paydasına girmez. Girseydi
+aynı bulgu iki katmanda birden puan üretir, "harmanlanmaz" kuralı sayıların
+içinden delinirdi.
+
+**Körleme koda da uygulanıyor.** Rapor gibi kod da model/satıcı adlarından
+arındırılıyor: üretim ajanının yorum satırına bıraktığı bir imza, hakemin
+körlüğünü rapor tarafından değil kod tarafından bozardı.
+
+**Alıntı kuralı aynı, yönü farklı.** Alıntısı raporda bulunamayan bulgu
+1. katmanda denetçinin ALEYHİNE sayılıyor (kaçırma); burada bulgunun
+kendisi düşüyor ve ayrı sayılıyor. Uydurulmuş bir bulguyu "yanlış pozitif"
+saymak, denetçiyi hakemin hatasıyla cezalandırmak olurdu.
+
+### Bu katmanın bilinen sınırları
+
+- **Bulgu sınırını hakem çiziyor.** "Kaç ayrı bulgu var" sorusunun cevabı
+  hakemin okumasına bağlı; geveze bir rapor daha çok bulguya bölünebilir.
+  Bu yüzden ana sayı **oran** (nit payı, yanlış payı), ham bulgu sayısı
+  değil — ham sayı yine basılıyor ama yorumlanırken bu sınır hatırlanmalı.
+- **Sınıflama bir model görüşü.** Aynı hakem dört hücrede de aynı olduğu
+  için sapma farka değil düzeye biner; yine de mutlak oranlar tek başına
+  alıntılanmamalı.
+- **Karara girmez.** Açık Soru #2'nin kararı yalnızca nesnel katmandan
+  okunur. Bu bir üslup tercihi değil, kodda sınanan bir özellik
+  (`noise.test.ts`: sınıflama olayları eklendiğinde kararın ve sayıların
+  değişmediği doğrulanıyor).
 
 ## Örneklem ve tekrar
 
@@ -671,7 +722,7 @@ yalnızca aynı satıcının iki modeliyle (ör. `haiku × sonnet`) koşulabilir
       kusur üretiyor (k=1); `claude-opus-5` beş görevde de temiz
 - [x] Denetim koşucusu (aynı artefakt → iki denetçi), 2x2 orkestrasyonu
 - [x] Nesnel katmanın puanlayıcısı — körlenmiş, alıntı doğrulamalı
-- [ ] Hakem katmanı — 2. yer gerçeği (nit / yanlış pozitif sınıflaması)
+- [x] Hakem katmanı — 2. yer gerçeği (nit / yanlış pozitif sınıflaması)
 - [ ] Kalan görevler — darboğaz hâlâ burası, ama artık daha dar: elde
       ölçüm gücü olan bir hücre var (`snapshot-store` × haiku)
 - [x] Rapor: hücre tablosu + etkileşim terimi + önceden ilan edilmiş karar

@@ -150,6 +150,41 @@ export type EventInput =
       unverified: string[];
     }
   | {
+      /**
+       * 2. YER GERÇEĞİ: raporun bulgularının sınıflaması.
+       *
+       * `judge.scored`'dan ayrı bir olay, çünkü ayrı bir katman: o, kanıtlı
+       * kusurların kaçını raporun söylediğini ölçer (nesnel, tartışmaya
+       * kapalı); bu, gizli testin göremediği bulguları gerçek/nit/yanlış
+       * diye ayırır (hakem görüşü, itiraz edilebilir). Tek olayda
+       * toplansalardı rapor tek bir "bulgu skoru"na erir ve zayıf katman
+       * gücünü güçlü katmandan ödünç alırdı (bench/DESIGN.md).
+       *
+       * Sayılar kararı ETKİLEMEZ: karar kuralı yalnızca nesnel katmandan
+       * okunur.
+       */
+      type: "judge.classified";
+      cell: string;
+      /** Sınıflayan model. */
+      judge: string;
+      /** Raporda sayılan ayrı bulgu sayısı (doğrulanmış alıntılar). */
+      findings: number;
+      /** Kodda karşılığı olan ve davranışı etkileyen bulgular. */
+      real: number;
+      /** Doğru ama önemsiz — biçim, adlandırma, tercih. */
+      nit: number;
+      /** Kodda karşılığı olmayan iddia. */
+      wrong: number;
+      /** Kanıtlanmış kusura ait bulgular; 1. katmanın alanı, oranlara girmez. */
+      proven: number;
+      /** Hakemin sınıfa karar veremediği bulgular; oranlara girmez. */
+      uncertain: number;
+      /** Alıntısı raporda bulunamayan bulgular — sayılmadı, sağlık göstergesi. */
+      unverified: number;
+      /** Tam sınıflamanın yazıldığı dosya. */
+      path: string;
+    }
+  | {
       type: "audit.round";
       cell: string;
       round: number;
@@ -173,6 +208,10 @@ const REQUIRED: Record<EventInput["type"], { strings: string[]; numbers: string[
   "audit.round": { strings: ["cell", "reason"], numbers: ["round"] },
   "review.done": { strings: ["cell", "producer", "reviewer", "promptHash", "path"], numbers: [] },
   "judge.scored": { strings: ["cell", "judge"], numbers: ["hooks"] },
+  "judge.classified": {
+    strings: ["cell", "judge", "path"],
+    numbers: ["findings", "real", "nit", "wrong", "proven", "uncertain", "unverified"],
+  },
 };
 
 class EventError extends Error {

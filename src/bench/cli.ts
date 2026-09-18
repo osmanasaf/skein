@@ -11,8 +11,9 @@ import { auditLoop } from "./audit-loop.js";
 import { runMatrix, diagnose } from "./matrix.js";
 import { selfTest } from "./selftest.js";
 import { networkFailure } from "./failure.js";
-import { scoreTargets, scoreAll } from "./score.js";
+import { scoreTargets, scoreAll, classifyTargets, classifyAll } from "./score.js";
 import { effectReport, filterByTask, type EffectReport, type PairScore, type Side } from "./effect.js";
+import { noiseReport, type NoiseReport, type NoiseSide } from "./noise.js";
 import { adapterFor } from "../adapters/factory.js";
 
 const REPO = resolve(import.meta.dirname, "../..");
@@ -90,6 +91,7 @@ async function report(taskFilter?: string): Promise<void> {
   }
   console.log(`\n  toplam: $${s.totalCostUsd.toFixed(4)}  ·  ${(s.totalDurationMs / 1000).toFixed(1)}s`);
   printEffect(effectReport(events));
+  printNoise(noiseReport(events));
 }
 
 async function run(taskId: string, provider: string, model: string, audit: boolean): Promise<void> {
@@ -425,6 +427,57 @@ async function puanla(judgeSpec: string, rescore: boolean, dry: boolean): Promis
 }
 
 /** Hücre tablosu, etkileşim terimi ve önceden ilan edilmiş karar. */
+/**
+ * 2. YER GERÇEĞİ: raporun bulgularını gerçek / nit / yanlış diye ayırır.
+ *
+ * `puanla`dan ayrı bir komut, çünkü ayrı bir katman ve ayrı bir maliyet:
+ * bu hakem kodu da okur (yanlış pozitif ancak kod okunarak söylenebilir) ve
+ * hücre şartı farklıdır — kanıtlanmış kusur aranmaz. Sonuç karara girmez.
+ */
+async function siniflandir(judgeSpec: string, reclassify: boolean, dry: boolean): Promise<void> {
+  const { events } = await readEvents(LOG);
+  if (events.length === 0) {
+    console.log("Günlük boş. Önce bir matris koş: cli.ts matrix <görev-id> A B");
+    return;
+  }
+  const { targets, skipped } = classifyTargets(events, { reclassify });
+  for (const s of skipped) console.log(`  atlandı  ${s.cell}\n           ${s.reason}`);
+  if (targets.length === 0) {
+    console.log("\nSınıflanacak hücre yok.");
+    return;
+  }
+
+  if (dry) {
+    console.log(`\n${targets.length} hücre sınıflanacak (kuru koşu, ajan çağrılmadı):`);
+    for (const t of targets) {
+      console.log(`  ${t.producer} → ${t.reviewer}  ${t.crossed ? "ÇAPRAZ" : "aynı  "}  ` +
+        `${t.redHooks.length} kanıtlanmış kusur  ${t.cell}`);
+    }
+    return;
+  }
+
+  const judge = adapterFor(judgeSpec, adapterEnv());
+  console.log(`\nsınıflayıcı: ${judge.model} · ${targets.length} hücre · körlenmiş (kod dahil)\n`);
+
+  const out = await classifyAll({
+    repo: REPO, judge, logPath: LOG, timeoutMs: 5 * 60_000,
+    layers: [{ name: "siniflandir", path: join(REPO, "bench/prompts/siniflandir.md") }],
+    targets,
+    onCell: (t, r) => {
+      const c = r.counts;
+      console.log(`  ${t.producer} → ${t.reviewer}  ${t.crossed ? "ÇAPRAZ" : "aynı  "}  ` +
+        `${c.findings} bulgu: ${c.real} gerçek, ${c.nit} nit, ${c.wrong} yanlış` +
+        (c.uncertain > 0 ? `, ${c.uncertain} belirsiz` : "") +
+        (c.proven > 0 ? `  · ${c.proven} kanıtlı (1. katman)` : "") +
+        (r.unverified > 0 ? `  · ${r.unverified} alıntı doğrulanamadı` : ""));
+    },
+  });
+
+  for (const f of out.failed) console.log(`  SINIFLANAMADI ${f.cell}\n      ${f.error}`);
+  console.log(`\n  ${out.classified} hücre sınıflandı · $${out.costUsd.toFixed(4)}`);
+  console.log("  Sonuç için: cli.ts report");
+}
+
 function printSide(e: { pairs: PairScore[]; same: Side | null; crossed: Side | null;
   relativeReduction: number | null; interaction: number | null;
   perRun: { relativeReduction: number | null }[]; repeats: number }, indent: string): void {
@@ -484,6 +537,35 @@ function printEffect(e: EffectReport): void {
   console.log(`  ${e.verdict.reason}`);
 }
 
+/**
+ * 2. katmanın çıktısı — kararın ALTINDA ve karardan ayrı.
+ *
+ * Yeri kasıtlı: karar nesnel katmandan çıkıyor ve bu tablo onun üstüne
+ * konsaydı, okuyan ilk olarak itiraz edilebilir sayıyı görürdü.
+ */
+function printNoise(n: NoiseReport): void {
+  if (n.groups.length === 0) return;
+  const pct = (x: number | null): string => (x === null ? "—" : `%${(x * 100).toFixed(0)}`);
+  const line = (label: string, s: NoiseSide | null): void => {
+    if (s === null) return;
+    console.log(`  ${label.padEnd(8)}${String(s.reports).padStart(5)}${String(s.findings).padStart(7)}` +
+      `${String(s.real).padStart(8)}${pct(s.nitRate).padStart(7)}${pct(s.wrongRate).padStart(8)}` +
+      `${(s.realPerReport ?? 0).toFixed(1).padStart(9)}`);
+  };
+  console.log("\n=== 2. katman: bulgu kalitesi (KARARA GİRMEZ) ===");
+  console.log("  Hakem görüşü, test sonucu değil. Kanıtlanmış kusura ait bulgular");
+  console.log("  bu tablonun dışında — onlar 1. katmanda sayıldı.");
+  for (const g of n.groups) {
+    console.log(`\n  ${g.taskId}  ·  ${g.models.join(" × ")}`);
+    console.log("          rapor  bulgu  gerçek    nit   yanlış  gerçek/rapor");
+    line("aynı", g.same);
+    line("çapraz", g.crossed);
+  }
+  if (n.unverified > 0) {
+    console.log(`\n  ! ${n.unverified} bulgunun alıntısı raporda bulunamadı — sayılmadı`);
+  }
+}
+
 const argv = process.argv.slice(2);
 const audit = argv.includes("--audit");
 const force = argv.includes("--force");
@@ -492,6 +574,8 @@ if (cmd === "report") {
   await report(argv.find((a) => a.startsWith("--gorev="))?.slice("--gorev=".length));
 } else if (cmd === "doctor") {
   await doctor(rest[0] ?? "codex:gpt-5.5");
+} else if (cmd === "siniflandir") {
+  await siniflandir(rest[0] ?? "claude:claude-opus-5", argv.includes("--yeniden"), argv.includes("--kuru"));
 } else if (cmd === "puanla") {
   await puanla(rest[0] ?? "claude:claude-opus-5", argv.includes("--yeniden"), argv.includes("--kuru"));
 } else if (cmd === "selftest") {
@@ -501,6 +585,6 @@ if (cmd === "report") {
 } else if (cmd) {
   await run(cmd, rest[0] ?? "claude", rest[1] ?? "claude-opus-5", audit);
 } else {
-  console.error("kullanım: cli.ts <görev-id> [sağlayıcı] [model] [--audit]\n         cli.ts matrix <görev-id> [sağlayıcı:model] [sağlayıcı:model]\n         cli.ts doctor <sağlayıcı:model>\n         cli.ts puanla [hakem-modeli] [--kuru] [--yeniden]\n         cli.ts selftest [görev-id]\n         cli.ts report [--gorev=<görev-id>]");
+  console.error("kullanım: cli.ts <görev-id> [sağlayıcı] [model] [--audit]\n         cli.ts matrix <görev-id> [sağlayıcı:model] [sağlayıcı:model]\n         cli.ts doctor <sağlayıcı:model>\n         cli.ts puanla [hakem-modeli] [--kuru] [--yeniden]\n         cli.ts siniflandir [hakem-modeli] [--kuru] [--yeniden]\n         cli.ts selftest [görev-id]\n         cli.ts report [--gorev=<görev-id>]");
   process.exit(2);
 }

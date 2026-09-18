@@ -109,19 +109,23 @@ export function scoredCells(events: SkeinEvent[]): ScoredCell[] {
     }
   }
   const tasks = tasksByRun(events);
-  const out: ScoredCell[] = [];
+  // Hücre başına SON puan geçerli. Günlük yalnızca-ekleme olduğu için
+  // `--yeniden` ile yeniden puanlanan hücre iki kayıt bırakıyor; hepsi
+  // toplansaydı hücre iki kez sayılır ve oran, eski (düzeltilmiş) puanla
+  // yenisinin ortalaması olurdu — yani düzeltme yarı yarıya geri alınırdı.
+  const latest = new Map<string, ScoredCell>();
   for (const e of events) {
     if (e.type !== "judge.scored") continue;
     const m = meta.get(key(e.runId, e.cell));
     // Puanı olup denetim kaydı olmayan hücre, kimin kimi incelediğini
     // söyleyemez — sayıya katılırsa "çapraz" sütunu sessizce kirlenir.
     if (m === undefined) continue;
-    out.push({
+    latest.set(key(e.runId, e.cell), {
       runId: e.runId, taskId: tasks.get(e.runId) ?? UNKNOWN_TASK, cell: e.cell, ...m,
       hooks: e.hooks, missed: e.missed.length, unverified: e.unverified.length,
     });
   }
-  return out;
+  return [...latest.values()];
 }
 
 /**
@@ -136,7 +140,7 @@ export function filterByTask(events: SkeinEvent[], taskId: string): SkeinEvent[]
 }
 
 /** Bir koşuda geçen modeller (üretici ∪ denetçi), sıralı. */
-function modelsOf(cells: ScoredCell[]): string[] {
+function modelsOf(cells: { producer: string; reviewer: string }[]): string[] {
   const set = new Set<string>();
   for (const c of cells) {
     set.add(c.producer);
@@ -240,25 +244,37 @@ function analyse(cells: ScoredCell[]): Omit<GroupReport, "taskId" | "models" | "
  *    çıkmayınca güçlü modelden zayıfına geçmek gerçek bir senaryo) eski
  *    hesap iki kurguyu tek sayıda topluyordu. Artık ayrı gruplar.
  */
-export function groupCells(cells: ScoredCell[]): GroupReport[] {
-  const byRun = new Map<string, ScoredCell[]>();
+export interface Grouped<T> {
+  taskId: string;
+  models: string[];
+  cells: T[];
+}
+
+/** Gruplamanın kendisi — iki katman da aynı bölmeyi kullanıyor. */
+export function groupRuns<T extends { runId: string; taskId: string; producer: string; reviewer: string }>(
+  cells: T[],
+): Grouped<T>[] {
+  const byRun = new Map<string, T[]>();
   for (const c of cells) {
     const list = byRun.get(c.runId);
     if (list) list.push(c);
     else byRun.set(c.runId, [c]);
   }
 
-  const byGroup = new Map<string, { taskId: string; models: string[]; cells: ScoredCell[] }>();
+  const byGroup = new Map<string, Grouped<T>>();
   for (const [, own] of byRun) {
-    const first = own[0] as ScoredCell;
+    const first = own[0] as T;
     const models = modelsOf(own);
     const k = key(first.taskId, ...models);
     const g = byGroup.get(k);
     if (g) g.cells.push(...own);
     else byGroup.set(k, { taskId: first.taskId, models, cells: [...own] });
   }
+  return [...byGroup.values()];
+}
 
-  return [...byGroup.values()].map((g) => {
+export function groupCells(cells: ScoredCell[]): GroupReport[] {
+  return groupRuns(cells).map((g) => {
     const a = analyse(g.cells);
     return {
       taskId: g.taskId, models: g.models, ...a,

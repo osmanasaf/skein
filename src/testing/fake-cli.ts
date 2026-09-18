@@ -6,6 +6,8 @@ export interface FakeCliSpec {
   stdinTo?: string;
   /** Çalışma dizinini bu dosyaya yazar. */
   cwdTo?: string;
+  /** Aldığı argümanları JSON dizisi olarak bu dosyaya yazar. */
+  argvTo?: string;
   stdout?: string;
   /**
    * stdout'u parça parça yazar, aralarında bekleyerek.
@@ -68,6 +70,7 @@ if (spec.lastMessage !== undefined && lastAt !== -1 && process.argv[lastAt + 1])
   await writeFile(process.argv[lastAt + 1], spec.lastMessage);
 }
 if (spec.cwdTo) await writeFile(spec.cwdTo, process.cwd());
+if (spec.argvTo) await writeFile(spec.argvTo, JSON.stringify(process.argv.slice(2)));
 if (spec.stdout) process.stdout.write(spec.stdout);
 const chunks = spec.chunks ?? [];
 for (const [i, chunk] of chunks.entries()) {
