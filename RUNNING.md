@@ -319,13 +319,17 @@ Her koşu kullandığı izin modunu ekrana basar. Otomatik geri düşmüyor:
 izin modu ajanın neye dokunabildiğini belirliyor ve koşular arasında
 sessizce değişmesi karşılaştırmayı fark edilmeden bozar.
 
-**Üreticiye `Glob`/`Grep` verme.** Gerçek bir koşuda `claude-haiku-4-5`
+**Araç listesi varsayılan olarak `Read,Write,Edit`** ve bu bir tercih
+değil düzeltme. Gerçek bir koşuda `Glob`/`Grep` verilen `claude-haiku-4-5`
 çalışma dizininden yukarı çıktı, deponun kendi `src/` dizinini buldu ve
 çözümü oraya yazdı — iki koşuda da. Hücre boş kaldığı için koşu
 `ÖLÇÜLEMEDİ` göründü ve dosya deponun içinde kaldı (`.skein/runs/`
-yok sayılıyor, `src/` sayılmıyor). Üretim için `Read,Write,Edit` yetiyor:
-seed dosyalarının listesi zaten görev metninde. Koşu artık bu durumu
-yakalayıp dosyanın yolunu söylüyor, ama en iyi tuzak kurulmayandır.
+yok sayılıyor, `src/` sayılmıyor).
+
+Üretim için bu üçü yetiyor: seed dosyalarının listesi zaten görev metninde.
+Değiştirmek istersen `SKEIN_ALLOWED_TOOLS` ile geçersiz kılabilirsin, ama
+kaçış riskini geri getirirsin. Koşu artık kaçışı yakalayıp dosyanın yolunu
+da söylüyor — yine de **koşudan sonra `git status`'a bak.**
 
 ## Koşular
 

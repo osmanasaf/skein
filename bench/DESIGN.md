@@ -492,7 +492,9 @@ zaten duruyorsa ona "ajan yazdı" denmez.
 
 Araç listesi `Read,Write,Edit` ile kısıtlanınca aynı koşu kaçmadı ve
 ölçüm verdi (yukarıdaki tabloda `async-pool` satırı). Üretim için bu üç
-araç yetiyor: seed dosyalarının listesi zaten görev metninde.
+araç yetiyor: seed dosyalarının listesi zaten görev metninde. Artık
+**varsayılan** bu; dört hücrede de aynı olduğu için karşılaştırmayı
+bozmuyor. `SKEIN_ALLOWED_TOOLS` ile geçersiz kılınabilir.
 
 **Kaçan dosyanın içeriği ayrıca bir veri:** `export function runPool` —
 `async` değil. Yani `limit < 1` kontrolü `RangeError`'ı senkron

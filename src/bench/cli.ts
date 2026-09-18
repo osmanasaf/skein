@@ -27,12 +27,26 @@ const REPO = resolve(import.meta.dirname, "../..");
  *   SKEIN_PERMISSION_MODE=acceptEdits
  *   SKEIN_ALLOWED_TOOLS="Read,Write,Edit,Bash"
  */
+/**
+ * Deneyin ajanına verilen araçlar.
+ *
+ * Kısıtlı, ve bu bir tercih değil düzeltme: `Glob`/`Grep` verilen bir ajan
+ * çalışma dizininden yukarı çıkabiliyor. `claude-haiku-4-5` iki koşuda da
+ * çıktı, deponun kendi `src/` dizinini buldu ve çözümü oraya yazdı. Hücre
+ * boş kaldığı için koşu ÖLÇÜLEMEDİ göründü ve dosya operatörün ağacında
+ * kaldı (`.skein/runs/` yok sayılıyor, `src/` sayılmıyor).
+ *
+ * Üretim için bu üçü yetiyor: seed dosyalarının listesi zaten görev
+ * metninde. Dört hücrede de aynı olduğu için karşılaştırmayı bozmuyor.
+ */
+export const BENCH_TOOLS = ["Read", "Write", "Edit"];
+
 function adapterEnv(): { permissionMode?: string; allowedTools?: string[] } {
   const mode = process.env["SKEIN_PERMISSION_MODE"]?.trim();
   const tools = process.env["SKEIN_ALLOWED_TOOLS"]?.split(",").map((t) => t.trim()).filter(Boolean);
   return {
     ...(mode ? { permissionMode: mode } : {}),
-    ...(tools && tools.length > 0 ? { allowedTools: tools } : {}),
+    allowedTools: tools && tools.length > 0 ? tools : BENCH_TOOLS,
   };
 }
 
