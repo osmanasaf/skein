@@ -59,7 +59,7 @@ kesiyor).
 | — | Tur başına artefakt anlık görüntüsü | ✅ |
 | — | Görev seti 5 → 8 | ✅ |
 | — | **Eşik ölçümü: sonnet-5** | ✅ **bu oturum** |
-| 6 | Planlamada ajanlar arası yazılı tur | ⬜ ölçümden sonra |
+| 6 | Planlamada ajanlar arası yazılı tur | 📐 **tasarımı yazıldı** (`PLANLAMA.md`), kod ölçümden sonra |
 
 ---
 
@@ -356,6 +356,41 @@ bulgu sayılamaz** ve DESIGN'daki bölümün başına bu uyarı düşüldü. Yen
 koşu başına ~$0.07. Çapraz satıcıda üretici olarak sonnet kullanmak sonucu
 daha güçlü bir sınıfa taşır ve "zaten zayıf model kusur üretti" itirazını
 zayıflatır.
+
+### Ayrıca: adım 6'nın tasarımı yazıldı (`PLANLAMA.md`)
+
+Kod değil, kararlar. Özeti:
+
+- **Alışverişin taşıyıcısı dosya, sohbet değil.** `docs/plan/<kart>.md` ve
+  `<kart>.itiraz.md`; transkript diye ayrı bir şey yok. Bir sonraki tur
+  "önceki mesajları hatırla" değil "dosyayı oku"dur.
+- **İtirazın zorunlu üç alanı:** ne, neden, **neyi yanlışlar** — ve sonuncu
+  depodan bir yere işaret etmek zorunda (dosya/satır/test adı). Yolu
+  olmayan itiraz geçersiz. Bu kural doğrudan bugünkü ölçümden geliyor:
+  eşik, komşu modülü okuyup okumamaktı.
+- **Tur 1 kör.** İlk turda katılımcılar birbirinin itirazını görmez —
+  2x2'deki "aynı artefakt, bağımsız iki denetçi" mantığı. Yakınsama
+  sonraki turlarda serbest; korunan şey ilk bağımsız görüş.
+- **Üç çıkış, yeni kart durumu yok:** anlaşma → ilerler; tur limiti dolup
+  açık itiraz kalırsa → deadlock kapısı; tur hiç tamamlanmazsa → kaçış
+  kapısı. Mevcut kapı makinesi aynen kullanılıyor.
+- **Planı yalnızca insan yeniden açar.** Downstream "plan yanlışmış"
+  diyebilir ama kartı planlamaya geri gönderemez: plan↔kod döngüsünün üst
+  sınırı yok.
+- **Akış diline dört kural (17-20), iki yeni olay**, ve maliyet formülü:
+  `katilimci × tur`. İki katılımcı iki tur, tipik kartın maliyetini iki
+  katına yakın çıkarır — çıtayı da bu belirliyor.
+- **Önceden ilan edilmiş ölçüt:** planlama açık/kapalı A/B, k≥3; downstream
+  ret sayısında ≥%20 azalma olumlu, <%10 olumsuz; ayrıca "kabul edilen
+  itiraz oranı" ve "itirazsız alışveriş oranı" — ikincisi yüksekse
+  mekanizma tören demektir.
+- **Reddedilenler gerekçeleriyle:** serbest sohbet, paylaşılan scratchpad,
+  oylama (ortak kör noktayı oy birliğiyle onaylar), ajanlar arası doğrudan
+  mesajlaşma.
+
+Aşamalı yol 6a→6d ve her aşamanın bitiş testi belgede. **6a (plan dosyası,
+alışveriş yok) ölçümü beklemeden yazılabilir**; 6b ve sonrası tezin üstüne
+bina kurduğu için ölçümden sonra.
 
 ---
 
@@ -681,8 +716,12 @@ Doğrulama iki eksik çıkardı:
 
 ## Açık karar (hâlâ açık)
 
-> Çapraz satıcı 2x2'si koşulduktan sonra: **adım 6** mı, yoksa görev setini
-> büyütmek mi?
+> Çapraz satıcı 2x2'si koşulduktan sonra: **adım 6'nın kodu** mu, yoksa
+> görev setini büyütmek mi?
+
+Görev seti bu arada 5'ten 8'e çıktı ve adım 6'nın **tasarımı** yazıldı
+(`PLANLAMA.md`); ikisi de sıradaki kararı beklemiyordu. Karar hâlâ ölçüme
+bağlı.
 
 Önceki devir teslimin sorusu ("önce ölçüm mü, adım 6 mı") artık cevaplandı:
 ölçüm hazır, sıra koşmakta. Ondan sonrası sonuca bağlı.
@@ -755,6 +794,7 @@ Doğrulama iki eksik çıkardı:
 | Dosya | Ne için |
 |---|---|
 | `ARCHITECTURE.md` | **Önce bu.** Katmanlar, çekirdek, DB kararı, değişmezler |
+| `PLANLAMA.md` | Adım 6'nın tasarımı — yazılmadı, kararları sabit |
 | `PHILOSOPHY.md` | İlkeler, reddedilenler, açık sorular (#2 güncel) |
 | `bench/DESIGN.md` | 2×2 tasarımı, görev formatı, kalibrasyon kayıtları |
 | `hub/flows/SCHEMA.md` | Akış dili — 16 kural, ret yolu, hash sözleşmesi |

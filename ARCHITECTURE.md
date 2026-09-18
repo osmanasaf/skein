@@ -229,12 +229,18 @@ Ekran tartışması bunların üstüne gelir, bunları yeniden açmaz:
 | ~~3~~ | ✅ Okuyucu ekran — pano, canlı adım, kart izi, diff | Gerçek depoda doğrulandı; üç sorunun üçü de ekrandan cevaplanıyor |
 | ~~4~~ | ✅ Kapı ekrandan açılıyor | Yüzey komut gönderiyor; çekirdeğin reddi kullanıcıya aynen gidiyor |
 | ~~5~~ | ✅ Akış ekrandan kuruluyor | Doğrulama ve maliyet tahmini zaten yazılıydı; ekran onları kullanıyor |
-| 6 | Planlamada ajanlar arası yazılı tur | En sonda, ve mekanizma olarak; serbest sohbet olarak değil |
+| 6 | Planlamada ajanlar arası yazılı tur | En sonda, ve mekanizma olarak; serbest sohbet olarak değil. **Tasarımı yazıldı: `PLANLAMA.md`** |
 
 Adım 6'nın gerekçesi `PHILOSOPHY.md`'de: serbest sohbet maliyeti sınırsız
 büyütür, izlenebilirliği kaybeder ve modeller birbirine yakınsadıkça kör nokta
 tezini zayıflatır. Doğru biçimi, `reject` mekanizmasının kardeşi: kayıtlı,
 sayılı, gerekçeli turlar.
+
+**`PLANLAMA.md` o biçimi sabitledi** (18 Eylül): alışverişin taşıyıcısı
+dosya, itirazın zorunlu üç alanı, tur 1'in kör olması, üç çıkış (anlaşma /
+tükendi → deadlock kapısı / kaçış), akış diline dört yeni kural, iki yeni
+olay, ve işe yarayıp yaramadığını söyleyecek önceden ilan edilmiş ölçüt.
+Kod yazılmadı.
 
 ---
 
