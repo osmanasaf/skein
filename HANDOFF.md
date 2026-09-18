@@ -33,11 +33,14 @@ gördüğün yer. Kod editörü **değil** — bu sınır kasıtlı (`ARCHITECTU
 
 ## Tek cümlede nerede kaldık
 
-**Ölçüm takımı bitti; kalan tek iş koşmak.** Üç oturumda kapanan üç
-eksik: tekrarın görev × kurgu grubu içinde sayılması, 2. yer gerçeği
-(bulguları gerçek/nit/yanlış ayıran hakem katmanı) ve tur başına artefakt
-anlık görüntüsü. Bu oturumda görev seti 5'ten 8'e çıktı — biri (
-`cache-refresh`) elde ölçüm gücü en yüksek hücre; ikisi kalibre edilmedi. **Kalan tek iş hâlâ aynı: çapraz satıcı 2x2'sini koşmak** —
+**Ölçüm takımı bitti; kalan tek iş koşmak — ve artık daha iyi bir
+üreticiyle.** Bu oturumda eşik ölçüldü: `snapshot-store` görevinde
+`claude-haiku-4-5` ve `claude-sonnet-5` üçer koşunun üçünde de **aynı iki
+kancayı** kırmızıya düşürüyor, `claude-opus-5` üçünde de temiz. Yani
+kampanya artık haiku sınıfına mahkûm değil; sonnet üreticisiyle koşulabilir
+(koşu başına ~$0.07). Ayrıca dürüst bir kötü haber: Açık Soru #1'in
+dayandığı `retry-backoff` kusuru bugünkü hatla **hiçbir modelde**
+tekrarlanmadı. **Kalan tek iş hâlâ aynı: çapraz satıcı 2x2'sini koşmak** —
 ve o, uzak konteynerde değil senin makinende yapılmalı (aşağıda sebebi;
 bugün bir kez daha sınandı, vekil `api.openai.com` CONNECT'ini hâlâ 403 ile
 kesiyor).
@@ -54,7 +57,8 @@ kesiyor).
 | — | Tekrar grup içinde sayılıyor | ✅ |
 | — | Hakem katmanı — 2. yer gerçeği | ✅ |
 | — | Tur başına artefakt anlık görüntüsü | ✅ |
-| — | **Görev seti 5 → 8** | ✅ **bu oturum** |
+| — | Görev seti 5 → 8 | ✅ |
+| — | **Eşik ölçümü: sonnet-5** | ✅ **bu oturum** |
 | 6 | Planlamada ajanlar arası yazılı tur | ⬜ ölçümden sonra |
 
 ---
@@ -71,7 +75,7 @@ npm install
 
 # 2. kancalar sağlam mı — ajan çağırmaz, PARA HARCAMAZ
 npx tsx src/bench/cli.ts selftest
-#    beklenen: 5 görevin beşi de "referansla hepsi yeşil"
+#    beklenen: 8 görevin sekizi de "referansla hepsi yeşil"
 
 # 3. codex gerçekten çağrılabiliyor mu
 npx tsx src/bench/cli.ts doctor codex:gpt-5.5
@@ -105,11 +109,26 @@ reddediliyor; kendi makinende gerekmeyebilir. Gerekirse
 `SKEIN_PERMISSION_MODE=acceptEdits` ver. Dört hücrede de aynı olmalı,
 yoksa karşılaştırma bozulur — koşuda ekrana basılıyor, bir bak.
 
-**Neden `haiku`:** `claude-opus-5` beş görevin hepsini altı koşuda temiz
-çözdü. Kusur üretmeyen üreticiyle denetim ölçülemez ve `matrix` bunu fark
-edip denetim hücrelerini **atlıyor** ("Ölçüm gücü yok"). Ölçüm gücü olan
-tek üretici şimdilik haiku sınıfı. Codex tarafında da güç sınıfı yakın bir
-model seç, yoksa aynı duvara çarparsın.
+**Üretici seçimi — 18 Eylül ölçümünden sonra güncellendi.** Kusur
+üretmeyen üreticiyle denetim ölçülemez; `matrix` bunu fark edip denetim
+hücrelerini **atlıyor** ("Ölçüm gücü yok"). Elde iki seçenek var:
+
+| Üretici | Nerede kusur üretiyor | Koşu maliyeti |
+|---|---|---|
+| `claude-haiku-4-5-20251001` | 4 görevde (`snapshot-store`, `csv-roundtrip`, `async-pool`, `cache-refresh`) | $0.04–0.19 |
+| `claude-sonnet-5` | yalnızca `snapshot-store` — ama 3/3 koşuda, aynı iki kanca | ~$0.07 |
+
+`claude-opus-5` sekiz görevin on iki koşusunda hiç kusur üretmedi; üretici
+olarak seçme.
+
+**Önerim: ikisini de koş, ama farklı kapsamda.** Haiku ile dört görev
+(geniş taban), sonnet ile yalnızca `snapshot-store` (güçlü sınıfta tek ama
+belirlenimci hücre). İkincisi "zaten zayıf model kusur üretti" itirazını
+kapatır. Bunlar iki ayrı **ölçüm grubu** olur ve `report` onları zaten ayrı
+raporlar — karıştırma riski yok.
+
+Codex tarafında güç sınıfı yakın bir model seç, yoksa aynı duvara
+çarparsın.
 
 **Maliyet:** bir 2x2 = 2 üretim + 4 denetim. Üretim haiku'da $0.04–0.13,
 `claude-opus-5`'te $0.17–0.47. `retry-backoff` üzerindeki eski bir matris
@@ -121,8 +140,17 @@ Tek görevlik sonuç "bu görevde" der.
 **Dördüncü aday: `cache-refresh`.** Haiku'da 22 kancanın 10'u kırmızı, yani
 en güçlü ölçüm hücresi elde bu. Kampanyaya eklemek maliyeti üçte bir
 artırır (~$4-5); bütçe elveriyorsa değer, çünkü kusur oranı yüksek olan
-hücre denetim farkını en net gösteren hücredir. `config-patch` ve
-`outbox-flush`'ı koşma: iki modelde de temiz, ölçüm gücü yok.
+hücre denetim farkını en net gösteren hücredir. `config-patch`,
+`outbox-flush` ve `retry-backoff`'ı koşma: üçünde de bugünkü modeller
+kusur üretmiyor.
+
+**Sonnet kolu (isteğe bağlı, ~$3):**
+
+```bash
+for k in 1 2 3; do
+  npx tsx src/bench/cli.ts matrix snapshot-store claude:claude-sonnet-5 codex:<model>
+done
+```
 
 **Ölçüm gücü yoksa** `matrix` denetimi atlar ve sebebini yazar. Yine de
 koşturmak istersen `--force`.
@@ -236,16 +264,19 @@ denetim turunun* değerini gösteriyor, *çapraz satıcı denetiminin* değil.
 
 **Ölçülmüş — görev kalibrasyonu (17-18 Eylül, k=1):**
 
-| Görev | Kanca | `claude-opus-5` | `claude-haiku-4-5` |
-|---|---:|---|---|
-| `snapshot-store` | 16 | temiz (×2) | **14/16** — 2 kırmızı |
-| `csv-roundtrip` | 18 | temiz (×2) | **17/18** — 1 kırmızı |
-| `async-pool` | 12 | temiz (×2) | **10/12** — 2 kırmızı |
-| `cache-refresh` | 22 | temiz | **12/22** — 10 kırmızı |
-| `config-patch` | 25 | temiz (×2) | temiz |
-| `outbox-flush` | 17 | temiz | temiz |
-| `retry-backoff` | 9 | 5 koşuda 4'ü kusurlu | — |
-| `token-bucket` | 14 | temiz | temiz |
+| Görev | Kanca | `claude-haiku-4-5` | `claude-sonnet-5` | `claude-opus-5` |
+|---|---:|---|---|---|
+| `snapshot-store` | 16 | **14/16** (3/3 koşu) | **14/16** (3/3 koşu) | temiz (3/3) |
+| `cache-refresh` | 22 | **12/22** | temiz | temiz |
+| `csv-roundtrip` | 18 | **17/18** | temiz | temiz |
+| `async-pool` | 12 | **10/12** | temiz | temiz |
+| `config-patch` | 25 | temiz | — | temiz (×2) |
+| `outbox-flush` | 17 | temiz | — | temiz |
+| `token-bucket` | 14 | temiz | temiz | temiz |
+| `retry-backoff` | 9 | temiz (3/3) | temiz (3/3) | temiz (3/3) · eski kayıt: 5'te 4 kusurlu |
+
+Belirtilmeyen hücreler k=1; `snapshot-store` ve `retry-backoff` satırları
+k=3 ve üç koşunun üçünde de aynı sonuç.
 
 Üçü de **önceden tarif edilmiş** kusuru üretti; kancalar tahminle yazılmıştı
 ve tahmin tuttu. `snapshot-store`'da geri alma geçmişi baştan oynattı ve
@@ -257,15 +288,78 @@ devam etti.
 eksik olan tek şey **koşunun kendisi**: ölçen, puanlayan ve karar veren
 katmanların üçü de yazılı ve testli.
 
-**Bilinmeyen:** frontier modelde kusurun hangi ölçekte başladığı.
-`claude-opus-5` sekiz görevde dokuz koşuda bir kez bile kusur üretmedi —
-üçü onu hedefleyerek yazılmış görevlerde. Bu "frontier model kusur
-üretmiyor" demek değil; bu sekiz görevin ona kolay geldiği demek. Bugünkü
-ders: zorluk, yazılmış kural sayısından gelmiyor (aşağıya bak).
+**Bilinen sınır:** eşik `snapshot-store` sınıfında **sonnet-5 ile opus-5
+arasında**. Opus sekiz görevin on iki koşusunda hiç kusur üretmedi; sonnet
+yalnızca `snapshot-store`'da üretti, haiku dört görevde üretti. Yani
+"frontier model kusur üretmiyor" değil: bu görevlerin ona kolay geldiği,
+ve zorluğun yazılmış kural sayısından değil **komşu modülden türetilen
+gereksinimden** geldiği ölçüldü.
 
 ---
 
-## Bu oturumda ne yapıldı — görev seti 5'ten 8'e
+## Bu oturumda ne yapıldı — eşik ölçüldü
+
+Haiku kusur üretiyordu, opus üretmiyordu; arada ne olduğu bilinmiyordu.
+20 canlı koşu (~$2.4) ile ölçüldü.
+
+| Görev | Kanca | `claude-haiku-4-5` | `claude-sonnet-5` | `claude-opus-5` |
+|---|---:|---|---|---|
+| `snapshot-store` | 16 | **14/16** (3/3) | **14/16** (3/3) | temiz (3/3) |
+| `retry-backoff` | 9 | temiz (3/3) | temiz (3/3) | temiz (3/3) |
+| `csv-roundtrip` | 18 | **17/18** | temiz | temiz |
+| `async-pool` | 12 | **10/12** | temiz | temiz |
+| `cache-refresh` | 22 | **12/22** | temiz | temiz |
+
+### Eşik: komşu modülü okuyup okumamak
+
+`snapshot-store` **bütün bir model katmanını aşıyor** ve kusur belirlenimci:
+haiku ve sonnet, üçer koşunun üçünde de **aynı iki kancayı** düşürdü
+(`version geri gitmez`, `version hiçbir zaman tekrar etmez`).
+
+Üç `undo` yan yana konunca fark bir puan değil, bir davranış:
+
+```ts
+// haiku ve sonnet — ikisi de geçmişi baştan oynatıyor
+this.#history.pop();
+this.#state = this.#history.reduce(apply, BOS);   // version geriye düşer
+```
+
+```ts
+// opus — kendi yorumuyla
+// "Eski State nesnesini geri takmak cazip ama yanlış olurdu: version
+//  türetilmiş hesapların önbellek anahtarı (bkz. selector.ts)."
+```
+
+Yani eşik "daha iyi kod" değil: **değiştirdiği modülün TÜKETİCİSİNİ
+okumak.** `selector.ts` sürüme göre önbellekliyor, bu spec'te yazmıyor.
+Dünkü dersin ikinci kanıtı: ölçüm gücü yazılmamış ama komşu modülden
+türetilebilir gereksinimden geliyor.
+
+### Kötü haber: Açık Soru #1'in sayısı tekrarlanmadı
+
+Audit gate ölçümünün dayandığı kusur (`retry-backoff` × opus, eski kayıt:
+5 koşuda ortalama 0.80 kırmızı kanca) bugün **hiçbir modelde** çıkmadı —
+üç model, üçer koşu, hepsi 9/9 temiz. Üç aday sebep var ve hiçbiri elenmiş
+değil: (1) o ölçümden sonra görev metninin geçiş yolu iki kez değişti,
+(2) üretim ajanının araçları `Read,Write,Edit` ile sınırlandı, (3) aynı ad
+altındaki model değişmiş olabilir.
+
+Sayı iptal edilmiyor — o koşular gerçekten oldu — ama **tekrarlanabilir
+bulgu sayılamaz** ve DESIGN'daki bölümün başına bu uyarı düşüldü. Yeniden
+ölçmek için kusur üreten bir hücre gerekiyor; bugün o hücre
+`snapshot-store` × {haiku, sonnet}.
+
+### Kampanya için sonucu
+
+Ölçüm gücü olan üretici artık haiku sınıfıyla sınırlı değil:
+**`snapshot-store` × `claude-sonnet-5`** belirlenimci kusur üretiyor,
+koşu başına ~$0.07. Çapraz satıcıda üretici olarak sonnet kullanmak sonucu
+daha güçlü bir sınıfa taşır ve "zaten zayıf model kusur üretti" itirazını
+zayıflatır.
+
+---
+
+## Önceki oturumda ne yapıldı — görev seti 5'ten 8'e
 
 Üç yeni görev, üçü de "mevcut koda dokun" sınıfında ve her biri ayrı bir
 tuzağı hedefliyor:
@@ -332,7 +426,7 @@ yakalayabileceği türden, yani ölçüm için aranan kusur.
 
 ---
 
-## Önceki oturumda ne yapıldı — tur başına anlık görüntü
+## Daha önce — tur başına anlık görüntü
 
 **Sınır şuydu:** ajan dosyayı **yerinde** değiştiriyor, yani bir turun
 sonundaki hâl bir sonraki turda kayboluyor. Koşu bittikten sonra elde

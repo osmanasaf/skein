@@ -440,6 +440,11 @@ Bir görev sete ancak kalibrasyon koşusunu geçerse girer:
 
 ## Audit gate — ilk ölçüm (Açık Soru #1)
 
+> **18 Eylül uyarısı: bu bölümdeki sayı bugünkü hatla tekrarlanmadı.**
+> Ölçümün dayandığı kusur (`retry-backoff` × `claude-opus-5`) üç yeni
+> koşuda da çıkmadı; ayrıntısı "Eşik nerede" bölümünde. Sayılar kayıt
+> olarak duruyor, tekrarlanabilir bulgu olarak değil.
+
 Roadmap'in ölçütü ("denetim turunda yapılan düzeltme oranı") kendi kendini
 çürütüyordu: kapının geçme koşulu *hiçbir şeyin değişmediği bir tur* olduğu
 için mekanizma düzeltme **yapmayan** ajanı ödüllendirir. Ölçüt bir **sonuç**
@@ -815,6 +820,81 @@ türden bir kusur, ki ölçüm için aranan tam olarak bu.
   temiz (k=1). Depoda duruyorlar ve naif çözüme karşı güçleri kanıtlı, ama
   bugünkü iki üreticiyle ölçüm üretmiyorlar. Matrisin kendi koruması
   zaten atlayacak ("Ölçüm gücü yok").
+
+## Eşik nerede: `claude-sonnet-5` ölçümü (18 Eylül, k=3)
+
+Haiku kusur üretiyordu, opus üretmiyordu; arada ne olduğu bilinmiyordu.
+Sonnet-5 ile ölçüldü — ve eşik tek bir görev sınıfında net çıktı.
+
+| Görev | Kanca | `claude-haiku-4-5` | `claude-sonnet-5` | `claude-opus-5` |
+|---|---:|---|---|---|
+| `snapshot-store` | 16 | **14/16** (3/3 koşu) | **14/16** (3/3 koşu) | 16/16 (3/3 koşu) |
+| `retry-backoff` | 9 | 9/9 (3/3) | 9/9 (3/3) | 9/9 (3/3) |
+| `csv-roundtrip` | 18 | 17/18 (k=1) | 18/18 (k=1) | 18/18 |
+| `async-pool` | 12 | 10/12 (k=1) | 12/12 (k=1) | 12/12 |
+| `cache-refresh` | 22 | 12/22 (k=1) | 22/22 (k=1) | 22/22 |
+
+**`snapshot-store` bütün bir model katmanını aşıyor** ve kusur tamamen
+belirlenimci: haiku ve sonnet, üçer koşunun üçünde de **aynı iki kancayı**
+kırmızıya düşürdü (`version geri gitmez`, `version hiçbir zaman tekrar
+etmez`). k=3 ve işaret tutarlı — DESIGN'ın kabul ölçütünün üçü de karşılanıyor.
+
+### Eşiğin mekanizması: komşu modül okunuyor mu
+
+Üç modelin yazdığı `undo` yan yana konunca fark bir puan değil, bir
+davranış:
+
+```ts
+// haiku ve sonnet — ikisi de geçmişi baştan oynatıyor
+this.#history.pop();
+this.#state = this.#history.reduce(apply, BOS);   // version geriye düşer
+```
+
+```ts
+// opus — kendi yorumuyla
+// "Eski `State` nesnesini geri takmak cazip ama yanlış olurdu:
+//  `version` türetilmiş hesapların önbellek anahtarı (bkz. `selector.ts`)."
+```
+
+Yani eşik "daha iyi kod yazmak" değil: **değiştirdiği modülün TÜKETİCİSİNİ
+okumak.** `selector.ts` sürüme göre önbellekliyor ve bu spec'te yazmıyor;
+haiku ve sonnet dosyayı açmadan görevi tarif edildiği gibi çözüyor, opus
+açıp tuzağı adıyla söylüyor.
+
+Bu, önceki turun dersinin ikinci kanıtı: ölçüm gücü **yazılmamış ama
+komşu modülden türetilebilir** gereksinimden geliyor.
+
+### `retry-backoff` artık kusur üretmiyor — eski ölçüm tekrarlanmadı
+
+Açık Soru #1'in (audit gate) dayandığı kusur, bugünkü hatla **hiçbir
+modelde** çıkmadı: haiku 3/3, sonnet 3/3, opus 3/3 temiz. Eski kayıt
+`claude-opus-5` için kapısız kolda ortalama 0.80 kırmızı kanca diyordu
+(n=5) ve mekanizma izi nettti: `export function retry` senkron fırlatıyordu.
+
+Aradaki farkı bugün ayıramıyoruz; üç aday var ve hiçbiri elenmiş değil:
+
+1. **Çağrı yolu değişti.** O ölçümden sonra görev metninin nasıl geçtiği
+   iki kez düzeltildi (stdin → pozisyonel argüman; sonra `-p`'nin hemen
+   ardına). Ajanın eline geçen metin aynı değildi.
+2. **Araç kısıtı eklendi.** Üretim ajanına artık yalnızca `Read,Write,Edit`
+   veriliyor.
+3. **Sunucu tarafındaki model değişmiş olabilir.** Aynı ad, aynı davranış
+   demek değil.
+
+**Sonuç: Açık Soru #1'in sayısı şüpheli sayılmalı.** İptal edilmiyor —
+o koşular gerçekten oldu ve kayıtları duruyor — ama bugünkü hatla
+tekrarlanmadığı için "audit gate kusuru sıfıra indirdi" ifadesi artık
+tekrarlanabilir bir bulgu değil. Tekrar ölçülmesi gerekiyor ve bunun için
+önce kusur üreten bir hücre gerekiyor: bugün o hücre
+`snapshot-store` × {haiku, sonnet}.
+
+### Kampanya için sonucu
+
+Ölçüm gücü olan üretici artık haiku sınıfıyla sınırlı değil:
+**`snapshot-store` × `claude-sonnet-5` belirlenimci olarak kusur üretiyor**
+ve koşu başına ~$0.07. Çapraz satıcı 2x2'sinde üretici olarak sonnet
+kullanmak, sonucu daha ilginç bir güç sınıfına taşır — "zayıf model kusur
+üretti" itirazını da zayıflatır.
 
 ## Çapraz satıcı nerede koşulabilir
 
