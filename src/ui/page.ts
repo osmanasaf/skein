@@ -427,6 +427,12 @@ function detayCiz(d) {
   p.append(el("h2", null, d.card.title));
   p.append(el("div", "cid", d.card.id + " · " + d.card.role + " · " + d.card.state));
 
+  // Kartın hangi planla yürüdüğü, kimliğine ait bir bilgi — plana bağlı
+  // değilse (plan yoksa) satır hiç görünmez.
+  if (d.card.plan) {
+    p.append(el("div", "cid", d.card.plan.path + " · " + d.card.plan.hash.slice(0, 12)));
+  }
+
   const m = el("div", "meta");
   if (d.card.rejects) m.append(el("span", "bad", d.card.rejects + " ret"));
   m.append(el("span", null, d.card.turns + " tur"));

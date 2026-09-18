@@ -260,6 +260,32 @@ describe("buildModel — türetilmiş, durum değil", () => {
   });
 });
 
+describe("buildDetail — plan", () => {
+  const numstat = async () => "";
+
+  it("devredilen kartın plan alanı tam {path, hash} olarak döner", async () => {
+    await put();
+    await queue.handoff((await queue.take("coder")) as Card, {
+      commit: "abc1234",
+      plan: { path: "docs/plan/c-yok.md", hash: "66ae27b7539abcdef0123456" },
+    });
+    const card = (await queue.list())[0] as Card;
+
+    const detail = await buildDetail({ ...base, numstat }, card.id);
+
+    expect(detail?.card.plan).toEqual({ path: "docs/plan/c-yok.md", hash: "66ae27b7539abcdef0123456" });
+  });
+
+  it("plana bağlı olmayan kartın plan alanı null'dur", async () => {
+    await put();
+    const card = (await queue.list())[0] as Card;
+
+    const detail = await buildDetail({ ...base, numstat }, card.id);
+
+    expect(detail?.card.plan).toBeNull();
+  });
+});
+
 describe("buildDetail — iz ve diff", () => {
   const numstat = async () => "24\t1\tsrc/events/log.ts\n19\t0\tsrc/watch/tick.ts\n";
 

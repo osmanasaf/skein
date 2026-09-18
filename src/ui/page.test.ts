@@ -43,4 +43,13 @@ describe("renderPage", () => {
     expect(html).not.toContain("http://");
     expect(html.includes("https://")).toBe(false);
   });
+
+  // Kart bir plana bağlıysa detay panelinde yol + sürümün ilk 12 karakteri
+  // görünmeli; kısaltma ekranın kendi tüketicisinde yapılır (akış hash'iyle
+  // aynı ilke), sunucudan tam hash gelir.
+  it("detay betiği plan varsa yol ve kısaltılmış hash'i çizer", () => {
+    const src = betik(renderPage("x"));
+    expect(src).toContain("d.card.plan");
+    expect(src).toContain("d.card.plan.hash.slice(0, 12)");
+  });
 });

@@ -75,6 +75,13 @@ export interface UiCard {
    * "kabul, ret, kapı, ret, bitti" aynı şey değil.
    */
   trail: ("accepted" | "rejected" | "gate" | "released" | "done")[];
+  /**
+   * Kartın yürüdüğü planın dondurulmuş kaydı — yoksa `null`.
+   *
+   * Tam hash burada taşınır; 12 karaktere kısaltma ekranın kendi
+   * tüketicisinde (`page.ts`) yapılır, akış hash'iyle aynı ilkeyle.
+   */
+  plan: { path: string; hash: string } | null;
 }
 
 export interface UiStep {
@@ -215,6 +222,7 @@ function toUiCard(
     orphan: hiza.orphan,
     stale: hiza.stale,
     trail,
+    plan: card.plan ?? null,
   };
 }
 
