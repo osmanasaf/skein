@@ -1,8 +1,11 @@
 import { randomBytes } from "node:crypto";
 import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join, sep } from "node:path";
-import { DONE, edgeKey, gateAfter, roleOf } from "../flow/snapshot.js";
-import { gateKind, parseCard, rejectCount, serializeCard, type Card, type HistoryEntry } from "./card.js";
+import { afterPlanning, DONE, edgeKey, gateAfter, roleOf } from "../flow/snapshot.js";
+import {
+  gateKind, parseCard, planGateEntry, rejectCount, serializeCard,
+  type Card, type HistoryEntry,
+} from "./card.js";
 
 /**
  * İnsanın kapıdaki karta verdiği karar.
@@ -288,6 +291,18 @@ export class CardQueue {
   ): Promise<Card> {
     const { path } = this.#requireActive(card);
     const withPlan = plan === undefined ? card : { ...card, plan };
+
+    // Alışveriş zincirin SONUNDA kapanıyorsa kart biter. `queue/done` diye
+    // bir rol kuyruğu açmak, kartı var olmayan bir role göndermek olurdu.
+    if (to === DONE) {
+      const kayitli = this.#push(withPlan, entry);
+      const done = {
+        ...this.#push(kayitli, { at: now(), event: "done", from: card.role }),
+        state: "done" as const,
+      };
+      return this.#move(done, join(this.#root, "done"), `${card.id}.json`, path);
+    }
+
     const moved = {
       ...this.#push(withPlan, entry),
       role: to,
@@ -428,8 +443,14 @@ export class CardQueue {
 
     // `back` hedefi: rolün ret hedefi. Zincirin başında geri dönecek rol
     // olmadığı için rol işi kendisi yeniden yapar.
+    // Planlama kilidinden ileri bırakmak, alışverişten SONRAKİ role gider:
+    // zincirdeki ardıl itiraz eden roldür ve oraya dönmek, insanın "planı
+    // olduğu gibi kabul ediyorum" kararını bir tur daha alışverişe çevirir.
+    const ileri = planGateEntry(card) === null
+      ? role.next
+      : (afterPlanning(card.topology) ?? role.next);
     const target =
-      decision === "retry" ? role.id : decision === "forward" ? role.next : (role.reject ?? role.id);
+      decision === "retry" ? role.id : decision === "forward" ? ileri : (role.reject ?? role.id);
 
     const rejects = { ...card.rejects };
     if (role.reject !== null) delete rejects[edgeKey(role.id, role.reject)];

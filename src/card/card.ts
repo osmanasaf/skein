@@ -207,6 +207,23 @@ export function gateKind(card: Card): "approval" | "deadlock" | "escalation" | n
   return null;
 }
 
+/**
+ * Kart bir PLANLAMA kilidinde mi bekliyor.
+ *
+ * Kapı kaydının hemen öncesinde bir `plan` cevabı varsa, bu kapı alışverişin
+ * tükenmesinden doğmuştur. Ayrımın bedeli var: böyle bir kartta "ileri
+ * bırak", zincirdeki ardıla (itiraz eden role) değil, alışverişten SONRAKİ
+ * role gitmeli. Aksi hâlde insan "planı olduğu gibi kabul ediyorum" dediğinde
+ * kart itiraz edene geri döner ve bir tur daha para harcar.
+ */
+export function planGateEntry(card: Card): Extract<HistoryEntry, { event: "plan" }> | null {
+  if (card.state !== "gate") return null;
+  const last = card.history[card.history.length - 1];
+  if (last?.event !== "gate") return null;
+  const prev = card.history[card.history.length - 2];
+  return prev?.event === "plan" && prev.action === "cevap" ? prev : null;
+}
+
 export function rejectCount(card: Card, from: string, to: string): number {
   return card.rejects[edgeKey(from, to)] ?? 0;
 }

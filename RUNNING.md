@@ -240,6 +240,23 @@ Rolün `git commit` atabilmesi gerekiyor. Varsayılan `bypassPermissions` bunu
 sağlar; root olarak koşuyorsan CLI onu reddeder, o zaman `acceptEdits` +
 `--allow-tool "Bash"` ver.
 
+**Canlı koşuda öğrenildi:** `acceptEdits` tek başına yetmiyor — dosya
+yazdırır ama `git add`/`commit` yaptırmaz. Ajan dosyayı yazıp "commit
+atamadım" diyerek durur (ve doğru davranmış olur). Dar hâli:
+
+```bash
+npx tsx src/watch/cli.ts <akış> --permission-mode acceptEdits \
+  --allow-tool "Bash(git:*)" --allow-tool Read --allow-tool Write --allow-tool Edit
+```
+
+`SKEIN_PERMISSION_MODE` ortam değişkeni yalnızca **bench** yolunda okunuyor;
+orkestratörde bayrak kullan.
+
+**Koşudan sonra `npm test` kırmızı yanıyorsa** önce `.worktrees/` bak:
+orkestratör her rol için deponun bir worktree'sini açıyor ve kökten koşan
+vitest oradaki kopyaları da toplayabiliyordu. `vitest.config.ts` artık
+dışlıyor; başka bir araç (eslint, tsc --build) için aynı tuzak geçerli.
+
 ---
 
 ## Deney (bench)

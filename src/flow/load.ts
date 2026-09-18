@@ -675,6 +675,26 @@ export async function loadFlow(path: string, options: LoadOptions): Promise<Flow
 
   const plan = parsePlan(doc, order, ids, file);
 
+  // --- kural 21: katılımcıya kapı konamaz ---
+  //
+  // Alışveriş sırasında kart katılımcılar arasında `planTurn` ile dolaşıyor
+  // ve o yol kapı kontrolünden GEÇMİYOR. Yani katılımcıya konmuş bir kapı
+  // hiç ateşlenmez: akış dosyasında duran ama işlemeyen bir insan kapısı,
+  // çalıştığı sanılan bir kapıdır ve en kötü sessiz arıza türüdür.
+  if (plan !== null) {
+    for (const gate of gates) {
+      if (plan.katilimcilar.includes(gate.after)) {
+        throw new FlowError(
+          file,
+          rule(21, `\`gates\` planlama katılımcısına konamaz: \`${gate.after}\`. ` +
+            `Alışveriş sırasında kart kapı kontrolünden geçmiyor, yani bu kapı hiç ` +
+            `ateşlenmez. Planın insan onayı 6c'nin konusu (bkz. PLANLAMA.md); ` +
+            `bugün kapıyı planlamadan SONRAKİ bir role koy.`),
+        );
+      }
+    }
+  }
+
   const hash = topologyHash({
     root, name, constitution, roles: ordered, gates, reject: rejectPolicy, audit,
     ...(plan === null ? {} : { plan }),

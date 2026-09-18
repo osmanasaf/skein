@@ -40,6 +40,11 @@ reject:                         # akış geneli ret politikası
 audit:
   enabled: boolean              # varsayılan: true
   fingerprint: [string]         # parmak izine giren alanlar
+
+planlama:                       # opsiyonel; PLANLAMA.md
+  katilimcilar: [string]        # ilki planı YAZAR, ikincisi itiraz eder
+  tur: integer                  # itiraz → cevap döngüsü; bugün yalnızca 1
+  plan: string                  # `{kart}` içermeli; itiraz dosyası türetilir
 ```
 
 ## Alanların anlamı
@@ -172,6 +177,17 @@ kapısı arkasında bir *öneri* olarak eklenebilir.
 için, denetim sırasında yapılan düzeltme otomatik olarak yeni bir tur açar;
 devir teslim ancak hiçbir şeyin değişmediği bir turdan sonra gerçekleşir.
 
+**`planlama`** — kod yazılmadan önce bir **plan belgesi** üretir.
+Katılımcıların ilki planı yazıp commit'ler; ikincisi (varsa) plana yazılı
+itiraz eder ve ilki itirazları yanıtlar (`kabul` → planı düzeltir /
+`ret: gerekçe` / `insana` → kapı). Alışveriş sırasında kart zincirden
+ayrılıp katılımcılar arasında dolaşır; `next` ancak alışveriş kapanınca
+devreye girer.
+
+İtiraz dosyasının biçimi ve mekanizmanın kapıları `PLANLAMA.md`'de. Öne
+çıkan kural: her itirazın `Neyi yanlışlar` alanı **depodan bir yere işaret
+etmek zorunda** — yolu bulunmayan itiraz sayılmaz.
+
 ## Doğrulama kuralları
 
 Akış yüklenirken şunlar kontrol edilir; ihlal varsa akış hiç başlamaz.
@@ -202,6 +218,24 @@ görürsün.
     izolasyonu sessizce yok eder: iki ajan aynı ağaçta çalışır ve
     birbirinin değişikliğini ezer. Rol kopyalayıp `workspace` satırını
     değiştirmeyi unutmak, topolojiyi büyütürken yapılacak en kolay hata.
+17. `planlama.katilimcilar` en az bir, en fazla iki tekil rol içerir ve
+    hepsi tanımlı olmalıdır. (Üç ve fazlası körlemeyi anlamlı kılar ve tur
+    sayacı gerektirir; henüz yazılmadı — `PLANLAMA.md` 6c.)
+18. `planlama.tur` 1 ile 5 arasında bir tamsayıdır; bugün yalnızca **1**
+    kabul edilir. `ilk-tur-kor` açıkça `false` yapılamaz. İkisi de
+    yazılmamış davranışa işaret ettiği için **sessizce yok sayılmaz,
+    reddedilir**: akışta duran ama işlemeyen bir alan, çalıştığı sanılan
+    bir alandır.
+19. `planlama.katilimcilar` zincirin **başında ve zincir sırasında** olmalı.
+    Plan, iş yapıldıktan sonra tartışılmaz.
+20. `planlama.plan` depo içinde kalan, `src/` altında olmayan ve `{kart}`
+    içeren bir yoldur. `{kart}` zorunlu: içermezse iki kart aynı dosyayı
+    ezer ve ikincisi birincisinin planını okur.
+21. `gates[].after` bir planlama katılımcısına işaret edemez. Alışveriş
+    sırasında kart kapı kontrolünden geçmiyor, yani o kapı hiç ateşlenmez —
+    akışta duran ama işlemeyen bir insan kapısı, çalıştığı sanılan bir
+    kapıdır. Planın insan onayı `PLANLAMA.md` 6c'nin konusu; bugün kapıyı
+    planlamadan sonraki bir role koy.
 
 Kural 9-11 akış yüklenirken değil, **prompt derlenirken** de yeniden
 uygulanır; ikisi de aynı birleştiriciden geçer.

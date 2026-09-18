@@ -29,7 +29,9 @@ ajanın iyi niyetine değil **mekanizmaya** bağlar:
 | [`PHILOSOPHY.md`](PHILOSOPHY.md) | İlkeler, reddedilenler, test edilmemiş varsayımlar |
 | [`ROADMAP.md`](ROADMAP.md) | Risk azaltma sırasına göre aşamalar |
 | [`hub/flows/SCHEMA.md`](hub/flows/SCHEMA.md) | Topoloji tanımlama dili — kendi akışını bununla yazarsın |
-| [`hub/flows/`](hub/flows/) | Örnek akışlar: 2 adımlı `daily`, 4 adımlı kapılı `spec` |
+| [`hub/flows/`](hub/flows/) | Örnek akışlar: 2 adımlı `daily`, 4 adımlı kapılı `spec`, planlı `plan`/`plan2` |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Katmanlar, uzun ömürlü çekirdek, değişmezler |
+| [`PLANLAMA.md`](PLANLAMA.md) | Planlamada yazılı tur — tasarım ve yazılan aşamalar |
 | [`hub/adapters/CONTRACT.md`](hub/adapters/CONTRACT.md) | Sağlayıcı sözleşmesi |
 | [`bench/DESIGN.md`](bench/DESIGN.md) | Tezi sınayan deneyin tasarımı — 2×2 çapraz kurgu |
 | [`RUNNING.md`](RUNNING.md) | Deneyi kendi makinende koşturmak |

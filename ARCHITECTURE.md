@@ -229,7 +229,9 @@ Ekran tartışması bunların üstüne gelir, bunları yeniden açmaz:
 | ~~3~~ | ✅ Okuyucu ekran — pano, canlı adım, kart izi, diff | Gerçek depoda doğrulandı; üç sorunun üçü de ekrandan cevaplanıyor |
 | ~~4~~ | ✅ Kapı ekrandan açılıyor | Yüzey komut gönderiyor; çekirdeğin reddi kullanıcıya aynen gidiyor |
 | ~~5~~ | ✅ Akış ekrandan kuruluyor | Doğrulama ve maliyet tahmini zaten yazılıydı; ekran onları kullanıyor |
-| 6 | Planlamada ajanlar arası yazılı tur | En sonda, ve mekanizma olarak; serbest sohbet olarak değil. **Tasarımı yazıldı: `PLANLAMA.md`** |
+| ~~6a~~ | ✅ Plan belgesi akışın parçası | Canlı koşuda doğrulandı: `coder` plana atıf yaptı, `reviewer` işi plana karşı denetledi |
+| ~~6b~~ | ✅ Plana itiraz turu (iki katılımcı) | Mekanizma canlı koştu; `kabul` yolu testlerle kapalı, canlı koşuyla değil |
+| 6c | Çok tur, tur sayacı, üç+ katılımcıda körleme | Tasarımı `PLANLAMA.md`'de; ölçümden sonra |
 
 Adım 6'nın gerekçesi `PHILOSOPHY.md`'de: serbest sohbet maliyeti sınırsız
 büyütür, izlenebilirliği kaybeder ve modeller birbirine yakınsadıkça kör nokta

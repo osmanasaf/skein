@@ -41,3 +41,12 @@ sayılmaz**; dosya yoksa tur kabul edilmez.
 
 Uydurma itiraz da yazma: itiraz etmek için itiraz etmek, sonraki rolün
 zamanını ve insanın dikkatini harcar.
+
+Ama "itirazım yok" tek başına bir bilgi değil. **Neyi kontrol ettiğini
+listele:** planın hangi iddiasını hangi dosyada doğruladın. Böylece
+okuyan, turun gerçek bir inceleme mi yoksa tören mi olduğunu ayırt eder —
+ve doğrulanmış bir anlaşma, sessiz bir anlaşmadan farklı bir şeydir.
+
+> Bu madde bir canlı koşudan geliyor: itiraz eden rol planın her iddiasını
+> depodaki kodla karşılaştırıp dosya:satır atıflarıyla listeledi, sonra
+> "uydurma bir itiraz eklemiyorum" dedi. Doğru davranıştı; artık yazılı.

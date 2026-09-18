@@ -507,6 +507,22 @@ describe("loadFlow — planlama (kural 17-20)", () => {
     await expect(load(await write(yaml))).rejects.toThrow(/kural 20.*\{kart\}/s);
   });
 
+  // Alışveriş sırasında kart `planTurn` ile dolaşıyor ve o yol kapı
+  // kontrolünden geçmiyor: katılımcıya konmuş kapı hiç ateşlenmez.
+  // Akışta duran ama işlemeyen bir insan kapısı, en kötü sessiz arıza.
+  it("planlama katılımcısına konmuş kapıyı reddeder", async () => {
+    const yaml = patch("gates: []", "gates:\n  - after: coder\n    type: approval") +
+      "\nplanlama:\n  katilimcilar: [coder]\n  plan: docs/plan/{kart}.md\n";
+    await expect(load(await write(yaml))).rejects.toThrow(/kural 21/);
+  });
+
+  it("planlamadan sonraki role konmuş kapıya dokunmaz", async () => {
+    const yaml = patch("gates: []", "gates:\n  - after: reviewer\n    type: approval") +
+      "\nplanlama:\n  katilimcilar: [coder]\n  plan: docs/plan/{kart}.md\n";
+    const flow = await load(await write(yaml));
+    expect(flow.gates).toHaveLength(1);
+  });
+
   it("depo dışına çıkan plan yolunu reddeder", async () => {
     const yaml = withPlan("planlama:\n  katilimcilar: [coder]\n  plan: ../disari/{kart}.md");
     await expect(load(await write(yaml))).rejects.toThrow(/kural 20/);

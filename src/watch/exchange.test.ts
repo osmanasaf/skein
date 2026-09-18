@@ -329,3 +329,34 @@ describe("alışveriş — günlük", () => {
     });
   });
 });
+
+// Kilit kapısından "ileri bırak" kararının hedefi, zincirdeki ardıl DEĞİL:
+// orası itiraz eden rol ve oraya dönmek, insanın "planı olduğu gibi kabul
+// ediyorum" kararını bir tur daha alışverişe çevirirdi.
+describe("alışveriş — kilit kapısından çıkış", () => {
+  async function kilide(card: Card): Promise<void> {
+    await planYaz(card);
+    dosyalar.set(at("architect", ITIRAZ_YOLU(card.id)), itiraz("açık"));
+    claude.answer = kabulEt("itirazım var");
+    await tick("architect", options);
+    dosyalar.set(at("main", ITIRAZ_YOLU(card.id)), itiraz("açık"));
+    claude.answer = kabulEt("cevap vermedim");
+    await tick("planner", options);
+  }
+
+  it("ileri bırakma kartı alışverişten SONRAKİ role gönderir", async () => {
+    const card = await put();
+    await kilide(card);
+    expect((await queue.get(card.id))?.state).toBe("gate");
+
+    const released = await queue.release(card.id, { decision: "forward" });
+    expect(released.role).toBe("coder");
+  });
+
+  it("retry aynı role, back ret hedefine gider", async () => {
+    const card = await put();
+    await kilide(card);
+    const released = await queue.release(card.id, { decision: "retry" });
+    expect(released.role).toBe("planner");
+  });
+});
