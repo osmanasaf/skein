@@ -11,7 +11,7 @@ import {
   promptLayers, roleOf, type SnapshotRole,
 } from "../flow/snapshot.js";
 import { planPhase } from "../plan/phase.js";
-import { parseItirazlar } from "../plan/itiraz.js";
+import { kanitYolu, parseItirazlar } from "../plan/itiraz.js";
 import { assemblePrompt } from "../prompt/assemble.js";
 import { dirtyPaths, head, isTracked, mergeForward, ORCHESTRATOR_PATHS } from "./git.js";
 import { buildTaskText } from "./task-text.js";
@@ -409,9 +409,12 @@ async function planStep(
   // itiraz hiçbir dosyaya işaret edemez ve planı durduramaz.
   const yollar = new Map<string, boolean>();
   for (const parca of itirazMetni.split(/\r?\n/u)) {
-    const m = /`([^`]+)`/u.exec(parca);
-    const aday = m?.[1]?.split(":")[0];
-    if (aday !== undefined && !yollar.has(aday)) {
+    // Satırdaki HER ters tırnaklı parça denetleniyor: ayrıştırıcı "yol
+    // gibi görünen ilk parçayı" seçiyor ve o, satırın ilk parçası olmak
+    // zorunda değil. İkisi farklı parçaya bakarsa geçerli bir itiraz
+    // "depoda yok" diye elenir.
+    const aday = kanitYolu(parca);
+    if (aday !== null && !yollar.has(aday)) {
       yollar.set(aday, await exists(join(workdir, aday)));
     }
   }

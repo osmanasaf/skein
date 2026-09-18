@@ -252,6 +252,12 @@ npx tsx src/watch/cli.ts <akış> --permission-mode acceptEdits \
 `SKEIN_PERMISSION_MODE` ortam değişkeni yalnızca **bench** yolunda okunuyor;
 orkestratörde bayrak kullan.
 
+**Orkestratör koşarken SENİN ağacın temiz olmalı.** `main` worktree'sini
+kullanan rol, "kabul temiz ağaç ister" kapısından geçiyor ve o kapı ajanın
+bıraktığı işle senin düzenlemeni ayırt edemez: canlı bir koşuda operatörün
+commit'lenmemiş dosyaları rolü insan kapısına çıkardı. Kapı doğru davrandı
+— ama koşu başlamadan `git status` temiz olmalı.
+
 **Koşudan sonra `npm test` kırmızı yanıyorsa** önce `.worktrees/` bak:
 orkestratör her rol için deponun bir worktree'sini açıyor ve kökten koşan
 vitest oradaki kopyaları da toplayabiliyordu. `vitest.config.ts` artık

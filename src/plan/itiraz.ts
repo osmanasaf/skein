@@ -80,11 +80,24 @@ function durumOf(raw: string): { durum: Durum; gerekce?: string } | null {
  * yol. Backtick'li ilk parça, yoksa uzantısı olan ilk kelime.
  */
 export function kanitYolu(kanit: string): string | null {
-  const tirnak = /`([^`]+)`/u.exec(kanit);
-  const aday = tirnak?.[1] ?? kanit.split(/\s+/u).find((k) => /\.[a-z]{2,5}(:\d+)?$/iu.test(k));
+  // Ters tırnaklı parçaların hepsine bakılıyor, yalnızca ilkine değil:
+  // "**Neyi yanlışlar:** `Store.undo()` — `src/store.ts:12`" satırında ilk
+  // parça yol DEĞİL. Yalnızca ilkine bakan bir okuyucu, iyi niyetli bir
+  // itirazı biçim yüzünden geçersiz sayardı — ve bu kural sonuçlu olduğu
+  // için katılığın bedeli yüksek.
+  const adaylar = [...kanit.matchAll(/`([^`]+)`/gu)].map((m) => m[1] as string);
+  adaylar.push(...kanit.split(/\s+/u));
+  const aday = adaylar.find((k) => yolGibi(k));
   if (aday === undefined) return null;
   const yol = aday.split(":")[0]?.trim();
   return yol === undefined || yol === "" ? null : yol;
+}
+
+/** Dizin ayracı ya da dosya uzantısı taşıyan bir parça mı. */
+function yolGibi(parca: string): boolean {
+  const temiz = parca.trim().replace(/[.,;]+$/u, "");
+  if (temiz === "") return false;
+  return temiz.includes("/") || /\.[a-z]{1,5}(:\d+)?$/iu.test(temiz);
 }
 
 export interface ParseOptions {

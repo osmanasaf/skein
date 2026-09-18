@@ -109,4 +109,15 @@ describe("kanitYolu", () => {
   it("yol yoksa null döner", () => {
     expect(kanitYolu("genel olarak hata yönetimi zayıf")).toBeNull();
   });
+
+  // Yalnızca İLK ters tırnağa bakan bir okuyucu, bu satırda `Store.undo()`
+  // parçasını yol sanıp itirazı geçersiz sayardı — iyi niyetli bir itiraz
+  // biçim yüzünden ölürdü ve kural sonuçlu olduğu için bedeli yüksek.
+  it("ilk ters tırnak yol değilse sonrakine bakar", () => {
+    expect(kanitYolu("`Store.undo()` — `src/card/store.ts:12`")).toBe("src/card/store.ts");
+  });
+
+  it("dizin ayracı taşıyan parçayı da yol sayar", () => {
+    expect(kanitYolu("`hub/flows` altındaki örnekler")).toBe("hub/flows");
+  });
 });

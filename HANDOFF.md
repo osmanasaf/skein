@@ -7,7 +7,7 @@ yapıştırılabilsin diye yazıldı: aşağısı Skein'i tanımayan birine de y
 **Dal:** `claude/project-plan-brainstorm-pthvoc` — `claude/project-thread-sc56cs`
 ileri sarılıp üstüne devam edildi, yani iki dalın işi bu dalda birleşti.
 `sc56cs` olduğu yerde duruyor; yeni iş burada.
-**Durum:** 599 test yeşil, typecheck temiz, `selftest` 5/5, ağaç temiz.
+**Durum:** 610 test yeşil, typecheck temiz, `selftest` 5/5, ağaç temiz.
 **Kod:** ~9.3k satır ürün + ~6.1k satır test.
 
 ---
@@ -394,21 +394,39 @@ Hangi turda olunduğu **kartın geçmişinden** okunuyor (`src/plan/phase.ts`),
 bellekte tutulan bir durumdan değil: gözcü çökse de kart nerede kaldığını
 kendi taşır.
 
-**Canlı koşu — ve dürüst sonuç.** `plan2.yaml` gerçek ajanlarla koştu:
-planner planı yazdı, architect itiraz turunu koştu, alışveriş kapandı,
-coder ve reviewer işi bitirdi. **Ama tasarımın bitiş testi tam geçilmedi:**
-architect planın her iddiasını depodaki kodla karşılaştırdı, hepsini
-doğruladı ve "itirazım yok" dedi (uydurma itiraz da eklemedi). Yani
-`itirazsız` yolu koştu; `kabul` / `ret` / `insana` / kilit kapısı yolları
-yalnızca testlerle kapalı. Çekişmeli bir kartta canlı doğrulama duruyor.
+**İki canlı koşu — ve dürüst sonuç.** `plan2.yaml` iki kez gerçek ajanlarla
+koştu; ikisinde de mekanizma uçtan uca çalıştı. **Ama bitiş testi ikisinde
+de geçilmedi: 2/2 alışveriş SIFIR itirazla kapandı.** İtiraz eden rol her
+seferinde planın iddialarını depodaki kodla dosya:satır atıflarıyla
+doğruladı ve uydurma itiraz eklemeyi açıkça reddetti; ikincisinde planın
+bir satır aralığı kaymasını fark edip itiraz AÇMAMA kararını gerekçelendirdi.
 
-Koşu iki kusur çıkardı, ikisi de düzeltildi:
+Bugünkü dürüst okuma: **mekanizma ikinci bir çift göz üretiyor, itiraz
+üretmiyor.** İkisinin aynı şey olup olmadığı ölçümün (6d) sorusu.
+`kabul` / `ret` / `insana` / kilit kapısı yolları yalnızca testlerle kapalı.
+
+**İkinci koşu denetim katmanının sınırını de gösterdi:** `coder` ekranın
+gömülü betiğine ters tırnak içeren bir yorum yazdı; o betik bir şablon
+dizesinin içinde durduğu için **dosya derlenmez oldu**. Ne kodu yazan ne
+denetleyen rol derleyiciyi koşturabildiği için (sandbox'ta onay yüzeyi yok)
+ikisi de "elle doğruladım" dedi. Birleştirdikten sonra derleyici kusuru bir
+saniyede buldu. Ders: **doğrulama koşturulamıyorsa denetim turu bir kanaat
+turudur** — "ÖLÇÜLEMEDİ ≠ temiz"in akış tarafındaki karşılığı.
+
+Koşular dört kusur çıkardı, dördü de düzeltildi:
 
 - **"İtiraz yok" ile "itirazların hiçbiri sayılmadı" tek sayıya eriyordu.**
   Geçersiz itirazlar artık ayrı sayılıyor ve günlüğe, kart izine, gözcü
   satırına düşüyor.
 - **Alışveriş kartın kendi izinde görünmüyordu** (`card show` `plan`
   kaydını atlıyordu). Bunu **itiraz eden rol kendi raporunda tespit etti.**
+- **Kanıt kuralı fazla katıydı:** satırdaki ilk ters tırnak yol değilse
+  (`` `Store.undo()` — `src/store.ts:12` ``) iyi niyetli bir itiraz biçim
+  yüzünden sayılmıyordu. Artık yol gibi görünen ilk parça seçiliyor.
+- **Orkestratörü kendi düzenlediğin ağaçta koşturma.** "Kabul temiz ağaç
+  ister" kapısı, ajanın işiyle operatörün işini ayırt edemez: benim
+  commit'lenmemiş dosyalarım planner'ı kapıya çıkardı. Kapı doğru davrandı;
+  ders `RUNNING.md`'ye yazıldı.
 
 Ajanların ürettiği iş (gözcü geçiş satırında planlama turu) birleştirildi;
 testleri yine ben koşturdum. Üstelik ürettikleri modül, benim yazdığım

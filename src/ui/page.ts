@@ -460,8 +460,14 @@ function detayCiz(d) {
     if (h.who) bas.append(el("em", null, h.who));
     if (h.commit) bas.append(el("em", null, h.commit));
     if (h.plan) {
-      // Alışverişin kendi sayıları — kaydın taşımadığı (`null`) alanlar hiç
+      // Alışverişin kendi sayıları — kaydın taşımadığı (null) alanlar hiç
       // basılmaz, "0" ile "hiç ölçülmedi" karışmasın.
+      //
+      // DİKKAT: bu betik dış dosyada bir şablon dizesinin İÇİNDE duruyor;
+      // buraya yazılan bir ters tırnak dizeyi kapatır ve dosya derlenmez.
+      // Tam olarak bu oldu: ajanın yazdığı yorum ters tırnak içeriyordu,
+      // ne kodu yazan ne denetleyen rol derleyici koşturabildiği için
+      // ikisi de "elle doğruladım" deyip geçti.
       let ozet = "tur " + h.plan.round;
       if (h.plan.objections !== null) ozet += ", " + h.plan.objections + " itiraz";
       if (h.plan.accepted !== null) ozet += ", " + h.plan.accepted + " kabul";

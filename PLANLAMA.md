@@ -346,17 +346,39 @@ Kural değişiklikleri: `katilimcilar` iki olabiliyor, `tur: 1` kabul
 ediliyor. `tur > 1`, üç ve fazla katılımcı, ve `ilk-tur-kor: false` hâlâ
 AÇIKÇA reddediliyor — üçü de 6c'nin konusu.
 
-**Canlı koşu (18 Eylül, `claude-sonnet-5`, `plan2.yaml`):** `planner` planı
-yazdı ve commit'ledi; `architect` itiraz turunu koştu; alışveriş kapandı;
-`coder` ve `reviewer` işi bitirdi. Mekanizma uçtan uca çalıştı.
+**İki canlı koşu (18 Eylül, `claude-sonnet-5`, `plan2.yaml`):** ikisinde de
+`planner` planı yazıp commit'ledi, `architect` itiraz turunu koştu,
+alışveriş kapandı, `coder` ve `reviewer` işi bitirdi. Mekanizma uçtan uca
+çalıştı.
 
-**Ama bitiş testi tam olarak geçilmedi.** Tasarımın istediği "en az bir
-itiraz `kabul` ile kapansın ve plan hash'i değişsin" olmadı: `architect`
-planın her iddiasını depodaki kodla tek tek karşılaştırdı, hepsini
-doğruladı ve **itirazım yok** dedi — uydurma itiraz da eklemedi ("Uydurma
-bir itiraz eklemiyorum"). Yani `itirazsız` yolu koştu, `kabul` yolu değil.
+**Ama bitiş testi ikisinde de geçilmedi — ve bu artık bir bulgu.**
+Tasarımın istediği "en az bir itiraz `kabul` ile kapansın" olmadı:
+**2/2 alışveriş sıfır itirazla kapandı.** İkisinde de itiraz eden rol planın
+her iddiasını depodaki kodla dosya:satır atıflarıyla karşılaştırdı ve
+uydurma itiraz eklemeyi açıkça reddetti. İkincisinde planın bir satır
+aralığı kaymasını (71-87 yerine 77-93) bile fark etti ve **itiraz açmama
+kararını gerekçelendirdi** — kararı etkilemeyen bir kaynak göstergesi
+olduğu için.
+
+Bu sayı tasarımın kendi ölçütünü ("itirazsız alışveriş oranı >%50 ise
+mekanizma tören") kırmızı yakıyor. Ama iki dosyada da ortada **sessizlik
+değil kanıtlı doğrulama** var; ayrımı görünür kılan şey, ilk koşudan sonra
+`plan-itiraz.md`'ye eklenen "itirazın yoksa neyi kontrol ettiğini listele"
+maddesi. Yani bugünkü dürüst okuma şu: **mekanizma ikinci bir çift göz
+üretiyor, itiraz üretmiyor.** İkisinin aynı şey olup olmadığı, ölçümün
+(6d) cevaplayacağı soru.
+
 `kabul`, `ret`, `insana` ve kilit kapısı yolları testlerle kapalı
 (`src/watch/exchange.test.ts`), canlı koşuyla değil.
+
+**İkinci koşu ayrıca denetim katmanının sınırını gösterdi:** `coder`
+ekranın gömülü betiğine ters tırnak içeren bir yorum yazdı — o betik dış
+dosyada bir şablon dizesinin içinde durduğu için **dosya derlenmez oldu**.
+Ne kodu yazan ne denetleyen rol derleyiciyi koşturabildiği (sandbox'ta
+onay yüzeyi yok) için ikisi de "elle doğruladım" deyip geçti. Kusuru
+birleştirmeden sonra derleyici bir saniyede buldu. "ÖLÇÜLEMEDİ ≠ temiz"
+dersinin akış tarafındaki karşılığı: **doğrulama koşturulamıyorsa denetim
+turu bir kanaat turudur.**
 
 Koşunun kendisi iki kusur çıkardı, ikisi de düzeltildi:
 
