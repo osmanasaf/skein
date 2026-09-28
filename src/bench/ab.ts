@@ -1,7 +1,7 @@
 import { cp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Adapter } from "../adapters/contract.js";
-import { knownProviderSet } from "../adapters/factory.js";
+import { adapterFor, knownProviderSet, parseModelSpec, type AdapterOptions } from "../adapters/factory.js";
 import { newCard } from "../card/card.js";
 import { CardQueue } from "../card/queue.js";
 import { EventLog, readEvents, type SkeinEvent } from "../events/log.js";
@@ -125,6 +125,48 @@ export async function armTaskText(task: Task): Promise<string> {
  * diske geliyor. Kum havuzunda üretim sırasında bulunmamaları, "üretici
  * gizli testi görmedi" garantisini talimat olmaktan çıkarıp fiziksel yapar.
  */
+export class ArmError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ArmError";
+  }
+}
+
+/**
+ * Akışın istediği her sağlayıcı için adaptör var mı.
+ *
+ * Kontrol burada ve koşu BAŞLAMADAN: eksik adaptörle koşulduğunda her kol
+ * "ÖLÇÜLEMEDİ" döndürüyordu, yani yazım hatası ölçüm sonucu gibi
+ * görünüyordu. Canlı doğrulama koşusunda tam bu oldu — `--k 1` biçimi model
+ * adını yuttu, adaptör `1` diye kaydedildi ve iki kol da sessizce boş
+ * döndü. Para harcanmadı ama sonuç yanıltıcıydı.
+ */
+export function requireAdapters(providers: string[], adapters: Map<string, Adapter>): void {
+  const eksik = [...new Set(providers)].filter((p) => !adapters.has(p));
+  if (eksik.length === 0) return;
+  throw new ArmError(
+    `Şu sağlayıcı(lar) için adaptör yok: ${eksik.join(", ")}. ` +
+      `Verilen: ${[...adapters.keys()].join(", ") || "(hiç)"}. ` +
+      `Model biçimi \`sağlayıcı:model\` olmalı, ör. \`claude:claude-sonnet-5\`.`,
+  );
+}
+
+/**
+ * Kol koşusunun beklediği adaptör haritası — anahtar SAĞLAYICI.
+ *
+ * `adapterFor` adaptörün `id`'sine model tanımının tamamını yazıyor
+ * (`claude:claude-haiku-4-5`), çünkü 2x2'nin hücreleri model düzeyinde
+ * ayrışmak zorunda. Akış rolleri ise `provider: claude` diyor. Harita
+ * `adapter.id` ile kurulunca ikisi eşleşmiyor ve koşu hiç başlamıyor —
+ * canlı doğrulamada tam bu oldu. Testler haritayı elle `"claude"`
+ * anahtarıyla kurduğu için kusuru göremiyordu; kurulum bu yüzden artık
+ * tek yerde ve test edilebilir.
+ */
+export function armAdapters(modelSpec: string, options: AdapterOptions = {}): Map<string, Adapter> {
+  const { provider } = parseModelSpec(modelSpec);
+  return new Map([[provider, adapterFor(modelSpec, options)]]);
+}
+
 export async function runArm(options: ArmOptions): Promise<ArmResult> {
   const { repo, taskId, arm, sandbox, adapters, logPath, runId } = options;
   const task = await loadTask(options.taskDir ?? join(repo, "bench/tasks", taskId));
@@ -133,6 +175,7 @@ export async function runArm(options: ArmOptions): Promise<ArmResult> {
   const flowPath = join(sandbox, "hub", "flows", `${ARM_FLOW[arm]}.yaml`);
   const flow = await loadFlow(flowPath, { root: sandbox, providers: knownProviderSet() });
   const topology = snapshot(flow, sandbox);
+  requireAdapters(topology.roles.map((r) => r.provider), adapters);
 
   const queue = new CardQueue(join(sandbox, ".skein"));
   await queue.init();

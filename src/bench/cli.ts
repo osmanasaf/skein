@@ -13,7 +13,7 @@ import { TurnRecorder, diffLines, diffSnapshots, loadSnapshot,
   type Snapshot, type SnapshotDiff } from "./snapshot.js";
 import { selfTest } from "./selftest.js";
 import { networkFailure } from "./failure.js";
-import { runArm, ARM_FLOW, type Arm } from "./ab.js";
+import { armAdapters, runArm, ARM_FLOW, type Arm } from "./ab.js";
 import { planEffect, type PlanEffectReport, type PlanGroup } from "./planeffect.js";
 import { scoreTargets, scoreAll, classifyTargets, classifyAll } from "./score.js";
 import { effectReport, filterByTask, type EffectReport, type PairScore, type Side } from "./effect.js";
@@ -228,8 +228,8 @@ async function run(taskId: string, provider: string, model: string, audit: boole
  */
 async function planab(taskId: string, k: number, modelSpec: string): Promise<void> {
   await mkdir(join(REPO, ".skein"), { recursive: true });
-  const adapter = adapterFor(modelSpec, adapterEnv());
-  const adapters = new Map([[adapter.id, adapter]]);
+  const adapters = armAdapters(modelSpec, adapterEnv());
+  const adapter = [...adapters.values()][0] as Adapter;
 
   console.log(`6d ölçümü — ${taskId} · ${adapter.model} · k=${k}`);
   console.log(`kollar: ${ARM_FLOW.plansiz} (kontrol) ve ${ARM_FLOW.planli} (deney)`);
@@ -781,12 +781,22 @@ if (cmd === "report") {
     console.error("kullanım: cli.ts planab <görev-id> [--k 3] [--model claude:claude-sonnet-5]");
     process.exit(2);
   }
-  const kRaw = argv.find((a) => a.startsWith("--k="))?.slice(4)
-    ?? (argv.includes("--k") ? argv[argv.indexOf("--k") + 1] : undefined);
+  // Boşluklu biçim (`--k 1`) değeri konumsal argümanlara bırakıyor ve model
+  // adı olarak okunuyordu; canlı koşuda model "1" oldu. Değer artık
+  // konumsallardan ÇIKARILIYOR ve model yalnızca `sağlayıcı:model`
+  // biçimindeyse konumsal kabul ediliyor.
+  const deger = (ad: string): string | undefined => {
+    const esit = argv.find((a) => a.startsWith(`${ad}=`));
+    if (esit !== undefined) return esit.slice(ad.length + 1);
+    const at = argv.indexOf(ad);
+    return at === -1 ? undefined : argv[at + 1];
+  };
+  const tuketilen = new Set([deger("--k"), deger("--model")].filter((x) => x !== undefined));
+  const konumsal = rest.slice(1).filter((a) => !tuketilen.has(a));
   await planab(
     gorev,
-    Math.max(1, Number(kRaw ?? 3)),
-    argv.find((a) => a.startsWith("--model="))?.slice("--model=".length) ?? rest[1] ?? "claude:claude-sonnet-5",
+    Math.max(1, Number(deger("--k") ?? 3)),
+    deger("--model") ?? konumsal.find((a) => a.includes(":")) ?? "claude:claude-sonnet-5",
   );
 } else if (cmd === "planrapor") {
   await planrapor();

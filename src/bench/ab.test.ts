@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import type { Adapter, InvokeRequest, InvokeResult } from "../adapters/contract.js";
 import { readEvents } from "../events/log.js";
 import { VERDICT_FILE } from "../watch/verdict.js";
-import { armMetrics, runArm, type Arm } from "./ab.js";
+import { ArmError, armAdapters, armMetrics, requireAdapters, runArm, type Arm } from "./ab.js";
 
 const REPO = resolve(import.meta.dirname, "../..");
 
@@ -182,5 +182,56 @@ describe("armMetrics", () => {
       ev({ type: "card.settled", cell: "b", card: "c1", role: "reviewer", outcome: "accepted", state: "done" }),
     ]);
     expect(m).toEqual({ activations: 2, costUsd: 0.5, rejects: 1 });
+  });
+});
+
+// Canlı doğrulama koşusunda yazım hatası ÖLÇÜM gibi göründü: `--k 1`
+// biçimi model adını yuttu, adaptör `1` diye kaydedildi ve iki kol da
+// "ÖLÇÜLEMEDİ" döndü. Para harcanmadı ama sonuç yanıltıcıydı.
+describe("sağlayıcı denetimi", () => {
+  it("eksik adaptörde koşu hiç başlamaz", () => {
+    expect(() => requireAdapters(["claude"], new Map())).toThrow(ArmError);
+    expect(() => requireAdapters(["claude"], new Map())).toThrow(/adaptör yok: claude/);
+  });
+
+  it("adaptör varsa sessizce geçer", () => {
+    const sahte = { id: "claude", model: "m", invoke: async () => ({ exitCode: 0, stdout: "", stderr: "", durationMs: 1 }) };
+    expect(() => requireAdapters(["claude", "claude"], new Map([["claude", sahte]]))).not.toThrow();
+  });
+
+  it("kol koşusu eksik adaptörle ÖLÇÜLEMEDİ döndürmez, hata atar", async () => {
+    await expect(runArm({
+      repo: REPO,
+      taskId: "toplam",
+      taskDir: await fikstur(),
+      arm: "plansiz",
+      sandbox: join(sandbox, "bos"),
+      adapters: new Map(),
+      logPath,
+      runId: "t-bos",
+      timeoutMs: 5_000,
+    })).rejects.toThrow(/adaptör yok/);
+  });
+});
+
+// Canlı doğrulamanın İKİNCİ yazım hatası buradaydı: harita `adapter.id`
+// ile kurulmuştu (`claude:claude-haiku-4-5`), akış rolleri ise
+// `provider: claude` diyor. `requireAdapters` yakaladı ve koşu hiç
+// başlamadı — ama testler haritayı elle kurduğu için kusuru görmemişti.
+describe("armAdapters", () => {
+  it("haritayı SAĞLAYICI adıyla anahtarlar, adaptör kimliğiyle değil", () => {
+    const m = armAdapters("claude:claude-haiku-4-5-20251001");
+    expect([...m.keys()]).toEqual(["claude"]);
+    expect(m.get("claude")?.model).toBe("claude-haiku-4-5-20251001");
+    // Kimlik model tanımının tamamı kalmalı: 2x2 hücreleri buna dayanıyor.
+    expect(m.get("claude")?.id).toBe("claude:claude-haiku-4-5-20251001");
+  });
+
+  it("ürettiği harita akışın sağlayıcı denetiminden geçer", () => {
+    expect(() => requireAdapters(["claude"], armAdapters("claude:claude-sonnet-5"))).not.toThrow();
+  });
+
+  it("sağlayıcı yazılmazsa claude varsayılır", () => {
+    expect([...armAdapters("claude-opus-5").keys()]).toEqual(["claude"]);
   });
 });
