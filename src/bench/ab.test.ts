@@ -146,6 +146,34 @@ describe("6d koşum takımı", () => {
     expect(sonuc.red.length).toBeGreaterThan(0);
   });
 
+  // Kapıda kalan kolun sebebi sonuca taşınmak zorunda: kampanyada
+  // "gate" yazısı tek başına modelin commit'i atlamasıyla ret limitinin
+  // dolmasını ayırt etmiyor.
+  it("kapıda kalan kolda kaçış sebebi sonuca taşınır", async () => {
+    const adapter = new RoleAdapter();
+    // Kod yazan rol commit atmazsa devir olmaz: canlı koşuda haiku tam
+    // bunu yaptı.
+    const commitsiz: Adapter = {
+      id: "claude",
+      model: "sahte-1",
+      async invoke(req) {
+        const metin = await readFile(req.promptFile, "utf8");
+        if (/rol:coder/.test(metin)) {
+          await mkdir(join(req.workdir, "src"), { recursive: true });
+          await writeFile(join(req.workdir, "src/toplam.ts"), adapter.cozum);
+          await writeFile(join(req.workdir, VERDICT_FILE), JSON.stringify({
+            decision: "accept", summary: "commit atmadım",
+          }));
+          return { exitCode: 0, stdout: "", stderr: "", durationMs: 3 };
+        }
+        return adapter.invoke(req);
+      },
+    };
+    const sonuc = await kos("plansiz", commitsiz);
+    expect(sonuc.cardState).not.toBe("done");
+    expect(sonuc.escalation).toMatch(/işlenmemiş/);
+  });
+
   it("kol kimliği günlüğe açıkça yazılır", async () => {
     await kos("planli", new RoleAdapter());
     const { events } = await readEvents(logPath);

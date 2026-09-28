@@ -33,14 +33,14 @@ gördüğün yer. Kod editörü **değil** — bu sınır kasıtlı (`ARCHITECTU
 
 ## Tek cümlede nerede kaldık
 
-**Ölçüm takımı bitti; kalan tek iş koşmak — ve artık daha iyi bir
-üreticiyle.** Bu oturumda eşik ölçüldü: `snapshot-store` görevinde
+**İki ölçüm takımı da bitti (çapraz denetim ve 6d planlama A/B'si); kalan
+iş ikisini koşmak — ve artık daha iyi bir üreticiyle.** Bu oturumda eşik ölçüldü: `snapshot-store` görevinde
 `claude-haiku-4-5` ve `claude-sonnet-5` üçer koşunun üçünde de **aynı iki
 kancayı** kırmızıya düşürüyor, `claude-opus-5` üçünde de temiz. Yani
 kampanya artık haiku sınıfına mahkûm değil; sonnet üreticisiyle koşulabilir
 (koşu başına ~$0.07). Ayrıca dürüst bir kötü haber: Açık Soru #1'in
 dayandığı `retry-backoff` kusuru bugünkü hatla **hiçbir modelde**
-tekrarlanmadı. **Kalan tek iş hâlâ aynı: çapraz satıcı 2x2'sini koşmak** —
+tekrarlanmadı. **Kalan iki iş de koşmak: çapraz satıcı 2x2'si ve 6d kampanyası** —
 ve o, uzak konteynerde değil senin makinende yapılmalı (aşağıda sebebi;
 bugün bir kez daha sınandı, vekil `api.openai.com` CONNECT'ini hâlâ 403 ile
 kesiyor).
@@ -61,7 +61,9 @@ kesiyor).
 | — | **Eşik ölçümü: sonnet-5** | ✅ **bu oturum** |
 | 6a | Plan belgesi akışın parçası | ✅ canlı koşuda doğrulandı |
 | 6b | Plana itiraz turu (iki katılımcı, tek tur) | ✅ **bu oturum** |
-| 6c-d | Çok tur, sayaç, körleme, ölçüm | 📐 tasarım hazır (`PLANLAMA.md`) |
+| 6d | Ölçüm koşum takımı (A/B, kum havuzu, rapor) | ✅ **bu oturum** |
+| — | **6d kampanyası** (planlama işe yarıyor mu) | ⏳ koşulmadı — senin makinende |
+| 6c | Çok tur, tur sayacı, anlamlı körleme | 📐 tasarım hazır (`PLANLAMA.md`) |
 
 ---
 
@@ -168,6 +170,65 @@ Sayılar `.skein/events.jsonl`'den gelir, ekrana basılan metinden değil.
 k=1'dir; `report` bunu artık ayırt ediyor (18 Eylül düzeltmesi, aşağıda).
 Aynı sebeple: model çiftini kampanya ortasında değiştirirsen o koşular ayrı
 bir gruba düşer ve iki grubun da k'sı ayrı sayılır.
+
+---
+
+## SENİN İKİNCİ İŞİN — 6d kampanyası (planlama işe yarıyor mu)
+
+Çapraz satıcı ölçümünden **bağımsız** ve tek satıcıyla koşulabilir; bu
+yüzden ikisi paralel gidebilir. Sorduğu soru: **plandan önce yazılı bir
+alışveriş, ürünü daha doğru yapıyor mu, yoksa sadece iki aktivasyon mu
+ekliyor?**
+
+```bash
+# Ağacın TEMİZ olmak zorunda — kapı operatörün işini ajanın işinden
+# ayırt edemiyor ve kirli ağaçta kart kapıda kalır.
+git status --porcelain      # boş çıkmalı
+
+export SKEIN_PERMISSION_MODE=acceptEdits
+export SKEIN_ALLOWED_TOOLS='Read,Write,Edit,Bash(git:*)'
+#  ^ `Bash(git:*)` ŞART: rol kendi işini commit etmek zorunda, yoksa
+#    devir olmaz ve kart kapıda kalır.
+
+# İki görev × k=3. Her komut iki kol koşar (kontrol + deney).
+npx tsx src/bench/cli.ts planab snapshot-store --k=3 --model=claude:claude-sonnet-5
+npx tsx src/bench/cli.ts planab cache-refresh  --k=3 --model=claude:claude-sonnet-5
+
+npx tsx src/bench/cli.ts planrapor
+```
+
+**Görev seçimi ölçümün gücünü belirliyor.** Kontrol kolunda kırmızı kanca
+çıkmazsa "azalma" tanımsızdır ve rapor YETERSİZ der — doğru davranış, ama
+harcanmış para. Bugünkü hatla kusur üreten görevler: `snapshot-store`
+(16 kancanın 2'si, haiku ve sonnet'te belirlenimci), `cache-refresh`
+(22'nin 10'u, haiku), `csv-roundtrip` ve `async-pool` (haiku). Yani
+**sonnet üreticisiyle `snapshot-store` en güvenli hücre; `cache-refresh`
+için haiku daha güçlü.** `retry-backoff`, `config-patch`, `outbox-flush`
+koşma.
+
+**Maliyet:** kontrol kolu 2 aktivasyon, deney kolu 4. Haiku'da kol çifti
+~$0.5, sonnet'te ~$1.5–2. İki görev × k=3 kabaca **$6–12**.
+
+**Koşarken ekrana bakılacak tek satır:** bir kol "ÖLÇÜLEMEDİ" derse
+altındaki `sebep:` satırını oku. Bugüne kadar görülen sebep: rolün
+**commit atlamamış olması** ("işlenmemiş iş devredilemez"). Bu bir ölçüm
+sonucu değil, kolun düşmesidir — ve `planrapor` onu `ÖLÇÜLEMEDİ` diye ayrı
+sayar, "0 kırmızı" saymaz. Bir kolda sistematik olarak çıkıyorsa
+karşılaştırma bozulmuştur: modeli yükselt (haiku bunu atlayabiliyor,
+canlı doğrulamada bir kez atladı) ve o görevi yeniden koş.
+
+**Önceden ilan edilmiş eşikler** (`PLANLAMA.md`, sonuçtan önce yazıldı):
+kırmızı kanca oranında ≥%20 göreli azalma olumlu, <%10 olumsuz; karar için
+k≥3 ve tekrarlar arasında işaret tutarlılığı. Ayrıca iki tören ölçüsü:
+kabul edilen itiraz oranı <%20 ise mekanizma gürültü, itirazsız alışveriş
+oranı >%50 ise mekanizma tören.
+
+**Bugünkü dürüst beklenti şu ki ikinci tören ölçüsü kırmızı yanacak.**
+Canlı koşulan üç alışverişin üçü de **sıfır itirazla** kapandı
+(`plan.settled` → `outcome: anlasma`). Üçünde de itiraz eden rol planı
+gerçekten okuyup kontrol ettiğini listeledi, yani sessizlik değil; ama
+"ikinci bir çift göz" ile "itiraz üreten mekanizma" aynı şey değil.
+Ölçüm tam bu ayrımı kesecek.
 
 ---
 
@@ -433,6 +494,83 @@ testleri yine ben koşturdum. Üstelik ürettikleri modül, benim yazdığım
 `lastPlanEntry`'nin bu iş için yanlış araç olduğunu gösteriyor: planlaması
 bitmiş bir kart her sıradan geçişte eski turu göstermeye devam ederdi.
 Ayrı bir `thisTurnPlanEntry` yazıp gerekçesini yorumda anlatmışlar.
+
+### 6d: ölçümün koşum takımı yazıldı
+
+`src/bench/ab.ts` + `src/bench/planeffect.ts` + `cli.ts planab|planrapor`.
+Ölçütler `PLANLAMA.md`'de sonuçtan önce ilan edilmişti; bu oturumda onları
+koşturan alet yazıldı. **Ölçümün kendisi koşulmadı** — kampanya senin
+makinende koşacak, komutlar aşağıda.
+
+Takımın taşıdığı tasarım kararları:
+
+- **Kolların tek farkı planlama bloğu.** `ab-plansiz.yaml` ve
+  `ab-planli.yaml` başka hiçbir yerde ayrışmıyor; ayrışsalar hiçbir sayı
+  planlamaya yazılamazdı.
+- **Her koşu kendi kum havuzu deposunda.** Ajanların ürettiği çözüm bu
+  depoya yazılmıyor. Üretim sırasında kum havuzunda `hidden/` **yok** —
+  casus adaptörle test edildi, çünkü bu tam olarak ölçümün geçerlilik
+  koşulu.
+- **Kolun kimliği günlüğe yazılıyor, çıkarsanmıyor** (`ab.arm`).
+  "Plan olayı var mı" diye bakmak, planlayıcısı hiç koşmamış bir planlı
+  kolu kontrol kolu gibi gösterirdi.
+- **Eşikler `effect.ts`ten import ediliyor**, kopyalanmıyor; gruplama aynı
+  ve `repeats = min(planlı, plansız)` — eksik kolla koşulmuş görev k'yı
+  şişirmiyor.
+- **Ölçülemeyen koşu ayrı sayılıyor** (`unmeasured`) ve rapora basılıyor.
+  "0 kırmızı" ile "yer gerçeği yok" aynı hücreye düşemez.
+
+**Canlı doğrulama üç kusur çıkardı, üçü de aletin kendisinde:**
+
+1. **`--k 1` biçimi model adını yuttu.** `"1"` konumsal argüman olarak
+   kalıp model tanımı diye okundu; adaptör `1` diye kaydedildi ve iki kol
+   da "ÖLÇÜLEMEDİ · 0 aktivasyon · $0.0000" döndürdü. Para harcanmadı ama
+   **çıktı bir ölçüm sonucu gibi duruyordu.**
+2. **Adaptör haritası yanlış anahtarla kuruluyordu.** `adapterFor`
+   adaptörün `id`'sine model tanımının tamamını yazıyor
+   (`claude:claude-haiku-4-5-20251001`) çünkü 2x2 hücreleri model
+   düzeyinde ayrışmak zorunda; akış rolleri ise `provider: claude` diyor.
+   Harita `adapter.id` ile kurulunca hiçbir rol adaptör bulamıyordu.
+   Testler haritayı **elle** `"claude"` anahtarıyla kurduğu için gerçek
+   kablolamayı hiç sınamamıştı; kurulum artık `armAdapters()` içinde tek
+   yerde ve üç testle kaplı.
+3. **Kapıda kalan kolun SEBEBİ görünmüyordu.** "⚠ kart `gate` durumunda
+   kaldı" satırı, modelin commit'i atlamasıyla ret limitinin dolmasını
+   ayırt etmiyordu. Sebep artık `ArmResult.escalation` üstünden ekrana
+   düşüyor — ve sebep ölçümün geçerliliğini belirliyor: bir kolda
+   sistematik çıkıyorsa karşılaştırma bozulmuştur.
+
+İlk ikisinin ortak dersi, ölçüm altyapısının en pahalı tuzağı:
+**yazım hatası, sessiz sıfırla sonuçlandığında ölçümden ayırt edilemez.**
+Bu yüzden `requireAdapters` koşuyu hiç başlatmadan patlatıyor — ikinci
+kusuru yakalayan da tam bu oldu.
+
+**Canlı doğrulama (snapshot-store × haiku, k=1, ~$0.56):**
+
+```
+── tekrar 1 · plansiz ──   coder: escalated  →  ÖLÇÜLEMEDİ · $0.1347
+── tekrar 1 · planli  ──   4/4 rol accepted
+   14/16 yeşil  ← version geri gitmez; version hiçbir zaman tekrar etmez
+   4 aktivasyon · $0.4270 · alışveriş: 0 itiraz, 0 kabul
+```
+
+Deney kolu baştan sona koştu ve kırmızı düşen iki kanca, **eşik
+ölçümünde haiku ile sonnet'in üçer koşunun üçünde de düşürdüğü aynı iki
+kanca.** Ayrı depoda, ayrı akışla, bilinen kusur yeniden üretildi —
+takımın geçerliliğine dair elde en güçlü kanıt bu.
+
+Kontrol kolu düştü: `coder` kodu yazdı, commit atmadı, temiz-ağaç kapısı
+devri reddetti. `planrapor` bunu doğru okudu — `k=0 · YETERSİZ — kontrol
+kolu ölçülmedi`, `ÖLÇÜLEMEDİ` ayrı sayıldı, "0 kırmızı" sayılmadı. Aynı
+koşunun planlı kolunda **aynı model commit'i attı**, yani sistematik engel
+değil haiku'nun değişkenliği; ama kampanyada kolları asimetrik
+düşürebileceği için sonnet üreticisi öneriliyor.
+
+**Bir tuzak, günlüğün doğası:** `planrapor` görev başına biriktiriyor, yani
+iptal edilmiş ya da düşmüş eski koşular o görevin `ÖLÇÜLEMEDİ` sayısında
+kalıcı olarak görünür (doğrulamada 2+1 öyle birikti). Bu bilerek böyle —
+kol kaybı görünmeli — ama temiz bir kampanya istiyorsan `.skein/events.jsonl`'i
+başlamadan önce bir kenara al.
 
 ### Ve 6a yazıldı: plan belgesi akışın parçası
 

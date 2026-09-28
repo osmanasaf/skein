@@ -400,7 +400,8 @@ olmasın.
 `tukendi` → deadlock kapısı. Bitiş testi: limit dolduğunda kart kapıda
 bekliyor, insan `retry` ile planı yeniden açabiliyor.
 
-**6d — Ölçüm.** Yukarıdaki A/B, k≥3.
+**6d — Ölçüm koşum takımı. YAZILDI.** `src/bench/ab.ts` +
+`src/bench/planeffect.ts` + `cli.ts planab|planrapor`. Aşağıda.
 
 Dokunacağı yerler: `src/flow/load.ts` (kural 17-20), `src/flow/cost.ts`
 (formül), `src/card/card.ts` (geçmiş kaydı + `plan.hash`),
@@ -408,6 +409,113 @@ Dokunacağı yerler: `src/flow/load.ts` (kural 17-20), `src/flow/cost.ts`
 `hub/prompts/planlama/*.md`, `src/ui/model.ts` (pano alanları),
 `src/events/log.ts` (iki olay). Kaba büyüklük: 600-800 satır ürün kodu ve
 bir o kadar test.
+
+---
+
+## 6d — Koşum takımı (YAZILDI)
+
+Ölçütler yukarıda ilan edilmişti; bu bölüm onları koşturan takımı
+anlatıyor. Takımın kendisi bir cevap **değil** — cevabı üretecek alet.
+
+### Kolların tek farkı planlama bloğu
+
+`hub/flows/ab-plansiz.yaml` ve `hub/flows/ab-planli.yaml` satır satır
+aynı: aynı rol promptları, aynı anayasa, aynı ret politikası, aynı kod
+taşıma. Deney kolunda fazladan yalnızca `planlama:` bloğu ve iki
+katılımcı rolü var. Fark buysa, ölçülen şey de bu olabilir; iki akış
+başka bir yerde de ayrışsaydı hiçbir sayı planlamaya yazılamazdı.
+
+### Her koşu kendi kum havuzunda
+
+`prepareSandbox` her kol-tekrar için ayrı bir git deposu kuruyor: `hub/`
+kopyalanıyor, görevin `seed/`i açılıyor, ilk commit atılıyor. Ajanların
+ürettiği çözüm **bu depoya yazılmaz**. Gizli süit yine gerçek depodan
+koşuyor (`node_modules` orada), ama üretim sırasında kum havuzunda
+`hidden/` **yok** — bunu bir test casus adaptörle doğruluyor, çünkü
+"gizli testler sızmadı" iddiası tam olarak ölçümün geçerlilik koşulu.
+
+### Kolun kimliği çıkarsanmıyor, yazılıyor
+
+Günlüğe `ab.arm` olayı düşüyor (`taskId`, `arm`, `flow`). "Plan olayı var
+mı" diye çıkarsamak, planlayıcısı hiç koşmamış bir planlı kolu kontrol
+kolu gibi gösterirdi — yani ölçümü sessizce kendi lehine bozardı.
+`armRuns` kolu **sadece** bu olaydan okuyor.
+
+### Karar kuralı bench'ten devralınıyor
+
+`planEffect` eşikleri `bench/effect.ts`ten **import ediyor**, kopyalamıyor:
+ikinci bir eşik tanımı, zamanla birinciyle ayrışacak ikinci bir gerçek
+demekti. Gruplama da aynı — grup = görev × model, ve `repeats`
+`min(planli.runs, plansiz.runs)`: eksik kolla koşulmuş bir görev k'yı
+şişirmiyor. Tören metrikleri (`exchanges`, `withoutObjection`,
+`objections`, `accepted`, `invalid`) ayrı raporlanıyor; sonuç metriğiyle
+harmanlanmıyor.
+
+### Canlı doğrulama iki yazım hatası çıkardı — ve ikisi de ölçüm gibi görünebilirdi
+
+Bu iki kusur, takımın en önemli parçasının neden `requireAdapters`
+olduğunu anlatıyor:
+
+1. **`--k 1` biçimi model adını yuttu.** Boşluklu biçimde `"1"` konumsal
+   argüman olarak kaldı ve model tanımı diye okundu; adaptör `1` diye
+   kaydedildi. Her iki kol da "ÖLÇÜLEMEDİ · 0 aktivasyon · $0.0000"
+   döndürdü. Para harcanmadı, ama çıktı **bir ölçüm sonucu gibi
+   duruyordu.**
+2. **Adaptör haritası yanlış anahtarla kuruluyordu.** `adapterFor`
+   adaptörün `id`'sine model tanımının tamamını yazıyor
+   (`claude:claude-haiku-4-5-20251001`) — 2x2'nin hücreleri model
+   düzeyinde ayrışmak zorunda olduğu için. Akış rolleri ise
+   `provider: claude` diyor. Harita `adapter.id` ile kurulunca hiçbir rol
+   adaptör bulamıyordu.
+
+Birinci kusur ayrıştırıcıyla, ikincisi `armAdapters()` ile düzeltildi. Ama
+asıl ders ikisinin ortak yanında: **yazım hatası, sessiz sıfırla
+sonuçlandığında ölçümden ayırt edilemez.** O yüzden `requireAdapters`
+koşuyu hiç başlatmadan patlatıyor — ikinci kusuru yakalayan da bu oldu.
+Ve testlerin kusuru görmemesinin sebebi tam olarak şu: testler adaptör
+haritasını **elle** `"claude"` anahtarıyla kuruyordu, yani gerçek
+kablolamayı hiç sınamıyordu. Kurulum bu yüzden artık tek bir yerde
+(`armAdapters`) ve üç testle kaplı.
+
+### Canlı doğrulama: deney kolu baştan sona ölçüldü
+
+`snapshot-store` × haiku, k=1 (~$0.56):
+
+```
+── tekrar 1 · plansiz ──
+   coder: escalated
+   ÖLÇÜLEMEDİ  ·  1 aktivasyon  ·  $0.1347
+── tekrar 1 · planli ──
+   planner/architect/coder/reviewer: accepted
+   14/16 yeşil  ← kusur: version geri gitmez; version hiçbir zaman tekrar etmez
+   4 aktivasyon · $0.4270 · alışveriş: 0 itiraz, 0 kabul
+```
+
+İki şey doğrulandı, biri de kendini gösterdi:
+
+1. **Zincir baştan sona koşuyor ve gizli süit üretilen koda karşı
+   koşuyor.** Dahası kırmızı düşen iki kanca, eşik ölçümünde `haiku` ve
+   `sonnet`in üçer koşunun üçünde de düşürdüğü **tam olarak aynı iki
+   kanca**. Yani kum havuzu, ayrı bir depoda ve ayrı bir akışla, bilinen
+   kusuru yeniden üretiyor — koşum takımının geçerliliğine dair elde en
+   güçlü kanıt bu.
+2. **Kolun düşmesi ölçüm gibi sayılmıyor.** Kontrol kolunda `coder` kodu
+   yazdı ama commit atmadı; temiz-ağaç kapısı devri reddetti. `planrapor`
+   bunu `ÖLÇÜLEMEDİ` diye ayrı sayıyor, "0 kırmızı" saymıyor, ve kararı
+   `k=0 · YETERSİZ — kontrol kolu ölçülmedi` diye veriyor. Doğru davranış:
+   tek kollu bir A/B, sonuç değil.
+3. **Alışveriş yine sıfır itirazla kapandı** — bu dördüncü canlı
+   alışveriş, dördü de `anlasma`. Tören ölçüsü (>%50 itirazsız ise tören)
+   bugün %100'de duruyor.
+
+Kontrol kolunun düşme sebebi modelin bir adımı atlaması; aynı koşunun
+**planlı** kolunda aynı model commit'i attı, yani sistematik bir engel
+değil haiku'nun değişkenliği. Ama kampanyada bu, kolları asimetrik
+düşürebildiği için ölçümü bozar; o yüzden sebep artık ekrana basılıyor
+(`ArmResult.escalation`) ve kampanya talimatı sonnet üreticisini öneriyor.
+
+**Ölçümün kendisi hâlâ koşulmadı:** k≥3 ve en az iki görev gerekiyor.
+Bu belgeye sonuç yazılmadan önce koşması gereken şey o.
 
 ---
 

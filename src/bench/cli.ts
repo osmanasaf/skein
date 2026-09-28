@@ -262,7 +262,10 @@ async function planab(taskId: string, k: number, modelSpec: string): Promise<voi
             : `  ·  alışveriş: ${r.planning.objections} itiraz, ` +
               `${r.planning.accepted} kabul${r.planning.invalid > 0 ? `, ${r.planning.invalid} sayılmadı` : ""}`),
       );
-      if (r.cardState !== "done") console.log(`   ⚠ kart \`${r.cardState}\` durumunda kaldı`);
+      if (r.cardState !== "done") {
+        console.log(`   ⚠ kart \`${r.cardState}\` durumunda kaldı` +
+          (r.escalation === undefined ? "" : `\n     sebep: ${r.escalation}`));
+      }
     }
   }
 

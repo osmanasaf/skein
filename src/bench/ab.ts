@@ -61,6 +61,16 @@ export interface ArmResult {
   rejects: number;
   /** Planlı kolda alışverişin sayıları; kontrol kolunda yok. */
   planning?: { rounds: number; objections: number; accepted: number; invalid: number };
+  /**
+   * Kart kapıda kaldıysa SEBEBİ.
+   *
+   * Kampanyada bu satır olmadan "⚠ kart `gate` durumunda kaldı" yazısı
+   * operatöre hiçbir şey söylemiyor: modelin commit'i atlaması, ret
+   * limitinin dolması ve planlama kilidi aynı görünüyor. Sebep ölçümün
+   * geçerliliğini belirliyor — bir kolda sistematik olarak çıkıyorsa
+   * karşılaştırma bozulmuştur.
+   */
+  escalation?: string;
 }
 
 async function git(cwd: string, args: string[]): Promise<void> {
@@ -223,12 +233,17 @@ export async function runArm(options: ArmOptions): Promise<ArmResult> {
 
   const { events } = await readEvents(logPath);
   const own = events.filter((e) => e.runId === runId);
+  const kacis = [...own].reverse().find(
+    (e): e is Extract<SkeinEvent, { type: "card.settled" }> =>
+      e.type === "card.settled" && e.outcome === "escalated",
+  );
   return {
     arm, taskId, runId,
     ran: h.ran,
     red: h.red,
     total: h.hooks.length,
     cardState: son?.state ?? "yok",
+    ...(kacis?.reason === undefined ? {} : { escalation: kacis.reason }),
     ...armMetrics(own),
   };
 }
