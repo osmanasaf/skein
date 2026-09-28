@@ -42,8 +42,8 @@ audit:
   fingerprint: [string]         # parmak izine giren alanlar
 
 planlama:                       # opsiyonel; PLANLAMA.md
-  katilimcilar: [string]        # ilki planı YAZAR, ikincisi itiraz eder
-  tur: integer                  # itiraz → cevap döngüsü; bugün yalnızca 1
+  katilimcilar: [string]        # ilki planı YAZAR, ötekiler itiraz eder
+  tur: integer                  # itiraz → cevap döngüsü tavanı; 1..5
   plan: string                  # `{kart}` içermeli; itiraz dosyası türetilir
 ```
 
@@ -178,11 +178,35 @@ için, denetim sırasında yapılan düzeltme otomatik olarak yeni bir tur açar
 devir teslim ancak hiçbir şeyin değişmediği bir turdan sonra gerçekleşir.
 
 **`planlama`** — kod yazılmadan önce bir **plan belgesi** üretir.
-Katılımcıların ilki planı yazıp commit'ler; ikincisi (varsa) plana yazılı
+Katılımcıların ilki planı yazıp commit'ler; ötekiler (varsa) plana yazılı
 itiraz eder ve ilki itirazları yanıtlar (`kabul` → planı düzeltir /
 `ret: gerekçe` / `insana` → kapı). Alışveriş sırasında kart zincirden
 ayrılıp katılımcılar arasında dolaşır; `next` ancak alışveriş kapanınca
 devreye girer.
+
+**Bir tur** = bütün itirazcılar (zincir sırasında, birer birer) + yazarın
+yanıtı. `tur` bunun **tavanı**; alışveriş daha erken de bitebilir ve üç
+çıkışı var:
+
+| Çıkış | Koşul | Kartın gittiği yer |
+|---|---|---|
+| `anlasma` | Açık itiraz kalmadı, ya da tur hiç yeni itiraz eklemedi | Alışverişten sonraki rol |
+| `tukendi` | Tavan doldu ya da tur yeni itiraz eklemedi — ama açık itiraz var | Kapı, `gate.kind: deadlock` |
+| `insana` | Bir itiraz değer kararı diye insana çıktı | Kapı, `gate.kind: deadlock` |
+
+**Doğal son:** bir tur hiç yeni itiraz eklemediyse alışveriş o turun
+sonunda kapanır — yazar boş bir aktivasyon harcamaz. Denetim kapısındaki
+"parmak izi değişmedi" kuralının kardeşi. Sayaç birikimli dosyadan değil,
+turun **kendi katkısından** okunuyor.
+
+Kilitten çıkış insanın elinde: `forward` planı olduğu gibi kabul edip
+alışverişten sonraki role gönderir, `retry` **aynı rolü aynı tura** geri
+koyar (planı yalnızca insan yeniden açar).
+
+**İlk tur AÇIK.** `ilk-tur-kor` alanı hiç yazılamaz (kural 18): kod taşıma
+ileri birleştirme olduğu için ikinci itirazcının ağacı birincinin itiraz
+dosyasını alıyor. Körleme, yazarın ağacından dallanıp turun sonunda
+birleştiren bir taşıma gerektiriyor — `PLANLAMA.md` 6e.
 
 İtiraz dosyasının biçimi ve mekanizmanın kapıları `PLANLAMA.md`'de. Öne
 çıkan kural: her itirazın `Neyi yanlışlar` alanı **depodan bir yere işaret
@@ -218,14 +242,12 @@ görürsün.
     izolasyonu sessizce yok eder: iki ajan aynı ağaçta çalışır ve
     birbirinin değişikliğini ezer. Rol kopyalayıp `workspace` satırını
     değiştirmeyi unutmak, topolojiyi büyütürken yapılacak en kolay hata.
-17. `planlama.katilimcilar` en az bir, en fazla iki tekil rol içerir ve
-    hepsi tanımlı olmalıdır. (Üç ve fazlası körlemeyi anlamlı kılar ve tur
-    sayacı gerektirir; henüz yazılmadı — `PLANLAMA.md` 6c.)
-18. `planlama.tur` 1 ile 5 arasında bir tamsayıdır; bugün yalnızca **1**
-    kabul edilir. `ilk-tur-kor` açıkça `false` yapılamaz. İkisi de
-    yazılmamış davranışa işaret ettiği için **sessizce yok sayılmaz,
-    reddedilir**: akışta duran ama işlemeyen bir alan, çalıştığı sanılan
-    bir alandır.
+17. `planlama.katilimcilar` en az bir tekil rol içerir ve hepsi tanımlı
+    olmalıdır. Tek katılımcı alışverişsiz plan belgesi demektir (6a).
+18. `planlama.tur` 1 ile 5 arasında bir tamsayıdır. `ilk-tur-kor` alanı
+    **hiç yazılamaz** — `true` dahil. Körleme yapılmadığı için `true`
+    yazılabilmesi, yapılmamış bir şeyi yapılmış göstermek olurdu:
+    akışta duran ama işlemeyen bir alan, çalıştığı sanılan bir alandır.
 19. `planlama.katilimcilar` zincirin **başında ve zincir sırasında** olmalı.
     Plan, iş yapıldıktan sonra tartışılmaz.
 20. `planlama.plan` depo içinde kalan, `src/` altında olmayan ve `{kart}`
@@ -234,7 +256,8 @@ görürsün.
 21. `gates[].after` bir planlama katılımcısına işaret edemez. Alışveriş
     sırasında kart kapı kontrolünden geçmiyor, yani o kapı hiç ateşlenmez —
     akışta duran ama işlemeyen bir insan kapısı, çalıştığı sanılan bir
-    kapıdır. Planın insan onayı `PLANLAMA.md` 6c'nin konusu; bugün kapıyı
+    kapıdır. Planın kendisi için insan onayı hâlâ yok; alışveriş kilide
+    çıktığında insan zaten devreye giriyor (`gate.kind: deadlock`). Kapıyı
     planlamadan sonraki bir role koy.
 
 Kural 9-11 akış yüklenirken değil, **prompt derlenirken** de yeniden

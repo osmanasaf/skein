@@ -69,23 +69,23 @@ export interface AuditPolicy {
 }
 
 /**
- * Planlama politikası — `PLANLAMA.md`'nin 6a aşaması.
+ * Planlama politikası — `PLANLAMA.md`, aşama 6a-6c.
  *
- * Bugün taşıdığı tek şey: planı kimin yazacağı ve nereye. Alışveriş (itiraz
- * turları) 6b'de gelecek; o gelene kadar `tur` ve `ilk-tur-kor` alanları
- * AÇIKÇA reddediliyor. Sessizce yok saymak, akış dosyasına yazılmış ama
- * hiçbir şey yapmayan bir alan bırakırdı — `audit.enabled`'ın bir dönem
- * yaptığı ve bir kez yakalanan hata bu.
+ * Taşıdığı şey: planı kimin yazacağı, nereye, ve alışverişin kaç tur
+ * sürebileceği. `ilk-tur-kor` alanı HÂLÂ reddediliyor, çünkü körleme
+ * yapılmadı; sessizce yok saymak, akış dosyasında duran ama hiçbir şey
+ * yapmayan bir alan bırakırdı — `audit.enabled`'ın bir dönem yaptığı ve
+ * bir kez yakalanan hata bu.
  */
 export interface PlanPolicy {
   /**
    * Planlamaya katılan roller, zincir sırasında. İlki planı YAZAR;
-   * sonrakiler itiraz eder. 6b'de en fazla iki.
+   * sonrakiler itiraz eder. Bir tur = bütün itirazcılar + yazarın yanıtı.
    */
   katilimcilar: string[];
   /** Plan dosyasının yolu; `{kart}` kart kimliğiyle değişir. */
   plan: string;
-  /** İtiraz→cevap döngüsü sayısı üst sınırı. 6b'de 1. */
+  /** İtiraz→cevap döngüsü sayısı üst sınırı; 1..5. */
   tur: number;
   /** İtiraz dosyasının yolu; plan yolundan türetilir. */
   itiraz: string;
@@ -325,34 +325,30 @@ function parsePlan(
   if (doc["planlama"] === undefined || doc["planlama"] === null) return null;
   if (!raw) throw new FlowError(file, "`planlama` bir eşleme olmalı");
 
-  // Körleme iki katılımcıda zaten etkisiz: itiraz eden tek rol var, kimsenin
-  // görmeyeceği bir itiraz yok. Anlam kazandığı yer üç ve fazlası, yani 6c.
-  // Varsayılan `true` atıl; AÇIKÇA kapatmak reddediliyor ki kapatılmış
-  // sanılan bir körleme diye bir şey olmasın.
-  if (raw["ilk-tur-kor"] === false) {
+  // Körleme HENÜZ YOK ve bu yüzden alan tamamen reddediliyor — `true` dahil.
+  //
+  // Sebep 6c ile keskinleşti: kod taşıma zincir boyunca ileri birleştirme
+  // (`mergeForward`). Üç katılımcıda ikinci itirazcının ağacı, birincinin
+  // itiraz dosyasını birleşmeyle ALIYOR. Yani körleme, yazarın ağacından
+  // dallanıp turun sonunda birleştiren bir taşıma (fan-out/fan-in)
+  // gerektiriyor; bu, taşıma katmanının kendi işi ve 6c'nin kapsamı
+  // dışında. `ilk-tur-kor: true` yazılabilmesi, YAPILMAYAN bir şeyi
+  // yapılmış göstermek olurdu — `audit.enabled`'ın bir dönem yaptığı ve
+  // bir kez yakalanan hatanın aynısı.
+  if (raw["ilk-tur-kor"] !== undefined) {
     throw new FlowError(
       file,
-      rule(18, "`planlama.ilk-tur-kor: false` henüz uygulanmadı. İki katılımcıda " +
-        "körlemenin etkisi yok (itiraz eden tek rol var); anlam kazandığı yer üç " +
-        "ve fazlası, yani 6c (bkz. PLANLAMA.md)."),
+      rule(18, "`planlama.ilk-tur-kor` henüz uygulanmadı; alan hiç yazılamaz. " +
+        "Kod taşıma ileri birleştirme olduğu için ikinci itirazcının ağacı " +
+        "birincinin itiraz dosyasını alıyor: körleme, yazarın ağacından " +
+        "dallanan bir taşıma gerektiriyor (bkz. PLANLAMA.md, 6e). " +
+        "Bugün ilk tur AÇIK ve rapor bunu böyle yazıyor."),
     );
-  }
-  if (raw["ilk-tur-kor"] !== undefined && raw["ilk-tur-kor"] !== true) {
-    throw new FlowError(file, rule(18, "`planlama.ilk-tur-kor` mantıksal değer olmalı"));
   }
 
   const turRaw = raw["tur"] ?? 1;
   if (typeof turRaw !== "number" || !Number.isInteger(turRaw) || turRaw < 1 || turRaw > 5) {
     throw new FlowError(file, rule(18, `\`planlama.tur\` 1 ile 5 arasında bir tamsayı olmalı: ${String(turRaw)}`));
-  }
-  if (turRaw > 1) {
-    throw new FlowError(
-      file,
-      rule(18, `\`planlama.tur\` bugün yalnızca 1 olabilir; ${turRaw} verildi. ` +
-        `Çok turlu alışveriş, tur sayacı ve kilit kapısı 6c'nin konusu ` +
-        `(bkz. PLANLAMA.md). Alanı yazıp hiçbir şey yapmamasındansa reddetmek ` +
-        `doğru: akışta duran ama işlemeyen bir alan, çalıştığı sanılan bir alandır.`),
-    );
   }
 
   const katilimcilar = optionalStringList(raw["katilimcilar"], "planlama.katilimcilar", file);
@@ -361,14 +357,6 @@ function parsePlan(
   }
   if (new Set(katilimcilar).size !== katilimcilar.length) {
     throw new FlowError(file, rule(17, "`planlama.katilimcilar` aynı rolü iki kez sayamaz"));
-  }
-  if (katilimcilar.length > 2) {
-    throw new FlowError(
-      file,
-      rule(17, `\`planlama.katilimcilar\` bugün en fazla iki rol alabilir; ${katilimcilar.length} verildi. ` +
-        `Üç ve fazlası körlemeyi anlamlı kılar ve tur sayacı gerektirir — 6c'nin konusu ` +
-        `(bkz. PLANLAMA.md).`),
-    );
   }
   for (const id of katilimcilar) {
     if (!ids.has(id)) {

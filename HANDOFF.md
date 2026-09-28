@@ -63,7 +63,8 @@ kesiyor).
 | 6b | Plana itiraz turu (iki katılımcı, tek tur) | ✅ **bu oturum** |
 | 6d | Ölçüm koşum takımı (A/B, kum havuzu, rapor) | ✅ **bu oturum** |
 | — | **6d kampanyası** (planlama işe yarıyor mu) | ⏳ koşulmadı — senin makinende |
-| 6c | Çok tur, tur sayacı, anlamlı körleme | 📐 tasarım hazır (`PLANLAMA.md`) |
+| 6c | Çok tur, çok katılımcı, sayaç, kilit kapısı | ✅ **bu oturum** (canlı koşulmadı) |
+| 6e | Körleme — taşıma değişikliği | 📐 gerekçesi yazıldı (`PLANLAMA.md`) |
 
 ---
 
@@ -173,6 +174,32 @@ bir gruba düşer ve iki grubun da k'sı ayrı sayılır.
 
 ---
 
+## İSTEĞE BAĞLI ÜÇÜNCÜ İŞ — 6c'yi canlı koşmak (~$1)
+
+6c testlerle kapalı ama gerçek ajanla koşmadı. Tek kartlık bir koşu,
+sıranın ve sayacın canlıda da tuttuğunu gösterir:
+
+```bash
+git status --porcelain      # boş olmalı
+export SKEIN_PERMISSION_MODE=acceptEdits
+export SKEIN_ALLOWED_TOOLS='Read,Write,Edit,Bash(git:*)'
+
+npx tsx src/card/cli.ts new "undo ekle" --task "…"
+npx tsx src/watch/cli.ts hub/flows/plan3.yaml --model claude:claude-sonnet-5
+npx tsx src/card/cli.ts show <kart-id>     # plan kayıtlarını oku
+```
+
+Bakılacak şey kart izinde: `plan` kayıtlarının **sırası** (planner yazdi →
+architect itiraz → analyst itiraz → planner cevap) ve `objections`
+sayısının turlar arasında nasıl ilerlediği. Ekranda `tur 2, N itiraz (bu
+turda +M)` satırı görünmeli.
+
+Beklenen tuzak: iki itirazcı da aynı ortak dosyaya yazıyor. Biri öbürünün
+itirazını ezerse sayaç düşer ve bunu kart izinden görürsün — promptta
+açıkça yasaklandı ama canlı koşu promptun tuttuğunu göstermenin tek yolu.
+
+---
+
 ## SENİN İKİNCİ İŞİN — 6d kampanyası (planlama işe yarıyor mu)
 
 Çapraz satıcı ölçümünden **bağımsız** ve tek satıcıyla koşulabilir; bu
@@ -241,6 +268,7 @@ npx tsx src/watch/cli.ts <akış> --model …       orkestratör (toplu koşu)
 npx tsx src/watch/cli.ts <akış> --serve …       gözcüyü açık bırak
 npx tsx src/flow/cli.ts check hub/flows/plan.yaml   planlı örnek akış (6a)
 npx tsx src/flow/cli.ts check hub/flows/plan2.yaml  itiraz turlu akış (6b)
+npx tsx src/flow/cli.ts check hub/flows/plan3.yaml  üç katılımcı, iki tur (6c)
 npx tsx src/ui/cli.ts <akış> [--port N]         ekran (127.0.0.1)
 
 npx tsx src/bench/cli.ts selftest [görev]       kancalar sağlam mı (bedava)
@@ -494,6 +522,74 @@ testleri yine ben koşturdum. Üstelik ürettikleri modül, benim yazdığım
 `lastPlanEntry`'nin bu iş için yanlış araç olduğunu gösteriyor: planlaması
 bitmiş bir kart her sıradan geçişte eski turu göstermeye devam ederdi.
 Ayrı bir `thisTurnPlanEntry` yazıp gerekçesini yorumda anlatmışlar.
+
+### 6c: çok tur, çok katılımcı, sayaç ve kilit
+
+Kaldırılan iki sınır: `planlama.tur` artık 1..5, `katilimcilar` üç ve
+fazlası olabiliyor. Örnek akış `hub/flows/plan3.yaml` — üç katılımcı, iki
+tur, ~9 aktivasyon/kart.
+
+- **Turun şekli:** bir tur = bütün itirazcılar (zincir sırasında, birer
+  birer) + yazarın yanıtı. Sıra ayrı bir alanda tutulmuyor, kartın
+  geçmişinden hesaplanıyor (`src/plan/phase.ts`). Bir "sıra" alanı,
+  kartla senkron kalmak zorunda olan ikinci bir gerçek olurdu.
+- **Turun ortasında sonlanma kararı verilmiyor.** İlk itirazcı sessiz
+  kalabilir; turun sessiz olup olmadığı ancak son itirazcı konuştuktan
+  sonra bilinir.
+- **Yeni itiraz sayacı:** dosya birikimli, ama sonlanma kuralı turun KENDİ
+  katkısını soruyor (`objectionBaseline`). Ekran ikisini ayrı basıyor:
+  `tur 2, 3 itiraz (bu turda +1)`.
+- **Doğal son yazarın turunu atlıyor:** son itirazcı yeni bir şey
+  eklemediyse ve açık itiraz yoksa alışveriş orada kapanıyor. Yanıtlanacak
+  şey yokken yazarı uyandırmak, bedeli olan bir nezaket.
+- **Kilit:** tavan doldu ya da tur yeni itiraz eklemedi, ama açık itiraz
+  var → `gate.kind: deadlock`, `plan.settled` outcome `tukendi`. `insana`
+  çıkışı artık kendi adıyla kayda geçiyor; `kacis`e ya da `tukendi`ye
+  sıkıştırmak ikisi de yanlış olurdu.
+- **Planı yalnızca insan yeniden açıyor:** kapıdan `retry` aynı rolü AYNI
+  tura geri koyuyor (kart geçmişinden okunuyor); `forward` alışverişi
+  yeniden açmıyor.
+
+**Kendi işime saldırgan bakınca bir kusur daha çıktı:** yeniden açma
+tespiti "plan kaydından sonraki ilk kapı + bırakma" diye tarıyordu, ve o
+tarama zincirin **ilerisinden** gelen bir `back` kararını da yeniden açma
+sayıyordu (coder kapıya çıkar, insan `back` der, hedef ret hedefi = planı
+yazan rol). Kart plan için değil kodla ilgili bir sebepten dönüyor; yazara
+"itirazları yanıtla" turu verilirdi. Kapı artık plan kaydının **hemen
+ardından** gelmek zorunda. Regresyon testi yazıldı ve eski gevşek tarama
+geri konarak testin tuttuğu doğrulandı.
+
+**Bir kusur daha:** `planGateEntry` yalnızca `cevap`
+kaydına bakıyordu, oysa 6c'de kilit **itirazcının** turunda da doğabiliyor.
+O kilidi tanımayan bir okuyucu `forward`u zincirdeki ardıla — yani itiraz
+eden role — gönderirdi, tam olarak bu fonksiyonun önlemek için var olduğu
+hata.
+
+**Körleme YAPILMADI ve alan artık `true` bile kabul etmiyor.** 6b'de
+gerekçe "iki katılımcıda etkisi yok, 6c'de anlam kazanır" idi; 6c üç
+katılımcıyı açtı ve gerekçe düştü. Yerine daha keskin bir gerçek geldi:
+kod taşıma ileri birleştirme, yani ikinci itirazcının ağacı birincinin
+itiraz dosyasını **alıyor**. Körleme talimatla sağlanamaz (dosya orada);
+taşımanın şeklini değiştirmek gerekiyor — her itirazcı yazarın ağacından
+dallanmalı ve turun sonunda hepsi yazara birleşmeli. Bu **6e** olarak
+ayrıldı. Bugün: alan hiç yazılamıyor, `plan.round` olayı `blind: false`
+diyor, ve itiraz promptu ortak dosyayı açıkça anlatıyor.
+
+**Doğrulama:** 27 yeni test (`src/plan/phase.test.ts` 15 — saf, diske hiç
+dokunmuyor; `src/watch/exchange3.test.ts` 12 — üç katılımcı ve iki turla
+uçtan uca `tick`). Toplam 664 yeşil. Sıra makinesinin gerçekten sınandığı
+**mutasyonla** doğrulandı: tabanı hep 0 döndürünce 5 test, turun
+ortasındaki devri kapatınca 8 test, tavan kontrolünü kaldırınca 2 test
+kırmızıya döndü.
+
+Ayrıca kendi testimde bir kusur çıktı: topoloji fikstürünü `as
+TopologySnapshot` ile yazmıştım ve cast, alan adının yanlış olduğunu
+(`promptFile` ≠ `prompt`) ve `constitution`ın eksik olduğunu gizliyordu.
+Cast kalktı, derleyici ikisini de söyledi. **Testte `as`, testin kendisini
+sınanmaz yapıyor.**
+
+**Canlı koşulmadı.** 6b iki canlı koşuyla doğrulanmıştı; `plan3.yaml`
+gerçek ajanla koşmadı. Kampanya komutu aşağıda.
 
 ### 6d: ölçümün koşum takımı yazıldı
 

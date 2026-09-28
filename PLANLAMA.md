@@ -93,7 +93,13 @@ Her açık itiraza, bir sonraki turda üç cevaptan biri verilir:
 Cevapsız bırakılan itiraz `ret` sayılmaz — **açık** sayılır. Sessizlik
 anlaşma değildir.
 
-### Tur 1 kör, sonrası açık
+### Tur 1 kör, sonrası açık — YAPILMADI (6e)
+
+> **Bu bölüm tasarımı anlatıyor, bugünkü davranışı DEĞİL.** Körleme
+> yazılmadı: kod taşıma ileri birleştirme olduğu için ikinci itirazcının
+> ağacı birincinin itiraz dosyasını alıyor. `ilk-tur-kor` alanı bu yüzden
+> hiç yazılamıyor ve `plan.round` olayı `blind: false` diyor. Gerekçesi ve
+> gerekeni 6c bölümünün sonunda.
 
 Birinci turda katılımcılar birbirinin itirazlarını **görmez**: herkes planı
 okur ve kendi itirazlarını yazar. İkinci turdan itibaren dosyanın tamamı
@@ -149,14 +155,16 @@ planlama:
   plan: docs/plan/{kart}.md            # yol; `src/` altı yasak
 ```
 
-Yükleyiciye dört kural eklenir (bugün 16 var, bunlar 17-20):
+Yükleyiciye dört kural eklenir (o gün 16 vardı, bunlar 17-20; 6b bir de
+21'i ekledi):
 
 | # | Kural | Neden |
 |---|---|---|
-| 17 | `katilimcilar` en az iki, tekrarsız, hepsi tanımlı rol | Tek kişilik "alışveriş" alışveriş değil |
-| 18 | `tur` 1..5 | Maliyet tavanı dilin içinde olmalı, promptun değil |
+| 17 | `katilimcilar` tekrarsız, hepsi tanımlı rol | Var olmayan role plan yazdırılamaz |
+| 18 | `tur` 1..5; `ilk-tur-kor` hiç yazılamaz | Maliyet tavanı dilin içinde olmalı; yapılmayan alan yazılamaz |
 | 19 | Katılımcılar, kod yazan her rolden **önce** gelmeli | Plan, iş yapıldıktan sonra tartışılmaz |
 | 20 | `plan` yolu `src/` altında olamaz | Plan belge; kod taşıma yolu git, dosya değil |
+| 21 | `gates[].after` katılımcıya işaret edemez | Alışveriş kapı kontrolünden geçmiyor; o kapı hiç ateşlenmez |
 
 Kural numaraları kullanıcıya aynen gösterilir; bugünkü davranış böyle.
 
@@ -343,8 +351,8 @@ Yazılanlar:
   1'i planlama alışverişi" diyor.
 
 Kural değişiklikleri: `katilimcilar` iki olabiliyor, `tur: 1` kabul
-ediliyor. `tur > 1`, üç ve fazla katılımcı, ve `ilk-tur-kor: false` hâlâ
-AÇIKÇA reddediliyor — üçü de 6c'nin konusu.
+ediliyor. (6c bu iki sınırı da kaldırdı; `ilk-tur-kor` hâlâ reddediliyor —
+aşağıda.)
 
 **İki canlı koşu (18 Eylül, `claude-sonnet-5`, `plan2.yaml`):** ikisinde de
 `planner` planı yazıp commit'ledi, `architect` itiraz turunu koştu,
@@ -396,9 +404,7 @@ fazlasında anlam kazanıyor; o yüzden varsayılan `true` duruyor ama
 kapatılması reddediliyor — "kapatılmış sanılan körleme" diye bir şey
 olmasın.
 
-**6c — Çok tur + sayaçlar + kapı.** Tur limiti, yeni itiraz sayacı,
-`tukendi` → deadlock kapısı. Bitiş testi: limit dolduğunda kart kapıda
-bekliyor, insan `retry` ile planı yeniden açabiliyor.
+**6c — Çok tur + sayaçlar + kapı. YAZILDI.** Aşağıda.
 
 **6d — Ölçüm koşum takımı. YAZILDI.** `src/bench/ab.ts` +
 `src/bench/planeffect.ts` + `cli.ts planab|planrapor`. Aşağıda.
@@ -409,6 +415,130 @@ Dokunacağı yerler: `src/flow/load.ts` (kural 17-20), `src/flow/cost.ts`
 `hub/prompts/planlama/*.md`, `src/ui/model.ts` (pano alanları),
 `src/events/log.ts` (iki olay). Kaba büyüklük: 600-800 satır ürün kodu ve
 bir o kadar test.
+
+---
+
+## 6c — Çok tur, çok katılımcı, sayaç ve kilit (YAZILDI)
+
+Kaldırılan iki sınır: `tur` artık 1..5, `katilimcilar` üç ve fazlası
+olabiliyor. Örnek akış `hub/flows/plan3.yaml` (üç katılımcı, iki tur).
+
+### Turun şekli: sıra makinesi kartın geçmişinden okunuyor
+
+Bir tur = bütün itirazcılar, zincir sırasında birer birer, sonra yazarın
+yanıtı. Sıranın kimde olduğu ayrı bir alanda **tutulmuyor**; son plan
+kaydının rolüne bakılıp hesaplanıyor (`src/plan/phase.ts`). Sebep
+PHILOSOPHY 1'in doğrudan sonucu: bir "sıra" alanı, kartla senkron kalmak
+zorunda olan ikinci bir gerçek olurdu ve gözcü çökerse ikisi ayrışırdı.
+
+Turun **ortasında** sonlanma kararı verilmiyor. İlk itirazcı sessiz
+kalabilir; turun sessiz olup olmadığı ancak son itirazcı konuştuktan sonra
+bilinir. İlk hâli buna bakıyordu ve tek bir sessiz itirazcı bütün turu
+kapatıyordu.
+
+### Sayaç: birikimli dosya, turun kendi katkısı
+
+İtiraz dosyası birikimli — transkript o. Ama sonlanma kuralı turun **kendi
+katkısını** sormak zorunda, yoksa her tur "üç itiraz var" diye kendini
+haklı çıkarır. Taban her turun başında kartın geçmişinden okunuyor
+(`objectionBaseline`) ve `yeni = toplam − taban`. Ekran da ikisini ayrı
+basıyor: `tur 2, 3 itiraz (bu turda +1)`.
+
+### Üç çıkış, üçü de mevcut makineyle
+
+| Çıkış | Koşul | Kartın gittiği yer |
+|---|---|---|
+| `anlasma` | Açık itiraz kalmadı, ya da tur hiç yeni itiraz eklemedi | Alışverişten sonraki rol |
+| `tukendi` | Tavan doldu **ya da** tur yeni itiraz eklemedi — ama açık itiraz var | Kapı, `gate.kind: deadlock` |
+| `insana` | Bir itiraz değer kararı diye insana çıktı | Kapı, `gate.kind: deadlock` |
+
+**Doğal son yazarın turunu atlıyor:** son itirazcı yeni bir şey eklemediyse
+ve açık itiraz yoksa alışveriş orada kapanıyor. Yanıtlanacak bir şey
+olmadığı hâlde yazarı uyandırmak, bedeli olan bir nezaket.
+
+`insana` çıkışı `plan.settled`'a kendi adıyla düşüyor. Önceden `kacis`e ya
+da `tukendi`ye sıkıştırılacaktı; ikisi de yanlış olurdu — biri turun hiç
+tamamlanmamasını, öteki tavanın dolmasını anlatıyor.
+
+### Kilitten çıkış: planı yalnızca insan yeniden açar
+
+Tasarımın kuralı buydu; makine karşılığı da kartın geçmişinden okunuyor.
+Son plan kaydından sonra bir kapı ve bir `released` kaydı varsa, insanın
+kartı verdiği rol **aynı turu** yeniden koşuyor. Sıra ilerlemiyor: insanın
+"bunu düzelt" dediği turu atlamak olurdu.
+
+`forward` ise alışverişi yeniden açmıyor — kart alışverişten sonraki role
+gidiyor, yani "planı olduğu gibi kabul ediyorum" kararı bir tur daha para
+harcamıyor.
+
+**Ve burada kendi işime saldırgan bakınca ikinci bir kusur çıktı.** İlk
+hâl "son plan kaydından sonraki İLK kapı + bırakma" diye tarıyordu. O
+tarama, zincirin **ilerisinden** gelen bir kararı da yeniden açma sayıyor:
+`coder` kaçış kapısına çıkar, insan `back` der, hedef ret hedefi — yani
+sıklıkla planı yazan rol. O kart planlama için dönmüyor, kodla ilgili bir
+sebepten dönüyor; yeniden açılmış sayılsaydı yazara "itirazları yanıtla"
+turu verilirdi. Kapı artık plan kaydının **hemen ardından** gelmek zorunda
+(`deadlock` ikisini yan yana yazıyor, `release` de kararı kapının hemen
+üstüne koyuyor). Kusur bir regresyon testiyle kapatıldı ve eski gevşek
+tarama geri konarak testin gerçekten tuttuğu doğrulandı.
+
+Bu yolda bir kusur daha düzeltildi: `planGateEntry` yalnızca `cevap` kaydına
+bakıyordu, oysa 6c'de kilit **itirazcının** turunda da doğabiliyor (tur
+yeni itiraz eklemedi, açık itiraz kaldı). O kilidi tanımayan bir okuyucu
+`forward`u zincirdeki ardıla, yani itiraz eden role gönderirdi — tam olarak
+bu fonksiyonun önlemek için var olduğu hata.
+
+### Körleme YAPILMADI — ve alan artık `true` bile kabul etmiyor
+
+6b'de `ilk-tur-kor: false` reddediliyordu, gerekçe "iki katılımcıda etkisi
+yok, anlam kazandığı yer 6c". 6c üç katılımcıyı açtı ve gerekçe **düştü**;
+yerine daha keskin bir gerçek geldi:
+
+**Kod taşıma ileri birleştirme.** Kart itirazcıdan itirazcıya geçerken
+`mergeForward` bütün ağacı taşıyor, yani ikinci itirazcının ağacı
+birincinin itiraz dosyasını **alıyor**. Körleme talimatla sağlanamaz
+(dosya orada), ancak taşımanın şeklini değiştirerek sağlanır: her itirazcı
+**yazarın** ağacından dallanmalı ve turun sonunda hepsi yazarın ağacına
+birleşmeli (fan-out/fan-in) — üstüne her itirazcı kendi dosyasına yazmalı
+ve yazar turun sonunda onları tek transkriptte toplamalı.
+
+Bu, taşıma katmanının kendi işi ve 6c'nin kapsamı dışında. O yüzden:
+
+- Alan **hiç yazılamıyor**, `true` dahil. `true` kabul edilse akış
+  dosyasında yapılmamış bir şey yapılmış görünürdü.
+- `plan.round` olayı `blind: false` yazıyor. Günlük, yapılmayanı
+  yapılmış göstermiyor.
+- İtiraz promptu ortak dosyayı açıkça anlatıyor: başkasının itirazını silme,
+  yeniden numaralandırma, "katılıyorum" diye bir durum yok.
+
+**6e — Körleme (taşıma değişikliği).** Fan-out/fan-in taşıma, itirazcı
+başına dosya, turun sonunda birleştirme. Bitiş testi: ikinci itirazcının
+ağacında birincinin dosyası YOK, ve yazarın ağacında ikisi de var.
+
+### Maliyet
+
+`flow check` çok turu sayıyor: `plan3.yaml` için "~9 aktivasyon/kart, 4'ü
+planlama alışverişi". Tahmin **en kötü hâl** — doğal son son turu yazar
+turuna varmadan kapatırsa 8'e düşer. Yön kasıtlı: maliyeti eksik göstermek,
+operatörü hazırlıksız yakalayan taraf.
+
+`plan3` (9 aktivasyon) `plan2`nin (5) neredeyse iki katı. 6d ölçümünün
+cevaplayacağı soru tam olarak bunun değip değmediği.
+
+### Neyle doğrulandı
+
+27 yeni test: `src/plan/phase.test.ts` (15, saf sıra makinesi — diske hiç
+dokunmuyor), `src/watch/exchange3.test.ts` (12, üç katılımcı ve iki turla
+uçtan uca `tick`). Toplam 664 test yeşil.
+
+Sıra makinesinin gerçekten sınandığı **mutasyonla** doğrulandı: tabanı hep
+0 döndürünce 5 test, turun ortasındaki devri kapatınca 8 test, tavan
+kontrolünü kaldırınca 2 test kırmızı oldu.
+
+**Canlı koşulmadı.** 6b iki canlı koşuyla doğrulanmıştı; 6c'nin üç
+katılımcılı iki turlu akışı henüz gerçek ajanla koşmadı. "Doğrulama
+koşturulamıyorsa denetim turu bir kanaat turudur" dersinin bu belgedeki
+karşılığı: yukarıdaki her şey testlerle kapalı, canlı koşuyla değil.
 
 ---
 

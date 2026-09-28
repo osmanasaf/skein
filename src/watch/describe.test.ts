@@ -65,6 +65,33 @@ describe("describeTick", () => {
     expect(line).not.toContain("tur 0");
   });
 
+  // İtiraz dosyası birikimli: tur 2'de "3 itiraz" yazmak, o turun üç itiraz
+  // eklediğini sandırır. Doğal sonlanma kararı turun KENDİ katkısına
+  // bakıyor; ekran da onu göstermek zorunda.
+  it("çok turlu alışverişte turun kendi katkısını ayrı gösterir", () => {
+    const c = card([
+      { at: "t0", event: "created", role: "coder" },
+      { at: "t1", event: "plan", role: "coder", action: "yazdi", round: 0 },
+      { at: "t2", event: "plan", role: "reviewer", action: "itiraz", round: 1, objections: 2 },
+      { at: "t3", event: "plan", role: "coder", action: "cevap", round: 1, objections: 2, accepted: 2 },
+      { at: "t4", event: "taken", role: "reviewer" },
+      { at: "t5", event: "plan", role: "reviewer", action: "itiraz", round: 2, objections: 3 },
+    ]);
+    const line = describeTick("reviewer", { status: "accepted", card: c });
+    expect(line).toContain("tur 2, 3 itiraz (bu turda +1)");
+  });
+
+  it("tek turlu alışverişte fazladan sayı basmaz", () => {
+    const c = card([
+      { at: "t0", event: "created", role: "coder" },
+      { at: "t1", event: "plan", role: "coder", action: "yazdi", round: 0 },
+      { at: "t2", event: "plan", role: "reviewer", action: "itiraz", round: 1, objections: 2 },
+    ]);
+    const line = describeTick("reviewer", { status: "accepted", card: c });
+    expect(line).toContain("tur 1, 2 itiraz");
+    expect(line).not.toContain("bu turda");
+  });
+
   it("kilit (deadlock) kapısında, plan kaydı gate'ten hemen önce ise turu gösterir", () => {
     const c = card(
       [

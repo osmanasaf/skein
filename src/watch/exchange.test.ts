@@ -322,7 +322,11 @@ describe("alışveriş — günlük", () => {
 
     const { events } = await readEvents(logPath);
     expect(events.find((e) => e.type === "plan.round")).toMatchObject({
-      card: card.id, role: "architect", round: 1, blind: true, newObjections: 1, openObjections: 1,
+      // `blind: false` — körleme yapılmadı ve günlük bunu böyle yazıyor.
+      // İleri birleştirme ikinci itirazcının ağacına birincinin dosyasını
+      // taşıyor; `true` yazan bir günlük yapılmamış bir şeyi yapılmış
+      // gösterirdi (6e).
+      card: card.id, role: "architect", round: 1, blind: false, newObjections: 1, openObjections: 1,
     });
     expect(events.find((e) => e.type === "plan.settled")).toMatchObject({
       card: card.id, outcome: "anlasma", rounds: 1, objections: 1, accepted: 1,

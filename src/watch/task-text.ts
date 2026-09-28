@@ -66,12 +66,21 @@ const planOkuBolumu = (planPath: string, card: Card): string[] => [
  * alanının depoda karşılığı olup olmadığına bakıyor. Bu yüzden biçim
  * metnin içinde, örneğiyle birlikte veriliyor.
  */
-const itirazBolumu = (planPath: string, itirazPath: string, roleId: string): string[] => [
+const itirazBolumu = (
+  planPath: string, itirazPath: string, roleId: string, round: number,
+): string[] => [
   "",
-  "## Plana itiraz et",
+  `## Plana itiraz et${round > 1 ? ` (tur ${round})` : ""}`,
   "",
   `Bu tur **kod yazma turu değil.** \`${planPath}\` dosyasındaki planı oku,`,
   `itirazlarını \`${itirazPath}\` dosyasına yaz ve **commit'le**.`,
+  "",
+  // Çok katılımcılı alışverişte dosya ORTAK: başkasının itirazı zaten
+  // içinde olabilir. Üzerine yazmak, sayılmış bir itirazı sessizce
+  // kaybetmek olur ve mekanizmanın sayacı yanlış okur.
+  `\`${itirazPath}\` ORTAK bir dosya: başka bir rolün itirazları zaten`,
+  "içinde olabilir. Onları silme, yeniden numaralandırma, yanıtlarını",
+  "değiştirme — kendi itirazını en büyük numaradan sonra ekle.",
   "",
   "Her itiraz tam olarak şu biçimde:",
   "",
@@ -90,10 +99,20 @@ const itirazBolumu = (planPath: string, itirazPath: string, roleId: string): str
   "Planı SEN düzenlemiyorsun; itirazı yazan ile planı düzelten ayrı roller.",
   "İtirazın yoksa dosyayı yine yaz ve itirazın olmadığını açıkça söyle —",
   "sessizlik anlaşma sayılmaz.",
+  ...(round === 1 ? [] : [
+    "",
+    `Bu ikinci ya da sonraki tur: plan düzeltildi ve önceki itirazlar`,
+    "yanıtlandı. Sorulacak şey **düzeltmenin gerçekten karşılayıp",
+    "karşılamadığı** — karşılamıyorsa yeni bir itiraz yaz, eskisini yeniden",
+    "açma. Yeni itiraz eklemezsen alışveriş bu turun sonunda kapanır;",
+    "bu, boş bir tur harcamamanın yolu.",
+  ]),
 ];
 
 /** Cevap turu: her açık itiraz üç cevaptan birini alır. */
-const cevapBolumu = (planPath: string, itirazPath: string): string[] => [
+const cevapBolumu = (
+  planPath: string, itirazPath: string, round: number, limit: number,
+): string[] => [
   "",
   "## İtirazları yanıtla",
   "",
@@ -105,8 +124,17 @@ const cevapBolumu = (planPath: string, itirazPath: string): string[] => [
   "- `**Durum:** ret: <gerekçe>` — katılmıyorsun. Gerekçe zorunlu.",
   "- `**Durum:** insana: <gerekçe>` — bu bir değer kararı; iş insana çıkar.",
   "",
-  "Açık bıraktığın itiraz kabul SAYILMAZ: tur dolduğunda kart insan",
+  "Açık bıraktığın itiraz kabul SAYILMAZ: tavan dolduğunda kart insan",
   "kapısında bekler. Bu tur da kod yazma turu değil.",
+  ...(round >= limit ? [
+    "",
+    `Bu **son tur** (tavan ${limit}): açık bıraktığın itiraz kartı doğrudan`,
+    "insan kapısına çıkarır.",
+  ] : [
+    "",
+    `Tavan ${limit} tur; bu tur ${round}. Yanıtından sonra itiraz edenler`,
+    "düzeltilmiş planı bir kez daha okuyacak.",
+  ]),
 ];
 
 /**
@@ -149,9 +177,13 @@ export function buildTaskText(card: Card, role: SnapshotRole): string {
   const itirazPath = itirazPathFor(card.topology, card.id);
   if (planPath !== null && itirazPath !== null) {
     const phase = planPhase(card, role.id, card.topology);
+    const limit = card.topology.plan?.tur ?? 1;
     if (phase.kind === "yaz") parts.push(...planYazBolumu(planPath));
-    else if (phase.kind === "itiraz") parts.push(...itirazBolumu(planPath, itirazPath, role.id));
-    else if (phase.kind === "cevap") parts.push(...cevapBolumu(planPath, itirazPath));
+    else if (phase.kind === "itiraz") {
+      parts.push(...itirazBolumu(planPath, itirazPath, role.id, phase.round));
+    } else if (phase.kind === "cevap") {
+      parts.push(...cevapBolumu(planPath, itirazPath, phase.round, limit));
+    }
     else if (!isPlanner(card.topology, role.id)) parts.push(...planOkuBolumu(planPath, card));
   }
 

@@ -66,7 +66,13 @@ export function estimateCost(flow: Flow): CostEstimate {
   // Planlama alışverişi: itiraz eden roller zincirdeki turlarını zaten
   // kullanıyor, ama planı YAZAN rol her tur için bir kez daha uyanıyor
   // (cevap turu). İkinci ve sonraki turlarda itiraz edenler de tekrar
-  // uyanır — bugün tur 1, o yüzden tek kalem.
+  // uyanır — 6c'den beri `tur` 1'den büyük olabiliyor ve ikinci kalem
+  // gerçekten işliyor.
+  //
+  // Bu EN KÖTÜ hâl: doğal sonlanma (tur yeni itiraz eklemedi) son turu
+  // yazar turuna varmadan kapatır ve tahmin bir aktivasyon yüksek kalır.
+  // Yön kasıtlı — maliyeti eksik göstermek, operatörü hazırlıksız
+  // yakalayan taraf.
   const plan = flow.plan;
   const planning = plan === undefined || plan.katilimcilar.length < 2
     ? 0

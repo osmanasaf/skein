@@ -5,7 +5,8 @@
 # iş `coder`a geçer. Alışveriş katılımcılar arasında döner; zincir ancak
 # alışveriş kapandığında devreye girer.
 #
-# Tur sınırı bugün 1: çok turlu alışveriş ve tur sayacı 6c'nin konusu.
+# Tur sınırı 1 — bilerek: bu akış 6b'nin en küçük hâli. Çok turlu ve üç
+# katılımcılı örnek için `plan3.yaml`e bak.
 
 name: plan2
 description: Plan yazılır, ikinci rol itiraz eder, yazan yanıtlar. Sonra kod.

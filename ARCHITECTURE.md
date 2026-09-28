@@ -231,7 +231,9 @@ Ekran tartışması bunların üstüne gelir, bunları yeniden açmaz:
 | ~~5~~ | ✅ Akış ekrandan kuruluyor | Doğrulama ve maliyet tahmini zaten yazılıydı; ekran onları kullanıyor |
 | ~~6a~~ | ✅ Plan belgesi akışın parçası | Canlı koşuda doğrulandı: `coder` plana atıf yaptı, `reviewer` işi plana karşı denetledi |
 | ~~6b~~ | ✅ Plana itiraz turu (iki katılımcı) | Mekanizma canlı koştu; `kabul` yolu testlerle kapalı, canlı koşuyla değil |
-| 6c | Çok tur, tur sayacı, üç+ katılımcıda körleme | Tasarımı `PLANLAMA.md`'de; ölçümden sonra |
+| ~~6c~~ | ✅ Çok tur, çok katılımcı, yeni itiraz sayacı, kilit kapısı | 26 testle kapalı ve mutasyonla doğrulandı; **canlı koşulmadı** |
+| ~~6d~~ | ✅ Ölçüm koşum takımı (A/B, kum havuzu, rapor) | Deney kolu canlı koştu ve bilinen kusuru yeniden üretti; kampanya koşulmadı |
+| 6e | Körleme — taşıma değişikliği (fan-out/fan-in) | İleri birleştirme ikinci itirazcıya birincinin dosyasını taşıyor; talimatla çözülmez |
 
 Adım 6'nın gerekçesi `PHILOSOPHY.md`'de: serbest sohbet maliyeti sınırsız
 büyütür, izlenebilirliği kaybeder ve modeller birbirine yakınsadıkça kör nokta
@@ -239,10 +241,12 @@ tezini zayıflatır. Doğru biçimi, `reject` mekanizmasının kardeşi: kayıtl
 sayılı, gerekçeli turlar.
 
 **`PLANLAMA.md` o biçimi sabitledi** (18 Eylül): alışverişin taşıyıcısı
-dosya, itirazın zorunlu üç alanı, tur 1'in kör olması, üç çıkış (anlaşma /
+dosya, itirazın zorunlu üç alanı, tur 1'in kör olması (yapılmadı — 6e),
+üç çıkış (anlaşma /
 tükendi → deadlock kapısı / kaçış), akış diline dört yeni kural, iki yeni
 olay, ve işe yarayıp yaramadığını söyleyecek önceden ilan edilmiş ölçüt.
-Kod yazılmadı.
+6a-6d yazıldı; körleme (6e) yazılmadı ve alanı bu yüzden akış dilinde hiç
+kabul edilmiyor.
 
 ---
 

@@ -1,4 +1,5 @@
 import type { Card, HistoryEntry } from "../card/card.js";
+import { objectionBaseline } from "../plan/phase.js";
 import type { TickResult } from "./tick.js";
 
 export const MARK: Record<TickResult["status"], string> = {
@@ -53,9 +54,14 @@ function planNote(card: Card): string {
   // sayacın dışında, alışveriş ondan sonra başlıyor.
   if (entry.action === "yazdi") return "  (planlama: plan yazıldı)";
   const kac = entry.objections;
+  // İtiraz dosyası BİRİKİMLİ: tur 2'de "3 itiraz" yazmak, o turun üç itiraz
+  // eklediğini sandırır. Turun kendi katkısı ayrı gösteriliyor — doğal
+  // sonlanma kararı da tam bu sayıya bakıyor.
+  const yeni = kac === undefined ? undefined : kac - objectionBaseline(card, entry.round);
   const sayi = kac === undefined
     ? ""
-    : `, ${kac} itiraz${entry.accepted ? ` / ${entry.accepted} kabul` : ""}` +
+    : `, ${kac} itiraz${yeni !== undefined && yeni !== kac ? ` (bu turda +${yeni})` : ""}` +
+      (entry.accepted ? ` / ${entry.accepted} kabul` : "") +
       (entry.invalid ? ` / ${entry.invalid} sayılmadı` : "");
   return `  (planlama, tur ${entry.round}${sayi})`;
 }

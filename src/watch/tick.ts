@@ -10,7 +10,7 @@ import {
   DONE, afterPlanning, isPlanner, itirazPathFor, planAuthor, planObjectors, planPathFor,
   promptLayers, roleOf, type SnapshotRole,
 } from "../flow/snapshot.js";
-import { planPhase } from "../plan/phase.js";
+import { objectionBaseline, planPhase } from "../plan/phase.js";
 import { kanitYolu, parseItirazlar } from "../plan/itiraz.js";
 import { assemblePrompt } from "../prompt/assemble.js";
 import { dirtyPaths, head, isTracked, mergeForward, ORCHESTRATOR_PATHS } from "./git.js";
@@ -422,82 +422,122 @@ async function planStep(
   // "İtiraz yok" ile "itiraz var ama hiçbiri sayılmadı" aynı şey değil.
   const gecersiz = dosya.itirazlar.length - dosya.gecerli.length;
 
+  // Kartın dondurduğu plan hash'i: itiraz turu planı DEĞİŞTİRMİYOR ve
+  // itiraz edenin ağacında plan dosyası hiç bulunmayabilir.
+  const donmusHash = card.plan?.hash ?? (planMetni === undefined ? "-" : sha(planMetni));
+
   if (phase.kind === "itiraz") {
     const yazar = planAuthor(card.topology) as string;
     const sonra = afterPlanning(card.topology);
-    if (dosya.gecerli.length === 0) {
-      // İtirazsız alışveriş: mekanizmanın tören olup olmadığının ölçüsü.
-      // Sayılıyor ve günlüğe düşüyor.
-      if (sonra === null) return { kind: "yok" };
-      // Hash kartın dondurduğu plandan okunuyor, itiraz edenin ağacındaki
-      // kopyadan değil: itiraz turu planı değiştirmiyor ve o ağaçta plan
-      // dosyası hiç bulunmayabilir.
-      await options.log?.append({
-        type: "plan.settled", card: card.id, role: role.id, outcome: "anlasma",
-        rounds: phase.round, objections: 0, accepted: 0, invalid: gecersiz,
-        path: planPath, planHash: card.plan?.hash ?? (planMetni === undefined ? "-" : sha(planMetni)),
-      });
-      return {
-        kind: "tasindi",
-        result: await planMove(card, role, options, workdir, sonra, {
-          at: new Date().toISOString(), event: "plan", role: role.id,
-          action: "itiraz", round: phase.round, objections: 0, invalid: gecersiz,
-        }, undefined, summary),
-      };
-    }
+    const itirazcilar = planObjectors(card.topology);
+    const sira = itirazcilar.indexOf(role.id);
+    const sonrakiItirazci = sira === -1 ? undefined : itirazcilar[sira + 1];
+
+    // Bu turda EKLENEN itiraz sayısı. Dosya birikimli; turun kendi katkısı
+    // tur başındaki sayıdan çıkarılarak bulunuyor. Doğal sonlanma kuralı
+    // buna dayanıyor: bir tur hiç yeni itiraz eklemediyse alışveriş biter.
+    const taban = objectionBaseline(card, phase.round);
+    const yeni = dosya.gecerli.length - taban;
 
     await options.log?.append({
       type: "plan.round", card: card.id, role: role.id, round: phase.round,
-      blind: true, newObjections: dosya.gecerli.length, openObjections: dosya.acik.length,
+      // Körleme YOK: ileri birleştirme ikinci itirazcının ağacına birincinin
+      // dosyasını taşıyor. Alan `true` yazılsaydı günlük yapılmamış bir şeyi
+      // yapılmış gösterirdi.
+      blind: false, newObjections: Math.max(0, yeni), openObjections: dosya.acik.length,
       invalid: gecersiz,
     });
+
+    const kayit = (): Extract<Card["history"][number], { event: "plan" }> => ({
+      at: new Date().toISOString(), event: "plan", role: role.id,
+      action: "itiraz", round: phase.round, objections: dosya.gecerli.length,
+      invalid: gecersiz,
+    });
+
+    // Turun ortasındaki itirazcı: söz sıradakine geçer. Sonlanma kararı
+    // turun SONUNDA veriliyor — ortadaki bir itirazcının sessizliği, turun
+    // sessiz olduğu anlamına gelmez.
+    if (sonrakiItirazci !== undefined) {
+      return {
+        kind: "tasindi",
+        result: await planMove(card, role, options, workdir, sonrakiItirazci, kayit(), undefined, summary),
+      };
+    }
+
+    // Turun SON itirazcısı: alışveriş burada bitebilir.
+    if (yeni <= 0) {
+      if (dosya.acik.length > 0) {
+        // Tur yeni bir şey eklemedi ama açık itiraz duruyor: kilit. Kaçış
+        // değil — turlar tamamlandı, kod yerinde, insan planı olduğu gibi
+        // kabul edip ilerletebilir.
+        const reason = `Planlama alışverişi tükendi: tur ${phase.round} yeni itiraz eklemedi ` +
+          `ama ${dosya.acik.length} itiraz açık kaldı: ` +
+          dosya.acik.map((i) => `#${i.no} ${i.ne}`).join(" · ") + ".";
+        await options.log?.append({
+          type: "plan.settled", card: card.id, role: role.id, outcome: "tukendi",
+          rounds: phase.round, objections: dosya.gecerli.length, accepted: dosya.kabul.length,
+          invalid: gecersiz, path: planPath, planHash: donmusHash,
+        });
+        return {
+          kind: "tasindi",
+          result: {
+            status: "escalated",
+            card: await options.queue.deadlock(card, reason, kayit()),
+            reason,
+          },
+        };
+      }
+      // Ne yeni itiraz ne açık itiraz: anlaşma. Yazarın turu koşmuyor —
+      // yanıtlanacak bir şey yok ve boş bir aktivasyonun bedeli var.
+      if (sonra === null) return { kind: "yok" };
+      await options.log?.append({
+        type: "plan.settled", card: card.id, role: role.id, outcome: "anlasma",
+        rounds: phase.round, objections: dosya.gecerli.length, accepted: dosya.kabul.length,
+        invalid: gecersiz, path: planPath, planHash: donmusHash,
+      });
+      return {
+        kind: "tasindi",
+        result: await planMove(card, role, options, workdir, sonra, kayit(), undefined, summary),
+      };
+    }
+
+    // Yeni itiraz var: yanıt sırası yazarda.
     return {
       kind: "tasindi",
-      result: await planMove(card, role, options, workdir, yazar, {
-        at: new Date().toISOString(), event: "plan", role: role.id,
-        action: "itiraz", round: phase.round, objections: dosya.gecerli.length,
-        invalid: gecersiz,
-      }, undefined, summary),
+      result: await planMove(card, role, options, workdir, yazar, kayit(), undefined, summary),
     };
   }
 
-  // CEVAP turu.
+  // CEVAP turu — turun sonunda yazar bütün itirazları yanıtlar.
   const acik = dosya.acik;
   const insana = dosya.insana;
   const kabul = dosya.kabul;
+  const limit = card.topology.plan?.tur ?? 1;
 
-  if (acik.length > 0) {
-    // Tur sınırı 1: açık kalan itirazla alışveriş tükenmiştir. Kaçış değil
-    // kilit — tur tamamlandı, kod yerinde, insan planı olduğu gibi kabul
-    // edip ilerletebilir.
-    const reason = `Planlama turu doldu, ${acik.length} itiraz açık kaldı: ` +
-      acik.map((i) => `#${i.no} ${i.ne}`).join(" · ") +
-      `. Cevapsız bırakılan itiraz kabul sayılmaz.`;
-    return {
-      kind: "tasindi",
-      result: {
-        status: "escalated",
-        card: await options.queue.deadlock(card, reason, {
-          at: new Date().toISOString(), event: "plan", role: role.id,
-          action: "cevap", round: phase.round, invalid: gecersiz,
-          objections: dosya.gecerli.length, accepted: kabul.length,
-        }),
-        reason,
-      },
-    };
-  }
+  const cevapKaydi = (
+    planHash?: string,
+  ): Extract<Card["history"][number], { event: "plan" }> => ({
+    at: new Date().toISOString(), event: "plan", role: role.id,
+    action: "cevap", round: phase.round, invalid: gecersiz,
+    objections: dosya.gecerli.length, accepted: kabul.length,
+    ...(planHash === undefined ? {} : { planHash }),
+  });
+
+  // Değer kararı her turda alışverişi bitirir: tavanın dolmasını beklemek,
+  // insana çıkmış bir soruyu makinede bir tur daha döndürmek olurdu.
   if (insana.length > 0) {
     const reason = `Planlamada ${insana.length} itiraz insana çıktı: ` +
       insana.map((i) => `#${i.no} ${i.ne} — ${i.gerekce ?? ""}`).join(" · ");
+    await options.log?.append({
+      type: "plan.settled", card: card.id, role: role.id, outcome: "insana",
+      rounds: phase.round, objections: dosya.gecerli.length, accepted: kabul.length,
+      invalid: gecersiz, path: planPath, planHash: donmusHash,
+    });
     return {
       kind: "tasindi",
       result: {
         status: "escalated",
-        card: await options.queue.deadlock(card, reason, {
-          at: new Date().toISOString(), event: "plan", role: role.id,
-          action: "cevap", round: phase.round, invalid: gecersiz,
-          objections: dosya.gecerli.length, accepted: kabul.length,
-        }),
+        card: await options.queue.deadlock(card, reason, cevapKaydi()),
         reason,
       },
     };
@@ -514,6 +554,47 @@ async function planStep(
     };
   }
 
+  // Tavan dolduğunda açık itiraz varsa kilit. Kaçış değil — turlar
+  // tamamlandı, kod yerinde, insan planı olduğu gibi kabul edip
+  // ilerletebilir ya da `retry` ile alışverişi yeniden açabilir.
+  if (acik.length > 0 && phase.round >= limit) {
+    const reason = `Planlama tavanı doldu (${limit} tur), ${acik.length} itiraz açık kaldı: ` +
+      acik.map((i) => `#${i.no} ${i.ne}`).join(" · ") +
+      `. Cevapsız bırakılan itiraz kabul sayılmaz.`;
+    await options.log?.append({
+      type: "plan.settled", card: card.id, role: role.id, outcome: "tukendi",
+      rounds: phase.round, objections: dosya.gecerli.length, accepted: kabul.length,
+      invalid: gecersiz, path: planPath, planHash: yeniHash ?? donmusHash,
+    });
+    return {
+      kind: "tasindi",
+      result: {
+        status: "escalated",
+        card: await options.queue.deadlock(card, reason, cevapKaydi(yeniHash)),
+        reason,
+      },
+    };
+  }
+
+  const yeniPlan = yeniHash === undefined ? undefined : { path: planPath, hash: yeniHash };
+
+  // Tavan dolmadı: yeni bir tur açılıyor ve söz ilk itirazcıya geçiyor.
+  // İtirazcılar DÜZELTİLMİŞ planı okuyup yeni itiraz yazabilir; hiçbiri
+  // yazmazsa alışveriş o turun sonunda doğal olarak biter (yukarıdaki
+  // "yeni <= 0" dalı). Açık itiraz kalmışsa da tur devam eder: tasarımın
+  // kuralı, tavan dolmadan kilit ilan etmemek.
+  if (phase.round < limit) {
+    const ilkItirazci = planObjectors(card.topology)[0];
+    if (ilkItirazci !== undefined) {
+      return {
+        kind: "tasindi",
+        result: await planMove(
+          card, role, options, workdir, ilkItirazci, cevapKaydi(yeniHash), yeniPlan, summary,
+        ),
+      };
+    }
+  }
+
   const sonra = afterPlanning(card.topology);
   if (sonra === null) return { kind: "yok" };
   await options.log?.append({
@@ -523,12 +604,7 @@ async function planStep(
   });
   return {
     kind: "tasindi",
-    result: await planMove(card, role, options, workdir, sonra, {
-      at: new Date().toISOString(), event: "plan", role: role.id,
-      action: "cevap", round: phase.round, invalid: gecersiz,
-      objections: dosya.gecerli.length, accepted: kabul.length,
-      ...(yeniHash === undefined ? {} : { planHash: yeniHash }),
-    }, yeniHash === undefined ? undefined : { path: planPath, hash: yeniHash }, summary),
+    result: await planMove(card, role, options, workdir, sonra, cevapKaydi(yeniHash), yeniPlan, summary),
   };
 }
 

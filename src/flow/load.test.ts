@@ -20,7 +20,7 @@ beforeEach(async () => {
   await mkdir(join(root, "roles"), { recursive: true });
   await writeFile(join(root, "hub", "prompts", "base.md"), "# Anayasa\nKurallar.\n");
   await writeFile(join(root, "hub", "prompts", "extra.md"), "# Ek madde\nBaşka kural.\n");
-  for (const role of ["coder", "reviewer", "guard"]) {
+  for (const role of ["coder", "reviewer", "guard", "analyst", "architect"]) {
     await writeFile(join(root, "roles", `${role}.prompt`), `# ${role}\nİşini yap.\n`);
   }
 });
@@ -431,6 +431,34 @@ describe("loadFlow — gönderilen örnekler", () => {
   });
 });
 
+/** Üç katılımcılı alışveriş için üç rollü akış (6c). */
+const UC_ROL = `
+name: uc
+description: Üç rollü deneme akışı
+constitution:
+  - ../prompts/base.md
+roles:
+  - id: analyst
+    provider: claude
+    workspace: main
+    prompt: ../../roles/analyst.prompt
+    receive: task
+    next: architect
+  - id: architect
+    provider: claude
+    workspace: architect
+    prompt: ../../roles/architect.prompt
+    receive: batch
+    next: coder
+  - id: coder
+    provider: claude
+    workspace: coder
+    prompt: ../../roles/coder.prompt
+    receive: batch
+    next: done
+gates: []
+`;
+
 // PLANLAMA.md 6a: tek rol planı yazar, alışveriş yok. Kurallar 17-20.
 describe("loadFlow — planlama (kural 17-20)", () => {
   const withPlan = (blok: string) => `${VALID}\n${blok}\n`;
@@ -465,23 +493,36 @@ describe("loadFlow — planlama (kural 17-20)", () => {
     expect(flow.plan?.tur).toBe(1);
   });
 
-  it("birden çok turu açıkça reddeder — sayaç ve kilit kapısı 6c", async () => {
-    const yaml = withPlan("planlama:\n  katilimcilar: [coder]\n  tur: 2\n  plan: docs/plan/{kart}.md");
-    await expect(load(await write(yaml))).rejects.toThrow(/kural 18.*yalnızca 1/s);
+  // 6c: çok turlu alışveriş açıldı. Tavan dilin içinde, promptun değil.
+  it("birden çok turu kabul eder — 6c", async () => {
+    const yaml = withPlan("planlama:\n  katilimcilar: [coder, reviewer]\n  tur: 3\n  plan: docs/plan/{kart}.md");
+    const flow = await load(await write(yaml));
+    expect(flow.plan?.tur).toBe(3);
   });
 
-  it("üç katılımcıyı reddeder — körleme ve sayaç 6c'nin konusu", async () => {
-    const yaml = withPlan(
-      "planlama:\n  katilimcilar: [coder, reviewer, guard]\n  plan: docs/plan/{kart}.md");
-    await expect(load(await write(yaml))).rejects.toThrow(/kural 17.*en fazla iki/s);
+  it("tavanın üstündeki turu reddeder", async () => {
+    const yaml = withPlan("planlama:\n  katilimcilar: [coder, reviewer]\n  tur: 6\n  plan: docs/plan/{kart}.md");
+    await expect(load(await write(yaml))).rejects.toThrow(/kural 18.*1 ile 5/s);
   });
 
-  // Varsayılan körleme atıl (itiraz eden tek rol var); kapatılmış SANILAN
-  // bir körleme diye bir şey olmasın diye açık kapatma reddediliyor.
-  it("körlemeyi açıkça kapatmayı reddeder", async () => {
-    const yaml = withPlan(
-      "planlama:\n  katilimcilar: [coder]\n  ilk-tur-kor: false\n  plan: docs/plan/{kart}.md");
-    await expect(load(await write(yaml))).rejects.toThrow(/kural 18.*körlemenin etkisi yok/s);
+  it("üç katılımcıyı kabul eder — 6c", async () => {
+    const flow = await load(await write(
+      `${UC_ROL}\nplanlama:\n  katilimcilar: [analyst, architect, coder]\n  tur: 2\n  plan: docs/plan/{kart}.md\n`,
+      "uc.yaml",
+    ));
+    expect(flow.plan?.katilimcilar).toEqual(["analyst", "architect", "coder"]);
+  });
+
+  // Körleme YAPILMADI: ileri birleştirme ikinci itirazcının ağacına
+  // birincinin dosyasını taşıyor. Alan bu yüzden iki değerle de
+  // reddediliyor — `true` yazılabilmesi, yapılmamış bir şeyi yapılmış
+  // göstermek olurdu.
+  it("körleme alanını iki değerle de reddeder", async () => {
+    for (const deger of ["false", "true"]) {
+      const yaml = withPlan(
+        `planlama:\n  katilimcilar: [coder, reviewer]\n  ilk-tur-kor: ${deger}\n  plan: docs/plan/{kart}.md`);
+      await expect(load(await write(yaml, `kor-${deger}.yaml`))).rejects.toThrow(/kural 18.*henüz uygulanmadı/s);
+    }
   });
 
   it("var olmayan role işaret eden katılımcıyı reddeder", async () => {

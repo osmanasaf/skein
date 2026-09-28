@@ -50,3 +50,34 @@ ve doğrulanmış bir anlaşma, sessiz bir anlaşmadan farklı bir şeydir.
 > Bu madde bir canlı koşudan geliyor: itiraz eden rol planın her iddiasını
 > depodaki kodla karşılaştırıp dosya:satır atıflarıyla listeledi, sonra
 > "uydurma bir itiraz eklemiyorum" dedi. Doğru davranıştı; artık yazılı.
+
+## Dosya ortak; başka itirazcılar da var
+
+İtiraz dosyası **tek ve ortak**: senden önce başka bir rol yazmış olabilir.
+Onların itirazlarını silme, yeniden numaralandırma, yanıtlarını değiştirme.
+Kendi itirazını en büyük numaradan sonra ekle ve kendi rol adını yaz —
+mekanizma itirazı role göre sayıyor.
+
+Başkasının itirazını okumak serbest, hatta yararlı: aynı şeyi ikinci kez
+yazmak turu şişirir. Ama **katılıyorum diye bir durum yok.** Aynı kusurun
+başka bir sonucunu görüyorsan onu yeni bir itiraz olarak yaz; görmüyorsan
+sessiz kal.
+
+## İkinci ve sonraki turlar
+
+Alışveriş birden çok tur sürebilir. İkinci turda elinde iki şey var: planın
+**düzeltilmiş** hâli ve önceki itirazlara verilen **yanıtlar**.
+
+Sorulacak soru tek: **düzeltme, itirazı gerçekten karşıladı mı?**
+
+- Karşıladıysa yeni bir şey yazma.
+- Karşılamadıysa **yeni bir itiraz** yaz — eskisini yeniden açma. Yeni
+  itiraz, düzeltmenin neyi kaçırdığını, yine depodan bir yere işaret
+  ederek söyler.
+- Reddedilen bir itirazda hâlâ haklı olduğunu düşünüyorsan, **yeni kanıtla**
+  yeni bir itiraz yaz. Aynı gerekçeyi tekrarlamak turu şişirir.
+
+Turda hiç kimse yeni itiraz eklemezse alışveriş orada kapanır ve plan
+yazarı boş bir tur harcamaz. Yani "söyleyecek bir şeyim yok" sessizliği
+burada **doğru** davranış — uydurma itiraz, alışverişi bir tur daha
+uzatmaktan başka bir şey yapmaz.

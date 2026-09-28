@@ -221,7 +221,13 @@ export function planGateEntry(card: Card): Extract<HistoryEntry, { event: "plan"
   const last = card.history[card.history.length - 1];
   if (last?.event !== "gate") return null;
   const prev = card.history[card.history.length - 2];
-  return prev?.event === "plan" && prev.action === "cevap" ? prev : null;
+  if (prev?.event !== "plan") return null;
+  // `cevap` VE `itiraz`: 6c'de alışveriş itirazcının turunda da tükenebilir
+  // (tur yeni itiraz eklemedi ama açık itiraz kaldı). Yalnızca `cevap`a
+  // bakan bir okuyucu o kilidi tanımaz ve "ileri bırak" kartı itiraz eden
+  // role geri gönderirdi — tam olarak bu fonksiyonun önlemek için var
+  // olduğu hata.
+  return prev.action === "cevap" || prev.action === "itiraz" ? prev : null;
 }
 
 export function rejectCount(card: Card, from: string, to: string): number {

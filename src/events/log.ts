@@ -179,7 +179,12 @@ export type EventInput =
       card: string;
       /** Planı yazan rol. */
       role: string;
-      outcome: "anlasma" | "tukendi" | "kacis";
+      /**
+       * `anlasma` açık itiraz kalmadı · `tukendi` tavan doldu ya da tur yeni
+       * itiraz eklemedi, açık itiraz var · `insana` bir itiraz değer kararı
+       * diye insana çıktı · `kacis` katılımcının turu hiç tamamlanmadı.
+       */
+      outcome: "anlasma" | "tukendi" | "insana" | "kacis";
       rounds: number;
       objections: number;
       accepted: number;
