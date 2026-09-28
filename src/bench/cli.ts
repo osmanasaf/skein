@@ -13,6 +13,8 @@ import { TurnRecorder, diffLines, diffSnapshots, loadSnapshot,
   type Snapshot, type SnapshotDiff } from "./snapshot.js";
 import { selfTest } from "./selftest.js";
 import { networkFailure } from "./failure.js";
+import { runArm, ARM_FLOW, type Arm } from "./ab.js";
+import { planEffect, type PlanEffectReport, type PlanGroup } from "./planeffect.js";
 import { scoreTargets, scoreAll, classifyTargets, classifyAll } from "./score.js";
 import { effectReport, filterByTask, type EffectReport, type PairScore, type Side } from "./effect.js";
 import { noiseReport, type NoiseReport, type NoiseSide } from "./noise.js";
@@ -214,6 +216,100 @@ async function run(taskId: string, provider: string, model: string, audit: boole
   console.log(`\n  ${h.hooks.length - h.red.length}/${h.hooks.length} kanca yeşil, ${h.red.length} KIRMIZI\n`);
   for (const hook of h.hooks) console.log(`  ${hook.passed ? "✓" : "✗"} ${hook.title}`);
   console.log(`\ngünlük: ${rel(LOG)}  (özet için: cli.ts report)`);
+}
+
+/**
+ * 6d ölçümü: planlama açık/kapalı iki kol, aynı görev, k tekrar.
+ *
+ * Kolların TEK farkı planlama turu; rol promptları, anayasa, ret politikası
+ * ve kod taşıma birebir aynı (`hub/flows/ab-*.yaml`). Her koşu kendi kum
+ * havuzu deposunda çalışıyor — ajanların ürettiği çözüm bu projeye
+ * yazılmaz.
+ */
+async function planab(taskId: string, k: number, modelSpec: string): Promise<void> {
+  await mkdir(join(REPO, ".skein"), { recursive: true });
+  const adapter = adapterFor(modelSpec, adapterEnv());
+  const adapters = new Map([[adapter.id, adapter]]);
+
+  console.log(`6d ölçümü — ${taskId} · ${adapter.model} · k=${k}`);
+  console.log(`kollar: ${ARM_FLOW.plansiz} (kontrol) ve ${ARM_FLOW.planli} (deney)`);
+  announceEnv();
+  console.log();
+
+  const kokDizin = join(REPO, ".skein", "olcum");
+  for (let i = 1; i <= k; i += 1) {
+    for (const arm of ["plansiz", "planli"] as Arm[]) {
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const runId = `ab-${taskId}-${arm}-${i}-${stamp}`;
+      const sandbox = join(kokDizin, runId);
+      console.log(`── tekrar ${i} · ${arm} ──`);
+      const r = await runArm({
+        repo: REPO, taskId, arm, sandbox, adapters, logPath: LOG, runId,
+        timeoutMs: 15 * 60_000,
+        onSweep: (sweep) => {
+          for (const { role, result } of sweep.results) {
+            if (result.status !== "idle") console.log(`   ${role}: ${result.status}`);
+          }
+        },
+      });
+      console.log(
+        `   ${r.ran ? `${r.total - r.red.length}/${r.total} yeşil` : "ÖLÇÜLEMEDİ"}` +
+          (r.red.length > 0 ? `  ← kusur: ${r.red.join("; ")}` : "") +
+          `  ·  ${r.activations} aktivasyon  ·  $${r.costUsd.toFixed(4)}` +
+          (r.rejects > 0 ? `  ·  ${r.rejects} ret` : "") +
+          (r.planning === undefined
+            ? ""
+            : `  ·  alışveriş: ${r.planning.objections} itiraz, ` +
+              `${r.planning.accepted} kabul${r.planning.invalid > 0 ? `, ${r.planning.invalid} sayılmadı` : ""}`),
+      );
+      if (r.cardState !== "done") console.log(`   ⚠ kart \`${r.cardState}\` durumunda kaldı`);
+    }
+  }
+
+  console.log("\nSıradaki: cli.ts planrapor");
+}
+
+/** 6d raporu: kol tabloları, göreli azalma ve önceden ilan edilmiş karar. */
+async function planrapor(): Promise<void> {
+  const { events } = await readEvents(LOG);
+  const report = planEffect(events);
+  if (report.groups.length === 0) {
+    console.log("Ölçülmüş kol koşusu yok. Önce: cli.ts planab <görev-id>");
+    return;
+  }
+  printPlanEffect(report);
+}
+
+function printPlanEffect(r: PlanEffectReport): void {
+  const pct = (n: number | null): string => (n === null ? "—" : `%${(n * 100).toFixed(0)}`);
+  for (const g of r.groups) {
+    console.log(`\n=== ${g.taskId}  ·  k=${g.repeats} ===`);
+    console.log("  kol        koşu  kanca  kırmızı   oran   aktivasyon   maliyet   ret");
+    for (const [ad, s] of [["plansız", g.plansiz], ["planlı", g.planli]] as const) {
+      if (s === null) continue;
+      console.log(`  ${ad.padEnd(10)}${String(s.runs).padStart(4)}${String(s.hooks).padStart(7)}` +
+        `${String(s.red).padStart(9)}${pct(s.redRate).padStart(7)}${String(s.activations).padStart(13)}` +
+        `${("$" + s.costUsd.toFixed(2)).padStart(10)}${String(s.rejects).padStart(6)}` +
+        (s.unmeasured > 0 ? `   (${s.unmeasured} ÖLÇÜLEMEDİ)` : ""));
+    }
+    if (g.relativeReduction !== null) {
+      console.log(`  göreli azalma: ${pct(g.relativeReduction)}`);
+    }
+    if (g.perRun.length > 1) {
+      console.log(`  koşu başına: ${g.perRun.map((x) => pct(x.relativeReduction)).join(", ")}`);
+    }
+    const c = g.ceremony;
+    if (c.exchanges > 0) {
+      // Tören ölçüsü: itiraz hiç çıkmıyorsa mekanizma ikinci bir çift göz
+      // olabilir ama itiraz üretmiyor.
+      console.log(`  alışveriş: ${c.exchanges} tur · ${c.withoutObjection} itirazsız ` +
+        `(${pct(c.withoutObjection / c.exchanges)}) · ${c.objections} itiraz, ${c.accepted} kabul` +
+        (c.invalid > 0 ? `, ${c.invalid} sayılmadı` : ""));
+    }
+    console.log(`  karar: ${g.verdict.code.toUpperCase()} — ${g.verdict.reason}`);
+  }
+  console.log(`\n  KARAR: ${r.verdict.code.toUpperCase()}`);
+  console.log(`  ${r.verdict.reason}`);
 }
 
 /**
@@ -679,6 +775,21 @@ if (cmd === "report") {
   await report(argv.find((a) => a.startsWith("--gorev="))?.slice("--gorev=".length));
 } else if (cmd === "doctor") {
   await doctor(rest[0] ?? "codex:gpt-5.5");
+} else if (cmd === "planab") {
+  const gorev = rest[0];
+  if (gorev === undefined) {
+    console.error("kullanım: cli.ts planab <görev-id> [--k 3] [--model claude:claude-sonnet-5]");
+    process.exit(2);
+  }
+  const kRaw = argv.find((a) => a.startsWith("--k="))?.slice(4)
+    ?? (argv.includes("--k") ? argv[argv.indexOf("--k") + 1] : undefined);
+  await planab(
+    gorev,
+    Math.max(1, Number(kRaw ?? 3)),
+    argv.find((a) => a.startsWith("--model="))?.slice("--model=".length) ?? rest[1] ?? "claude:claude-sonnet-5",
+  );
+} else if (cmd === "planrapor") {
+  await planrapor();
 } else if (cmd === "turlar") {
   await turlar(rest[0], argv.includes("--diff"));
 } else if (cmd === "siniflandir") {
@@ -692,6 +803,6 @@ if (cmd === "report") {
 } else if (cmd) {
   await run(cmd, rest[0] ?? "claude", rest[1] ?? "claude-opus-5", audit);
 } else {
-  console.error("kullanım: cli.ts <görev-id> [sağlayıcı] [model] [--audit]\n         cli.ts matrix <görev-id> [sağlayıcı:model] [sağlayıcı:model]\n         cli.ts doctor <sağlayıcı:model>\n         cli.ts puanla [hakem-modeli] [--kuru] [--yeniden]\n         cli.ts siniflandir [hakem-modeli] [--kuru] [--yeniden]\n         cli.ts selftest [görev-id]\n         cli.ts turlar [hücre-parçası] [--diff]\n         cli.ts report [--gorev=<görev-id>]");
+  console.error("kullanım: cli.ts <görev-id> [sağlayıcı] [model] [--audit]\n         cli.ts matrix <görev-id> [sağlayıcı:model] [sağlayıcı:model]\n         cli.ts doctor <sağlayıcı:model>\n         cli.ts puanla [hakem-modeli] [--kuru] [--yeniden]\n         cli.ts siniflandir [hakem-modeli] [--kuru] [--yeniden]\n         cli.ts selftest [görev-id]\n         cli.ts turlar [hücre-parçası] [--diff]\n         cli.ts planab <görev-id> [--k 3] [--model sağ:model]\n         cli.ts planrapor\n         cli.ts report [--gorev=<görev-id>]");
   process.exit(2);
 }

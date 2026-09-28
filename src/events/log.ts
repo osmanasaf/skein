@@ -189,6 +189,20 @@ export type EventInput =
       path: string;
       planHash: string;
     }
+  | {
+      /**
+       * Ölçüm koşusunun HANGİ KOLU (PLANLAMA.md 6d).
+       *
+       * Kol günlüğe açıkça yazılıyor; "plan olayı var mı" diye çıkarsamak,
+       * planlayıcısı hiç koşmamış bir planlı kolu kontrol kolu gibi
+       * gösterirdi ve fark planlamanın lehine sapardı.
+       */
+      type: "ab.arm";
+      taskId: string;
+      arm: "planli" | "plansiz";
+      /** Koşulan akışın adı — kolların birbirine karışmadığının kanıtı. */
+      flow: string;
+    }
   | { type: "hooks.measured"; cell: string; ran: boolean; total: number; red: string[] }
   | {
       type: "review.done";
@@ -284,6 +298,7 @@ const REQUIRED: Record<EventInput["type"], { strings: string[]; numbers: string[
   "gate.released": { strings: ["card", "role", "decision", "kind"], numbers: [] },
   "card.closed": { strings: ["card", "role", "reason"], numbers: [] },
   "hooks.measured": { strings: ["cell"], numbers: ["total"] },
+  "ab.arm": { strings: ["taskId", "arm", "flow"], numbers: [] },
   "plan.round": {
     strings: ["card", "role"],
     numbers: ["round", "newObjections", "openObjections", "invalid"],

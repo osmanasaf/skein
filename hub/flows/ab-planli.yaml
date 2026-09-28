@@ -1,0 +1,64 @@
+# 6d ölçümünün DENEY kolu: planlama turu açık.
+#
+# `ab-plansiz.yaml` ile tek farkı `planner` + `architect` ve `planlama`
+# bloğu. Kodu yazan ve denetleyen roller, promptları, ret politikası ve kod
+# taşıma birebir aynı — yoksa ölçülen şey planlama değil, iki farklı akış
+# olurdu.
+#
+# Asimetri bilerek kayıtlı: planı yazan rol `main`, kontrol kolunda `coder`
+# `main`. Tam olarak bir rol `main` olmak zorunda (kural 2) ve planı yazan
+# rol zincirin başı olmak zorunda (kural 19).
+
+name: ab-planli
+description: 6d deney kolu — kod yazılmadan önce plan belgesi ve ona itiraz turu.
+
+constitution:
+  - ../prompts/constitution/base.md
+  - ../prompts/constitution/engineering-ts.md
+
+roles:
+  - id: planner
+    provider: claude
+    workspace: main
+    prompt: ../prompts/roles/planner.md
+    receive: task
+    next: architect
+
+  - id: architect
+    provider: claude
+    workspace: architect
+    prompt: ../prompts/roles/plan-itiraz.md
+    receive: task
+    reject: planner
+    next: coder
+
+  - id: coder
+    provider: claude
+    workspace: coder
+    prompt: ../prompts/roles/coder.md
+    receive: task
+    reject: planner
+    next: reviewer
+
+  - id: reviewer
+    provider: claude
+    workspace: reviewer
+    prompt: ../prompts/roles/reviewer.md
+    receive: batch
+    syncBack: [coder]
+    reject: coder
+    next: done
+
+planlama:
+  katilimcilar: [planner, architect]
+  tur: 1
+  plan: docs/plan/{kart}.md
+
+reject:
+  limit: 2
+  onExhausted: gate
+
+audit:
+  enabled: false
+
+# Maliyet: ~5 aktivasyon/kart (planner ×2, architect, coder, reviewer).

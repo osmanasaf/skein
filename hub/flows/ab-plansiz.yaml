@@ -1,0 +1,38 @@
+# 6d ölçümünün KONTROL kolu: planlama yok.
+#
+# `ab-planli.yaml` ile tek farkı planlama turunun olmaması. İkisi arasındaki
+# her başka fark, ölçülen şeyi kirletir — rol promptları, anayasa, ret
+# politikası ve kod taşıma bilerek birebir aynı.
+
+name: ab-plansiz
+description: 6d kontrol kolu — kod doğrudan yazılır, plan belgesi yoktur.
+
+constitution:
+  - ../prompts/constitution/base.md
+  - ../prompts/constitution/engineering-ts.md
+
+roles:
+  - id: coder
+    provider: claude
+    workspace: main
+    prompt: ../prompts/roles/coder.md
+    receive: task
+    next: reviewer
+
+  - id: reviewer
+    provider: claude
+    workspace: reviewer
+    prompt: ../prompts/roles/reviewer.md
+    receive: batch
+    syncBack: [coder]
+    reject: coder
+    next: done
+
+reject:
+  limit: 2
+  onExhausted: gate
+
+audit:
+  enabled: false
+
+# Maliyet: ~2 aktivasyon/kart. Planlı kol ~4 eder; fark ölçümün bedeli.
