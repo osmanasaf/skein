@@ -62,7 +62,7 @@ kesiyor).
 | 6a | Plan belgesi akışın parçası | ✅ canlı koşuda doğrulandı |
 | 6b | Plana itiraz turu (iki katılımcı, tek tur) | ✅ **bu oturum** |
 | 6d | Ölçüm koşum takımı (A/B, kum havuzu, rapor) | ✅ **bu oturum** |
-| — | **6d kampanyası** (planlama işe yarıyor mu) | ⏳ koşulmadı — senin makinende |
+| — | **6d kampanyası** | ⚠️ koşuldu ($11.98), KARAR ÇIKMADI — mekanizma düzeltmesi bekliyor |
 | 6c | Çok tur, çok katılımcı, sayaç, kilit kapısı | ✅ canlı koşuda doğrulandı |
 | 6e | Körleme — taşıma katmanında (fan-out/fan-in) | ✅ canlı koşuda doğrulandı |
 
@@ -227,6 +227,69 @@ Kart yazara döndüğünde `ls "$SB/docs/plan/"` iki itiraz dosyasını da
 göstermeli — fan-in budur. Günlükte `plan.round` olaylarının `blind` alanı
 `true`, ve itirazcıların `newObjections` değeri kendi katkısını, yazarınki
 turun gerçek toplamını gösterir.
+
+---
+
+## 6d KAMPANYASI KOŞULDU — karar çıkmadı, ama dört şey öğrenildi
+
+30 Eylül, iki görev × `claude-haiku-4-5`, hedef k=3. **$11.98 harcandı,
+karar çıkmadı.** Ayrıntı `PLANLAMA.md`'de; özeti burada.
+
+```
+=== snapshot-store × haiku-4.5 · k=2 ===
+  plansız  3 koşu  48 kanca   6 kırmızı  %13   6 akt  $0.55  0 ret
+  planlı   2 koşu  32 kanca   2 kırmızı   %6  16 akt  $2.41  3 ret  (1 ÖLÇÜLEMEDİ)
+  göreli azalma %50 · koşu başına %0, %100
+
+=== cache-refresh × haiku-4.5 · k=1 ===
+  plansız  3 koşu  66 kanca   2 kırmızı   %3  12 akt  $2.29  3 ret
+  planlı   1 koşu  22 kanca  10 kırmızı  %45  16 akt  $3.20  4 ret  (2 ÖLÇÜLEMEDİ)
+  göreli azalma %-1400
+
+  KARAR: YETERSIZ
+```
+
+**1. İtiraz mekanizması kullanılmıyor; ret kanalı kullanılıyor.** Plan
+itirazcısı (`architect`) **7 ret verdi ve 0 itiraz yazdı**. Retlerin
+gerekçeleri tam da tasarımın istediği cinsten ("plan `#stateSnapshots`
+mekanizmasını göz ardı ediyor, `snapshots.length == history.length + 1`
+değişmezini kırar"). Yani söyleyecek şey vardı, yanlış kanaldan söylendi.
+Tören ölçüsünün "%100 itirazsız" demesi artık **yanıltıcı**.
+
+Sebep tasarımda: itirazcı rol hem `reject` kenarı hem itiraz dosyası
+taşıyor. **Öneri (kural 22): planlama katılımcısı `reject` taşıyamasın.**
+Kural 21 katılımcıya kapı koymayı zaten yasaklıyor; bu onun kardeşi.
+Yazılmadı — akış dilini değiştiriyor, senin kararın.
+
+**2. Kol kaybı asimetrik ve deney kolunda.** Gerçek kayıpların ikisi de
+planlı kolda, `reject.limit` dolduğu için. Hiçbir kontrol kolu düşmedi.
+Bu ölçümü yavaşlatmıyor, **bozuyor** — ve (1) düzeltilirse bu da düzelir.
+
+**3. Hücre seçiminin doğru tablosu yok.** İlk deneme
+`snapshot-store × sonnet-5` ile başladı, kontrol kolu 16/16 yeşil verdi
+(ölçüm gücü yok) ve $1.19'a durduruldu. Sebep: eşik tablosu **tek ajanlı
+`produce`** yolunu ölçüyor, AB kolları koder+reviewer zinciri.
+`cache-refresh`te de aynı: tek ajanlı yolda 10/22 kırmızı, zincirde 2/66.
+**Zincir çıplak üreticiden belirgin şekilde güçlü** — denetim turunun
+değerine dair bağımsız bir sinyal, ve 6d için ayrı bir kalibrasyon
+gerektiriyor.
+
+**4. Yön, olduğu kadarıyla, olumlu değil.** `snapshot-store`ta %50 azalma
+ama işaret tutarsız (%0 ve %100). `cache-refresh`in tek planlı koşusu
+%-1400. İki görev ayrışıyor. Bedel tekrarlanıyor: planlı kollar **3-4 kat**
+pahalı.
+
+**Karar kuralı doğru davrandı:** hiçbir sayı karara çevrilmedi, düşen
+kollar `ÖLÇÜLEMEDİ` sayıldı, "0 kırmızı" sayılmadı.
+
+### Tekrar koşmadan önce
+
+1. **Kural 22'ye karar ver** (yukarıda). Bu düzeltilmeden kampanya
+   asimetrik kol kaybıyla koşar ve sonuç yanlı olur.
+2. **Hücreleri zincire göre kalibre et.** `planab` öncesi her aday hücrede
+   tek bir kontrol kolu koş; kontrol kolu temizse o hücre ölçemez.
+3. Sonra: `planab <görev> --k=3 --model=claude:claude-haiku-4-5-20251001`,
+   iki-üç görev, ~$12-15.
 
 ---
 

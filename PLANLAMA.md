@@ -675,6 +675,108 @@ yazılmış olan takım.
 
 ---
 
+## 6d kampanyası — KOŞULDU, karar çıkmadı (30 Eylül)
+
+İki görev × `claude-haiku-4-5` × k=3 hedeflendi; toplam **$11.98**
+harcandı ve **karar çıkmadı**. Ama kampanya, ölçmeye çalıştığı şeyden
+başka dört şey ölçtü ve üçü mekanizmanın kendisiyle ilgili.
+
+### Rapor
+
+```
+=== snapshot-store × haiku-4.5 · k=2 ===
+  kol        koşu  kanca  kırmızı   oran   aktivasyon  maliyet  ret
+  plansız      3     48        6    %13        6      $0.55     0
+  planlı       2     32        2     %6       16      $2.41     3   (1 ÖLÇÜLEMEDİ)
+  göreli azalma: %50 · koşu başına: %0, %100
+
+=== cache-refresh × haiku-4.5 · k=1 ===
+  plansız      3     66        2     %3       12      $2.29     3
+  planlı       1     22       10    %45       16      $3.20     4   (2 ÖLÇÜLEMEDİ)
+  göreli azalma: %-1400
+
+  KARAR: YETERSIZ — iki görevin hiçbiri karar verecek durumda değil.
+```
+
+### Bulgu 1: itiraz mekanizması kullanılmıyor — ret kanalı kullanılıyor
+
+Kampanyanın en önemli sonucu bu ve ölçülmek istenen şey değil.
+
+**`architect` (plan itirazcısı) 7 ret verdi ve 0 itiraz yazdı.** Yedi retin
+gerekçeleri genel değil, tam da tasarımın istediği cinsten:
+
+> Plan, `Store` sınıfının mevcut `#stateSnapshots` mekanizmasını göz ardı
+> ederek, yalnızca `#history.pop()` işlemiyle
+> `snapshots.length == history.length + 1` değişmezini kıracak bir `undo()`
+> uygulaması önerir.
+
+Yani itirazcının söyleyecek gerçek bir şeyi vardı ve onu **yanlış kanaldan**
+söyledi. Tören ölçüsü "3 alışverişin 3'ü itirazsız (%100)" diyor — bu sayı
+artık **yanıltıcı**: anlaşmazlık vardı, itiraz dosyasından geçmedi.
+
+Sebep tasarımda: `ab-planli.yaml`, `plan2.yaml` ve `plan3.yaml`'da itirazcı
+rolün hem `reject` kenarı hem itiraz dosyası var. İki kanal verildiğinde
+model tanıdık olanı seçiyor. Ve ret burada her açıdan daha kötü:
+
+| | yazılı itiraz | ret |
+|---|---|---|
+| maliyet | bir tur içinde, plan yeniden yazılmaz | her ret = tam bir yeniden planlama |
+| kayıt | `kabul`/`ret`/`insana` ayrımı, sayılabilir | tek gerekçe metni |
+| sonlanma | tur sayacı, doğal son | `reject.limit` dolunca kart kapıda |
+
+**Öneri (kural 22):** planlama katılımcısı `reject` kenarı taşıyamasın.
+Planlama aşamasında itirazın yolu itiraz dosyası; ret, kod aşamasının
+mekanizması. Kural 21 katılımcıya *kapı* koymayı zaten yasaklıyor, aynı
+gerekçenin kardeşi. Yazılmadı — akış dilini değiştiriyor, ayrı bir karar.
+
+### Bulgu 2: kol kaybı ASİMETRİK ve deney kolunda
+
+Gerçek kol kayıplarının hepsi deney kolunda: iki planlı kol `reject.limit`
+dolduğu için kapıya çıktı, hiçbir kontrol kolu düşmedi. (Üçüncü planlı
+kaybı bana ait — kararı değiştiremeyeceği kesinleşince koşuyu durdurdum.)
+
+Bu, ölçümü yalnızca yavaşlatmıyor **bozuyor**: deney kolunun en çok
+tartışılan koşuları sistematik olarak eleniyor. Bulgu 1'in düzeltilmesi
+bunu da düzeltir.
+
+### Bulgu 3: hücre seçimi yanlış tabloya dayanıyordu
+
+İlk deneme `snapshot-store × sonnet-5` ile başladı ve kontrol kolu
+**16/16 yeşil** verdi — ölçüm gücü yok, rapor zorunlu olarak YETERSİZ.
+Sebep: hücreler **tek ajanlı `produce`** yolunun eşik tablosuna göre
+seçilmişti, oysa AB kolları koder+reviewer zinciri. Zincirdeki reviewer
+tuzağı yakalayıp reddetti, koder düzeltti.
+
+Aynısı `cache-refresh`te de görüldü: tek ajanlı yolda haiku 22 kancanın
+10'unu düşürüyordu, zincirde kontrol kolu 66 kancanın yalnızca 2'sini
+düşürdü. **Zincir, çıplak üreticiden belirgin şekilde güçlü** — ve bu,
+denetim turunun değerine dair bağımsız bir sinyal.
+
+Sonuç: 6d için hücre seçmenin doğru tablosu yok. `planab`'a, kontrol kolu
+temiz çıktığında kalan tekrarları koşmadan uyaran bir ön kontrol
+gerekiyor.
+
+### Bulgu 4: yön, olduğu kadarıyla, olumlu değil
+
+`snapshot-store`ta göreli azalma %50 ama işaret tutarsız (%0 ve %100):
+bir planlı tekrarda kusur tamamen kayboldu, ötekinde hiç değişmedi.
+`cache-refresh`in tek ölçülmüş planlı koşusu 22 kancanın 10'unu düşürdü,
+kontrol kolu ise 66'nın 2'sini — **%-1400**. Tek koşu, ama yön olumlu
+değil ve iki görev ayrışıyor.
+
+Bedel net ve tekrarlanıyor: planlı kollar kontrol kollarının **3-4 katı**
+($2.41 / $0.55 ve $3.20 / $2.29).
+
+### Karar kuralı doğru davrandı
+
+Hiçbir sayı karara çevrilmedi: k eşiğin altında kaldığı için iki grup da
+YETERSİZ okundu, düşen kollar `ÖLÇÜLEMEDİ` diye ayrı sayıldı ve "0 kırmızı"
+sayılmadı. Kampanyanın ürettiği tek "sonuç" cümlesi şu: **planlamanın
+ürünü daha doğru yapıp yapmadığı hâlâ bilinmiyor**, ve bugünkü haliyle
+mekanizma ölçülmeden önce bir tasarım düzeltmesi bekliyor (Bulgu 1).
+
+---
+
 ## 6d — Koşum takımı (YAZILDI)
 
 Ölçütler yukarıda ilan edilmişti; bu bölüm onları koşturan takımı
