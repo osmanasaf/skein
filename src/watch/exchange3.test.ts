@@ -326,6 +326,24 @@ describe("6e — körlü tur: taşıma dallanıyor ve toplanıyor", () => {
     expect(metin).not.toContain(ITIRAZ(card.id, "analyst"));
   });
 
+  // Devir teslimin iki kapısı iş metninin BAŞINDA olmak zorunda. Ölçüm
+  // kampanyasında `claude-haiku-4-5` kolların yarısını tam bu iki adımda
+  // düşürdü: biri commit'i atladı, öteki `.skein-verdict.json`'ı `git add -A`
+  // ile ürünün geçmişine soktu. İkisinin talimatı rol promptunun ortasında
+  // duruyordu ve tutmuyordu — projenin iki kez öğrendiği dersin üçüncüsü.
+  it("iş metni devir teslimin iki kapısını da BAŞTA söyler", async () => {
+    const card = await put();
+    await planYaz(card);
+    const kart = (await queue.get(card.id)) as Card;
+    for (const rolAdi of ["architect", "coder"]) {
+      const metin = buildTaskText(kart, roleOf(topology, rolAdi) as never);
+      const bas = metin.slice(0, metin.indexOf("## İş"));
+      expect(bas).toMatch(/git commit/);
+      expect(bas).toMatch(/commit'lemE/);
+      expect(bas).toMatch(/git add -A/);
+    }
+  });
+
   it("cevap turunun iş metni bütün itiraz dosyalarını sayar", async () => {
     const card = await put();
     await planYaz(card);

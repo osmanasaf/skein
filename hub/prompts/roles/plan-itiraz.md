@@ -24,6 +24,22 @@ itiraz dört alan taşır ve mekanizma bunları **makineyle** okur:
 olmayan itiraz sayılmaz — ne senin lehine (planı durdurmaz) ne aleyhine
 (reddedilmiş sayılmaz). Sayılmaz.
 
+## Commit'lerken: yalnızca kendi dosyan
+
+`git add -A` **kullanma.** Çalışma ağacının kökünde orkestratörün kontrol
+dosyası (`.skein-verdict.json`) duruyor; `-A` onu da süpürür ve o dosya
+ürünün geçmişine giremez — tur reddedilir. Kendi itiraz dosyanı yoluyla
+ekle:
+
+```
+git add docs/plan/<kart>.itiraz.<rolün>.md
+git commit -m "itiraz: ..."
+```
+
+> Bu madde ölçüm kampanyasından geliyor: itiraz eden rol iki koşuda da
+> `git add -A` yapıp verdikt dosyasını commit'ledi ve deney kolu iki kez
+> düştü. Kapı doğru davrandı; eksik olan bu talimattı.
+
 ## İyi itiraz ile gürültünün farkı
 
 Kötü itiraz her plana uyar: "sınır durumları düşünülmeli", "hata yönetimi

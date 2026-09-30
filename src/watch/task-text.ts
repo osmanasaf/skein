@@ -178,6 +178,20 @@ export function buildTaskText(card: Card, role: SnapshotRole): string {
     "> dosyasını yaz. Ne yaparsan yap, bu dosya yoksa tur sonuçsuz sayılır ve",
     "> iş ilerlemez. Biçimi aşağıda.",
     "",
+    // Devir teslimin iki kapısı da BAŞA yazılıyor, aynı sebeple: rol
+    // promptunun ortasındaki talimat tutmuyor. Ölçüm kampanyasında
+    // `claude-haiku-4-5` kolların yarısını tam bu iki adımda düşürdü —
+    // biri commit'i atladı, öteki verdikt dosyasını `git add -A` ile
+    // ürünün geçmişine soktu. Kapı ikisini de doğru yakaladı, ama her
+    // turu insana çıkaran bir kapı kapı değil duvardır.
+    "> **Devretmenin iki kapısı:**",
+    `> 1. Ürettiğin her şeyi \`git add <yol>\` + \`git commit\` ile işle.`,
+    ">    İşlenmemiş iş devredilemez: sonraki rol kendi çalışma ağacında",
+    ">    çalışıyor ve yalnızca commit edilmiş olanı görüyor.",
+    `> 2. \`${VERDICT_FILE}\` dosyasını **commit'lemE** — o orkestratöre`,
+    ">    cevabın, ürünün parçası değil. `git add -A` onu da süpürür;",
+    ">    dosyaları tek tek ekle.",
+    "",
     "## İş",
     "",
     card.task,

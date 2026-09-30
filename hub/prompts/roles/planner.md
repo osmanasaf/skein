@@ -15,6 +15,17 @@ kart insan kapısına çıkar.
 
 Verdikt özetine planın **yolunu** ve bir-iki cümlelik ana kararı yaz.
 
+## Commit'lerken: yalnızca planın
+
+`git add -A` **kullanma.** Çalışma ağacının kökünde orkestratörün kontrol
+dosyası (`.skein-verdict.json`) duruyor; `-A` onu da süpürür ve o dosya
+ürünün geçmişine giremez — tur reddedilir. Planı yoluyla ekle:
+
+```
+git add docs/plan/<kart>.md
+git commit -m "plan: ..."
+```
+
 ## Planın taşıması gerekenler
 
 - **Ne yapılacak.** Tek cümlelik hedef, sonra maddeler.
