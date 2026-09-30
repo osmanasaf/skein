@@ -7,6 +7,7 @@ const ev = (e: Record<string, unknown>, runId: string): SkeinEvent =>
 
 interface KosuSpec {
   red: number;
+  model?: string;
   hooks?: number;
   ran?: boolean;
   activations?: number;
@@ -18,7 +19,7 @@ interface KosuSpec {
 function kosu(runId: string, taskId: string, arm: "planli" | "plansiz", s: KosuSpec): SkeinEvent[] {
   const hooks = s.hooks ?? 10;
   const out: SkeinEvent[] = [
-    ev({ type: "ab.arm", taskId, arm, flow: `ab-${arm}` }, runId),
+    ev({ type: "ab.arm", taskId, arm, flow: `ab-${arm}`, model: s.model ?? "m1" }, runId),
   ];
   for (let i = 0; i < (s.activations ?? 2); i += 1) {
     out.push(ev({ type: "agent.finished", cell: `c${i}`, exitCode: 0, durationMs: 1, usage: { costUsd: 0.1 } }, runId));
@@ -41,13 +42,13 @@ function kosu(runId: string, taskId: string, arm: "planli" | "plansiz", s: KosuS
 }
 
 /** Üç tekrar: kontrol kolu 4/10 kırmızı, planlı kol `planliRed`. */
-const ucTekrar = (planliRed: number, taskId = "gorev-1"): SkeinEvent[] =>
+const ucTekrar = (planliRed: number, taskId = "gorev-1", model = "m1"): SkeinEvent[] =>
   // Koşu kimliği göreve göre değişmeli: aynı kimlik iki görevde kullanılırsa
   // koşular tek koşu sanılır (ilk hâlinde tam bu oldu ve iki görev tek
   // gruba eridi).
   [1, 2, 3].flatMap((k) => [
-    ...kosu(`${taskId}-p${k}`, taskId, "planli", { red: planliRed, activations: 4, planning: { objections: 1, accepted: 1, invalid: 0 } }),
-    ...kosu(`${taskId}-s${k}`, taskId, "plansiz", { red: 4, activations: 2 }),
+    ...kosu(`${taskId}-${model}-p${k}`, taskId, "planli", { red: planliRed, model, activations: 4, planning: { objections: 1, accepted: 1, invalid: 0 } }),
+    ...kosu(`${taskId}-${model}-s${k}`, taskId, "plansiz", { red: 4, model, activations: 2 }),
   ]);
 
 describe("armRuns", () => {
@@ -154,5 +155,42 @@ describe("planEffect", () => {
     const g = planEffect(ucTekrar(1)).groups[0];
     expect(g?.planli?.activations).toBe(12);
     expect(g?.plansiz?.activations).toBe(6);
+  });
+});
+
+// Grup = görev × MODEL KURGUSU. Bu kural `effect.ts`'te bir kez konuldu
+// (k-şişmesi düzeltmesi) ve `planeffect.ts`'te UNUTULDU; canlı kampanyada
+// yakalandı: aynı görev önce sonnet sonra haiku ile koşulduğunda rapor
+// ikisini tek hücre sanıyordu.
+describe("planEffect — grup anahtarı görev × model", () => {
+  it("aynı görevin iki modeli AYRI gruplara düşer", () => {
+    const r = planEffect([...ucTekrar(1, "gorev-1", "sonnet"), ...ucTekrar(4, "gorev-1", "haiku")]);
+    expect(r.groups).toHaveLength(2);
+    expect(r.groups.map((g) => [g.taskId, g.model, g.repeats])).toEqual(
+      expect.arrayContaining([["gorev-1", "sonnet", 3], ["gorev-1", "haiku", 3]]),
+    );
+  });
+
+  it("modelleri karıştırmak k'yı şişirmez", () => {
+    // Her modelde BİR tekrar: elde iki ayrı k=1 var, k=2 yok.
+    const bir = (model: string) => [
+      ...kosu(`g-${model}-p1`, "gorev-1", "planli", { red: 1, model, activations: 4 }),
+      ...kosu(`g-${model}-s1`, "gorev-1", "plansiz", { red: 4, model, activations: 2 }),
+    ];
+    const r = planEffect([...bir("sonnet"), ...bir("haiku")]);
+    expect(r.groups.map((g) => g.repeats)).toEqual([1, 1]);
+    expect(r.verdict.code).toBe("yetersiz");
+    expect(r.verdict.reason).toMatch(/k=1/);
+  });
+
+  // Eski günlüklerde alan yok; onları yeni bir modelin grubuna karıştırmak
+  // tam olarak bu düzeltmenin önlediği şey olurdu.
+  it("modeli yazılmamış eski koşular ayrı bir gruba düşer", () => {
+    const eski = [
+      ev({ type: "ab.arm", taskId: "gorev-1", arm: "plansiz", flow: "ab-plansiz" }, "eski-1"),
+      ev({ type: "hooks.measured", cell: "olcum/plansiz", ran: true, total: 10, red: ["k1"] }, "eski-1"),
+    ];
+    const r = planEffect([...eski, ...ucTekrar(1, "gorev-1", "sonnet")]);
+    expect(r.groups.map((g) => g.model).sort()).toEqual(["(bilinmiyor)", "sonnet"]);
   });
 });

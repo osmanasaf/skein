@@ -26,6 +26,8 @@ export interface ArmSide {
 
 export interface PlanGroup {
   taskId: string;
+  /** Üretici model kurgusu; grubun anahtarının öteki yarısı. */
+  model: string;
   planli: ArmSide | null;
   plansiz: ArmSide | null;
   /** Kırmızı kanca oranındaki göreli azalma: (plansız − planlı) / plansız. */
@@ -46,6 +48,7 @@ export interface PlanEffectReport {
 interface ArmRun {
   runId: string;
   taskId: string;
+  model: string;
   arm: Arm;
   ran: boolean;
   hooks: number;
@@ -58,15 +61,20 @@ interface ArmRun {
 
 /** Günlükten kol koşularını çıkarır; kol bilgisi `ab.arm` olayından gelir. */
 export function armRuns(events: SkeinEvent[]): ArmRun[] {
-  const arms = new Map<string, { taskId: string; arm: Arm }>();
+  const arms = new Map<string, { taskId: string; arm: Arm; model: string }>();
   for (const e of events) {
-    if (e.type === "ab.arm") arms.set(e.runId, { taskId: e.taskId, arm: e.arm });
+    // `model` 6d'nin ilk kampanyasında YOKTU; o günlüklerin kolları
+    // "(bilinmiyor)" grubuna düşüyor. Eksik alanı sessizce boş saymak,
+    // eski koşuları yeni bir modelin grubuna karıştırırdı.
+    if (e.type === "ab.arm") {
+      arms.set(e.runId, { taskId: e.taskId, arm: e.arm, model: e.model ?? "(bilinmiyor)" });
+    }
   }
 
   const out = new Map<string, ArmRun>();
   for (const [runId, meta] of arms) {
     out.set(runId, {
-      runId, taskId: meta.taskId, arm: meta.arm,
+      runId, taskId: meta.taskId, model: meta.model, arm: meta.arm,
       ran: false, hooks: 0, red: 0, activations: 0, costUsd: 0, rejects: 0,
     });
   }
@@ -122,14 +130,21 @@ function reduction(plansiz: ArmSide | null, planli: ArmSide | null): number | nu
 
 export function planEffect(events: SkeinEvent[]): PlanEffectReport {
   const runs = armRuns(events);
-  const byTask = new Map<string, ArmRun[]>();
+  // Grup = görev × MODEL KURGUSU. Yalnızca göreve göre gruplamak, kampanya
+  // ortasında üretici değişince iki kurgu tek gruba eritir ve k şişer —
+  // `effect.ts`'te bir kez yapılan ve düzeltilen hatanın aynısı. Burada
+  // ikinci kez yapıldı ve canlı kampanyada yakalandı: aynı görev sonnet ve
+  // haiku ile koşulduğunda rapor ikisini tek hücre sanıyordu.
+  const byGroup = new Map<string, ArmRun[]>();
   for (const r of runs) {
-    const list = byTask.get(r.taskId);
+    const key = `${r.taskId}\u0000${r.model}`;
+    const list = byGroup.get(key);
     if (list) list.push(r);
-    else byTask.set(r.taskId, [r]);
+    else byGroup.set(key, [r]);
   }
 
-  const groups: PlanGroup[] = [...byTask.entries()].map(([taskId, own]) => {
+  const groups: PlanGroup[] = [...byGroup.entries()].map(([key, own]) => {
+    const [taskId, model] = key.split("\u0000") as [string, string];
     const planliRuns = own.filter((r) => r.arm === "planli");
     const plansizRuns = own.filter((r) => r.arm === "plansiz");
     const planli = side(planliRuns);
@@ -163,7 +178,7 @@ export function planEffect(events: SkeinEvent[]): PlanEffectReport {
 
     const relativeReduction = reduction(plansiz, planli);
     return {
-      taskId, planli, plansiz, relativeReduction, perRun, repeats, ceremony,
+      taskId, model, planli, plansiz, relativeReduction, perRun, repeats, ceremony,
       verdict: decide(relativeReduction, repeats, perRun, plansiz),
     };
   });
@@ -233,7 +248,7 @@ function overall(groups: PlanGroup[]): { code: VerdictCode; reason: string } {
   const only = groups[0] as PlanGroup;
   if (groups.length === 1) return only.verdict;
 
-  const say = (g: PlanGroup): string => `${g.taskId} (k=${g.repeats})`;
+  const say = (g: PlanGroup): string => `${g.taskId} × ${g.model} (k=${g.repeats})`;
   const decisive = groups.filter((g) => g.verdict.code === "olumlu" || g.verdict.code === "olumsuz");
   if (decisive.length === 0) {
     return {

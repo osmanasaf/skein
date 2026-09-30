@@ -286,7 +286,7 @@ async function planrapor(): Promise<void> {
 function printPlanEffect(r: PlanEffectReport): void {
   const pct = (n: number | null): string => (n === null ? "—" : `%${(n * 100).toFixed(0)}`);
   for (const g of r.groups) {
-    console.log(`\n=== ${g.taskId}  ·  k=${g.repeats} ===`);
+    console.log(`\n=== ${g.taskId} × ${g.model}  ·  k=${g.repeats} ===`);
     console.log("  kol        koşu  kanca  kırmızı   oran   aktivasyon   maliyet   ret");
     for (const [ad, s] of [["plansız", g.plansiz], ["planlı", g.planli]] as const) {
       if (s === null) continue;

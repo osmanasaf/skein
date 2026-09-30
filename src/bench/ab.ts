@@ -194,7 +194,11 @@ export async function runArm(options: ArmOptions): Promise<ArmResult> {
   // Kolun kimliği günlüğe AÇIKÇA yazılıyor: "plan olayı var mı" diye
   // çıkarsamak, planlayıcısı hiç koşmamış bir planlı kolu kontrol kolu
   // gibi gösterirdi.
-  await log.append({ type: "ab.arm", taskId, arm, flow: flow.name });
+  // Model de yazılıyor: ölçüm grubunun anahtarı görev × model kurgusu.
+  const model = [...new Set(topology.roles.map((r) => adapters.get(r.provider)?.model ?? "?"))]
+    .sort()
+    .join("+");
+  await log.append({ type: "ab.arm", taskId, arm, flow: flow.name, model });
 
   const card = await queue.add(newCard({
     title: `${taskId} (${arm})`,

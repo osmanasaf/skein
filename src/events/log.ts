@@ -207,6 +207,15 @@ export type EventInput =
       arm: "planli" | "plansiz";
       /** Koşulan akışın adı — kolların birbirine karışmadığının kanıtı. */
       flow: string;
+      /**
+       * Üretici model tanımı.
+       *
+       * Ölçüm grubu görev × MODEL KURGUSU; grup anahtarının yarısı bu.
+       * Kayıtlı olmadığı sürece, kampanya ortasında üretici değişirse iki
+       * kurgu tek gruba erir ve k şişer — `effect.ts`'te bir kez yapılan
+       * ve düzeltilen hatanın aynısı.
+       */
+      model: string;
     }
   | { type: "hooks.measured"; cell: string; ran: boolean; total: number; red: string[] }
   | {
@@ -303,7 +312,7 @@ const REQUIRED: Record<EventInput["type"], { strings: string[]; numbers: string[
   "gate.released": { strings: ["card", "role", "decision", "kind"], numbers: [] },
   "card.closed": { strings: ["card", "role", "reason"], numbers: [] },
   "hooks.measured": { strings: ["cell"], numbers: ["total"] },
-  "ab.arm": { strings: ["taskId", "arm", "flow"], numbers: [] },
+  "ab.arm": { strings: ["taskId", "arm", "flow", "model"], numbers: [] },
   "plan.round": {
     strings: ["card", "role"],
     numbers: ["round", "newObjections", "openObjections", "invalid"],
