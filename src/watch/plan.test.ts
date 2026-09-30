@@ -109,7 +109,7 @@ describe("topoloji — plan politikası donuyor", () => {
   it("anlık görüntü plan politikasını taşır", () => {
     expect(topology.plan).toEqual({
       katilimcilar: ["planner"], plan: "docs/plan/{kart}.md",
-      itiraz: "docs/plan/{kart}.itiraz.md", tur: 1,
+      itiraz: "docs/plan/{kart}.itiraz.{rol}.md", tur: 1, ilkTurKor: true,
     });
   });
 

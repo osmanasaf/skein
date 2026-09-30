@@ -38,7 +38,7 @@ class RoleAdapter implements Adapter {
     } else if (rol === "architect") {
       const kart = /Kart: `([^`]+)`/.exec(req.taskText ?? "")?.[1] ?? "x";
       await mkdir(join(req.workdir, "docs/plan"), { recursive: true });
-      await writeFile(join(req.workdir, `docs/plan/${kart}.itiraz.md`),
+      await writeFile(join(req.workdir, `docs/plan/${kart}.itiraz.architect.md`),
         "# İtirazlar\n\nİtirazım yok.\n");
     } else if (rol === "coder") {
       await mkdir(join(req.workdir, "src"), { recursive: true });

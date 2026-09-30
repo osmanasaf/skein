@@ -470,8 +470,11 @@ describe("loadFlow — planlama (kural 17-20)", () => {
       katilimcilar: ["coder"],
       plan: "docs/plan/{kart}.md",
       // İtiraz dosyası plan yolundan türetiliyor: tek alan, tek hata yüzeyi.
-      itiraz: "docs/plan/{kart}.itiraz.md",
+      // `{rol}` 6e'den beri zorunlu: her itirazcı kendi dosyasına yazıyor,
+      // çünkü körlemenin fan-in birleşmesi ortak dosyada çakışırdı.
+      itiraz: "docs/plan/{kart}.itiraz.{rol}.md",
       tur: 1,
+      ilkTurKor: true,
     });
 
     // Plan politikası topolojinin parçası: değişirse yoldaki kart eskisiyle yaşar.
@@ -513,16 +516,44 @@ describe("loadFlow — planlama (kural 17-20)", () => {
     expect(flow.plan?.katilimcilar).toEqual(["analyst", "architect", "coder"]);
   });
 
-  // Körleme YAPILMADI: ileri birleştirme ikinci itirazcının ağacına
-  // birincinin dosyasını taşıyor. Alan bu yüzden iki değerle de
-  // reddediliyor — `true` yazılabilmesi, yapılmamış bir şeyi yapılmış
-  // göstermek olurdu.
-  it("körleme alanını iki değerle de reddeder", async () => {
-    for (const deger of ["false", "true"]) {
-      const yaml = withPlan(
-        `planlama:\n  katilimcilar: [coder, reviewer]\n  ilk-tur-kor: ${deger}\n  plan: docs/plan/{kart}.md`);
-      await expect(load(await write(yaml, `kor-${deger}.yaml`))).rejects.toThrow(/kural 18.*henüz uygulanmadı/s);
-    }
+  // 6e: körleme uygulandı (fan-out/fan-in taşıma), alan artık kabul
+  // ediliyor ve varsayılanı açık.
+  it("körleme alanını okur; varsayılanı açık", async () => {
+    const acik = await load(await write(withPlan(
+      "planlama:\n  katilimcilar: [coder, reviewer]\n  plan: docs/plan/{kart}.md"), "kor-yok.yaml"));
+    expect(acik.plan?.ilkTurKor).toBe(true);
+
+    const kapali = await load(await write(withPlan(
+      "planlama:\n  katilimcilar: [coder, reviewer]\n  ilk-tur-kor: false\n  plan: docs/plan/{kart}.md"),
+      "kor-false.yaml"));
+    expect(kapali.plan?.ilkTurKor).toBe(false);
+  });
+
+  it("körleme alanı mantıksal olmayan değeri reddeder", async () => {
+    const yaml = withPlan(
+      "planlama:\n  katilimcilar: [coder, reviewer]\n  ilk-tur-kor: belki\n  plan: docs/plan/{kart}.md");
+    await expect(load(await write(yaml))).rejects.toThrow(/kural 18.*mantıksal/s);
+  });
+
+  // Tur tavanı da hash'e girmeli. 6c tavanı 1..5 yaptığında hash'e
+  // eklenmemişti: yalnızca `tur`da ayrışan iki akış aynı damgayı
+  // üretiyordu, yani damga davranışı belirleyen bir kararı gizliyordu.
+  it("tur tavanı hash'i değiştirir", async () => {
+    const bir = await load(await write(withPlan(
+      "planlama:\n  katilimcilar: [coder, reviewer]\n  tur: 1\n  plan: docs/plan/{kart}.md"), "t1.yaml"));
+    const uc = await load(await write(withPlan(
+      "planlama:\n  katilimcilar: [coder, reviewer]\n  tur: 3\n  plan: docs/plan/{kart}.md"), "t3.yaml"));
+    expect(bir.hash).not.toBe(uc.hash);
+  });
+
+  // Körleme topolojinin parçası: değişirse yoldaki kart eskisiyle yaşar.
+  it("körleme ayarı hash'i değiştirir", async () => {
+    const a = await load(await write(withPlan(
+      "planlama:\n  katilimcilar: [coder, reviewer]\n  plan: docs/plan/{kart}.md"), "h1.yaml"));
+    const b = await load(await write(withPlan(
+      "planlama:\n  katilimcilar: [coder, reviewer]\n  ilk-tur-kor: false\n  plan: docs/plan/{kart}.md"),
+      "h2.yaml"));
+    expect(a.hash).not.toBe(b.hash);
   });
 
   it("var olmayan role işaret eden katılımcıyı reddeder", async () => {

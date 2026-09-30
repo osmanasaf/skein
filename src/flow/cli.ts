@@ -70,7 +70,16 @@ function printFlow(flow: Flow, root: string): void {
       itirazcilar.length === 0
         ? "       alışveriş yok (tek katılımcı) — ayrı aktivasyon getirmiyor"
         : `       ${itirazcilar.join(", ")} itiraz eder → ${flow.plan.itiraz}` +
-          `\n       ${flow.plan.tur} tur (itiraz → cevap); açık itiraz kalırsa kilit kapısı`,
+          `\n       ${flow.plan.tur} tur (itiraz → cevap); açık itiraz kalırsa kilit kapısı` +
+          // Körleme tek itirazcıda ATIL: kimsenin görmeyeceği bir itiraz
+          // yok. Açık yazmak, çalışmayan bir şeyi çalışıyor göstermek olurdu.
+          `\n       ilk tur ${
+            !flow.plan.ilkTurKor
+              ? "açık (ilk-tur-kor: false)"
+              : itirazcilar.length < 2
+                ? "açık — körleme tek itirazcıda atıl"
+                : "KÖR: her itirazcı yazarın ağacından dallanır, tur sonunda birleşir"
+          }`,
     );
   }
   console.log("");

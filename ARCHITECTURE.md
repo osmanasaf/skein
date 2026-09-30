@@ -233,7 +233,7 @@ Ekran tartışması bunların üstüne gelir, bunları yeniden açmaz:
 | ~~6b~~ | ✅ Plana itiraz turu (iki katılımcı) | Mekanizma canlı koştu; `kabul` yolu testlerle kapalı, canlı koşuyla değil |
 | ~~6c~~ | ✅ Çok tur, çok katılımcı, yeni itiraz sayacı, kilit kapısı | 26 testle kapalı ve mutasyonla doğrulandı; **canlı koşulmadı** |
 | ~~6d~~ | ✅ Ölçüm koşum takımı (A/B, kum havuzu, rapor) | Deney kolu canlı koştu ve bilinen kusuru yeniden üretti; kampanya koşulmadı |
-| 6e | Körleme — taşıma değişikliği (fan-out/fan-in) | İleri birleştirme ikinci itirazcıya birincinin dosyasını taşıyor; talimatla çözülmez |
+| ~~6e~~ | ✅ Körleme — taşıma katmanında (fan-out/fan-in) | 19 testle kapalı ve mutasyonla doğrulandı; **canlı koşulmadı** |
 
 Adım 6'nın gerekçesi `PHILOSOPHY.md`'de: serbest sohbet maliyeti sınırsız
 büyütür, izlenebilirliği kaybeder ve modeller birbirine yakınsadıkça kör nokta
@@ -241,12 +241,11 @@ tezini zayıflatır. Doğru biçimi, `reject` mekanizmasının kardeşi: kayıtl
 sayılı, gerekçeli turlar.
 
 **`PLANLAMA.md` o biçimi sabitledi** (18 Eylül): alışverişin taşıyıcısı
-dosya, itirazın zorunlu üç alanı, tur 1'in kör olması (yapılmadı — 6e),
-üç çıkış (anlaşma /
+dosya, itirazın zorunlu üç alanı, tur 1'in kör olması, üç çıkış (anlaşma /
 tükendi → deadlock kapısı / kaçış), akış diline dört yeni kural, iki yeni
 olay, ve işe yarayıp yaramadığını söyleyecek önceden ilan edilmiş ölçüt.
-6a-6d yazıldı; körleme (6e) yazılmadı ve alanı bu yüzden akış dilinde hiç
-kabul edilmiyor.
+6a-6e yazıldı. Körleme, talimat olarak yazılamayacağı için taşıma
+katmanına indi: körlü turda itirazcılar yazarın ağacından dallanır.
 
 ---
 

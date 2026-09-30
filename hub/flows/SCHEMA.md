@@ -44,6 +44,8 @@ audit:
 planlama:                       # opsiyonel; PLANLAMA.md
   katilimcilar: [string]        # ilki planı YAZAR, ötekiler itiraz eder
   tur: integer                  # itiraz → cevap döngüsü tavanı; 1..5
+  ilk-tur-kor: boolean          # varsayılan true; ilk turda itirazcılar
+                                # birbirini görmez (fan-out/fan-in taşıma)
   plan: string                  # `{kart}` içermeli; itiraz dosyası türetilir
 ```
 
@@ -203,10 +205,26 @@ Kilitten çıkış insanın elinde: `forward` planı olduğu gibi kabul edip
 alışverişten sonraki role gönderir, `retry` **aynı rolü aynı tura** geri
 koyar (planı yalnızca insan yeniden açar).
 
-**İlk tur AÇIK.** `ilk-tur-kor` alanı hiç yazılamaz (kural 18): kod taşıma
-ileri birleştirme olduğu için ikinci itirazcının ağacı birincinin itiraz
-dosyasını alıyor. Körleme, yazarın ağacından dallanıp turun sonunda
-birleştiren bir taşıma gerektiriyor — `PLANLAMA.md` 6e.
+**İlk tur KÖR** (`ilk-tur-kor`, varsayılan `true`). Körleme bir talimat
+değil **taşıma kuralı**: körlü turda her itirazcının ağacı zincirden değil
+**yazarın** ağacından besleniyor (fan-out), turun sonunda hepsi yazarın
+ağacına katılıyor (fan-in). İkinci itirazcı birincinin itiraz dosyasını
+göremez, çünkü o dosya onun ağacında hiç yok.
+
+Bunun iki sonucu var:
+
+- **Her itirazcı kendi dosyasına yazar** — `itiraz` yolu `{rol}` içerir.
+  Ortak tek dosya her fan-in'de çakışırdı. Numaraların roller arasında
+  çakışması sorun değil: kimlik (dosya sahibi, numara) çifti.
+- **Körlü turda sonlanma kararını yalnızca plan yazarı verebilir.**
+  İtirazcılar kendi dosyalarından başkasını görmüyor; "yeni itiraz yok"
+  diyen bir itirazcı, ötekinin itirazını sessizce çöpe atardı. Körlü tur
+  bu yüzden her zaman yazarın turuyla biter.
+
+Körleme tek itirazcıda **atıl** (kimsenin görmeyeceği bir itiraz yok) ve
+`plan.round` olayı bunu `blind: false` diye yazar; `flow check` de aynısını
+söyler. Kapatmak için `ilk-tur-kor: false` — o zaman taşıma zincir boyunca
+ileri gider.
 
 İtiraz dosyasının biçimi ve mekanizmanın kapıları `PLANLAMA.md`'de. Öne
 çıkan kural: her itirazın `Neyi yanlışlar` alanı **depodan bir yere işaret
@@ -244,10 +262,10 @@ görürsün.
     değiştirmeyi unutmak, topolojiyi büyütürken yapılacak en kolay hata.
 17. `planlama.katilimcilar` en az bir tekil rol içerir ve hepsi tanımlı
     olmalıdır. Tek katılımcı alışverişsiz plan belgesi demektir (6a).
-18. `planlama.tur` 1 ile 5 arasında bir tamsayıdır. `ilk-tur-kor` alanı
-    **hiç yazılamaz** — `true` dahil. Körleme yapılmadığı için `true`
-    yazılabilmesi, yapılmamış bir şeyi yapılmış göstermek olurdu:
-    akışta duran ama işlemeyen bir alan, çalıştığı sanılan bir alandır.
+18. `planlama.tur` 1 ile 5 arasında bir tamsayıdır. `ilk-tur-kor`
+    mantıksal bir değerdir (varsayılan `true`). İkisi de topoloji hash'ine
+    girer: davranışı belirleyen bir kararı damganın dışında bırakmak,
+    yalnızca o kararda ayrışan iki akışı aynı göstermek olurdu.
 19. `planlama.katilimcilar` zincirin **başında ve zincir sırasında** olmalı.
     Plan, iş yapıldıktan sonra tartışılmaz.
 20. `planlama.plan` depo içinde kalan, `src/` altında olmayan ve `{kart}`

@@ -87,8 +87,21 @@ export interface PlanPolicy {
   plan: string;
   /** İtiraz→cevap döngüsü sayısı üst sınırı; 1..5. */
   tur: number;
-  /** İtiraz dosyasının yolu; plan yolundan türetilir. */
+  /**
+   * İtiraz dosyasının yolu; plan yolundan türetilir.
+   *
+   * `{kart}` ve `{rol}` içerir: her itirazcının kendi dosyası var. Tek
+   * ortak dosya, körlemenin fan-in birleşmesinde her turda çakışırdı.
+   */
   itiraz: string;
+  /**
+   * İlk turda itirazcılar birbirinin itirazını görmüyor mu.
+   *
+   * Talimat değil TAŞIMA kuralı: körleme açıkken her itirazcı yazarın
+   * ağacından dallanıyor, yani öteki itirazcının dosyası o ağaçta hiç
+   * bulunmuyor.
+   */
+  ilkTurKor: boolean;
 }
 
 export interface Flow {
@@ -325,25 +338,17 @@ function parsePlan(
   if (doc["planlama"] === undefined || doc["planlama"] === null) return null;
   if (!raw) throw new FlowError(file, "`planlama` bir eşleme olmalı");
 
-  // Körleme HENÜZ YOK ve bu yüzden alan tamamen reddediliyor — `true` dahil.
+  // Körleme 6e'de uygulandı: ilk turda her itirazcı YAZARIN ağacından
+  // dallanıyor (fan-out), turun sonunda hepsi yazarın ağacına birleşiyor
+  // (fan-in). Varsayılan açık.
   //
-  // Sebep 6c ile keskinleşti: kod taşıma zincir boyunca ileri birleştirme
-  // (`mergeForward`). Üç katılımcıda ikinci itirazcının ağacı, birincinin
-  // itiraz dosyasını birleşmeyle ALIYOR. Yani körleme, yazarın ağacından
-  // dallanıp turun sonunda birleştiren bir taşıma (fan-out/fan-in)
-  // gerektiriyor; bu, taşıma katmanının kendi işi ve 6c'nin kapsamı
-  // dışında. `ilk-tur-kor: true` yazılabilmesi, YAPILMAYAN bir şeyi
-  // yapılmış göstermek olurdu — `audit.enabled`'ın bir dönem yaptığı ve
-  // bir kez yakalanan hatanın aynısı.
-  if (raw["ilk-tur-kor"] !== undefined) {
-    throw new FlowError(
-      file,
-      rule(18, "`planlama.ilk-tur-kor` henüz uygulanmadı; alan hiç yazılamaz. " +
-        "Kod taşıma ileri birleştirme olduğu için ikinci itirazcının ağacı " +
-        "birincinin itiraz dosyasını alıyor: körleme, yazarın ağacından " +
-        "dallanan bir taşıma gerektiriyor (bkz. PLANLAMA.md, 6e). " +
-        "Bugün ilk tur AÇIK ve rapor bunu böyle yazıyor."),
-    );
+  // İki itirazcıdan azında etkisi yok — kimsenin görmeyeceği bir itiraz
+  // yok — ama alan yine kabul ediliyor: varsayılanı reddetmek saçma
+  // olurdu. Etkin olup olmadığı `plan.round` olayına `blind` diye
+  // yazılıyor, yani günlük atıl körlemeyi çalışıyor göstermiyor.
+  const korRaw = raw["ilk-tur-kor"] ?? true;
+  if (typeof korRaw !== "boolean") {
+    throw new FlowError(file, rule(18, "`planlama.ilk-tur-kor` mantıksal değer olmalı"));
   }
 
   const turRaw = raw["tur"] ?? 1;
@@ -402,9 +407,14 @@ function parsePlan(
 
   // İtiraz dosyası plan yolundan türetiliyor: iki yol iki alan demek ve
   // ikisinin ayrı ayrı doğru yazılması gerekirdi. Tek alan, tek hata yüzeyi.
-  const itiraz = yol.replace(/\.md$/u, "") + ".itiraz.md";
+  //
+  // `{rol}` 6e'den beri zorunlu: her itirazcı KENDİ dosyasına yazıyor.
+  // Sebep körlemenin taşıma tarafı — turun sonunda N ağaç yazarın ağacına
+  // birleşiyor ve aynı yolu yazan iki ağaç her birleşmede çakışırdı.
+  // Yan faydası, 6c'nin "ortak dosyayı ezme" tuzağının tamamen kalkması.
+  const itiraz = yol.replace(/\.md$/u, "") + ".itiraz.{rol}.md";
 
-  return { katilimcilar, plan: yol, tur: turRaw, itiraz };
+  return { katilimcilar, plan: yol, tur: turRaw, itiraz, ilkTurKor: korRaw };
 }
 
 function parseAudit(doc: Record<string, unknown>, file: string): AuditPolicy {
@@ -745,10 +755,18 @@ function topologyHash(input: {
   }
   lines.push(["reject", String(input.reject.limit), input.reject.onExhausted].join(F));
   lines.push(["audit", String(input.audit.enabled), input.audit.fingerprint.join(M)].join(F));
-  // Plan politikası hash'e giriyor: planın yolu ve yazarı, kartın hangi
-  // topolojiden geçtiğinin parçası. Değişirse yoldaki kart eskisiyle yaşar.
+  // Plan politikası hash'e giriyor: planın yolu, yazarı, tur tavanı ve
+  // körleme, kartın hangi topolojiden geçtiğinin parçası. Değişirse yoldaki
+  // kart eskisiyle yaşar.
+  //
+  // `tur` ve `ilk-tur-kor` başta yoktu ve bu bir kusurdu: ikisi de tek bir
+  // değere sabitlenmişken zararsızdı, ama 6c tur tavanını 1..5 yaptı ve
+  // 6e körlemeyi gerçek bir davranış farkına çevirdi. O noktadan sonra,
+  // yalnızca bu alanlarda ayrışan iki akış AYNI hash'i üretiyordu — yani
+  // topoloji damgası, davranışı belirleyen bir kararı gizliyordu.
   if (input.plan !== undefined) {
-    lines.push(["plan", input.plan.katilimcilar.join(M), input.plan.plan].join(F));
+    lines.push(["plan", input.plan.katilimcilar.join(M), input.plan.plan,
+      String(input.plan.tur), String(input.plan.ilkTurKor)].join(F));
   }
 
   return createHash("sha256").update(lines.join(L), "utf8").digest("hex");

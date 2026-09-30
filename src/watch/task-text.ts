@@ -1,5 +1,7 @@
 import type { Card } from "../card/card.js";
-import { isPlanner, itirazPathFor, planPathFor, type SnapshotRole } from "../flow/snapshot.js";
+import {
+  isPlanner, itirazPathFor, itirazPathsFor, planBlind, planPathFor, type SnapshotRole,
+} from "../flow/snapshot.js";
 import { planPhase } from "../plan/phase.js";
 import { verdictInstructions, VERDICT_FILE } from "./verdict.js";
 
@@ -67,7 +69,7 @@ const planOkuBolumu = (planPath: string, card: Card): string[] => [
  * metnin içinde, örneğiyle birlikte veriliyor.
  */
 const itirazBolumu = (
-  planPath: string, itirazPath: string, roleId: string, round: number,
+  planPath: string, itirazPath: string, roleId: string, round: number, blind: boolean,
 ): string[] => [
   "",
   `## Plana itiraz et${round > 1 ? ` (tur ${round})` : ""}`,
@@ -75,13 +77,21 @@ const itirazBolumu = (
   `Bu tur **kod yazma turu değil.** \`${planPath}\` dosyasındaki planı oku,`,
   `itirazlarını \`${itirazPath}\` dosyasına yaz ve **commit'le**.`,
   "",
-  // Çok katılımcılı alışverişte dosya ORTAK: başkasının itirazı zaten
-  // içinde olabilir. Üzerine yazmak, sayılmış bir itirazı sessizce
-  // kaybetmek olur ve mekanizmanın sayacı yanlış okur.
-  `\`${itirazPath}\` ORTAK bir dosya: başka bir rolün itirazları zaten`,
-  "içinde olabilir. Onları silme, yeniden numaralandırma, yanıtlarını",
-  "değiştirme — kendi itirazını en büyük numaradan sonra ekle.",
+  // Dosya rolün KENDİSİNE ait: başkasının dosyasına yazmak, turun sonundaki
+  // birleştirmede çakışma üretir.
+  `Bu dosya SANA ait; numaralarını 1'den başlat. Başka bir rolün itiraz`,
+  "dosyasına yazma — turun sonunda hepsi tek ağaçta birleşiyor ve aynı",
+  "dosyaya yazan iki rol birleşmeyi çakıştırır.",
   "",
+  ...(blind
+    ? [
+      "**Bu tur KÖR:** öteki itirazcıların itirazlarını göremiyorsun ve",
+      "onlar da seninkini görmüyor. Kasıtlı — ilk görüşlerin bağımsız",
+      "olması ölçümün koşulu. Ağacında onların dosyası YOK; aramaya",
+      "çalışmak zaman kaybı. Sonraki turda hepsi açık olacak.",
+      "",
+    ]
+    : []),
   "Her itiraz tam olarak şu biçimde:",
   "",
   "```markdown",
@@ -111,13 +121,19 @@ const itirazBolumu = (
 
 /** Cevap turu: her açık itiraz üç cevaptan birini alır. */
 const cevapBolumu = (
-  planPath: string, itirazPath: string, round: number, limit: number,
+  planPath: string, itirazDosyalari: { role: string; path: string }[], round: number, limit: number,
 ): string[] => [
   "",
   "## İtirazları yanıtla",
   "",
-  `\`${itirazPath}\` dosyasında planına itirazlar var. Her birinin`,
-  "`**Durum:**` satırını düzenleyerek yanıtla, sonra **commit'le**:",
+  // Her itirazcının kendi dosyası var ve HEPSİ yanıtlanmak zorunda: biri
+  // atlanırsa itirazları açık sayılır ve kart kapıya çıkar.
+  `Planına itirazlar ${itirazDosyalari.length === 1 ? "şu dosyada" : "şu dosyalarda"}:`,
+  ...itirazDosyalari.map((d) => `- \`${d.path}\`  (${d.role})`),
+  "",
+  "Her itirazın `**Durum:**` satırını düzenleyerek yanıtla, sonra",
+  "**commit'le**. Dosyaların HEPSİNİ yanıtla — atladığın itiraz açık",
+  "sayılır:",
   "",
   "- `**Durum:** kabul` — haklı. **Bu durumda planı da düzenle**;",
   `  \`${planPath}\` değişmemişse kabul sayılmaz ve tur kabul edilmez.`,
@@ -174,17 +190,22 @@ export function buildTaskText(card: Card, role: SnapshotRole): string {
   // sonundaki kısıt tutmaz (`specifier.md`). Planı yazacak rol için bu
   // zorunlu çıktı; okuyacak rol için işin tanımının yarısı.
   const planPath = planPathFor(card.topology, card.id);
-  const itirazPath = itirazPathFor(card.topology, card.id);
-  if (planPath !== null && itirazPath !== null) {
+  if (planPath !== null) {
     const phase = planPhase(card, role.id, card.topology);
     const limit = card.topology.plan?.tur ?? 1;
+    const benim = phase.kind === "itiraz"
+      ? itirazPathFor(card.topology, card.id, role.id)
+      : null;
     if (phase.kind === "yaz") parts.push(...planYazBolumu(planPath));
-    else if (phase.kind === "itiraz") {
-      parts.push(...itirazBolumu(planPath, itirazPath, role.id, phase.round));
+    else if (phase.kind === "itiraz" && benim !== null) {
+      parts.push(...itirazBolumu(
+        planPath, benim, role.id, phase.round, planBlind(card.topology, phase.round),
+      ));
     } else if (phase.kind === "cevap") {
-      parts.push(...cevapBolumu(planPath, itirazPath, phase.round, limit));
-    }
-    else if (!isPlanner(card.topology, role.id)) parts.push(...planOkuBolumu(planPath, card));
+      parts.push(...cevapBolumu(
+        planPath, itirazPathsFor(card.topology, card.id), phase.round, limit,
+      ));
+    } else if (!isPlanner(card.topology, role.id)) parts.push(...planOkuBolumu(planPath, card));
   }
 
   const rejection = lastRejectTo(card, role.id);

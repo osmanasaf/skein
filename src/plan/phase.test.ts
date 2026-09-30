@@ -22,7 +22,10 @@ const topology = (tur: number, katilimcilar = ["planner", "architect", "analyst"
   reject: { limit: 2, onExhausted: "gate" },
   audit: { enabled: false, fingerprint: [] },
   constitution: [],
-  plan: { katilimcilar, plan: "docs/plan/{kart}.md", itiraz: "docs/plan/{kart}.itiraz.md", tur },
+  plan: {
+    katilimcilar, plan: "docs/plan/{kart}.md",
+    itiraz: "docs/plan/{kart}.itiraz.{rol}.md", tur, ilkTurKor: true,
+  },
 });
 
 const kart = (topo: TopologySnapshot, ...history: HistoryEntry[]): Card => {

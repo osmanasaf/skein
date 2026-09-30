@@ -64,7 +64,7 @@ kesiyor).
 | 6d | Ölçüm koşum takımı (A/B, kum havuzu, rapor) | ✅ **bu oturum** |
 | — | **6d kampanyası** (planlama işe yarıyor mu) | ⏳ koşulmadı — senin makinende |
 | 6c | Çok tur, çok katılımcı, sayaç, kilit kapısı | ✅ **bu oturum** (canlı koşulmadı) |
-| 6e | Körleme — taşıma değişikliği | 📐 gerekçesi yazıldı (`PLANLAMA.md`) |
+| 6e | Körleme — taşıma katmanında (fan-out/fan-in) | ✅ **bu oturum** (canlı koşulmadı) |
 
 ---
 
@@ -565,20 +565,17 @@ O kilidi tanımayan bir okuyucu `forward`u zincirdeki ardıla — yani itiraz
 eden role — gönderirdi, tam olarak bu fonksiyonun önlemek için var olduğu
 hata.
 
-**Körleme YAPILMADI ve alan artık `true` bile kabul etmiyor.** 6b'de
-gerekçe "iki katılımcıda etkisi yok, 6c'de anlam kazanır" idi; 6c üç
-katılımcıyı açtı ve gerekçe düştü. Yerine daha keskin bir gerçek geldi:
-kod taşıma ileri birleştirme, yani ikinci itirazcının ağacı birincinin
-itiraz dosyasını **alıyor**. Körleme talimatla sağlanamaz (dosya orada);
-taşımanın şeklini değiştirmek gerekiyor — her itirazcı yazarın ağacından
-dallanmalı ve turun sonunda hepsi yazara birleşmeli. Bu **6e** olarak
-ayrıldı. Bugün: alan hiç yazılamıyor, `plan.round` olayı `blind: false`
-diyor, ve itiraz promptu ortak dosyayı açıkça anlatıyor.
+**Körleme 6c'de yapılmadı ve gerekçesi 6e'yi doğurdu.** 6b'de gerekçe "iki
+katılımcıda etkisi yok, 6c'de anlam kazanır" idi; 6c üç katılımcıyı açtı ve
+gerekçe düştü. Yerine daha keskin bir gerçek geldi: kod taşıma ileri
+birleştirme, yani ikinci itirazcının ağacı birincinin itiraz dosyasını
+**alıyor**. Körleme talimatla sağlanamaz (dosya orada); taşımanın şeklini
+değiştirmek gerekiyor. 6c alanı iki değerle de reddetti ve işi 6e'ye
+ayırdı — o da yukarıda yazıldı.
 
-**Doğrulama:** 27 yeni test (`src/plan/phase.test.ts` 15 — saf, diske hiç
-dokunmuyor; `src/watch/exchange3.test.ts` 12 — üç katılımcı ve iki turla
-uçtan uca `tick`). Toplam 664 yeşil. Sıra makinesinin gerçekten sınandığı
-**mutasyonla** doğrulandı: tabanı hep 0 döndürünce 5 test, turun
+**Doğrulama:** `src/plan/phase.test.ts` (15, saf sıra makinesi — diske hiç
+dokunmuyor) ve `src/watch/exchange3.test.ts` (6e'de yeniden yazıldı). Sıra
+makinesinin gerçekten sınandığı **mutasyonla** doğrulandı: tabanı hep 0 döndürünce 5 test, turun
 ortasındaki devri kapatınca 8 test, tavan kontrolünü kaldırınca 2 test
 kırmızıya döndü.
 
@@ -590,6 +587,54 @@ sınanmaz yapıyor.**
 
 **Canlı koşulmadı.** 6b iki canlı koşuyla doğrulanmıştı; `plan3.yaml`
 gerçek ajanla koşmadı. Kampanya komutu aşağıda.
+
+### 6e: körleme taşıma katmanına indi
+
+6c'nin bıraktığı iş, ve asıl mesele şu: **körleme bir talimat olarak
+yazılamaz.** "Ötekinin itirazını okuma" diyen bir prompt, dosya ajanın
+ağacındayken hiçbir şey garanti etmez ve okumadığı hiçbir yerden
+doğrulanamaz. Körleme ancak dosyanın o ağaçta **hiç bulunmaması** ile olur.
+
+- **Fan-out:** körlü turda hedef ağaç, önceki itirazcının ağacından değil
+  **yazarın** ağacından besleniyor. İkinci itirazcının ağacında plan var,
+  birincinin itiraz dosyası yok.
+- **Fan-in:** turun sonunda bütün itirazcıların ağaçları sırayla yazarın
+  ağacına katılıyor. Kodda tek yer: `handOverCode` artık bir kaynak rol
+  listesi alıyor.
+- **İtirazcı başına dosya** (`docs/plan/{kart}.itiraz.{rol}.md`). Zorunlu:
+  fan-in N ağacı tek ağaca katıyor ve hepsi aynı yolu yazsaydı her
+  birleşme çakışırdı. Numaraların roller arasında çakışması sorun değil —
+  kimlik (dosya sahibi, numara) çifti. Yan fayda: 6c'de prompta yazdığım
+  "ortak dosyayı ezme" tuzağı tamamen kalktı.
+- **Körlü turda sonlanma kararı yazarda.** 6c'nin kuralı "son itirazcı
+  yeni itiraz olmadığını görürse alışveriş biter"di; körlemeyle bu
+  tehlikeli: son itirazcı kendi dosyasından başkasını görmüyor, o kararı
+  verse birinci itirazcının itirazı sessizce çöpe giderdi. Körlü tur artık
+  her zaman yazarın turuyla bitiyor. Bedeli: itirazsız bir körlü tur bile
+  yazarın bir aktivasyonunu harcıyor.
+- **Kaybolan dosya sessizce "itiraz yok" sayılmıyor.** Fan-in'den sonra her
+  itirazcının dosyası yazarın ağacında olmak zorunda; biri yoksa tur
+  reddediliyor. Eksik dosyayı "itiraz yazmamış" diye okuyan bir mekanizma,
+  taşıma her bozulduğunda itirazı yutardı.
+- **Atıl körleme `true` yazılmıyor:** tek itirazcıda etkisi yok, `plan.round`
+  `blind: false` diyor ve `flow check` "körleme tek itirazcıda atıl" yazıyor.
+
+**Bu iş yolda ikinci bir kusur açtı ve o benim 6c'den kalan deliğim:**
+"körleme ayarı hash'i değiştirir" testi kırmızı çıktı, sebebi plan
+politikasının hash'e giren parçasının yalnızca `katilimcilar` + `plan` yolu
+olmasıydı. Yani **`tur` da hash'in dışındaydı** — 6c tavanı 1..5 yaptığı
+andan itibaren, yalnızca `tur`da ayrışan iki akış aynı topoloji damgasını
+üretiyordu. Damga, davranışı belirleyen bir kararı gizliyordu. İkisi de
+hash'e eklendi.
+
+**Doğrulama:** `src/watch/exchange3.test.ts` yeniden yazıldı (19 test,
+körlü ve açık taşıma). Kritik nokta koşumda: sahte `mergeForward` artık
+**gerçekten kopyalıyor**. Dosyaları her ağaca elle yazan eski koşum,
+taşımanın ne yaptığını hiç sormamış olurdu — körlemeyi sınayamazdı.
+Mutasyonla: fan-out'u kaldırınca 2, fan-in'i kaldırınca 4, kararı son
+itirazcıya bırakınca 5 test kırmızıya döndü. Toplam 674 yeşil.
+
+**Canlı koşulmadı.** `plan3.yaml` gerçek ajanla hâlâ koşmadı.
 
 ### 6d: ölçümün koşum takımı yazıldı
 

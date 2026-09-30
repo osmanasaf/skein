@@ -93,13 +93,11 @@ Her açık itiraza, bir sonraki turda üç cevaptan biri verilir:
 Cevapsız bırakılan itiraz `ret` sayılmaz — **açık** sayılır. Sessizlik
 anlaşma değildir.
 
-### Tur 1 kör, sonrası açık — YAPILMADI (6e)
+### Tur 1 kör, sonrası açık
 
-> **Bu bölüm tasarımı anlatıyor, bugünkü davranışı DEĞİL.** Körleme
-> yazılmadı: kod taşıma ileri birleştirme olduğu için ikinci itirazcının
-> ağacı birincinin itiraz dosyasını alıyor. `ilk-tur-kor` alanı bu yüzden
-> hiç yazılamıyor ve `plan.round` olayı `blind: false` diyor. Gerekçesi ve
-> gerekeni 6c bölümünün sonunda.
+> **Yazıldı (6e).** Körleme bir talimat değil taşıma kuralı: körlü turda
+> her itirazcının ağacı yazarın ağacından besleniyor, turun sonunda hepsi
+> yazara katılıyor. Ayrıntısı ve bedeli 6e bölümünde.
 
 Birinci turda katılımcılar birbirinin itirazlarını **görmez**: herkes planı
 okur ve kendi itirazlarını yazar. İkinci turdan itibaren dosyanın tamamı
@@ -161,7 +159,7 @@ Yükleyiciye dört kural eklenir (o gün 16 vardı, bunlar 17-20; 6b bir de
 | # | Kural | Neden |
 |---|---|---|
 | 17 | `katilimcilar` tekrarsız, hepsi tanımlı rol | Var olmayan role plan yazdırılamaz |
-| 18 | `tur` 1..5; `ilk-tur-kor` hiç yazılamaz | Maliyet tavanı dilin içinde olmalı; yapılmayan alan yazılamaz |
+| 18 | `tur` 1..5; `ilk-tur-kor` mantıksal (varsayılan açık) | Maliyet tavanı dilin içinde olmalı, promptun değil |
 | 19 | Katılımcılar, kod yazan her rolden **önce** gelmeli | Plan, iş yapıldıktan sonra tartışılmaz |
 | 20 | `plan` yolu `src/` altında olamaz | Plan belge; kod taşıma yolu git, dosya değil |
 | 21 | `gates[].after` katılımcıya işaret edemez | Alışveriş kapı kontrolünden geçmiyor; o kapı hiç ateşlenmez |
@@ -406,6 +404,8 @@ olmasın.
 
 **6c — Çok tur + sayaçlar + kapı. YAZILDI.** Aşağıda.
 
+**6e — Körleme (taşıma değişikliği). YAZILDI.** Aşağıda.
+
 **6d — Ölçüm koşum takımı. YAZILDI.** `src/bench/ab.ts` +
 `src/bench/planeffect.ts` + `cli.ts planab|planrapor`. Aşağıda.
 
@@ -488,32 +488,15 @@ yeni itiraz eklemedi, açık itiraz kaldı). O kilidi tanımayan bir okuyucu
 `forward`u zincirdeki ardıla, yani itiraz eden role gönderirdi — tam olarak
 bu fonksiyonun önlemek için var olduğu hata.
 
-### Körleme YAPILMADI — ve alan artık `true` bile kabul etmiyor
+### Körleme 6c'de yapılmadı — gerekçesi 6e'yi doğurdu
 
 6b'de `ilk-tur-kor: false` reddediliyordu, gerekçe "iki katılımcıda etkisi
 yok, anlam kazandığı yer 6c". 6c üç katılımcıyı açtı ve gerekçe **düştü**;
-yerine daha keskin bir gerçek geldi:
+yerine daha keskin bir gerçek geldi: **kod taşıma ileri birleştirme**, yani
+ikinci itirazcının ağacı birincinin itiraz dosyasını alıyor. Körleme
+talimatla sağlanamaz (dosya orada); taşımanın şeklini değiştirmek gerekiyor.
 
-**Kod taşıma ileri birleştirme.** Kart itirazcıdan itirazcıya geçerken
-`mergeForward` bütün ağacı taşıyor, yani ikinci itirazcının ağacı
-birincinin itiraz dosyasını **alıyor**. Körleme talimatla sağlanamaz
-(dosya orada), ancak taşımanın şeklini değiştirerek sağlanır: her itirazcı
-**yazarın** ağacından dallanmalı ve turun sonunda hepsi yazarın ağacına
-birleşmeli (fan-out/fan-in) — üstüne her itirazcı kendi dosyasına yazmalı
-ve yazar turun sonunda onları tek transkriptte toplamalı.
-
-Bu, taşıma katmanının kendi işi ve 6c'nin kapsamı dışında. O yüzden:
-
-- Alan **hiç yazılamıyor**, `true` dahil. `true` kabul edilse akış
-  dosyasında yapılmamış bir şey yapılmış görünürdü.
-- `plan.round` olayı `blind: false` yazıyor. Günlük, yapılmayanı
-  yapılmış göstermiyor.
-- İtiraz promptu ortak dosyayı açıkça anlatıyor: başkasının itirazını silme,
-  yeniden numaralandırma, "katılıyorum" diye bir durum yok.
-
-**6e — Körleme (taşıma değişikliği).** Fan-out/fan-in taşıma, itirazcı
-başına dosya, turun sonunda birleştirme. Bitiş testi: ikinci itirazcının
-ağacında birincinin dosyası YOK, ve yazarın ağacında ikisi de var.
+6c bu yüzden alanı iki değerle de reddetti ve işi **6e**'ye ayırdı. Aşağıda.
 
 ### Maliyet
 
@@ -539,6 +522,117 @@ kontrolünü kaldırınca 2 test kırmızı oldu.
 katılımcılı iki turlu akışı henüz gerçek ajanla koşmadı. "Doğrulama
 koşturulamıyorsa denetim turu bir kanaat turudur" dersinin bu belgedeki
 karşılığı: yukarıdaki her şey testlerle kapalı, canlı koşuyla değil.
+
+---
+
+## 6e — Körleme: taşıma katmanında (YAZILDI)
+
+6c'nin bıraktığı iş. Sorun şuydu: körleme bir **talimat** olarak
+yazılamaz. "Ötekinin itirazını okuma" diyen bir prompt, dosya ajanın
+ağacındayken hiçbir şey garanti etmez — ve okumadığını hiçbir yerden
+doğrulayamayız. Körleme ancak dosyanın **o ağaçta hiç bulunmaması** ile
+sağlanır. Yani körleme taşıma katmanının işi.
+
+### Fan-out / fan-in
+
+Açık turda taşıma zincir boyunca ileri: her rol kendinden öncekinin
+ağacını alır.
+
+Körlü turda iki değişiklik:
+
+- **Fan-out.** Kart itirazcıdan itirazcıya geçerken hedef ağaç, önceki
+  itirazcının ağacından değil **yazarın** ağacından besleniyor. İkinci
+  itirazcının ağacında planın kendisi var, birincinin itiraz dosyası yok.
+- **Fan-in.** Turun son itirazcısı bitirdiğinde bütün itirazcıların
+  ağaçları sırayla yazarın ağacına katılıyor. Yazar turun tamamını görür.
+
+Kodda tek yer: `handOverCode` artık bir **kaynak rol listesi** alıyor.
+Körlü turda liste `[yazar]` (dallanma), turun sonunda `itirazcilar`
+(toplama). Geri kalan her yerde liste tek elemanlı ve davranış aynı.
+
+### Zorunlu yan sonuç: itirazcı başına dosya
+
+Fan-in N ağacı tek ağaca katıyor. Hepsi **aynı yolu** yazsaydı her
+birleşme çakışırdı — yani ortak tek transkript, körlemeyle birlikte
+yaşayamaz. Bu yüzden `itiraz` yolu artık `{rol}` içeriyor:
+
+```
+docs/plan/<kart>.itiraz.architect.md
+docs/plan/<kart>.itiraz.analyst.md
+```
+
+Numaralar dosyalar arasında çakışabilir ve bu **sorun değil**: kimlik
+(dosya sahibi, numara) çifti. Tekilleştirme yapılmıyor — yapılsaydı iki
+rolün "İtiraz 1"i tek itiraza erir ve sayaç düşerdi.
+
+Dosyanın sahibi aynı zamanda rolün **yer gerçeği**: ayrıştırıcıya `owner`
+veriliyor ve başlıkta yazan ad ne olursa olsun itiraz dosya sahibine
+sayılıyor. Ajan adı yanlış yazarsa itiraz başka bir role sayılırdı.
+
+Beklenmedik ama hoş bir yan fayda: 6c'de prompta yazdığım "ortak dosyayı
+ezme" tuzağı **tamamen kalktı**. İki rol artık aynı dosyaya yazamaz.
+
+### Körlü turda sonlanma kararı yazarda
+
+6c'nin sonlanma kuralı "turun son itirazcısı yeni itiraz eklenmediğini
+görürse alışveriş biter" diyordu. Körlemeyle bu kural **tehlikeli** hale
+geliyor: son itirazcı kendi dosyasından başkasını görmüyor, yani "yeni
+itiraz yok" ve "açık itiraz yok" derken ötekinin itirazını hiç
+saymıyor. O kararı vermesine izin verilse, birinci itirazcının itirazı
+sessizce çöpe giderdi.
+
+Bu yüzden körlü tur **her zaman** yazarın turuyla bitiyor. Doğal sonlanma
+kuralı da yazarın turuna taşındı: tur hiç yeni itiraz eklemediyse ve açık
+itiraz yoksa yazar alışverişi orada kapatıyor. Açık turda yazara ancak yeni
+itiraz varken gelindiği için o dal orada ateşlenmiyor — tek kural, iki
+taşıma.
+
+Bedeli açık: körlü turda itirazsız bir tur bile yazarın bir aktivasyonunu
+harcıyor. Alternatifi itiraz kaybetmek olduğu için bu bedel ödeniyor.
+
+### Kaybolan dosya sessizce "itiraz yok" sayılmaz
+
+Fan-in'den sonra yazarın ağacında **her** itirazcının dosyası olmak
+zorunda. Biri yoksa taşıma bozulmuştur ve tur reddediliyor
+(`\`analyst\` rolünün itiraz dosyası \`planner\` ağacına ulaşmadı`).
+
+Bu kontrol körlemenin en pahalı kusurunu kapatıyor: eksik dosyayı "o rol
+itiraz yazmamış" diye okuyan bir mekanizma, taşıma her bozulduğunda
+itirazı yutar ve bunu hiçbir yere yazmaz.
+
+### Atıl körleme `true` yazılmıyor
+
+Tek itirazcıda körlemenin etkisi yok — kimsenin görmeyeceği bir itiraz yok.
+Alan kabul ediliyor (varsayılanı reddetmek saçma olurdu) ama `plan.round`
+olayı `blind: false` yazıyor ve `flow check` "ilk tur açık — körleme tek
+itirazcıda atıl" diyor. Kural aynı: çalışmayan bir şey çalışıyor
+görünmemeli.
+
+### Yol açtığı kusur: topoloji damgası yalan söylüyordu
+
+6e'nin testlerinden biri "körleme ayarı hash'i değiştirir" diyordu ve
+**kırmızı çıktı**. Sebep ilk bakışta 6e değil: plan politikasının hash'e
+giren parçası yalnızca `katilimcilar` ve `plan` yoluydu. Yani `tur`
+da hash'in dışındaydı — ve bu **6c'nin bıraktığı bir delik**, çünkü 6c
+tavanı 1..5 yaptı. O noktadan sonra yalnızca `tur`da ayrışan iki akış aynı
+damgayı üretiyordu; damga, davranışı belirleyen bir kararı gizliyordu.
+İkisi de hash'e eklendi, mutasyonla iki testin de tuttuğu doğrulandı.
+
+### Neyle doğrulandı
+
+`src/watch/exchange3.test.ts` yeniden yazıldı: 19 test, körlü ve açık
+taşımanın ikisi de. Kritik nokta test koşumunda: sahte `mergeForward`
+artık **gerçekten kopyalıyor** (kaynak ağacın dosyalarını hedefe taşıyor).
+Dosyaları her ağaca elle yazan eski koşum, taşımanın ne yaptığını hiç
+sormamış olurdu — yani körlemeyi sınayamazdı.
+
+Bitiş testinin iki yarısı da yeşil: ikinci itirazcının ağacında birincinin
+dosyası **yok**, ve turun sonunda yazarın ağacında **ikisi de var**.
+Mutasyonla doğrulandı: fan-out'u kaldırınca 2 test, fan-in'i kaldırınca 4
+test, körlü turda kararı son itirazcıya bırakınca 5 test kırmızıya döndü.
+
+**Canlı koşulmadı.** `plan3.yaml` gerçek ajanla hâlâ koşmadı; 6c ve 6e
+birlikte koşulacak.
 
 ---
 

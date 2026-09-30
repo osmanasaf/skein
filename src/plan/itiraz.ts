@@ -103,6 +103,14 @@ function yolGibi(parca: string): boolean {
 export interface ParseOptions {
   /** Yol depoda var mı. Verilmezse yol denetimi yapılmaz. */
   varMi?: (yol: string) => boolean;
+  /**
+   * Dosyanın SAHİBİ; verilirse her itirazın `role` alanı buna eşitlenir.
+   *
+   * 6e'den beri her itirazcı kendi dosyasına yazıyor, yani rolün yer
+   * gerçeği dosyanın kendisi. Başlıkta yazan ad ajanın beyanı: yanlış
+   * yazarsa itiraz başka bir role sayılırdı.
+   */
+  owner?: string;
 }
 
 /**
@@ -135,6 +143,13 @@ export function parseItirazlar(text: string, options: ParseOptions = {}): Itiraz
   }
   bitir();
 
+  return topla(options.owner === undefined
+    ? itirazlar
+    : itirazlar.map((i) => ({ ...i, role: options.owner as string })));
+}
+
+/** Sayılmış listeden türev alanları kurar. */
+function topla(itirazlar: Itiraz[]): ItirazDosyasi {
   const gecerli = itirazlar.filter((i) => i.gecersiz === undefined);
   return {
     itirazlar,
@@ -143,6 +158,18 @@ export function parseItirazlar(text: string, options: ParseOptions = {}): Itiraz
     kabul: gecerli.filter((i) => i.durum === "kabul"),
     insana: gecerli.filter((i) => i.durum === "insana"),
   };
+}
+
+/**
+ * Birden çok itirazcının dosyasını tek görünüme katar.
+ *
+ * Numaralar dosyalar arasında çakışabilir (her itirazcı 1'den sayar) ve
+ * bu sorun DEĞİL: kimlik (sahip, no) çifti, yalnızca numara değil. Bu
+ * yüzden burada tekilleştirme yapılmıyor — yapılsaydı iki rolün "İtiraz 1"i
+ * tek itiraza erir ve sayaç düşerdi.
+ */
+export function birlestirItirazlar(dosyalar: ItirazDosyasi[]): ItirazDosyasi {
+  return topla(dosyalar.flatMap((d) => d.itirazlar));
 }
 
 function kur(no: number, role: string, alan: Map<string, string>, options: ParseOptions): Itiraz {

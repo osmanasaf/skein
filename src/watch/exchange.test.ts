@@ -66,7 +66,8 @@ let options: TickOptions;
 let dosyalar: Map<string, string>;
 
 const PLAN_YOLU = (id: string) => `docs/plan/${id}.md`;
-const ITIRAZ_YOLU = (id: string) => `docs/plan/${id}.itiraz.md`;
+// 6e: her itirazcının kendi dosyası. Bu akışta itirazcı tek: `architect`.
+const ITIRAZ_YOLU = (id: string) => `docs/plan/${id}.itiraz.architect.md`;
 
 /** Rolün ağacındaki mutlak yol. */
 const at = (workspace: string, rel: string): string =>

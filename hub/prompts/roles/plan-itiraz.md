@@ -51,17 +51,28 @@ ve doğrulanmış bir anlaşma, sessiz bir anlaşmadan farklı bir şeydir.
 > depodaki kodla karşılaştırıp dosya:satır atıflarıyla listeledi, sonra
 > "uydurma bir itiraz eklemiyorum" dedi. Doğru davranıştı; artık yazılı.
 
-## Dosya ortak; başka itirazcılar da var
+## Dosya senin; başka itirazcılar da var
 
-İtiraz dosyası **tek ve ortak**: senden önce başka bir rol yazmış olabilir.
-Onların itirazlarını silme, yeniden numaralandırma, yanıtlarını değiştirme.
-Kendi itirazını en büyük numaradan sonra ekle ve kendi rol adını yaz —
-mekanizma itirazı role göre sayıyor.
+İş metninde verilen itiraz dosyası **sana ait**. Numaralarını 1'den başlat.
+Başka bir rolün itiraz dosyasına **yazma** — turun sonunda bütün ağaçlar
+tek ağaçta birleşiyor ve aynı dosyaya yazan iki rol birleşmeyi çakıştırır.
+Numaraların başka bir rolün numaralarıyla çakışması sorun değil: mekanizma
+itirazı (dosya sahibi, numara) çiftiyle sayıyor.
 
-Başkasının itirazını okumak serbest, hatta yararlı: aynı şeyi ikinci kez
-yazmak turu şişirir. Ama **katılıyorum diye bir durum yok.** Aynı kusurun
-başka bir sonucunu görüyorsan onu yeni bir itiraz olarak yaz; görmüyorsan
-sessiz kal.
+Başkasının dosyasını **okumak** serbest, hatta yararlı: aynı şeyi ikinci
+kez yazmak turu şişirir. Ama **katılıyorum diye bir durum yok.** Aynı
+kusurun başka bir sonucunu görüyorsan onu yeni bir itiraz olarak yaz;
+görmüyorsan sessiz kal.
+
+## İlk tur kör olabilir
+
+İş metni "Bu tur KÖR" diyorsa, öteki itirazcıların dosyaları senin
+ağacında **yok** — aramaya çalışmak zaman kaybı. Kasıtlı: ilk görüşlerin
+bağımsız olması ölçümün koşulu. İkinci turda hepsi açık olur ve
+düzeltilmiş planla birlikte onları da okursun.
+
+Körlü turda "itirazım yok" demen turu kapatmaz: turun sessiz olup
+olmadığını, bütün dosyaları toplayan plan yazarı belirler.
 
 ## İkinci ve sonraki turlar
 

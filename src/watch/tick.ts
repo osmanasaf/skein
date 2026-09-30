@@ -7,11 +7,11 @@ import type { Card } from "../card/card.js";
 import type { CardQueue } from "../card/queue.js";
 import type { EventLog } from "../events/log.js";
 import {
-  DONE, afterPlanning, isPlanner, itirazPathFor, planAuthor, planObjectors, planPathFor,
-  promptLayers, roleOf, type SnapshotRole,
+  DONE, afterPlanning, isPlanner, itirazPathsFor, planAuthor, planBlind, planObjectors,
+  planPathFor, promptLayers, roleOf, type SnapshotRole,
 } from "../flow/snapshot.js";
 import { objectionBaseline, planPhase } from "../plan/phase.js";
-import { kanitYolu, parseItirazlar } from "../plan/itiraz.js";
+import { birlestirItirazlar, kanitYolu, parseItirazlar } from "../plan/itiraz.js";
 import { assemblePrompt } from "../prompt/assemble.js";
 import { dirtyPaths, head, isTracked, mergeForward, ORCHESTRATOR_PATHS } from "./git.js";
 import { buildTaskText } from "./task-text.js";
@@ -355,8 +355,10 @@ async function planStep(
   if (phase.kind === "yok") return { kind: "yok" };
 
   const planPath = planPathFor(card.topology, card.id);
-  const itirazPath = itirazPathFor(card.topology, card.id);
-  if (planPath === null || itirazPath === null) return { kind: "yok" };
+  if (planPath === null) return { kind: "yok" };
+  // Her itirazcının KENDİ dosyası var (6e). Yazarın cevap turu hepsini
+  // okur; itirazcı yalnızca kendisininkini yazar.
+  const itirazYollari = itirazPathsFor(card.topology, card.id);
 
   const oku = options.readPlan ?? ((p: string) => readFile(p, "utf8"));
   const planMetni = await oku(join(workdir, planPath)).catch(() => undefined);
@@ -388,15 +390,41 @@ async function planStep(
     };
   }
 
-  // İtiraz ve cevap turlarının ikisi de itiraz dosyasını okur.
-  const itirazMetni = await oku(join(workdir, itirazPath)).catch(() => undefined);
-  if (itirazMetni === undefined) {
-    return {
-      kind: "hata",
-      reason: `\`${role.id}\` kabul etti ama itiraz dosyası yok: \`${itirazPath}\`. ` +
-        `İtirazın yoksa da dosyayı yaz ve bunu söyle — sessizlik anlaşma değildir.`,
-    };
+  // İtiraz ve cevap turlarının ikisi de itiraz dosyalarını okur.
+  //
+  // Okunamayan dosya körlü turda BEKLENEN durum: öteki itirazcının dosyası
+  // o ağaçta hiç yok (fan-out). Bu yüzden eksiklik burada hata değil;
+  // hangisinin zorunlu olduğuna aşağıda turun kimliğine göre bakılıyor.
+  const okunan: { role: string; path: string; text: string }[] = [];
+  for (const y of itirazYollari) {
+    const text = await oku(join(workdir, y.path)).catch(() => undefined);
+    if (text !== undefined) okunan.push({ ...y, text });
   }
+
+  const eksik = (yol: { role: string; path: string }, neden: string): PlanAdim => ({
+    kind: "hata",
+    reason: `\`${role.id}\` kabul etti ama ${neden}: \`${yol.path}\`. ` +
+      `İtirazın yoksa da dosyayı yaz ve bunu söyle — sessizlik anlaşma değildir.`,
+  });
+
+  if (phase.kind === "itiraz") {
+    const benim = itirazYollari.find((y) => y.role === role.id);
+    if (benim === undefined) return { kind: "yok" };
+    if (!okunan.some((o) => o.role === role.id)) return eksik(benim, "itiraz dosyası yok");
+  } else {
+    // Cevap turu: fan-in'den sonra HEPSİ yazarın ağacında olmak zorunda.
+    // Biri eksikse itiraz kaybolmuş demektir — sessizce "itiraz yok"
+    // saymak, körlemenin en pahalı kusuru olurdu.
+    const kayip = itirazYollari.find((y) => !okunan.some((o) => o.role === y.role));
+    if (kayip !== undefined) {
+      return {
+        kind: "hata",
+        reason: `\`${kayip.role}\` rolünün itiraz dosyası \`${role.id}\` ağacına ulaşmadı: ` +
+          `\`${kayip.path}\`. Turun itirazları toplanmadan yanıtlanamaz.`,
+      };
+    }
+  }
+
   const exists = options.pathExists ?? (async (p: string) => {
     try {
       await readFile(p);
@@ -408,7 +436,7 @@ async function planStep(
   // Kanıt yolları TEK TEK denetleniyor; "sınır durumlarına dikkat" diyen bir
   // itiraz hiçbir dosyaya işaret edemez ve planı durduramaz.
   const yollar = new Map<string, boolean>();
-  for (const parca of itirazMetni.split(/\r?\n/u)) {
+  for (const parca of okunan.flatMap((o) => o.text.split(/\r?\n/u))) {
     // Satırdaki HER ters tırnaklı parça denetleniyor: ayrıştırıcı "yol
     // gibi görünen ilk parçayı" seçiyor ve o, satırın ilk parçası olmak
     // zorunda değil. İkisi farklı parçaya bakarsa geçerli bir itiraz
@@ -418,9 +446,14 @@ async function planStep(
       yollar.set(aday, await exists(join(workdir, aday)));
     }
   }
-  const dosya = parseItirazlar(itirazMetni, { varMi: (yol) => yollar.get(yol) === true });
+  // `owner`: rolün yer gerçeği DOSYA, başlıkta yazan ad değil.
+  const dosya = birlestirItirazlar(okunan.map((o) => parseItirazlar(o.text, {
+    varMi: (yol) => yollar.get(yol) === true,
+    owner: o.role,
+  })));
   // "İtiraz yok" ile "itiraz var ama hiçbiri sayılmadı" aynı şey değil.
   const gecersiz = dosya.itirazlar.length - dosya.gecerli.length;
+  const kor = planBlind(card.topology, phase.round);
 
   // Kartın dondurduğu plan hash'i: itiraz turu planı DEĞİŞTİRMİYOR ve
   // itiraz edenin ağacında plan dosyası hiç bulunmayabilir.
@@ -441,10 +474,10 @@ async function planStep(
 
     await options.log?.append({
       type: "plan.round", card: card.id, role: role.id, round: phase.round,
-      // Körleme YOK: ileri birleştirme ikinci itirazcının ağacına birincinin
-      // dosyasını taşıyor. Alan `true` yazılsaydı günlük yapılmamış bir şeyi
-      // yapılmış gösterirdi.
-      blind: false, newObjections: Math.max(0, yeni), openObjections: dosya.acik.length,
+      // Körleme ETKİN mi — üç koşulun hepsi: akış istemiş, tur 1 ve en az
+      // iki itirazcı. Atıl körlemeyi `true` yazmak, yapılmamış bir şeyi
+      // yapılmış göstermek olurdu.
+      blind: kor, newObjections: Math.max(0, yeni), openObjections: dosya.acik.length,
       invalid: gecersiz,
     });
 
@@ -454,13 +487,36 @@ async function planStep(
       invalid: gecersiz,
     });
 
+    // Körlü turda taşıma DALLANIYOR: hedef, bu rolün ağacından değil
+    // yazarın ağacından besleniyor. Bu tek satır körlemenin kendisi —
+    // ötekinin itiraz dosyası hedef ağaca hiç girmiyor.
+    const dallan = kor ? [yazar] : undefined;
+
     // Turun ortasındaki itirazcı: söz sıradakine geçer. Sonlanma kararı
     // turun SONUNDA veriliyor — ortadaki bir itirazcının sessizliği, turun
     // sessiz olduğu anlamına gelmez.
     if (sonrakiItirazci !== undefined) {
       return {
         kind: "tasindi",
-        result: await planMove(card, role, options, workdir, sonrakiItirazci, kayit(), undefined, summary),
+        result: await planMove(
+          card, role, options, workdir, sonrakiItirazci, kayit(), undefined, summary, dallan,
+        ),
+      };
+    }
+
+    // Körlü turun SON itirazcısı sonlanma kararı VEREMEZ: kendi dosyasından
+    // başkasını görmüyor. "Yeni itiraz yok" ya da "açık itiraz yok" diyen
+    // bir karar, öteki itirazcının itirazını sessizce çöpe atardı. Karar,
+    // fan-in'den sonra hepsini gören yazarda.
+    if (kor) {
+      return {
+        kind: "tasindi",
+        result: await planMove(
+          card, role, options, workdir, yazar, kayit(), undefined, summary,
+          // FAN-IN: bütün itirazcıların ağaçları yazara katılıyor. Her biri
+          // kendi dosyasına yazdığı için çakışma yüzeyi yok.
+          itirazcilar,
+        ),
       };
     }
 
@@ -514,6 +570,17 @@ async function planStep(
   const kabul = dosya.kabul;
   const limit = card.topology.plan?.tur ?? 1;
 
+  // Yazarın turu da günlüğe düşüyor. Körlü turda sayıların YER GERÇEĞİ
+  // burası: itirazcılar kendi dosyalarından başkasını görmüyor, yani
+  // turun gerçek toplamı ilk kez fan-in'den sonra biliniyor.
+  const yazarTaban = objectionBaseline(card, phase.round);
+  const yazarYeni = dosya.gecerli.length - yazarTaban;
+  await options.log?.append({
+    type: "plan.round", card: card.id, role: role.id, round: phase.round,
+    blind: kor, newObjections: Math.max(0, yazarYeni),
+    openObjections: dosya.acik.length, invalid: gecersiz,
+  });
+
   const cevapKaydi = (
     planHash?: string,
   ): Extract<Card["history"][number], { event: "plan" }> => ({
@@ -552,6 +619,25 @@ async function planStep(
       reason: `\`${role.id}\` ${kabul.length} itirazı KABUL etti ama planı değiştirmedi ` +
         `(\`${planPath}\` aynı). Kabul, planı düzenlemek demektir; değilse ret gerekçesi yaz.`,
     };
+  }
+
+  // Doğal son, YAZARIN turunda: tur hiç yeni itiraz eklemedi ve açık itiraz
+  // yok. Körlü turda sonlanma kararını verebilen tek rol yazar, çünkü
+  // itirazcılar kendi dosyalarından başkasını görmüyor. Açık turda yazara
+  // ancak yeni itiraz varken gelinir, yani bu dal orada ateşlenmez.
+  if (yazarYeni <= 0 && acik.length === 0) {
+    const sonra = afterPlanning(card.topology);
+    if (sonra !== null) {
+      await options.log?.append({
+        type: "plan.settled", card: card.id, role: role.id, outcome: "anlasma",
+        rounds: phase.round, objections: dosya.gecerli.length, accepted: kabul.length,
+        invalid: gecersiz, path: planPath, planHash: donmusHash,
+      });
+      return {
+        kind: "tasindi",
+        result: await planMove(card, role, options, workdir, sonra, cevapKaydi(), undefined, summary),
+      };
+    }
   }
 
   // Tavan dolduğunda açık itiraz varsa kilit. Kaçış değil — turlar
@@ -618,8 +704,10 @@ async function planMove(
   entry: Extract<Card["history"][number], { event: "plan" }>,
   plan: { path: string; hash: string } | undefined,
   summary?: string,
+  /** Kodun geldiği roller; körlü turda bu rol DEĞİL (bkz. `handOverCode`). */
+  sources?: string[],
 ): Promise<TickResult> {
-  const merge = await handOverCode(card, role, options, workdir, hedef);
+  const merge = await handOverCode(card, role, options, workdir, hedef, sources);
   if (merge !== null) {
     return { status: "escalated", card: await options.queue.escalate(card, merge), reason: merge };
   }
@@ -694,30 +782,54 @@ async function handOverCode(
   fromDir: string,
   /** Hedef rol; verilmezse zincirdeki ardıl. Planlama kendi hedefini verir. */
   targetId: string = role.next,
+  /**
+   * Kodun geldiği ROLLER; verilmezse `role` (ve `fromDir`).
+   *
+   * Körlemenin taşıma tarafı burada: körlü turda hedef, bu rolün ağacından
+   * değil YAZARIN ağacından besleniyor (fan-out), turun sonunda da bütün
+   * itirazcıların ağaçları yazara katılıyor (fan-in). Liste sırayla
+   * birleştiriliyor; her itirazcı kendi dosyasına yazdığı için çakışma
+   * yüzeyi yok.
+   */
+  sources?: string[],
 ): Promise<string | null> {
   if (targetId === DONE) return null;
 
   const next = roleOf(card.topology, targetId);
   if (next === null) return `Sonraki rol topolojide yok: ${targetId}`;
-  if (next.workspace === role.workspace) return null;
+
+  const kaynaklar: { id: string; dir: string }[] = [];
+  for (const id of sources ?? [role.id]) {
+    const kaynak = roleOf(card.topology, id);
+    if (kaynak === null) return `Kaynak rol topolojide yok: ${id}`;
+    if (kaynak.workspace === next.workspace) continue;
+    kaynaklar.push({
+      id,
+      dir: id === role.id ? fromDir : await resolveWorkspace(options.root, kaynak.workspace),
+    });
+  }
+  if (kaynaklar.length === 0) return null;
 
   const toDir = await resolveWorkspace(options.root, next.workspace);
-  const result = await (options.mergeForward ?? mergeForward)({
-    fromDir,
-    toDir,
-    message: `skein: ${role.id} → ${next.id} (${card.id})`,
-    ignoreDirty: ORCHESTRATOR_PATHS,
-  });
+  for (const kaynak of kaynaklar) {
+    const result = await (options.mergeForward ?? mergeForward)({
+      fromDir: kaynak.dir,
+      toDir,
+      message: `skein: ${kaynak.id} → ${next.id} (${card.id})`,
+      ignoreDirty: ORCHESTRATOR_PATHS,
+    });
 
-  switch (result.kind) {
-    case "merged":
-    case "already":
-      return null;
-    case "conflict":
-      // Çakışmayı üçüncü bir ajanın tahmin etmesi değil, insanın çözmesi
-      // gereken yer burası.
-      return `\`${role.id}\` → \`${next.id}\` birleştirmesi çakıştı: ${result.paths.join(", ")}`;
-    case "blocked":
-      return `\`${role.id}\` → \`${next.id}\` kodu taşınamadı: ${result.reason}`;
+    switch (result.kind) {
+      case "merged":
+      case "already":
+        continue;
+      case "conflict":
+        // Çakışmayı üçüncü bir ajanın tahmin etmesi değil, insanın çözmesi
+        // gereken yer burası.
+        return `\`${kaynak.id}\` → \`${next.id}\` birleştirmesi çakıştı: ${result.paths.join(", ")}`;
+      case "blocked":
+        return `\`${kaynak.id}\` → \`${next.id}\` kodu taşınamadı: ${result.reason}`;
+    }
   }
+  return null;
 }

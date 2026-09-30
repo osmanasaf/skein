@@ -1,6 +1,6 @@
 # Örnek akış — çok turlu ve üç katılımcılı planlama (PLANLAMA.md, aşama 6c).
 #
-# `plan2.yaml`den iki farkı var ve ikisi de 6c'nin konusu:
+# `plan2.yaml`den üç farkı var:
 #
 #   1. ÜÇ katılımcı: `planner` yazar, `architect` ve `analyst` itiraz eder.
 #      Bir tur = bütün itirazcılar (zincir sırasında, birer birer) + yazarın
@@ -8,15 +8,21 @@
 #   2. İKİ tur: yazar yanıtladıktan sonra itirazcılar düzeltilmiş planı bir
 #      kez daha okur. O tur yeni itiraz eklemezse alışveriş orada kapanır —
 #      yazar boş bir aktivasyon harcamaz.
+#   3. İlk tur KÖR (aşağıda).
 #
 # Tavan dolduğunda açık itiraz kalırsa kart KİLİT kapısına çıkar
 # (`gate.kind: deadlock`): kod yerinde, insan planı olduğu gibi ileri
 # bırakabilir ya da `retry` ile alışverişi yeniden açabilir.
 #
-# İlk tur AÇIK. Körleme yapılmadı ve bu bilerek yazılı: kod taşıma ileri
-# birleştirme olduğu için ikinci itirazcının ağacı birincinin itiraz
-# dosyasını alıyor. Körleme, yazarın ağacından dallanıp turun sonunda
-# birleştiren bir taşıma gerektiriyor (PLANLAMA.md, 6e).
+# İLK TUR KÖR (6e, varsayılan). Körleme bir talimat değil TAŞIMA kuralı:
+# körlü turda her itirazcının ağacı zincirden değil YAZARIN ağacından
+# besleniyor (fan-out), turun sonunda hepsi yazarın ağacına katılıyor
+# (fan-in). Yani ikinci itirazcı, birincinin itiraz dosyasını göremez —
+# çünkü o dosya onun ağacında hiç yok. Her itirazcı kendi dosyasına yazıyor
+# (`{rol}`); ortak tek dosya her fan-in'de çakışırdı.
+#
+# Kapatmak için: `ilk-tur-kor: false`. Kapalıyken taşıma zincir boyunca
+# ileri gider ve ikinci itirazcı birincinin itirazlarını okur.
 
 name: plan3
 description: Üç katılımcı iki tur boyunca planı tartışır, sonra kod yazılır.
@@ -67,6 +73,7 @@ roles:
 planlama:
   katilimcilar: [planner, architect, analyst]  # ilki yazar, ötekiler itiraz eder
   tur: 2                                       # tavan; doğal son daha erken gelebilir
+  ilk-tur-kor: true                            # varsayılan; fan-out/fan-in taşıma
   plan: docs/plan/{kart}.md                    # itirazlar: docs/plan/{kart}.itiraz.md
 
 reject:

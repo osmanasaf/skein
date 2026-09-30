@@ -77,6 +77,7 @@ export function snapshot(flow: Flow, root: string): TopologySnapshot {
             plan: flow.plan.plan,
             tur: flow.plan.tur,
             itiraz: flow.plan.itiraz,
+            ilkTurKor: flow.plan.ilkTurKor,
           },
         }),
     constitution: flow.constitution.map((path) => rel(root, path)),
@@ -156,11 +157,43 @@ export function planPathFor(topology: TopologySnapshot, cardId: string): string 
   return plan.plan.replaceAll("{kart}", cardId);
 }
 
-/** İtiraz dosyasının yolu, aynı kuralla. */
-export function itirazPathFor(topology: TopologySnapshot, cardId: string): string | null {
+/**
+ * Bir itirazcının KENDİ itiraz dosyasının yolu.
+ *
+ * Rol başına ayrı dosya, körlemenin taşıma tarafından geliyor: turun
+ * sonunda N ağaç yazarın ağacına birleşiyor ve aynı yolu yazan iki ağaç
+ * her birleşmede çakışırdı.
+ */
+export function itirazPathFor(
+  topology: TopologySnapshot, cardId: string, roleId: string,
+): string | null {
   const plan = topology.plan;
   if (plan === undefined) return null;
-  return plan.itiraz.replaceAll("{kart}", cardId);
+  return plan.itiraz.replaceAll("{kart}", cardId).replaceAll("{rol}", roleId);
+}
+
+/** Bütün itirazcıların dosyaları, zincir sırasında. */
+export function itirazPathsFor(
+  topology: TopologySnapshot, cardId: string,
+): { role: string; path: string }[] {
+  return planObjectors(topology).flatMap((role) => {
+    const path = itirazPathFor(topology, cardId, role);
+    return path === null ? [] : [{ role, path }];
+  });
+}
+
+/**
+ * Bu turda körleme ETKİN mi.
+ *
+ * Üç koşulun hepsi: akış istemiş olacak, tur 1 olacak ve en az iki
+ * itirazcı olacak. Tek itirazcıda körleme atıl — kimsenin görmeyeceği bir
+ * itiraz yok — ve günlüğe `blind: true` yazmak atıl bir mekanizmayı
+ * çalışıyor göstermek olurdu.
+ */
+export function planBlind(topology: TopologySnapshot, round: number): boolean {
+  const plan = topology.plan;
+  if (plan === undefined || !plan.ilkTurKor) return false;
+  return round === 1 && planObjectors(topology).length >= 2;
 }
 
 export { DONE };
