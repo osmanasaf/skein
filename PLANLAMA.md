@@ -518,10 +518,11 @@ Sıra makinesinin gerçekten sınandığı **mutasyonla** doğrulandı: tabanı 
 0 döndürünce 5 test, turun ortasındaki devri kapatınca 8 test, tavan
 kontrolünü kaldırınca 2 test kırmızı oldu.
 
-**Canlı koşulmadı.** 6b iki canlı koşuyla doğrulanmıştı; 6c'nin üç
-katılımcılı iki turlu akışı henüz gerçek ajanla koşmadı. "Doğrulama
-koşturulamıyorsa denetim turu bir kanaat turudur" dersinin bu belgedeki
-karşılığı: yukarıdaki her şey testlerle kapalı, canlı koşuyla değil.
+**Canlı koşuldu** (30 Eylül, `plan3.yaml` × `claude-sonnet-5`): turun
+sırası, tur sayacı ve doğal son uçtan uca çalıştı. Ayrıntısı 6e
+bölümünde — iki aşama tek koşuda doğrulandı. Kilit ve `retry` yolları
+testlerle kapalı, canlı koşuyla değil: o koşu için planın kusurlu olması
+gerekiyor ve bu koşuda plan doğruydu.
 
 ---
 
@@ -631,8 +632,46 @@ dosyası **yok**, ve turun sonunda yazarın ağacında **ikisi de var**.
 Mutasyonla doğrulandı: fan-out'u kaldırınca 2 test, fan-in'i kaldırınca 4
 test, körlü turda kararı son itirazcıya bırakınca 5 test kırmızıya döndü.
 
-**Canlı koşulmadı.** `plan3.yaml` gerçek ajanla hâlâ koşmadı; 6c ve 6e
-birlikte koşulacak.
+### Canlı koşu: körleme uçtan uca doğrulandı
+
+30 Eylül, `plan3.yaml` × `claude-sonnet-5`, kum havuzu deposunda
+(`snapshot-store` tohumu), **6 aktivasyon · $1.98**.
+
+Bitiş testinin iki yarısı da canlıda geçti:
+
+- **Fan-out.** `architect` itiraz dosyasını yazıp commit'ledikten sonra kart
+  `analyst`e geçti ve `analyst`in ağacında `...itiraz.architect.md` **yoktu**.
+  Git geçmişi kanıtı taşıyor: o ağaçtaki son commit yazarın plan commit'i
+  (`plan: Store.undo() için tasarım kararı…`), architect'in commit'i değil.
+- **Fan-in.** `analyst` bitirdiğinde yazarın ağacında **iki dosya da** vardı.
+
+Üç `plan.round` olayının üçünde de `blind: true`. Kart izi sırayı doğruluyor:
+`planner planı yazdı → architect itiraz turu → analyst itiraz turu →
+planner itirazları yanıtladı`.
+
+**Doğal son çalıştı ve parayı gerçekten kurtardı.** Tavan 2 tur ama
+alışveriş tur 1'de kapandı: `tur: 2` ile en kötü hâl 9 aktivasyondu, koşu
+**6**'da bitti. `flow check`'in tahmini bilerek en kötü hâli veriyor.
+
+**Ve körleme ilk canlı koşusunda ÇEŞİTLİLİK değil YAKINSAMA üretti.** İki
+itirazcı birbirini görmeden, bağımsız olarak **aynı** şeyi buldu:
+`selector.ts`'in `state.version === sonSurum` önbelleğinin, version geri
+sarılırsa bayat sonuç döndüreceği. İkisi de bunu planın zaten doğru
+çözdüğünü söyleyip itiraz açmadı. Yani beşinci canlı alışveriş de sıfır
+itirazla kapandı (5/5).
+
+Dürüst okuma: bu koşu körlemenin **mekanizmasını** doğruluyor, **değerini**
+doğrulamıyor. Üstelik plan bu koşuda gerçekten doğruydu — kusuru olmayan
+bir planda itiraz çeşitliliği ölçülemez. Körlemenin çeşitlilik ürettiği
+iddiası, ancak planın kusurlu olduğu koşularda sınanabilir.
+
+**Bir yan sinyal, ölçüm değil.** Üretilen kod gizli süitte **16/16 yeşil** —
+eşik ölçümünde `haiku` ve `sonnet`in üçer koşunun üçünde de düşürdüğü iki
+kanca (`version geri gitmez`, `version hiçbir zaman tekrar etmez`) dahil.
+Cazip ama karşılaştırılabilir değil: eşik ölçümü tek ajanlı `produce`
+yolundan geçiyordu, bu koşu beş rollü zincirden. Kontrol kolu yok, k=1.
+Bunu ölçüme çevirecek şey 6d kampanyası (`planab`), yani zaten o iş için
+yazılmış olan takım.
 
 ---
 

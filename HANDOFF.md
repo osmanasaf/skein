@@ -63,8 +63,8 @@ kesiyor).
 | 6b | Plana itiraz turu (iki katılımcı, tek tur) | ✅ **bu oturum** |
 | 6d | Ölçüm koşum takımı (A/B, kum havuzu, rapor) | ✅ **bu oturum** |
 | — | **6d kampanyası** (planlama işe yarıyor mu) | ⏳ koşulmadı — senin makinende |
-| 6c | Çok tur, çok katılımcı, sayaç, kilit kapısı | ✅ **bu oturum** (canlı koşulmadı) |
-| 6e | Körleme — taşıma katmanında (fan-out/fan-in) | ✅ **bu oturum** (canlı koşulmadı) |
+| 6c | Çok tur, çok katılımcı, sayaç, kilit kapısı | ✅ canlı koşuda doğrulandı |
+| 6e | Körleme — taşıma katmanında (fan-out/fan-in) | ✅ canlı koşuda doğrulandı |
 
 ---
 
@@ -174,29 +174,59 @@ bir gruba düşer ve iki grubun da k'sı ayrı sayılır.
 
 ---
 
-## İSTEĞE BAĞLI ÜÇÜNCÜ İŞ — 6c'yi canlı koşmak (~$1)
+## ÜÇÜNCÜ İŞ — 6c/6e'yi tekrar koşmak (isteğe bağlı, ~$2)
 
-6c testlerle kapalı ama gerçek ajanla koşmadı. Tek kartlık bir koşu,
-sıranın ve sayacın canlıda da tuttuğunu gösterir:
+Bir kez koşuldu ve mekanizma çalıştı (yukarı bak). Tekrar koşmanın değeri
+başka bir yerde: **plan kusurlu olduğunda** körlemenin çeşitlilik üretip
+üretmediği hâlâ bilinmiyor. Bunun için planın yanlış olacağı bir görev
+seçmek gerekiyor — ya da aynı görevi daha zayıf bir modelle koşmak
+(`claude-haiku-4-5`), çünkü plan kusurluysa itirazcıların ayrışması
+ölçülebilir hale gelir.
+
+Kum havuzunda koşum (gerçek depoyu kirletmez):
+
+Bunlar 30 Eylül koşusunun **aynen** çalıştırdığı komutlar. `watch/cli.ts`
+kökü `cwd`den alıyor ve akışı `<cwd>/hub/flows/<ad>.yaml` diye arıyor;
+kum havuzunda koşmak bu yüzden sadece `cd` meselesi.
 
 ```bash
-git status --porcelain      # boş olmalı
-export SKEIN_PERMISSION_MODE=acceptEdits
-export SKEIN_ALLOWED_TOOLS='Read,Write,Edit,Bash(git:*)'
+SB=/tmp/plan3-canli
+TSX=$PWD/node_modules/.bin/tsx
+REPO=$PWD
 
-npx tsx src/card/cli.ts new "undo ekle" --task "…"
-npx tsx src/watch/cli.ts hub/flows/plan3.yaml --model claude:claude-sonnet-5
-npx tsx src/card/cli.ts show <kart-id>     # plan kayıtlarını oku
+# 1. kum havuzu: git deposu + hub/ + görev tohumu
+rm -rf "$SB" && mkdir -p "$SB" && cd "$SB"
+git init --quiet
+git config user.email skein@ornek && git config user.name "Skein Canli"
+cp -r "$REPO/hub" .
+printf '.skein/\n.worktrees/\n' > .gitignore
+cp -r "$REPO/bench/tasks/snapshot-store/seed/." .
+git add -A && git commit --quiet -m "kum havuzu"
+
+# 2. kart: görev metni spec + "bu depoda test koşucusu YOK" notu
+"$TSX" "$REPO/src/card/cli.ts" new plan3 "Store.undo() ekle" "$(cat "$REPO/bench/tasks/snapshot-store/spec.md")
+Çözümü şu dosyaya yaz: src/store.ts
+Bu bir kum havuzu: node_modules ve test koşucusu YOK; npm test aramayı deneme."
+
+# 3. koşu — `Bash(git:*)` ŞART, rol kendi işini commit ediyor
+"$TSX" "$REPO/src/watch/cli.ts" plan3 --model claude:claude-sonnet-5 \
+  --permission-mode acceptEdits \
+  --allow-tool Read --allow-tool Write --allow-tool Edit --allow-tool "Bash(git:*)"
 ```
 
-Bakılacak şey kart izinde: `plan` kayıtlarının **sırası** (planner yazdi →
-architect itiraz → analyst itiraz → planner cevap) ve `objections`
-sayısının turlar arasında nasıl ilerlediği. Ekranda `tur 2, N itiraz (bu
-turda +M)` satırı görünmeli.
+**Körlemenin doğrulandığı yer kart izi değil, ağaçlar.** Koşu sırasında,
+kart `analyst`e geçtiği anda:
 
-Beklenen tuzak: iki itirazcı da aynı ortak dosyaya yazıyor. Biri öbürünün
-itirazını ezerse sayaç düşer ve bunu kart izinden görürsün — promptta
-açıkça yasaklandı ama canlı koşu promptun tuttuğunu göstermenin tek yolu.
+```bash
+ls "$SB/.worktrees/analyst/docs/plan/"     # SADECE plan; architect'in itirazı YOK
+ls "$SB/.worktrees/architect/docs/plan/"   # plan + kendi itirazı
+git -C "$SB/.worktrees/analyst" log --oneline -3   # son commit YAZARIN plan commit'i
+```
+
+Kart yazara döndüğünde `ls "$SB/docs/plan/"` iki itiraz dosyasını da
+göstermeli — fan-in budur. Günlükte `plan.round` olaylarının `blind` alanı
+`true`, ve itirazcıların `newObjections` değeri kendi katkısını, yazarınki
+turun gerçek toplamını gösterir.
 
 ---
 
@@ -634,7 +664,42 @@ taşımanın ne yaptığını hiç sormamış olurdu — körlemeyi sınayamazd�
 Mutasyonla: fan-out'u kaldırınca 2, fan-in'i kaldırınca 4, kararı son
 itirazcıya bırakınca 5 test kırmızıya döndü. Toplam 674 yeşil.
 
-**Canlı koşulmadı.** `plan3.yaml` gerçek ajanla hâlâ koşmadı.
+### Canlı koşu (30 Eylül): körleme uçtan uca çalıştı
+
+`plan3.yaml` × `claude-sonnet-5`, kum havuzu deposunda (`snapshot-store`
+tohumu) — gerçek depo kirletilmedi. **6 aktivasyon · $1.98.**
+
+Bitiş testinin iki yarısı da canlıda geçti:
+
+- **Fan-out:** `architect` itirazını yazıp commit'ledikten sonra kart
+  `analyst`e geçti ve `analyst`in ağacında `...itiraz.architect.md`
+  **yoktu**. Git geçmişi kanıt: o ağaçtaki son commit yazarın plan
+  commit'i, architect'in commit'i değil.
+- **Fan-in:** `analyst` bitirdiğinde yazarın ağacında iki dosya da vardı.
+
+Üç `plan.round` olayının üçünde `blind: true`. Kart izi sırayı gösteriyor:
+`planner planı yazdı → architect itiraz turu → analyst itiraz turu →
+planner itirazları yanıtladı → coder → reviewer → bitti`.
+
+**Doğal son parayı gerçekten kurtardı:** tavan 2 tur, en kötü hâl 9
+aktivasyon; alışveriş tur 1'de kapandığı için koşu 6'da bitti.
+
+**Ama körleme ilk koşusunda çeşitlilik değil YAKINSAMA üretti.** İki
+itirazcı birbirini görmeden aynı şeyi buldu: `selector.ts`'in
+`state.version === sonSurum` önbelleğinin version geri sarılırsa bayat
+sonuç döndüreceği. İkisi de planın bunu zaten doğru çözdüğünü söyleyip
+itiraz açmadı — beşinci canlı alışveriş de sıfır itirazla kapandı (5/5).
+
+Dürüst okuma: koşu körlemenin **mekanizmasını** doğruluyor, **değerini**
+doğrulamıyor. Plan bu koşuda gerçekten doğruydu ve kusuru olmayan bir
+planda itiraz çeşitliliği ölçülemez.
+
+**Yan sinyal, ölçüm DEĞİL:** üretilen kod gizli süitte **16/16 yeşil** —
+eşik ölçümünde haiku ve sonnet'in üçer koşunun üçünde de düşürdüğü iki
+kanca dahil (`version geri gitmez`, `version hiçbir zaman tekrar etmez`).
+Karşılaştırılabilir değil: eşik ölçümü tek ajanlı `produce` yolundan
+geçiyordu, bu koşu beş rollü zincirden; kontrol kolu yok, k=1. Ölçüme
+çevirecek şey 6d kampanyası.
 
 ### 6d: ölçümün koşum takımı yazıldı
 

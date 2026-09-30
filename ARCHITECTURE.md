@@ -231,9 +231,9 @@ Ekran tartışması bunların üstüne gelir, bunları yeniden açmaz:
 | ~~5~~ | ✅ Akış ekrandan kuruluyor | Doğrulama ve maliyet tahmini zaten yazılıydı; ekran onları kullanıyor |
 | ~~6a~~ | ✅ Plan belgesi akışın parçası | Canlı koşuda doğrulandı: `coder` plana atıf yaptı, `reviewer` işi plana karşı denetledi |
 | ~~6b~~ | ✅ Plana itiraz turu (iki katılımcı) | Mekanizma canlı koştu; `kabul` yolu testlerle kapalı, canlı koşuyla değil |
-| ~~6c~~ | ✅ Çok tur, çok katılımcı, yeni itiraz sayacı, kilit kapısı | 26 testle kapalı ve mutasyonla doğrulandı; **canlı koşulmadı** |
+| ~~6c~~ | ✅ Çok tur, çok katılımcı, yeni itiraz sayacı, kilit kapısı | Canlı koşuda doğrulandı: sıra, sayaç ve doğal son çalıştı (6 aktivasyon, 9 değil) |
 | ~~6d~~ | ✅ Ölçüm koşum takımı (A/B, kum havuzu, rapor) | Deney kolu canlı koştu ve bilinen kusuru yeniden üretti; kampanya koşulmadı |
-| ~~6e~~ | ✅ Körleme — taşıma katmanında (fan-out/fan-in) | 19 testle kapalı ve mutasyonla doğrulandı; **canlı koşulmadı** |
+| ~~6e~~ | ✅ Körleme — taşıma katmanında (fan-out/fan-in) | Canlı koşuda doğrulandı: ikinci itirazcının ağacında birincinin dosyası YOK, yazarın ağacında ikisi de var |
 
 Adım 6'nın gerekçesi `PHILOSOPHY.md`'de: serbest sohbet maliyeti sınırsız
 büyütür, izlenebilirliği kaybeder ve modeller birbirine yakınsadıkça kör nokta
