@@ -677,7 +677,7 @@ yazılmış olan takım.
 
 ## 6d kampanyası — KOŞULDU, karar çıkmadı (30 Eylül)
 
-İki görev × `claude-haiku-4-5` × k=3 hedeflendi; toplam **$11.98**
+İki görev × `claude-haiku-4-5` × k=3 hedeflendi; toplam **$12.20**
 harcandı ve **karar çıkmadı**. Ama kampanya, ölçmeye çalıştığı şeyden
 başka dört şey ölçtü ve üçü mekanizmanın kendisiyle ilgili.
 
@@ -692,7 +692,7 @@ başka dört şey ölçtü ve üçü mekanizmanın kendisiyle ilgili.
 
 === cache-refresh × haiku-4.5 · k=1 ===
   plansız      3     66        2     %3       12      $2.29     3
-  planlı       1     22       10    %45       16      $3.20     4   (2 ÖLÇÜLEMEDİ)
+  planlı       1     22       10    %45       17      $3.42     5   (2 ÖLÇÜLEMEDİ)
   göreli azalma: %-1400
 
   KARAR: YETERSIZ — iki görevin hiçbiri karar verecek durumda değil.
@@ -765,7 +765,7 @@ kontrol kolu ise 66'nın 2'sini — **%-1400**. Tek koşu, ama yön olumlu
 değil ve iki görev ayrışıyor.
 
 Bedel net ve tekrarlanıyor: planlı kollar kontrol kollarının **3-4 katı**
-($2.41 / $0.55 ve $3.20 / $2.29).
+($2.41 / $0.55 ve $3.42 / $2.29).
 
 ### Karar kuralı doğru davrandı
 

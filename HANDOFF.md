@@ -62,7 +62,7 @@ kesiyor).
 | 6a | Plan belgesi akışın parçası | ✅ canlı koşuda doğrulandı |
 | 6b | Plana itiraz turu (iki katılımcı, tek tur) | ✅ **bu oturum** |
 | 6d | Ölçüm koşum takımı (A/B, kum havuzu, rapor) | ✅ **bu oturum** |
-| — | **6d kampanyası** | ⚠️ koşuldu ($11.98), KARAR ÇIKMADI — mekanizma düzeltmesi bekliyor |
+| — | **6d kampanyası** | ⚠️ koşuldu ($12.20), KARAR ÇIKMADI — mekanizma düzeltmesi bekliyor |
 | 6c | Çok tur, çok katılımcı, sayaç, kilit kapısı | ✅ canlı koşuda doğrulandı |
 | 6e | Körleme — taşıma katmanında (fan-out/fan-in) | ✅ canlı koşuda doğrulandı |
 
@@ -232,7 +232,7 @@ turun gerçek toplamını gösterir.
 
 ## 6d KAMPANYASI KOŞULDU — karar çıkmadı, ama dört şey öğrenildi
 
-30 Eylül, iki görev × `claude-haiku-4-5`, hedef k=3. **$11.98 harcandı,
+30 Eylül, iki görev × `claude-haiku-4-5`, hedef k=3. **$12.20 harcandı,
 karar çıkmadı.** Ayrıntı `PLANLAMA.md`'de; özeti burada.
 
 ```
@@ -243,7 +243,7 @@ karar çıkmadı.** Ayrıntı `PLANLAMA.md`'de; özeti burada.
 
 === cache-refresh × haiku-4.5 · k=1 ===
   plansız  3 koşu  66 kanca   2 kırmızı   %3  12 akt  $2.29  3 ret
-  planlı   1 koşu  22 kanca  10 kırmızı  %45  16 akt  $3.20  4 ret  (2 ÖLÇÜLEMEDİ)
+  planlı   1 koşu  22 kanca  10 kırmızı  %45  17 akt  $3.42  5 ret  (2 ÖLÇÜLEMEDİ)
   göreli azalma %-1400
 
   KARAR: YETERSIZ
