@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { kanitYolu, parseItirazlar } from "./itiraz.js";
+import { kanitYolu, kanitYollari, parseItirazlar } from "./itiraz.js";
 
 const ITIRAZ = `# İtirazlar — c-1
 
@@ -121,6 +121,40 @@ describe("parseItirazlar", () => {
     expect(d.gecerli).toHaveLength(1);
   });
 
+  // 1 Ekim'in İKİNCİ kampanyası bunu canlı çıkardı. Gerçek itiraz kanıtı
+  // madde madde yazdı: bir madde plan belgesini, öteki `src/selector.ts`'i
+  // gösteriyordu. İlk yola bakan denetim itirazı attı — oysa itiraz tam da
+  // istediğimiz şeyi, tüketici modülü, gösteriyordu.
+  it("plan belgesinin YANINDA koda da işaret eden itiraz geçerli", () => {
+    const text = ITIRAZ.replace(
+      "**Neyi yanlışlar:** `src/selector.ts:12` — aynı sürüm için önbellek tazelenmez.",
+      "**Neyi yanlışlar:**\n" +
+      "- `docs/plan/c-1.md:44` — \"version sayaçları otomatik doğru olur\" yüzeysel.\n" +
+      "- `src/selector.ts:10-11` — cache koşulu undo'dan sonra yanlış sonuç verir.",
+    );
+    const d = parseItirazlar(text, {
+      varMi: () => true,
+      kendiBelgeleri: ["docs/plan/c-1.md"],
+    });
+    expect(d.itirazlar[0]?.gecersiz).toBeUndefined();
+    expect(d.gecerli).toHaveLength(1);
+  });
+
+  it("yolların HEPSİ kendi belgesiyse itiraz düşer", () => {
+    const text = ITIRAZ.replace(
+      "**Neyi yanlışlar:** `src/selector.ts:12` — aynı sürüm için önbellek tazelenmez.",
+      "**Neyi yanlışlar:**\n" +
+      "- `docs/plan/c-1.md:44` — plan böyle diyor.\n" +
+      "- `docs/plan/c-1.itiraz.reviewer.md:3` — reviewer da böyle demiş.",
+    );
+    const d = parseItirazlar(text, {
+      varMi: () => true,
+      kendiBelgeleri: ["docs/plan/c-1.md", "docs/plan/c-1.itiraz.reviewer.md"],
+    });
+    expect(d.gecerli).toHaveLength(0);
+    expect(d.itirazlar[0]?.gecersiz).toMatch(/kendi belgesine/);
+  });
+
   it("boş dosyada itiraz yok", () => {
     const d = parseItirazlar("# İtirazlar\n\nBu turda itirazım yok.\n", { varMi });
     expect(d.itirazlar).toHaveLength(0);
@@ -200,5 +234,20 @@ describe("Durum satırı — dört durum da gerekçe alır", () => {
 
   it("gerekçesiz `ret` hâlâ geçersiz", () => {
     expect(parseItirazlar(ile("ret")).itirazlar[0]?.gecersiz).toMatch(/gerekçesiz olamaz/);
+  });
+});
+
+describe("kanitYollari", () => {
+  it("bütün yolları sırayla verir, sarmalayıcıları atar", () => {
+    expect(kanitYollari("- `docs/plan/k.md:44` — şu\n- (`src/a.ts:10-11`) — bu."))
+      .toEqual(["docs/plan/k.md", "src/a.ts"]);
+  });
+
+  it("aynı yolu iki kez saymaz", () => {
+    expect(kanitYollari("`src/a.ts:1` ve src/a.ts:9")).toEqual(["src/a.ts"]);
+  });
+
+  it("yol yoksa boş", () => {
+    expect(kanitYollari("Satır 47-49 — sıra koruması açık değil.")).toEqual([]);
   });
 });

@@ -108,6 +108,20 @@ function durumOf(raw: string): { durum: Durum; gerekce?: string } | null {
  * yol. Backtick'li ilk parça, yoksa uzantısı olan ilk kelime.
  */
 export function kanitYolu(kanit: string): string | null {
+  return kanitYollari(kanit)[0] ?? null;
+}
+
+/**
+ * Kanıt alanındaki BÜTÜN depo yolları, yazıldıkları sırayla.
+ *
+ * Tek yola bakmak yetmiyor ve bunu bir kampanya pahasına öğrendik: itirazcı
+ * kanıtı madde madde yazıyor ("- `docs/plan/k.md:44` … / - `src/selector.ts:10`
+ * …"). İlk yola bakan bir denetim, plan belgesini görüp itirazı atıyor —
+ * oysa aynı itiraz KODA da işaret ediyor. Kuralın amacı döngüsel kanıtı
+ * elemek; koda işaret eden bir itirazı plan belgesini de andığı için elemek
+ * değil.
+ */
+export function kanitYollari(kanit: string): string[] {
   // Ters tırnaklı parçaların hepsine bakılıyor, yalnızca ilkine değil:
   // "**Neyi yanlışlar:** `Store.undo()` — `src/store.ts:12`" satırında ilk
   // parça yol DEĞİL. Yalnızca ilkine bakan bir okuyucu, iyi niyetli bir
@@ -115,10 +129,22 @@ export function kanitYolu(kanit: string): string | null {
   // için katılığın bedeli yüksek.
   const adaylar = [...kanit.matchAll(/`([^`]+)`/gu)].map((m) => m[1] as string);
   adaylar.push(...kanit.split(/\s+/u));
-  const aday = adaylar.find((k) => yolGibi(k));
-  if (aday === undefined) return null;
-  const yol = aday.split(":")[0]?.trim();
-  return yol === undefined || yol === "" ? null : yol;
+  const yollar: string[] = [];
+  for (const aday of adaylar) {
+    // Sarmalayıcılar atılıyor. Boşlukla ayırma aynı parçayı ters
+    // tırnaklarıyla da aday yapıyor; temizlenmezse `x.md` ile x.md iki ayrı
+    // yol sayılır ve "yolların hepsi kendi belgesi mi" denetimi yanılır.
+    const temiz = aday
+      .replace(/^[`'"([<]+/u, "")
+      .replace(/[`'")\]>]+$/u, "")
+      .replace(/[.,;]+$/u, "")
+      .trim();
+    if (!yolGibi(temiz)) continue;
+    const yol = temiz.split(":")[0]?.trim();
+    if (yol === undefined || yol === "") continue;
+    if (!yollar.includes(yol)) yollar.push(yol);
+  }
+  return yollar;
 }
 
 /** Dizin ayracı ya da dosya uzantısı taşıyan bir parça mı. */
@@ -245,18 +271,26 @@ function kur(no: number, role: string, alan: Map<string, string>, options: Parse
   }
 
   // Kanıt depodan bir yere işaret etmeli — tasarımın en keskin kuralı.
+  // Üç koşul da BÜTÜN yollara bakıyor: bir itiraz, gösterdiği yollardan
+  // EN AZ BİRİ geçerliyse ayakta kalır. Yoksa yanında plan belgesini de
+  // anan iyi bir itiraz elenir.
   if (options.varMi !== undefined) {
-    const yol = kanitYolu(kanit);
-    if (yol === null) {
+    const yollar = kanitYollari(kanit);
+    if (yollar.length === 0) {
       return { ...taban, gecersiz: "`Neyi yanlışlar` bir dosya yolu içermiyor" };
     }
-    if (!options.varMi(yol)) {
-      return { ...taban, gecersiz: `\`Neyi yanlışlar\` depoda olmayan bir yola işaret ediyor: ${yol}` };
-    }
-    if (options.kendiBelgeleri?.includes(yol) === true) {
+    const depoda = yollar.filter((y) => options.varMi?.(y) === true);
+    if (depoda.length === 0) {
       return {
         ...taban,
-        gecersiz: `\`Neyi yanlışlar\` alışverişin kendi belgesine işaret ediyor: ${yol}. ` +
+        gecersiz: `\`Neyi yanlışlar\` depoda olmayan bir yola işaret ediyor: ${yollar.join(", ")}`,
+      };
+    }
+    const kendi = new Set(options.kendiBelgeleri ?? []);
+    if (depoda.every((y) => kendi.has(y))) {
+      return {
+        ...taban,
+        gecersiz: `\`Neyi yanlışlar\` alışverişin kendi belgesine işaret ediyor: ${depoda.join(", ")}. ` +
           `Kanıt, planın DOKUNACAĞI koda işaret etmek zorunda — "plan şöyle diyor" ` +
           `bir kanıt değil, planın tekrarı.`,
       };
