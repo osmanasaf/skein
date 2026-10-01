@@ -194,3 +194,31 @@ describe("planEffect — grup anahtarı görev × model", () => {
     expect(r.groups.map((g) => g.model).sort()).toEqual(["(bilinmiyor)", "sonnet"]);
   });
 });
+
+// Rapor operatörün para harcama kararını besliyor; yanlış teşhis pahalı.
+// İlk hâlinde `relative === null`'un üç sebebi tek mesaja eriyordu ve
+// kampanya sırasında rapor, kontrol kolunda 2 kırmızı kanca gösterirken
+// "kontrol kolunda hiç kırmızı kanca yok" diyordu.
+describe("planEffect — ölçülemezliğin sebebi doğru söylenir", () => {
+  it("deney kolu ölçülmediyse kontrol kolunu suçlamaz", () => {
+    const r = planEffect([
+      ...kosu("s1", "g", "plansiz", { red: 2, hooks: 16 }),
+      ...kosu("p1", "g", "planli", { red: 0, hooks: 16, ran: false }),
+    ]);
+    expect(r.verdict.reason).toMatch(/Deney kolu ölçülmedi \(1 kol düştü\)/);
+    expect(r.verdict.reason).not.toMatch(/kırmızı kanca yok/);
+  });
+
+  it("kontrol kolu temizse onu söyler", () => {
+    const r = planEffect([
+      ...kosu("s1", "g", "plansiz", { red: 0, hooks: 16 }),
+      ...kosu("p1", "g", "planli", { red: 0, hooks: 16 }),
+    ]);
+    expect(r.verdict.reason).toMatch(/Kontrol kolunda hiç kırmızı kanca yok/);
+  });
+
+  it("kontrol kolu hiç koşmadıysa onu söyler", () => {
+    const r = planEffect([...kosu("p1", "g", "planli", { red: 0, hooks: 16 })]);
+    expect(r.verdict.reason).toMatch(/Kontrol kolu ölçülmedi/);
+  });
+});

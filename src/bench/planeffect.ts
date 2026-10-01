@@ -179,7 +179,7 @@ export function planEffect(events: SkeinEvent[]): PlanEffectReport {
     const relativeReduction = reduction(plansiz, planli);
     return {
       taskId, model, planli, plansiz, relativeReduction, perRun, repeats, ceremony,
-      verdict: decide(relativeReduction, repeats, perRun, plansiz),
+      verdict: decide(relativeReduction, repeats, perRun, plansiz, planli),
     };
   });
 
@@ -191,9 +191,23 @@ function decide(
   repeats: number,
   perRun: { relativeReduction: number | null }[],
   plansiz: ArmSide | null,
+  planli: ArmSide | null,
 ): { code: VerdictCode; reason: string } {
   if (plansiz === null || plansiz.runs === 0) {
     return { code: "yetersiz", reason: "Kontrol kolu ölçülmedi; karşılaştırılacak bir şey yok." };
+  }
+  // Deney kolu ayrı soruluyor. İlk hâlinde `relative === null`'un ÜÇ sebebi
+  // tek mesaja eriyordu ve rapor, kontrol kolunda 2 kırmızı kanca
+  // gösterirken "kontrol kolunda hiç kırmızı kanca yok" diyordu — sebep
+  // deney kolunun ölçülmemiş olmasıydı. Operatör bu rapora bakıp para
+  // harcama kararı veriyor; yanlış teşhis pahalı.
+  if (planli === null || planli.runs === 0) {
+    return {
+      code: "yetersiz",
+      reason: "Deney kolu ölçülmedi" +
+        (planli !== null && planli.unmeasured > 0 ? ` (${planli.unmeasured} kol düştü)` : "") +
+        "; karşılaştırılacak bir şey yok.",
+    };
   }
   if (relative === null) {
     return {
