@@ -24,6 +24,40 @@ export interface ArmSide {
   unmeasured: number;
 }
 
+/**
+ * Kanca KİMLİKLERİ — sayı değil.
+ *
+ * 1 Ekim kampanyasının açtığı kör nokta. `async-pool`'da iki kol da benzer
+ * SAYIDA kırmızı kanca verdi, ama kontrol kolunun kusurları iki koşuda
+ * aynı kancalardaydı, planlı kolunki BAŞKA kancalardaydı. Yani planlama
+ * kusuru azaltmak yerine KAYDIRMIŞ olabilir ve sayıya bakan bir rapor bunu
+ * göremez.
+ *
+ * `yalnizPlanli` bu yüzden raporun en önemli satırı olabilir: planlamanın
+ * GETİRDİĞİ kusur sınıfları. Göreli azalma olumlu çıkarken bu küme boş
+ * değilse, "daha az kusur" ile "daha iyi ürün" aynı şey değildir.
+ */
+export interface HookSets {
+  /** Kontrol kolunda en az bir koşuda kırmızı olan kancalar. */
+  plansiz: string[];
+  /** Deney kolunda en az bir koşuda kırmızı olan kancalar. */
+  planli: string[];
+  /** İki kolda da görülen — planlamanın dokunmadığı kusurlar. */
+  ortak: string[];
+  /** Yalnızca kontrol kolunda — planlamanın ÇÖZDÜĞÜ. */
+  yalnizPlansiz: string[];
+  /** Yalnızca deney kolunda — planlamanın GETİRDİĞİ. */
+  yalnizPlanli: string[];
+  /**
+   * Kolun her ÖLÇÜLMÜŞ koşusunda kırmızı olan kancalar.
+   *
+   * Kusurun belirlenimci olup olmadığını söylüyor: kontrol kolunda bu küme
+   * birleşime eşitse hücre kararlı, yani ölçüm için elverişli.
+   */
+  herKosudaPlansiz: string[];
+  herKosudaPlanli: string[];
+}
+
 export interface PlanGroup {
   taskId: string;
   /** Üretici model kurgusu; grubun anahtarının öteki yarısı. */
@@ -37,6 +71,8 @@ export interface PlanGroup {
   repeats: number;
   /** Alışverişin töreni: itirazsız kapanan oran ve kabul oranı. */
   ceremony: { exchanges: number; withoutObjection: number; objections: number; accepted: number; invalid: number };
+  /** Kanca kimlikleri; sayının göremediği kusur kayması buradan okunuyor. */
+  hooks: HookSets;
   verdict: { code: VerdictCode; reason: string };
 }
 
@@ -53,6 +89,8 @@ interface ArmRun {
   ran: boolean;
   hooks: number;
   red: number;
+  /** Kırmızı kancaların ADLARI; kimlik karşılaştırması buna dayanıyor. */
+  redNames: string[];
   activations: number;
   costUsd: number;
   rejects: number;
@@ -75,7 +113,7 @@ export function armRuns(events: SkeinEvent[]): ArmRun[] {
   for (const [runId, meta] of arms) {
     out.set(runId, {
       runId, taskId: meta.taskId, model: meta.model, arm: meta.arm,
-      ran: false, hooks: 0, red: 0, activations: 0, costUsd: 0, rejects: 0,
+      ran: false, hooks: 0, red: 0, redNames: [], activations: 0, costUsd: 0, rejects: 0,
     });
   }
 
@@ -97,9 +135,40 @@ export function armRuns(events: SkeinEvent[]): ArmRun[] {
       run.ran = e.ran;
       run.hooks = e.total;
       run.red = e.red.length;
+      run.redNames = [...e.red];
     }
   }
   return [...out.values()];
+}
+
+/** Kanca kimliklerini iki kol üzerinden karşılaştırır. */
+function hookSets(plansizRuns: ArmRun[], planliRuns: ArmRun[]): HookSets {
+  const birlesim = (runs: ArmRun[]): Set<string> => {
+    const out = new Set<string>();
+    for (const r of runs) if (r.ran) for (const ad of r.redNames) out.add(ad);
+    return out;
+  };
+  // Her koşuda kırmızı olanlar: ölçülmüş koşu yoksa boş küme (kesişim
+  // tanımsız; "hepsinde var" demek yanlış olurdu).
+  const herKosuda = (runs: ArmRun[]): Set<string> => {
+    const olculen = runs.filter((r) => r.ran);
+    if (olculen.length === 0) return new Set();
+    let acc = new Set((olculen[0] as ArmRun).redNames);
+    for (const r of olculen.slice(1)) acc = new Set([...acc].filter((a) => r.redNames.includes(a)));
+    return acc;
+  };
+  const s = birlesim(plansizRuns);
+  const p = birlesim(planliRuns);
+  const sirala = (x: Set<string>): string[] => [...x].sort();
+  return {
+    plansiz: sirala(s),
+    planli: sirala(p),
+    ortak: sirala(new Set([...s].filter((a) => p.has(a)))),
+    yalnizPlansiz: sirala(new Set([...s].filter((a) => !p.has(a)))),
+    yalnizPlanli: sirala(new Set([...p].filter((a) => !s.has(a)))),
+    herKosudaPlansiz: sirala(herKosuda(plansizRuns)),
+    herKosudaPlanli: sirala(herKosuda(planliRuns)),
+  };
 }
 
 function side(runs: ArmRun[]): ArmSide | null {
@@ -179,6 +248,7 @@ export function planEffect(events: SkeinEvent[]): PlanEffectReport {
     const relativeReduction = reduction(plansiz, planli);
     return {
       taskId, model, planli, plansiz, relativeReduction, perRun, repeats, ceremony,
+      hooks: hookSets(plansizRuns, planliRuns),
       verdict: decide(relativeReduction, repeats, perRun, plansiz, planli),
     };
   });

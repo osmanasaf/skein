@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import type { SkeinEvent } from "../events/log.js";
 import { armRuns, planEffect } from "./planeffect.js";
+import type { PlanEffectReport, PlanGroup } from "./planeffect.js";
 
 const ev = (e: Record<string, unknown>, runId: string): SkeinEvent =>
   ({ v: 1, at: "2026-01-01T00:00:00.000Z", runId, ...e }) as SkeinEvent;
 
 interface KosuSpec {
   red: number;
+  /** Kırmızı kancaların ADLARI; verilmezse `kanca-1..N`. */
+  redNames?: string[];
   model?: string;
   hooks?: number;
   ran?: boolean;
@@ -36,7 +39,7 @@ function kosu(runId: string, taskId: string, arm: "planli" | "plansiz", s: KosuS
   }
   out.push(ev({
     type: "hooks.measured", cell: `olcum/${arm}`, ran: s.ran ?? true, total: hooks,
-    red: Array.from({ length: s.red }, (_, i) => `kanca-${i + 1}`),
+    red: s.redNames ?? Array.from({ length: s.red }, (_, i) => `kanca-${i + 1}`),
   }, runId));
   return out;
 }
@@ -220,5 +223,67 @@ describe("planEffect — ölçülemezliğin sebebi doğru söylenir", () => {
   it("kontrol kolu hiç koşmadıysa onu söyler", () => {
     const r = planEffect([...kosu("p1", "g", "planli", { red: 0, hooks: 16 })]);
     expect(r.verdict.reason).toMatch(/Kontrol kolu ölçülmedi/);
+  });
+});
+
+/** `noUncheckedIndexedAccess` altında tek grubu dönüştürmeden almak için. */
+function tekGrup(r: PlanEffectReport): PlanGroup {
+  const g = r.groups[0];
+  if (g === undefined) throw new Error("rapor boş: grup bekleniyordu");
+  return g;
+}
+
+// 1 Ekim kampanyasının açtığı kör nokta: `async-pool`'da iki kol benzer
+// SAYIDA kırmızı kanca verdi, ama kontrol kolunun kusurları iki koşuda aynı
+// kancalardaydı, planlı kolunki BAŞKA kancalardaydı. Sayıya bakan rapor bunu
+// göremiyordu.
+describe("planEffect — kanca KİMLİĞİ, sayı değil", () => {
+  it("planlamanın GETİRDİĞİ kusurları ayrı sayar", () => {
+    const r = planEffect([
+      ...kosu("s1", "g", "plansiz", { red: 2, redNames: ["A", "B"] }),
+      ...kosu("p1", "g", "planli", { red: 2, redNames: ["A", "C"] }),
+    ]);
+    const h = tekGrup(r).hooks;
+    expect(h.ortak).toEqual(["A"]);
+    expect(h.yalnizPlansiz).toEqual(["B"]);
+    expect(h.yalnizPlanli).toEqual(["C"]);
+  });
+
+  // Sayı aynı kalırken kusur sınıfı değişebilir: "daha az kusur" ile
+  // "daha iyi ürün" aynı şey değil.
+  it("sayı eşitken bile kayma görünür", () => {
+    const r = planEffect([
+      ...kosu("s1", "g", "plansiz", { red: 2, redNames: ["A", "B"] }),
+      ...kosu("p1", "g", "planli", { red: 2, redNames: ["C", "D"] }),
+    ]);
+    const h = tekGrup(r).hooks;
+    expect(h.ortak).toEqual([]);
+    expect(h.yalnizPlanli).toEqual(["C", "D"]);
+    // Göreli azalma SIFIR ama kusurların hiçbiri aynı değil.
+    expect(r.groups[0]?.relativeReduction).toBe(0);
+  });
+
+  it("her koşuda kırmızı olanlar hücrenin kararlılığını söyler", () => {
+    const r = planEffect([
+      ...kosu("s1", "g", "plansiz", { red: 2, redNames: ["A", "B"] }),
+      ...kosu("s2", "g", "plansiz", { red: 2, redNames: ["A", "B"] }),
+      ...kosu("s3", "g", "plansiz", { red: 1, redNames: ["A"] }),
+      ...kosu("p1", "g", "planli", { red: 1, redNames: ["A"] }),
+    ]);
+    const h = tekGrup(r).hooks;
+    // `B` iki koşuda var, üçüncüde yok → her koşuda değil.
+    expect(h.plansiz).toEqual(["A", "B"]);
+    expect(h.herKosudaPlansiz).toEqual(["A"]);
+  });
+
+  // Ölçülmüş koşu yoksa kesişim TANIMSIZ; "hepsinde var" demek yanlış olurdu.
+  it("ölçülmemiş kolda her-koşuda kümesi boş", () => {
+    const r = planEffect([
+      ...kosu("s1", "g", "plansiz", { red: 1, redNames: ["A"] }),
+      ...kosu("p1", "g", "planli", { red: 0, ran: false }),
+    ]);
+    const h = tekGrup(r).hooks;
+    expect(h.herKosudaPlanli).toEqual([]);
+    expect(h.planli).toEqual([]);
   });
 });

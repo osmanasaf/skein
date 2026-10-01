@@ -413,6 +413,26 @@ function printPlanEffect(r: PlanEffectReport): void {
         `(${pct(c.withoutObjection / c.exchanges)}) · ${c.objections} itiraz, ${c.accepted} kabul` +
         (c.invalid > 0 ? `, ${c.invalid} sayılmadı` : ""));
     }
+    // Kanca KİMLİĞİ: sayının göremediği kusur kayması. `yalnizPlanli` boş
+    // değilse, "daha az kusur" ile "daha iyi ürün" aynı şey değil.
+    const h = g.hooks;
+    if (h.plansiz.length > 0 || h.planli.length > 0) {
+      // Sıfır sayının yanına etiket basmak ("0 yalnız planlıda (planlama
+      // GETİRDİ)") olmayan bir şeyi varmış gibi okutuyor; etiket yalnızca
+      // sayı varsa çıkıyor.
+      const kimlik = (sayi: number, ad: string, etiket: string): string =>
+        sayi > 0 ? `${sayi} ${ad} (${etiket})` : `${sayi} ${ad}`;
+      console.log(`  kusur kimliği: ${h.ortak.length} ortak · ` +
+        `${kimlik(h.yalnizPlansiz.length, "yalnız kontrolde", "planlama çözdü")} · ` +
+        `${kimlik(h.yalnizPlanli.length, "yalnız planlıda", "planlama GETİRDİ")}`);
+      if (h.yalnizPlanli.length > 0) {
+        console.log(`    ⚠ planlamanın getirdiği: ${h.yalnizPlanli.join("; ")}`);
+      }
+      // Kontrol kolu her koşuda aynı kancaları düşürüyorsa hücre kararlı.
+      const kararli = h.herKosudaPlansiz.length === h.plansiz.length && h.plansiz.length > 0;
+      console.log(`    kontrol kolu ${kararli ? "KARARLI" : "değişken"}: ` +
+        `${h.herKosudaPlansiz.length}/${h.plansiz.length} kanca her koşuda`);
+    }
     console.log(`  karar: ${g.verdict.code.toUpperCase()} — ${g.verdict.reason}`);
   }
   console.log(`\n  KARAR: ${r.verdict.code.toUpperCase()}`);
