@@ -232,7 +232,8 @@ Ekran tartışması bunların üstüne gelir, bunları yeniden açmaz:
 | ~~6a~~ | ✅ Plan belgesi akışın parçası | Canlı koşuda doğrulandı: `coder` plana atıf yaptı, `reviewer` işi plana karşı denetledi |
 | ~~6b~~ | ✅ Plana itiraz turu (iki katılımcı) | Mekanizma canlı koştu; `kabul` yolu testlerle kapalı, canlı koşuyla değil |
 | ~~6c~~ | ✅ Çok tur, çok katılımcı, yeni itiraz sayacı, kilit kapısı | Canlı koşuda doğrulandı: sıra, sayaç ve doğal son çalıştı (6 aktivasyon, 9 değil) |
-| ~~6d~~ | ✅ Ölçüm koşum takımı (A/B, kum havuzu, rapor) | Deney kolu canlı koştu ve bilinen kusuru yeniden üretti; kampanya koşulmadı |
+| ~~6d~~ | ✅ Ölçüm koşum takımı + kampanya (k=3 × 2 görev) | İki görevde de BELİRSİZ: azalma eşiğin üstünde (%67, %20) ama işaret tutarsız |
+| ~~22~~ | ✅ Kural 22 — katılımcı `reject` taşıyamaz | Kampanyada ölçülen kusuru kapattı: 7 ret / 0 itiraz → 9 itiraz / 9 kabul |
 | ~~6e~~ | ✅ Körleme — taşıma katmanında (fan-out/fan-in) | Canlı koşuda doğrulandı: ikinci itirazcının ağacında birincinin dosyası YOK, yazarın ağacında ikisi de var |
 
 Adım 6'nın gerekçesi `PHILOSOPHY.md`'de: serbest sohbet maliyeti sınırsız

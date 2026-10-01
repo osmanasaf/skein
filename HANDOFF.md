@@ -62,7 +62,8 @@ kesiyor).
 | 6a | Plan belgesi akışın parçası | ✅ canlı koşuda doğrulandı |
 | 6b | Plana itiraz turu (iki katılımcı, tek tur) | ✅ **bu oturum** |
 | 6d | Ölçüm koşum takımı (A/B, kum havuzu, rapor) | ✅ **bu oturum** |
-| — | **6d kampanyası** | ⚠️ koşuldu ($12.20), KARAR ÇIKMADI — mekanizma düzeltmesi bekliyor |
+| — | **6d kampanyası** | ✅ tam koştu (k=3 × 2 görev): iki görevde de **BELİRSİZ** |
+| — | Kural 22 + itiraz durumu + `--devam` | ✅ kampanyayı koşturabilir hâle getiren üç düzeltme |
 | 6c | Çok tur, çok katılımcı, sayaç, kilit kapısı | ✅ canlı koşuda doğrulandı |
 | 6e | Körleme — taşıma katmanında (fan-out/fan-in) | ✅ canlı koşuda doğrulandı |
 
@@ -227,6 +228,84 @@ Kart yazara döndüğünde `ls "$SB/docs/plan/"` iki itiraz dosyasını da
 göstermeli — fan-in budur. Günlükte `plan.round` olaylarının `blind` alanı
 `true`, ve itirazcıların `newObjections` değeri kendi katkısını, yazarınki
 turun gerçek toplamını gösterir.
+
+---
+
+## 6d KAMPANYASI TAM KOŞTU (1 Ekim) — iki görevde de BELİRSİZ
+
+Önceki kampanya mekanizma kusurlarına çarpmıştı. Üç düzeltmeden sonra
+(kural 22, itiraz durumu ayrıştırıcısı, `--devam`) kampanya ilk kez iki
+görevde de **k=3**'e ulaştı. Ayrıntı `PLANLAMA.md`'de.
+
+```
+=== snapshot-store × haiku-4.5 · k=3 ===
+  plansız   3 koşu  48 kanca  6 kırmızı  %13   6 akt  $0.75
+  planlı    3 koşu  48 kanca  2 kırmızı   %4  24 akt  $3.20  (3 ÖLÇÜLEMEDİ)
+  göreli azalma %67 · koşu başına %100, %0, %100 · %40 itirazsız
+  karar: BELİRSİZ — eşiğin üstünde ama işaret tutarsız
+
+=== async-pool × haiku-4.5 · k=3 ===
+  plansız   3 koşu  36 kanca  5 kırmızı  %14   8 akt  $0.92
+  planlı    3 koşu  36 kanca  4 kırmızı  %11  20 akt  $2.48
+  göreli azalma %20 · koşu başına %0, %100, %-100 · %33 itirazsız
+  karar: BELİRSİZ — eşiğin üstünde ama işaret tutarsız
+
+KARAR: YETERSİZ
+```
+
+**Önceden ilan edilmiş kurala göre cevap: planlamanın ürünü daha doğru
+yaptığı gösterilemedi.** Azalma iki görevde de eşiği geçiyor (%67, %20)
+ama ikisinde de bir tekrar ters yönde çıktı; kural işaret tutarlılığı
+istiyor. %67'yi "olumlu" okumak, üç tekrardan birinde hiçbir iyileşme
+olmadığını gizlemek olurdu.
+
+**Kurduğum hipotezi veri çürüttü.** `snapshot-store`'da örüntü temizdi:
+itiraz açılıp kabul edildiğinde 16/16 (iki kez), alışveriş boş geçtiğinde
+14/16. `async-pool` bunu iki yönden de yanlışladı — **0 itirazla 12/12**,
+**4 itirazla 10/12**. Mekanizmanın çalışması ile ürünün düzelmesi arasında
+bu veriyle kurulabilen bir bağ yok.
+
+**Ayrı bir gözlem: kusur azalmıyor, kayıyor.** `async-pool` kontrol kolu
+iki koşuda aynı iki kancayı düşürdü; planlı kolun kusurları **başka**
+kancalardaydı. Kanca SAYISI bunu göremiyor. Bu ölçüm düzeninin kör noktası.
+
+**Tartışmasız tek sonuç bedel:** planlı kol iki görevde de 3-4 kat pahalı
+(24/6 ve 20/8 aktivasyon).
+
+**Mekanizma artık çalışıyor:**
+
+| | 30 Eylül | 1 Ekim |
+|---|---|---|
+| itiraz / ret | 0 itiraz, 7 ret | **9 itiraz, 9 kabul, 4 ret** |
+| itirazsız alışveriş | %100 | %40 ve %33 |
+| kol kaybı sebebi | ret limiti (mekanizma) | zaman penceresi (ortam) |
+
+### Koşum ortamı: öğrenilen üç sınır
+
+Bunlar bu konteynerin gerçekleri, kodun değil:
+
+1. **Konteyner, oturum boşta kalınca geri alınıyor.** İlk tam kampanya
+   böyle öldü ve bir süre koştuğunu sandım — `pgrep` eşleşmesi kendi
+   kabuk sarmalayıcımdı. "Öldürdüm" ya da "koşuyor" demek yetmiyor;
+   **günlüğün büyüyüp büyümediğine** bakmak gerekiyor.
+2. **Tek komut 10 dakikada kesiliyor.** İtiraz turu olan planlı kollar
+   bunu aşıyor. Çözüm `planab --kol` (tek kol) + `--devam` (kaldığı
+   yerden sürdürme, orkestratörün `recover()`'ı üzerinden).
+3. **Konteyner, tool çağrısı yapmadığım sürece askıda.** Arka plan işi
+   ancak ben çalışırken ilerliyor; uzun kolları ÖN PLANDA koşturmak
+   gerekiyor.
+
+Senin makinende bu üçü de yok: `planab <görev> --k=3` tek komutta biter.
+
+### Sıradaki adım
+
+Kural k artırılmasını söylüyor; aynı düzende k=6 kabaca **$14** daha
+ister. Ama ondan önce **yeni koşu gerektirmeyen** iki analiz daha değerli:
+
+1. **Kusur kayması gerçek mi?** Kanca sayısı yerine kanca KİMLİĞİ
+   karşılaştırılmalı. Mevcut günlük (`.skein/arsiv/`) bunu zaten taşıyor.
+2. **İtiraz kusura denk geliyor mu?** İtirazın kanıt yolu
+   (`Neyi yanlışlar`) ile kırmızı kancanın dokunduğu dosya karşılaştırılabilir.
 
 ---
 

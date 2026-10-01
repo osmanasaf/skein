@@ -676,6 +676,112 @@ yazılmış olan takım.
 
 ---
 
+## 6d kampanyası — TAM KOŞTU (1 Ekim): iki görevde de BELİRSİZ
+
+Önceki kampanya (30 Eylül) mekanizma kusurlarına çarpıp karar üretemedi.
+Üç düzeltmeden sonra (kural 22, itiraz durumu ayrıştırıcısı, `--devam`)
+kampanya ilk kez **iki görevde de k=3'e** ulaştı.
+
+### Rapor
+
+```
+=== snapshot-store × haiku-4.5 · k=3 ===
+  plansız   3 koşu  48 kanca  6 kırmızı  %13   6 akt  $0.75
+  planlı    3 koşu  48 kanca  2 kırmızı   %4  24 akt  $3.20   (3 ÖLÇÜLEMEDİ)
+  göreli azalma %67 · koşu başına: %100, %0, %100
+  alışveriş: 5 tur · %40 itirazsız · 4 itiraz, 4 kabul
+  karar: BELİRSİZ — eşiğin üstünde ama işaret tutarsız
+
+=== async-pool × haiku-4.5 · k=3 ===
+  plansız   3 koşu  36 kanca  5 kırmızı  %14   8 akt  $0.92
+  planlı    3 koşu  36 kanca  4 kırmızı  %11  20 akt  $2.48
+  göreli azalma %20 · koşu başına: %0, %100, %-100
+  alışveriş: 3 tur · %33 itirazsız · 5 itiraz, 5 kabul, 1 sayılmadı
+  karar: BELİRSİZ — eşiğin üstünde ama işaret tutarsız
+
+KARAR: YETERSİZ — iki görevin hiçbiri karar verecek durumda değil
+```
+
+### Önceden ilan edilmiş kurala göre cevap
+
+Azalma iki görevde de olumlu eşiği (%20) geçiyor — %67 ve %20. Ama kural
+**işaret tutarlılığı** da istiyor ve ikisinde de bir tekrar ters yönde
+çıktı. Yani: **planlamanın ürünü daha doğru yaptığı gösterilemedi.**
+Sinyal olumlu yönde, k=3 varyansı yutmaya yetmiyor.
+
+Bu kuralın doğru davranışı. %67'yi "olumlu" diye okumak, üç tekrardan
+birinde hiçbir iyileşme olmadığını gizlemek olurdu.
+
+### Koşu başına döküm — ve çürüttüğüm hipotez
+
+`snapshot-store` örüntüsü ilk bakışta çok temiz:
+
+| planlı koşu | alışveriş | sonuç |
+|---|---|---|
+| #1 | 1 itiraz, 1 kabul | **16/16** |
+| #2 | 0 itiraz | 14/16 (kontrolle aynı) |
+| #3 | 1 itiraz, 1 kabul | **16/16** |
+
+Kontrol kolu üç koşunun üçünde de aynı iki kancayı düşürüyor, yani kusur
+belirlenimci. Buradan "kusur, itiraz açılıp kabul edildiğinde kayboluyor"
+hipotezini kurdum. **`async-pool` onu iki yönden de çürüttü:**
+
+| planlı koşu | alışveriş | sonuç |
+|---|---|---|
+| #1 | 1 itiraz, 1 kabul | 10/12 — ama **farklı** iki kanca |
+| #2 | **0 itiraz** | **12/12** — hiç kusur yok |
+| #3 | 4 itiraz, 4 kabul | 10/12 |
+
+İtiraz olmadan kusur tamamen kayboldu; dört itirazla kalmaya devam etti.
+Varyansı açıklayan şey itirazın varlığı değil. Hipotez yazıldığı yerde
+kalıyor çünkü yanlışlanması bulgunun kendisi: **mekanizmanın çalışması
+ile ürünün düzelmesi arasında, bu veriyle kurulabilen bir bağ yok.**
+
+### Ayrı bir gözlem: kusur azalmıyor, KAYIYOR
+
+`async-pool`'un kontrol kolu iki koşuda **aynı** iki kancayı düşürdü
+(`O hatayla reddeder`, `reddettikten sonra yeni görev başlatmaz`). Planlı
+kolun kusurları **başka** kancalardaydı (`senkron fırlatan görevi reddetme
+sayar`, `limit < 1 ise senkron fırlatmaz`).
+
+Yani planlama, kontrol kolunun iki kusurunu çözüp iki yenisini üretmiş
+olabilir. Kanca SAYISI bunu göremiyor; sayı aynı kalırken kusur sınıfı
+değişiyor. Bu ölçüm düzeninin kör noktası, ve kaydediliyor.
+
+### Tartışmasız tek sonuç: bedel
+
+Planlı kol iki görevde de **3-4 kat pahalı**: 24/6 ve 20/8 aktivasyon,
+$3.20/$0.75 ve $2.48/$0.92. Kampanyanın tutarlı, tekrarlanan, varyansa
+bağlı olmayan tek bulgusu bu.
+
+### Mekanizma artık çalışıyor — önceki kampanyayla karşılaştırma
+
+| | 30 Eylül | 1 Ekim |
+|---|---|---|
+| itiraz / ret | 0 itiraz, 7 ret | **9 itiraz, 9 kabul, 4 ret** |
+| itirazsız alışveriş | %100 | **%40 ve %33** |
+| kol kaybı sebebi | ret limiti (MEKANİZMA) | zaman penceresi (ORTAM) |
+| k | 2 ve 1 | **3 ve 3** |
+
+Üç düzeltme birlikte işe yaradı: kural 22 ret kanalını kapattı,
+ayrıştırıcı düzeltmesi kabulleri saymaya başladı, `--devam` kesilen kolu
+kurtardı. `3 ÖLÇÜLEMEDİ` kaleminin hiçbiri mekanizma kusuru değil.
+
+### Sıradaki adım, ve bedeli
+
+Kural k artırılmasını söylüyor. Aynı düzende k=6 kabaca **$14** daha
+ister. Ama ondan önce iki soru daha değerli:
+
+1. **Kusur kayması gerçek mi?** Kanca sayısı yerine kanca KİMLİĞİ
+   karşılaştırılmalı. Mevcut günlük bunu zaten taşıyor; yeni koşu
+   gerektirmeyen bir analiz.
+2. **İtirazın kusura denk gelmesi ölçülebilir mi?** `snapshot-store`'da
+   itiraz tam kusurun üstüne geldi, `async-pool`'da gelmedi. İtirazın
+   kanıt yolu (`Neyi yanlışlar`) ile kırmızı kancanın dokunduğu dosya
+   karşılaştırılabilir.
+
+---
+
 ## 6d kampanyası — KOŞULDU, karar çıkmadı (30 Eylül)
 
 İki görev × `claude-haiku-4-5` × k=3 hedeflendi; toplam **$12.20**
