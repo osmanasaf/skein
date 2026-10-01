@@ -7,7 +7,7 @@ yapıştırılabilsin diye yazıldı: aşağısı Skein'i tanımayan birine de y
 **Dal:** `claude/project-plan-brainstorm-pthvoc` — `claude/project-thread-sc56cs`
 ileri sarılıp üstüne devam edildi, yani iki dalın işi bu dalda birleşti.
 `sc56cs` olduğu yerde duruyor; yeni iş burada.
-**Durum:** 704 test yeşil, typecheck temiz, ağaç temiz.
+**Durum:** 709 test yeşil, typecheck temiz, ağaç temiz.
 `watch selftest` bu konteynerde **koşmuyor**: `hub/flows/selftest.yaml`
 depoda izlenmiyor (yalnızca yazarın makinesinde duruyordu, konteyner
 yenilenince gitti). Belgelenmiş bir komutun depoda olmayan bir dosyaya
@@ -236,6 +236,78 @@ turun gerçek toplamını gösterir.
 
 ---
 
+## YENİ KURALLA TEKRAR KOŞULDU (1 Ekim, ikinci kampanya): OLUMSUZ
+
+İki görev × `claude-haiku-4-5` × k=3, iki kol da baştan (12 koşu, **$4.56**).
+Eski kuralın kaydı `.skein/arsiv/events-6d-kampanya-2026-10-01-eskikural.jsonl`'e
+ayrıldı — eski ve yeni kuralın koşularını bir grupta toplamak iki
+mekanizmanın karışımını ölçmek olurdu.
+
+```
+snapshot-store  plansız 6 kırmızı/48 · planlı 6 kırmızı/48 · azalma %0 · OLUMSUZ
+async-pool      plansız 2 kırmızı/36 · planlı 2 kırmızı/36 · azalma %0 · OLUMSUZ
+KARAR: OLUMSUZ
+```
+
+Projenin **ilk net kararı**: önceki iki kampanya YETERSİZ/BELİRSİZ vermişti.
+Planlama turu ürünü daha doğru yapmadı; bedeli ~2.2 kat aktivasyon.
+
+**Ama bu kampanya yeni kuralı sınamıyor.** Altı planlı koşuda:
+
+| ne oldu | sayı |
+|---|---|
+| koşu hiç itiraz yazmadı | **4 / 6** |
+| **eski** kural eledi (kanıtta yol yok: "Satır 47-49") | 4 |
+| geçerli (`src/selector.ts:7-16`) | 1 |
+| **yeni** kural eledi | **1 → düzeltmeden sonra 0** |
+
+%0'ı açıklayan şey kural değil: planlı kol çoğu koşuda "plan yazıldı, kimse
+itiraz etmedi"ye indi. Baskın kayıp **kanıtın biçimi** — itirazcı plan satır
+numarası yazıyor, depodan yol göstermiyor; onu eleyen kural eskiden beri var.
+
+**Kuralın tek ateşlenmesi yanlış elemeydi, düzeltildi.** Gerçek itiraz kanıtı
+madde madde yazdı: bir madde plan belgesini, öteki `src/selector.ts:10-11`'i
+gösteriyordu. `kanitYolu` ilk yolu alıyordu → itiraz atıldı. `kanitYollari`
+eklendi; üç koşul da bütün yollara bakıyor, en az biri geçerliyse itiraz
+ayakta. Altından ikincisi çıktı: boşlukla ayırma aynı parçayı ters
+tırnaklarıyla da aday yapıyordu. 5 yeni sınama, üçü mutasyonla doğrulandı.
+
+**Hizalama korelasyonu çürüdü.** Aynı gün "koda işaret eden itiraz kusurun
+elenmesine denk geliyor" yazmıştım. Bu kampanyanın `snapshot-store` 1.
+koşusunda iki itiraz da `src/selector.ts`'i gösterdi, ikisi de kabul edildi —
+ürün yine 14/16. Olası sebep: itirazın kabulü PLANIN değişmesi demek, kodun
+değişmesi demek değil; `coder` güncellenmiş planı okuyup aynı kusuru
+yazabiliyor.
+
+**Güç uyarısı:** `async-pool` kontrol kolu %14'ten %6'ya indi (iki koşu
+12/12 temiz). O görevin %0'ı düşük güçlü. `snapshot-store` iki kampanyada da
+aynı: 6 kırmızı, her koşuda aynı iki kanca.
+
+**Kendi tuzağım:** kural ve istem değişikliği birlikte gitti.
+`snapshot-store`'da itiraz 4→1 düştü; kuraldan mı istemden mi değişkenlikten
+mi olduğu bu veriyle ayrılamaz. `async-pool`'da ayrılabiliyor: itirazlar
+yazıldı, eski kural eledi — sebep istem değil.
+
+**Sıradaki kaldıraç:** isteme bir karşı örnek ("Satır 47-49 bir yol
+DEĞİLDİR"). Kendiliğinden yapılmadı: her istem değişikliği sonraki
+kampanyayı karıştırıyor ve bu tuzağa bu kampanyada bir kez düşüldü.
+
+### Ortam: izin modu her komutta verilmeli
+
+Konteyner root altında koşuyor ve sağlayıcı CLI'ı `bypassPermissions`'ı
+reddediyor. Üç koşu $0 harcayıp `ÖLÇÜLEMEDİ` düştü, sebebi ekrana basıldı.
+Kabuk ortamı çağrılar arasında kalmadığı için **her** `planab` komutunun
+başına gerekiyor:
+
+```
+SKEIN_PERMISSION_MODE=acceptEdits SKEIN_ALLOWED_TOOLS="Read,Write,Edit,Bash(git:*)"
+```
+
+Sessiz geri düşme bilerek yok (`src/bench/cli.ts`): izin modu koşular
+arasında sessizce değişirse karşılaştırma fark edilmeden bozulur.
+
+---
+
 ## 6d KAMPANYASI TAM KOŞTU (1 Ekim) — iki görevde de BELİRSİZ
 
 Önceki kampanya mekanizma kusurlarına çarpmıştı. Üç düzeltmeden sonra
@@ -329,13 +401,10 @@ Depodaki başka belgeler kanıt olmayı sürdürüyor; kapatılan şey döngü.
 İtirazcı istemine gerekçesiyle yazıldı. 5 yeni sınama (3 ayrıştırıcı,
 2 `tick` bağlantısı), üçü mutasyonla doğrulandı.
 
-### Sıradaki adım
+### Sıradaki adım — koşuldu, aşağıda
 
-Kural k artırılmasını söylüyor; aynı düzende k=6 kabaca **$14** daha ister.
-İki analiz bunun **sırasını** değiştirdi: kanıt kuralı yeni olduğu için
-k=6 yeni kuralın altında koşulmalı, yoksa iki mekanizmanın karışımı
-ölçülür. Kuralın canlı sınavı da bu: `async-pool`'un plan-belgesi gösteren
-itirazları artık elenir — elendiğinde itirazcı koda bakmaya zorlanır mı?
+Kuralın canlı sınavı yapıldı; sonucu bir sonraki bölümde. Kısası: kural hiç
+ateşlenmedi ve kampanya ilk kez net bir OLUMSUZ verdi.
 
 ---
 

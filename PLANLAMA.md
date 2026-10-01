@@ -846,6 +846,119 @@ mekanizmanın karışımı ölçülür. Kuralın canlı sınavı da bu olacak:
 `async-pool`'un plan-belgesi gösteren itirazları yeni kuralda elenir,
 elendiğinde itirazcı koda bakmaya zorlanır mı?
 
+> **Koşuldu, ve bu tahmin tutmadı.** Aşağıdaki bölüm ne olduğunu anlatıyor:
+> kural hiç ateşlenmedi, çünkü itirazcı bu kez plan belgesini düzgün
+> göstermedi — hiç yol göstermedi.
+
+---
+
+## 6d kampanyası — YENİ KURALLA TEKRAR (1 Ekim, ikinci koşu): OLUMSUZ
+
+İki görev × `claude-haiku-4-5` × k=3, iki kol da baştan koşuldu (12 koşu,
+**$4.56**). Eski kuralın kaydı `.skein/arsiv/events-6d-kampanya-2026-10-01-eskikural.jsonl`'e
+ayrıldı: eski ve yeni kuralın koşularını aynı grupta toplamak, iki
+mekanizmanın karışımını ölçmek olurdu. Kontrol kolu yeni kuraldan
+etkilenmiyor ama o da baştan koşuldu — eski kaydı süzüp taşımak, ölçüm
+kaydı üzerinde veri ameliyatı olurdu.
+
+```
+=== snapshot-store × haiku-4.5 · k=3 ===
+  plansız   3 koşu  48 kanca  6 kırmızı  %13   6 akt  $0.70
+  planlı    3 koşu  48 kanca  6 kırmızı  %13  13 akt  $1.55
+  göreli azalma %0 · koşu başına %0, %0, %0 · %67 itirazsız
+  kusur kimliği: 2 ortak · 0 · 0 — kontrol kolu KARARLI
+  karar: OLUMSUZ
+
+=== async-pool × haiku-4.5 · k=3 ===
+  plansız   3 koşu  36 kanca  2 kırmızı   %6   6 akt  $0.69
+  planlı    3 koşu  36 kanca  2 kırmızı   %6  12 akt  $1.62
+  göreli azalma %0 · koşu başına —, —, %50 · %100 itirazsız
+  kusur kimliği: 1 ortak · 1 yalnız kontrolde · 0 yalnız planlıda
+  karar: OLUMSUZ
+
+KARAR: OLUMSUZ
+```
+
+Projenin **ilk net kararı** bu: önceki iki kampanya YETERSİZ/BELİRSİZ
+vermişti. Karar kuralı artık "ölçemedim" değil "ölçtüm, olumsuz" diyor:
+planlama turu ürünü daha doğru yapmadı, bedeli iki görevde de ~2.2 kat
+aktivasyon.
+
+### Ama bu kampanya yeni kuralı SINAMIYOR
+
+Kararı yazmadan önce bakılması gereken şey kuralın ateşlenip ateşlenmediği.
+Ateşlenmedi. Altı planlı koşuda yazılan itirazların dökümü:
+
+| ne oldu | sayı |
+|---|---|
+| koşu hiç itiraz yazmadı | **4 / 6 koşu** |
+| **eski** kural eledi — kanıtta hiç yol yok ("Satır 47-49") | 4 |
+| geçerli — `src/selector.ts:7-16` | 1 |
+| **yeni** kural eledi | **1 → düzeltmeden sonra 0** |
+
+Yani %0'ı açıklayan şey kural değil: planlı kol çoğu koşuda
+"plan yazıldı, kimse itiraz etmedi"ye indi, ürün de kontrol kolunun aynısı
+oldu. Baskın kayıp **kanıtın biçimi**: itirazcı plan satır numarası yazıyor
+("Satır 47-49 — sıra koruması açık değil"), depodan yol göstermiyor, ve
+bunu eleyen kural eskiden beri duruyor.
+
+### Kuralın tek ateşlenmesi YANLIŞ elemeydi — düzeltildi
+
+Kuralın canlı ilk sınavı kendi kusurunu gösterdi. Gerçek itiraz kanıtı madde
+madde yazdı:
+
+```markdown
+**Neyi yanlışlar:**
+- `docs/plan/c-...md:44` — "version sayaçları otomatik doğru olur" yüzeysel.
+- `src/selector.ts:10-11` — cache koşulu undo'dan sonra yanlış sonuç verir.
+```
+
+`kanitYolu` İLK yolu alıyordu; denetim plan belgesini görüp itirazı bütünüyle
+attı — oysa itiraz tam istediğimiz şeyi, tüketici modülü, gösteriyordu.
+`kanitYollari` eklendi: üç koşul da (yol var mı, depoda mı, kendi belgesi mi)
+artık bütün yollara bakıyor, itiraz gösterdiği yollardan en az biri
+geçerliyse ayakta kalıyor. Altından ikinci kusur çıktı: boşlukla ayırma aynı
+parçayı ters tırnaklarıyla da aday yapıyordu, yani `` `x.md` `` ile `x.md`
+iki ayrı yol sayılıyor ve "hepsi kendi belgesi mi" denetimi yanılıyordu —
+tek yola bakan eski kodda görünmesi mümkün değildi.
+
+### Hizalama korelasyonunu bu kampanya ÇÜRÜTTÜ
+
+Aynı gün şunu yazmıştım: koda işaret eden itiraz kusurun elenmesine denk
+geliyor, plan belgesini gösteren gelmiyor. Bu kampanyanın
+`snapshot-store` 1. koşusu bunu yanlışlıyor: **iki itiraz da yazıldı, ikisi
+de `src/selector.ts`'i gösterdi, ikisi de KABUL edildi — ve ürün yine
+14/16 kaldı.** Yani "itiraz doğru dosyayı gösterdi" ile "kusur elendi"
+arasında kurduğum bağ, üçüncü veri noktasında kırıldı. Korelasyon diye
+yazmıştım, nedensellik diye değil; yine de artık onu da desteklemiyor.
+
+Bir yorum: itirazın kabul edilmesi planın DEĞİŞMESİ demek, kodun değişmesi
+demek değil. `coder` güncellenmiş planı okuyup aynı kusuru yazabiliyor.
+Alışverişin kapısı planla kod arasında değil, plan belgesinin içinde.
+
+### Ölçüm gücü: `async-pool` hücresi zayıfladı
+
+`async-pool` kontrol kolu 1 Ekim'de 5 kırmızı kanca veriyordu (%14), bu kez
+2 (%6) — iki koşu 12/12 temiz çıktı. Azalma gösterecek alan daraldı, yani o
+görevin %0'ı düşük güçlü. `snapshot-store` kontrol kolu iki kampanyada da
+aynı: 6 kırmızı, her koşuda aynı iki kanca.
+
+### Kendi kendime koyduğum tuzak: kural ve istem birlikte gitti
+
+Kural değişikliğiyle birlikte itirazcı istemine de bir bölüm ekledim.
+`snapshot-store`'da itiraz sayısı 4'ten 1'e düştü; bunun kuraldan mı
+istemden mi haikunun değişkenliğinden mi olduğunu bu veriyle ayıramam.
+Ayrılabilen tek yer `async-pool`: orada itirazlar yazıldı ve eski kural
+eledi, yani sebep istem değil.
+
+### Sıradaki kaldıraç — ve neden kendiliğinden yapılmadı
+
+Baskın kayıp artık döngüsel kanıt değil, **yol göstermeyen kanıt** (4/6).
+İsteme bir karşı örnek koymak ("Satır 47-49 bir yol DEĞİLDİR") bunu
+muhtemelen kapatır. Yapılmadı: her istem değişikliği bir sonraki kampanyayı
+karıştırıyor ve bu tuzağa bu kampanyada bir kez düşüldü. Sıralama kararı
+operatörün.
+
 ---
 
 ## 6d kampanyası — KOŞULDU, karar çıkmadı (30 Eylül)
