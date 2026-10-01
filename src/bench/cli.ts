@@ -280,7 +280,21 @@ async function kalibre(taskId: string, modelSpec: string): Promise<void> {
   console.log(`  Sıradaki: cli.ts planab ${taskId} --k=3 --model=${modelSpec}`);
 }
 
-async function planab(taskId: string, k: number, modelSpec: string): Promise<void> {
+async function planab(
+  taskId: string, k: number, modelSpec: string,
+  /**
+   * Yalnızca bu kolu koş. Verilmezse ikisi.
+   *
+   * Kolları ayrı koşturmak koşum ortamının gereği: bir tekrar (iki kol)
+   * dokuz dakikayı aşıyor ve bu oturumun arka plan komutu 10 dakikada
+   * kesiliyor; üstelik konteyner, oturum boşta kalınca geri alınıyor ve
+   * ayrık süreç onu aşamıyor. Tek kol ~2-6 dakika, yani pencereye sığıyor.
+   *
+   * Ölçüme etkisi yok: grup ölçülmüş KOŞU sayar, komutun kaç kol
+   * koşturduğunu saymaz.
+   */
+  kol?: Arm,
+): Promise<void> {
   await mkdir(join(REPO, ".skein"), { recursive: true });
   const adapters = armAdapters(modelSpec, adapterEnv());
   const adapter = [...adapters.values()][0] as Adapter;
@@ -292,7 +306,7 @@ async function planab(taskId: string, k: number, modelSpec: string): Promise<voi
 
   const kokDizin = join(REPO, ".skein", "olcum");
   for (let i = 1; i <= k; i += 1) {
-    for (const arm of ["plansiz", "planli"] as Arm[]) {
+    for (const arm of (kol === undefined ? ["plansiz", "planli"] : [kol]) as Arm[]) {
       const stamp = new Date().toISOString().replace(/[:.]/g, "-");
       const runId = `ab-${taskId}-${arm}-${i}-${stamp}`;
       const sandbox = join(kokDizin, runId);
@@ -835,7 +849,7 @@ if (cmd === "report") {
 } else if (cmd === "planab") {
   const gorev = rest[0];
   if (gorev === undefined) {
-    console.error("kullanım: cli.ts planab <görev-id> [--k 3] [--model claude:claude-sonnet-5]");
+    console.error("kullanım: cli.ts planab <görev-id> [--k 3] [--model claude:claude-sonnet-5] [--kol planli|plansiz]");
     process.exit(2);
   }
   // Boşluklu biçim (`--k 1`) değeri konumsal argümanlara bırakıyor ve model
@@ -848,12 +862,18 @@ if (cmd === "report") {
     const at = argv.indexOf(ad);
     return at === -1 ? undefined : argv[at + 1];
   };
-  const tuketilen = new Set([deger("--k"), deger("--model")].filter((x) => x !== undefined));
+  const tuketilen = new Set([deger("--k"), deger("--model"), deger("--kol")].filter((x) => x !== undefined));
   const konumsal = rest.slice(1).filter((a) => !tuketilen.has(a));
+  const kolRaw = deger("--kol");
+  if (kolRaw !== undefined && kolRaw !== "planli" && kolRaw !== "plansiz") {
+    console.error(`--kol yalnızca \`planli\` ya da \`plansiz\` olabilir (verilen: ${kolRaw})`);
+    process.exit(2);
+  }
   await planab(
     gorev,
     Math.max(1, Number(deger("--k") ?? 3)),
     deger("--model") ?? konumsal.find((a) => a.includes(":")) ?? "claude:claude-sonnet-5",
+    kolRaw as Arm | undefined,
   );
 } else if (cmd === "kalibre") {
   const gorev = rest[0];
@@ -882,6 +902,6 @@ if (cmd === "report") {
 } else if (cmd) {
   await run(cmd, rest[0] ?? "claude", rest[1] ?? "claude-opus-5", audit);
 } else {
-  console.error("kullanım: cli.ts <görev-id> [sağlayıcı] [model] [--audit]\n         cli.ts matrix <görev-id> [sağlayıcı:model] [sağlayıcı:model]\n         cli.ts doctor <sağlayıcı:model>\n         cli.ts puanla [hakem-modeli] [--kuru] [--yeniden]\n         cli.ts siniflandir [hakem-modeli] [--kuru] [--yeniden]\n         cli.ts selftest [görev-id]\n         cli.ts turlar [hücre-parçası] [--diff]\n         cli.ts kalibre <görev-id> [--model sağ:model]   (ölçüm gücü ön kontrolü)\n         cli.ts planab <görev-id> [--k 3] [--model sağ:model]\n         cli.ts planrapor\n         cli.ts report [--gorev=<görev-id>]");
+  console.error("kullanım: cli.ts <görev-id> [sağlayıcı] [model] [--audit]\n         cli.ts matrix <görev-id> [sağlayıcı:model] [sağlayıcı:model]\n         cli.ts doctor <sağlayıcı:model>\n         cli.ts puanla [hakem-modeli] [--kuru] [--yeniden]\n         cli.ts siniflandir [hakem-modeli] [--kuru] [--yeniden]\n         cli.ts selftest [görev-id]\n         cli.ts turlar [hücre-parçası] [--diff]\n         cli.ts kalibre <görev-id> [--model sağ:model]   (ölçüm gücü ön kontrolü)\n         cli.ts planab <görev-id> [--k 3] [--model sağ:model] [--kol planli|plansiz]\n         cli.ts planrapor\n         cli.ts report [--gorev=<görev-id>]");
   process.exit(2);
 }
