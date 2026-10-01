@@ -36,6 +36,20 @@ export interface ArmOptions {
   arm: Arm;
   /** Kum havuzu dizini — her koşu kendi deposunda çalışır. */
   sandbox: string;
+  /**
+   * Var olan kum havuzunu KALDIĞI YERDEN sürdür.
+   *
+   * Koşum ortamının gereği: tek arka plan komutu 10 dakikada kesiliyor ve
+   * itiraz turu olan planlı kollar bunu aşıyor. Kolu yeniden başlatmak,
+   * biten aktivasyonların parasını ikinci kez ödemek olurdu.
+   *
+   * Yeni bir mekanizma DEĞİL: orkestratör zaten durumu diskte tutuyor ve
+   * `recover()` yarıda kalmış kartı kuyruğa geri koyuyor. Burada o
+   * mekanizma kullanılıyor — kum havuzu kurulmuyor, kart eklenmiyor,
+   * aynı `runId` ile devam ediliyor (aktivasyonlar ve maliyet aynı koşuya
+   * toplanıyor).
+   */
+  resume?: boolean;
   adapters: Map<string, Adapter>;
   logPath: string;
   /** Bu kolun koşu kimliği; bütün olaylar bununla yazılır. */
@@ -180,7 +194,7 @@ export function armAdapters(modelSpec: string, options: AdapterOptions = {}): Ma
 export async function runArm(options: ArmOptions): Promise<ArmResult> {
   const { repo, taskId, arm, sandbox, adapters, logPath, runId } = options;
   const task = await loadTask(options.taskDir ?? join(repo, "bench/tasks", taskId));
-  await prepareSandbox(repo, sandbox, task);
+  if (options.resume !== true) await prepareSandbox(repo, sandbox, task);
 
   const flowPath = join(sandbox, "hub", "flows", `${ARM_FLOW[arm]}.yaml`);
   const flow = await loadFlow(flowPath, { root: sandbox, providers: knownProviderSet() });
@@ -200,12 +214,43 @@ export async function runArm(options: ArmOptions): Promise<ArmResult> {
     .join("+");
   await log.append({ type: "ab.arm", taskId, arm, flow: flow.name, model });
 
+  // Sürdürmede kart diskte duruyor: `recover()` `active/` altında yarıda
+  // kalmışı kuyruğa geri koyuyor ve kaldığı rolden devam ediliyor.
+  if (options.resume === true) {
+    await queue.recover();
+    const bekleyen = (await queue.list()).find((c) => c.state !== "done") ?? (await queue.list())[0];
+    if (bekleyen === undefined) {
+      throw new ArmError(
+        `\`${sandbox}\` içinde sürdürülecek kart yok. Kol ya hiç başlamamış ya kum havuzu silinmiş.`,
+      );
+    }
+    return await finishArm(options, task, topology, queue, bekleyen, log);
+  }
+
   const card = await queue.add(newCard({
     title: `${taskId} (${arm})`,
     task: await armTaskText(task),
     topology,
   }));
 
+  return await finishArm(options, task, topology, queue, card, log);
+}
+
+/**
+ * Kolun ikinci yarısı: süpürmeyi bitir, artefaktı topla, gizli süiti koş.
+ *
+ * Ayrı fonksiyon olmasının sebebi sürdürme: yarıda kesilmiş bir kol, kum
+ * havuzu kurulmadan ve kart eklenmeden buradan devam ediyor.
+ */
+async function finishArm(
+  options: ArmOptions,
+  task: Task,
+  topology: ReturnType<typeof snapshot>,
+  queue: CardQueue,
+  card: { id: string },
+  log: EventLog,
+): Promise<ArmResult> {
+  const { repo, taskId, arm, sandbox, adapters, logPath, runId } = options;
   await runUntilIdle(topology, {
     root: sandbox,
     queue,

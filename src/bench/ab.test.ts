@@ -5,9 +5,14 @@ import { join, resolve } from "node:path";
 import type { Adapter, InvokeRequest, InvokeResult } from "../adapters/contract.js";
 import { readEvents } from "../events/log.js";
 import { VERDICT_FILE } from "../watch/verdict.js";
-import { ArmError, armAdapters, armMetrics, requireAdapters, runArm, type Arm } from "./ab.js";
+import {
+  ArmError, armAdapters, armMetrics, prepareSandbox, requireAdapters, runArm, type Arm,
+} from "./ab.js";
 
 const REPO = resolve(import.meta.dirname, "../..");
+
+/** Testin geçici kökü; `sandbox` beforeEach içinde atanıyor. */
+const sandbox2 = (): string => sandbox;
 
 /**
  * Rolüne göre davranan sahte ajan.
@@ -261,5 +266,52 @@ describe("armAdapters", () => {
 
   it("sağlayıcı yazılmazsa claude varsayılır", () => {
     expect([...armAdapters("claude-opus-5").keys()]).toEqual(["claude"]);
+  });
+});
+
+// Koşum ortamı tek komutu 10 dakikada kesiyor ve itiraz turu olan planlı
+// kollar bunu aşıyor. Kolu baştan koşmak, biten aktivasyonların parasını
+// ikinci kez ödemek olurdu; sürdürme orkestratörün kendi `recover()`
+// mekanizmasını kullanıyor.
+describe("kol sürdürme", () => {
+  it("yarıda kesilmiş kolu kaldığı yerden bitirir", async () => {
+    const dir = await fikstur();
+    const sandbox = join(sandbox2(), "surdur");
+    const adapter = new RoleAdapter();
+    // İlk geçiş: yalnızca bir süpürme — kart `coder`dan sonra yarıda kalır.
+    const yarim = await runArm({
+      repo: REPO, taskId: "toplam", taskDir: dir, arm: "plansiz",
+      sandbox, adapters: new Map([["claude", adapter]]),
+      logPath, runId: "t-surdur", timeoutMs: 20_000, maxSweeps: 1,
+    });
+    expect(yarim.cardState).not.toBe("done");
+    expect(adapter.gorulen).toEqual(["coder"]);
+
+    // İkinci geçiş: AYNI kum havuzu, aynı runId, kurulum yok.
+    const tam = await runArm({
+      repo: REPO, taskId: "toplam", taskDir: dir, arm: "plansiz",
+      sandbox, adapters: new Map([["claude", adapter]]),
+      logPath, runId: "t-surdur", timeoutMs: 20_000, resume: true,
+    });
+    expect(tam.cardState).toBe("done");
+    expect(adapter.gorulen).toEqual(["coder", "reviewer"]);
+    expect(tam.ran).toBe(true);
+    // Aktivasyonlar AYNI koşuya toplanıyor: iki geçiş tek kol.
+    expect(tam.activations).toBe(2);
+  });
+
+  // Kum havuzu KURULU ama kart hiç eklenmemiş: sürdürülecek bir şey yok.
+  // (Kum havuzu hiç yoksa hata daha önce, akış dosyasında geliyor.)
+  it("kart hiç eklenmemişse açıkça hata verir", async () => {
+    const dir = await fikstur();
+    const kum = join(sandbox2(), "kartsiz");
+    const { loadTask } = await import("./task.js");
+    await prepareSandbox(REPO, kum, await loadTask(dir));
+
+    await expect(runArm({
+      repo: REPO, taskId: "toplam", taskDir: dir, arm: "plansiz",
+      sandbox: kum, adapters: new Map([["claude", new RoleAdapter()]]),
+      logPath, runId: "t-kartsiz", timeoutMs: 5_000, resume: true,
+    })).rejects.toThrow(/sürdürülecek kart yok/);
   });
 });
