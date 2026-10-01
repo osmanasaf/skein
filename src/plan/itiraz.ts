@@ -139,6 +139,22 @@ export interface ParseOptions {
    * yazarsa itiraz başka bir role sayılırdı.
    */
   owner?: string;
+  /**
+   * İtirazın kanıt olarak GÖSTEREMEYECEĞİ yollar: kartın plan belgesi ve
+   * itiraz dosyaları.
+   *
+   * 1 Ekim kampanyasının hizalama analizinden geliyor ve ölçülmüş bir
+   * ayrışmayı kapatıyor. İyileşen planlı koşuların hepsinde itiraz
+   * `src/selector.ts`'e — planın dokunacağı modülün TÜKETİCİSİNE — işaret
+   * etti. İyileşmeyenlerin hepsinde itiraz `docs/plan/<kart>.md`'ye, yani
+   * PLANIN KENDİSİNE işaret etti: "plan şöyle diyor" demekten öteye
+   * gitmeyen, döngüsel bir kanıt.
+   *
+   * Eski kural bunu ayırt edemiyordu çünkü plan belgesi de depoda var ve
+   * `varMi()` geçiyordu. Oysa kuralın gerekçesi "model tüketici modülü
+   * okudu mu" idi; plan belgesini göstermek bunu hiç göstermiyor.
+   */
+  kendiBelgeleri?: string[];
 }
 
 /**
@@ -236,6 +252,14 @@ function kur(no: number, role: string, alan: Map<string, string>, options: Parse
     }
     if (!options.varMi(yol)) {
       return { ...taban, gecersiz: `\`Neyi yanlışlar\` depoda olmayan bir yola işaret ediyor: ${yol}` };
+    }
+    if (options.kendiBelgeleri?.includes(yol) === true) {
+      return {
+        ...taban,
+        gecersiz: `\`Neyi yanlışlar\` alışverişin kendi belgesine işaret ediyor: ${yol}. ` +
+          `Kanıt, planın DOKUNACAĞI koda işaret etmek zorunda — "plan şöyle diyor" ` +
+          `bir kanıt değil, planın tekrarı.`,
+      };
     }
   }
 

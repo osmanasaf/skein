@@ -73,6 +73,11 @@ Serbest yorum kabul edilmez. Her itiraz üç alan taşır:
 dosya, bir satır, bir test adı. Yolu var olmayan itiraz geçersiz sayılır
 ve açık itiraz listesine girmez.
 
+Yol **alışverişin kendi belgesi olamaz** — ne plan belgesi
+(`docs/plan/<kart>.md`) ne itiraz dosyaları. İkisi de depoda, yani varlık
+koşulunu geçiyorlar; ama planı göstererek planı yanlışlamak döngü.
+*(1 Ekim analizinden geliyor; aşağıda ölçümü var.)*
+
 > Bu kural bugünkü ölçümden geliyor. `snapshot-store`'da eşik "daha iyi kod
 > yazmak" değil, **değiştirdiği modülün tüketicisini okumak** çıktı: haiku
 > ve sonnet `selector.ts`'i hiç açmadan doğru görünen bir `undo` yazdı,
@@ -767,18 +772,79 @@ bağlı olmayan tek bulgusu bu.
 ayrıştırıcı düzeltmesi kabulleri saymaya başladı, `--devam` kesilen kolu
 kurtardı. `3 ÖLÇÜLEMEDİ` kaleminin hiçbiri mekanizma kusuru değil.
 
+### Analiz 1: kusur kayması GERÇEK — ve sayı onu gizliyordu
+
+Yeni koşu gerektirmeyen ilk analiz. `planeffect` artık kanca **sayısını**
+değil kanca **kimliğini** karşılaştırıyor (`HookSets`); rapor da onu
+basıyor:
+
+```
+=== snapshot-store × haiku · k=3 ===
+  kusur kimliği: 2 ortak · 0 yalnız kontrolde · 0 yalnız planlıda
+    kontrol kolu KARARLI: 2/2 kanca her koşuda
+=== async-pool × haiku · k=3 ===
+  kusur kimliği: 1 ortak · 1 yalnız kontrolde (planlama çözdü)
+                         · 2 yalnız planlıda (planlama GETİRDİ)
+    ⚠ planlamanın getirdiği: limit < 1 ise senkron fırlatmaz, reddeden
+      promise döndürür; senkron fırlatan bir görevi reddetme sayar
+    kontrol kolu değişken: 1/2 kanca her koşuda
+```
+
+İki görev iki ayrı şey söylüyor:
+
+- **`snapshot-store`'da kayma YOK.** Her iki kolun kusurları aynı iki
+  kancada. Yani %67 azalma, *aynı kusur sınıfının* gerçek azalmasıdır.
+- **`async-pool`'da kayma GERÇEK.** Kanca sayısı 5→4 düşerken kusur sınıfı
+  2→3 çıktı ve ikisi yeni. Planlama bir kusuru çözdü, iki kusur getirdi.
+  Bu görevin %20'si **iyileşme diye okunamaz.**
+
+Ölçünün kendisi için bulgu: *"daha az kırmızı kanca"* ile *"daha iyi
+ürün"* aynı şey değil, ve sayıya bakan rapor aradaki farkı göremiyordu.
+Kimlik satırı artık her grupta basılıyor.
+
+### Analiz 2: itiraz kusura DENK GELDİĞİNDE kusur eliniyor
+
+İkinci analiz bir ölçü değil, bir okuma: her geçerli itirazın
+`Neyi yanlışlar` kanıt yolu, kırmızı kancanın dokunduğu dosyayla
+karşılaştırıldı. Sonuç tam ayrışma:
+
+| görev | geçerli itiraz | **koda** işaret eden | **plan belgesine** işaret eden | sonuç |
+|---|---|---|---|---|
+| `snapshot-store` | 4 | **4** (`src/selector.ts`) | 0 | 16/16 (iki koşu) |
+| `async-pool` | 5 | 0 | **5** (`docs/plan/<kart>.md`) | kusur kaldı/kaydı |
+
+İyileşen koşuların hepsinde itiraz, planın dokunacağı modülün
+**tüketicisine** işaret ediyor — kırmızı kancaların sınadığı değişmezin
+durduğu yere. İyileşmeyenlerin hepsinde itiraz **planın kendi belgesine**
+işaret ediyor: "plan şöyle diyor" demekten öteye gitmeyen, döngüsel bir
+kanıt.
+
+k=3'te bu bir korelasyon, nedensellik değil. Ama bir **kural kusuruna**
+işaret ediyor ve o kısmı kanıt gerektirmiyor: kanıt kuralının gerekçesi
+"model tüketici modülü okudu mu" idi, plan belgesini göstermek bunu hiç
+göstermiyor. Eski kural ayrımı yapamıyordu çünkü plan belgesi de depoda
+ve `varMi()` geçiyordu.
+
+**Kapatıldı:** `parseItirazlar` artık `kendiBelgeleri` alıyor — kartın plan
+belgesi ve itiraz dosyaları — ve bu yolları gösteren itirazı geçersiz
+sayıyor. Kural dışındaki belgeler (bir tasarım notu vb.) kanıt olmayı
+sürdürüyor; kapatılan şey yalnızca **döngü**. İtirazcı istemine de
+gerekçesiyle yazıldı.
+
+Doğrulama: ayrıştırıcıda 3, `tick`'te 2 sınama; `kendiBelgeleri`
+koşulunu ayrıştırıcıdan düşürmek 2, `tick`'ten düşürmek 1 sınamayı
+kırıyor. Bağlantının ayrı sınanması bilinçli — adaptör haritası kusuru,
+seçenekleri elle kuran sınamaların gerçek bağlantıyı hiç sınamamasından
+doğmuştu.
+
 ### Sıradaki adım, ve bedeli
 
 Kural k artırılmasını söylüyor. Aynı düzende k=6 kabaca **$14** daha
-ister. Ama ondan önce iki soru daha değerli:
-
-1. **Kusur kayması gerçek mi?** Kanca sayısı yerine kanca KİMLİĞİ
-   karşılaştırılmalı. Mevcut günlük bunu zaten taşıyor; yeni koşu
-   gerektirmeyen bir analiz.
-2. **İtirazın kusura denk gelmesi ölçülebilir mi?** `snapshot-store`'da
-   itiraz tam kusurun üstüne geldi, `async-pool`'da gelmedi. İtirazın
-   kanıt yolu (`Neyi yanlışlar`) ile kırmızı kancanın dokunduğu dosya
-   karşılaştırılabilir.
+ister. İki analiz bundan önce koşulması gerekeni değiştirdi: kanıt kuralı
+yeni, yani k=6 artık **yeni kuralın altında** koşulmalı — yoksa iki ayrı
+mekanizmanın karışımı ölçülür. Kuralın canlı sınavı da bu olacak:
+`async-pool`'un plan-belgesi gösteren itirazları yeni kuralda elenir,
+elendiğinde itirazcı koda bakmaya zorlanır mı?
 
 ---
 

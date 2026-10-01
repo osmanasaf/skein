@@ -85,6 +85,42 @@ describe("parseItirazlar", () => {
     expect(d.itirazlar[0]?.gecersiz).toMatch(/dosya yolu içermiyor/);
   });
 
+  // 1 Ekim kampanyasının hizalama analizi: iyileşen planlı koşuların
+  // hepsinde itiraz `src/selector.ts`'e, iyileşmeyenlerin hepsinde PLANIN
+  // KENDİ BELGESİNE işaret etti. Plan belgesi de depoda olduğu için
+  // `varMi()` geçiyordu; kuralı asıl taşıyan koşul buydu.
+  it("kanıt olarak plan belgesini gösteren itirazı geçersiz sayar", () => {
+    const text = ITIRAZ.replace("`src/selector.ts:12`", "`docs/plan/c-1.md:42`");
+    const d = parseItirazlar(text, {
+      varMi: (yol) => yol === "docs/plan/c-1.md" || varMi(yol),
+      kendiBelgeleri: ["docs/plan/c-1.md"],
+    });
+    expect(d.gecerli).toHaveLength(0);
+    expect(d.acik).toHaveLength(0);
+    expect(d.itirazlar[0]?.gecersiz).toMatch(/kendi belgesine/);
+  });
+
+  it("kanıt olarak bir itiraz dosyasını gösteren itirazı geçersiz sayar", () => {
+    const text = ITIRAZ.replace("`src/selector.ts:12`", "`docs/plan/c-1.itiraz.reviewer.md`");
+    const d = parseItirazlar(text, {
+      varMi: () => true,
+      kendiBelgeleri: ["docs/plan/c-1.md", "docs/plan/c-1.itiraz.reviewer.md"],
+    });
+    expect(d.gecerli).toHaveLength(0);
+    expect(d.itirazlar[0]?.gecersiz).toMatch(/kendi belgesine/);
+  });
+
+  // Kural yalnızca KENDİ belgelerini kapatıyor; depodaki başka bir belge
+  // (ör. bir tasarım notu) hâlâ kanıt olabilir.
+  it("alışverişin dışındaki bir belgeyi kanıt saymayı sürdürür", () => {
+    const text = ITIRAZ.replace("`src/selector.ts:12`", "`docs/ARCHITECTURE.md:7`");
+    const d = parseItirazlar(text, {
+      varMi: () => true,
+      kendiBelgeleri: ["docs/plan/c-1.md"],
+    });
+    expect(d.gecerli).toHaveLength(1);
+  });
+
   it("boş dosyada itiraz yok", () => {
     const d = parseItirazlar("# İtirazlar\n\nBu turda itirazım yok.\n", { varMi });
     expect(d.itirazlar).toHaveLength(0);

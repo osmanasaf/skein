@@ -470,9 +470,13 @@ async function planStep(
     }
   }
   // `owner`: rolün yer gerçeği DOSYA, başlıkta yazan ad değil.
+  // Alışverişin kendi belgeleri kanıt olamaz: plan belgesini göstermek
+  // "plan şöyle diyor" demektir, planın dokunacağı kodu göstermek değil.
+  const kendiBelgeleri = [planPath, ...itirazYollari.map((y) => y.path)];
   const dosya = birlestirItirazlar(okunan.map((o) => parseItirazlar(o.text, {
     varMi: (yol) => yollar.get(yol) === true,
     owner: o.role,
+    kendiBelgeleri,
   })));
   // "İtiraz yok" ile "itiraz var ama hiçbiri sayılmadı" aynı şey değil.
   const gecersiz = dosya.itirazlar.length - dosya.gecerli.length;

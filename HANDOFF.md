@@ -7,7 +7,12 @@ yapıştırılabilsin diye yazıldı: aşağısı Skein'i tanımayan birine de y
 **Dal:** `claude/project-plan-brainstorm-pthvoc` — `claude/project-thread-sc56cs`
 ileri sarılıp üstüne devam edildi, yani iki dalın işi bu dalda birleşti.
 `sc56cs` olduğu yerde duruyor; yeni iş burada.
-**Durum:** 610 test yeşil, typecheck temiz, `selftest` 5/5, ağaç temiz.
+**Durum:** 704 test yeşil, typecheck temiz, ağaç temiz.
+`watch selftest` bu konteynerde **koşmuyor**: `hub/flows/selftest.yaml`
+depoda izlenmiyor (yalnızca yazarın makinesinde duruyordu, konteyner
+yenilenince gitti). Belgelenmiş bir komutun depoda olmayan bir dosyaya
+dayanması açık bir eksik; akış dosyasını depoya almak bir tasarım kararı
+olduğu için kendiliğinden eklenmedi.
 **Kod:** ~9.3k satır ürün + ~6.1k satır test.
 
 ---
@@ -265,9 +270,12 @@ itiraz açılıp kabul edildiğinde 16/16 (iki kez), alışveriş boş geçtiği
 **4 itirazla 10/12**. Mekanizmanın çalışması ile ürünün düzelmesi arasında
 bu veriyle kurulabilen bir bağ yok.
 
-**Ayrı bir gözlem: kusur azalmıyor, kayıyor.** `async-pool` kontrol kolu
-iki koşuda aynı iki kancayı düşürdü; planlı kolun kusurları **başka**
-kancalardaydı. Kanca SAYISI bunu göremiyor. Bu ölçüm düzeninin kör noktası.
+**Kusur azalmıyor, kayıyor — ve bu artık doğrulandı.** Kanca KİMLİĞİ
+karşılaştırıldı (`planeffect` artık `HookSets` basıyor): `snapshot-store`'da
+kayma **yok** (iki kolun kusurları aynı iki kancada, yani %67 gerçek bir
+azalma), `async-pool`'da kayma **gerçek** (sayı 5→4 düşerken kusur sınıfı
+2→3 çıktı, ikisi yeni). O görevin %20'si iyileşme diye okunamaz. Sayıya
+bakan rapor bu farkı göremiyordu; artık her grupta kimlik satırı var.
 
 **Tartışmasız tek sonuç bedel:** planlı kol iki görevde de 3-4 kat pahalı
 (24/6 ve 20/8 aktivasyon).
@@ -297,15 +305,37 @@ Bunlar bu konteynerin gerçekleri, kodun değil:
 
 Senin makinende bu üçü de yok: `planab <görev> --k=3` tek komutta biter.
 
+### İtiraz kusura denk geldiğinde kusur eleniyor — ve bir kural kusuru
+
+İkinci analiz (geçerli itirazın kanıt yolu ile kırmızı kancanın dosyası)
+tam ayrışma verdi:
+
+| görev | geçerli itiraz | **koda** işaret eden | **plan belgesine** işaret eden | sonuç |
+|---|---|---|---|---|
+| `snapshot-store` | 4 | **4** (`src/selector.ts`) | 0 | 16/16 (iki koşu) |
+| `async-pool` | 5 | 0 | **5** (`docs/plan/<kart>.md`) | kusur kaldı/kaydı |
+
+İyileşen koşuların hepsinde itiraz planın dokunacağı modülün
+**tüketicisine** işaret ediyor; iyileşmeyenlerin hepsinde **planın kendi
+belgesine** — yani "plan şöyle diyor", döngüsel bir kanıt. k=3'te bu bir
+korelasyon. Ama **kural kusuru** kısmı kanıt gerektirmiyor: kanıt
+kuralının gerekçesi "model tüketici modülü okudu mu" idi, plan belgesini
+göstermek bunu hiç göstermiyor; eski kural ayrımı yapamıyordu çünkü plan
+belgesi de depoda ve `varMi()` geçiyordu.
+
+**Kapatıldı:** `parseItirazlar` artık `kendiBelgeleri` alıyor (kartın plan
+belgesi + itiraz dosyaları) ve o yolları gösteren itirazı geçersiz sayıyor.
+Depodaki başka belgeler kanıt olmayı sürdürüyor; kapatılan şey döngü.
+İtirazcı istemine gerekçesiyle yazıldı. 5 yeni sınama (3 ayrıştırıcı,
+2 `tick` bağlantısı), üçü mutasyonla doğrulandı.
+
 ### Sıradaki adım
 
-Kural k artırılmasını söylüyor; aynı düzende k=6 kabaca **$14** daha
-ister. Ama ondan önce **yeni koşu gerektirmeyen** iki analiz daha değerli:
-
-1. **Kusur kayması gerçek mi?** Kanca sayısı yerine kanca KİMLİĞİ
-   karşılaştırılmalı. Mevcut günlük (`.skein/arsiv/`) bunu zaten taşıyor.
-2. **İtiraz kusura denk geliyor mu?** İtirazın kanıt yolu
-   (`Neyi yanlışlar`) ile kırmızı kancanın dokunduğu dosya karşılaştırılabilir.
+Kural k artırılmasını söylüyor; aynı düzende k=6 kabaca **$14** daha ister.
+İki analiz bunun **sırasını** değiştirdi: kanıt kuralı yeni olduğu için
+k=6 yeni kuralın altında koşulmalı, yoksa iki mekanizmanın karışımı
+ölçülür. Kuralın canlı sınavı da bu: `async-pool`'un plan-belgesi gösteren
+itirazları artık elenir — elendiğinde itirazcı koda bakmaya zorlanır mı?
 
 ---
 

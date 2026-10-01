@@ -298,6 +298,44 @@ describe("6e — körlü tur: taşıma dallanıyor ve toplanıyor", () => {
     });
   });
 
+  // Kural parser'da duruyor diye tick'te duruyor sayılmaz: adaptör
+  // haritasını elle kuran sınamalar gerçek bağlantıyı hiç sınamamıştı.
+  // Burada kanıt yolu GERÇEKTEN depoda (plan belgesi fan-out ile
+  // itirazcının ağacına kopyalanıyor), yani itirazı eleyen tek şey
+  // "kendi belgesi" koşulu.
+  it("plan belgesini kanıt gösteren itirazı tick de geçersiz sayar", async () => {
+    const card = await put();
+    await planYaz(card);
+    yaz("architect", ITIRAZ(card.id, "architect"),
+      itirazDosyasi("architect", { no: 1, durum: "açık", kanit: PLAN(card.id) }));
+    await tick("architect", options);
+    yaz("analyst", ITIRAZ(card.id, "analyst"), YOK);
+    await tick("analyst", options);
+    expect(await rol(card.id)).toBe("planner");
+
+    await tick("planner", options);
+    const { events } = await readEvents(logPath);
+    expect(events.filter((e) => e.type === "plan.settled")[0]).toMatchObject({
+      outcome: "anlasma", rounds: 1, objections: 0, invalid: 1,
+    });
+  });
+
+  // Karşı uç: aynı kurgu, kanıt plan yerine KODA işaret ediyor. Ayrımı
+  // yapan şeyin yol olduğunu bu çift gösteriyor.
+  it("koda işaret eden itiraz geçerli sayılmayı sürdürür", async () => {
+    const card = await put();
+    await planYaz(card);
+    yaz("architect", ITIRAZ(card.id, "architect"),
+      itirazDosyasi("architect", { no: 1, durum: "açık", kanit: "src/var.ts" }));
+    await tick("architect", options);
+    yaz("analyst", ITIRAZ(card.id, "analyst"), YOK);
+    await tick("analyst", options);
+    const { events } = await readEvents(logPath);
+    expect(events.filter((e) => e.type === "plan.round")[0]).toMatchObject({
+      role: "architect", newObjections: 1, openObjections: 1, invalid: 0,
+    });
+  });
+
   // Taşıma bozulursa itiraz KAYBOLUR. Sessizce "itiraz yok" saymak,
   // körlemenin en pahalı kusuru olurdu; o yüzden eksik dosya hata.
   it("bir itirazcının dosyası yazara ulaşmazsa tur kabul edilmez", async () => {

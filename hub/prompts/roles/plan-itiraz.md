@@ -24,6 +24,17 @@ itiraz dört alan taşır ve mekanizma bunları **makineyle** okur:
 olmayan itiraz sayılmaz — ne senin lehine (planı durdurmaz) ne aleyhine
 (reddedilmiş sayılmaz). Sayılmaz.
 
+**Plan belgesinin kendisini kanıt gösterme.** `docs/plan/<kart>.md` depoda
+var, ama onu göstermek "plan şöyle diyor" demektir; planın *dokunacağı*
+kodu göstermek değil. Aynısı itiraz dosyaları için de geçerli. Bu yolları
+gösteren itiraz sayılmaz.
+
+Kanıt, planın değiştireceği ya da kıracağı **koda** işaret etmeli:
+çağıran modül, aynı değişmezi tutan başka bir yer, planın varsaydığı
+imzanın gerçek hâli. Ölçtüğümüz şey tam olarak bu: 1 Ekim kampanyasında
+kusuru gerçekten eleyen itirazların hepsi tüketici modülü gösteriyordu,
+eleyemeyenlerin hepsi plan belgesini.
+
 ## Commit'lerken: yalnızca kendi dosyan
 
 `git add -A` **kullanma.** Çalışma ağacının kökünde orkestratörün kontrol
