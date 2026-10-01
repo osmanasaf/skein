@@ -59,16 +59,44 @@ function alanlar(govde: string[]): Map<string, string> {
   return out;
 }
 
+/** Anahtar kelime → durum. Sıra anlamlı değil; eşleşme tam kelime üzerinden. */
+const DURUMLAR: readonly (readonly [string, Durum])[] = [
+  ["açık", "acik"],
+  ["acik", "acik"],
+  ["kabul", "kabul"],
+  ["ret", "ret"],
+  ["insana", "insana"],
+];
+
+/**
+ * `Durum` satırını okur.
+ *
+ * Dört durumun HEPSİ sondaki gerekçeyi kabul ediyor. İlk hâlinde yalnızca
+ * `ret` ve `insana` kabul ediyordu, `kabul` tam eşleşme istiyordu — ve
+ * bu, 6d kampanyasının ÜÇÜNCÜ koşusunda projenin ilk gerçek "itiraz
+ * açıldı ve kabul edildi" alışverişini çöpe attı: plan yazarı iki itirazı
+ * da `kabul — Haklı. Plan güncellenmiştir: …` diye yanıtladı, ikisi de
+ * okunamaz sayıldı, alışveriş "0 itiraz, 0 kabul, 2 sayılmadı" diye kayda
+ * geçti. Üstelik `kabul` sayısı sıfır kaldığı için "kabul ettin ama planı
+ * değiştirmedin" kapısı da hiç çalışmadı.
+ *
+ * Gerekçe kabul etmesi en gereken durum, en katı olanıydı: "haklısın"
+ * demek doğal olarak bir açıklama davet ediyor.
+ *
+ * Ayraç ZORUNLU (`:` ya da tire). Yalnızca boşluk kabul edilseydi
+ * "kabul edilemez" → `kabul` diye okunur ve itirazın anlamı tersine
+ * dönerdi; ayraçsız hâl geçersiz sayılıp görünür oluyor.
+ */
 function durumOf(raw: string): { durum: Durum; gerekce?: string } | null {
   const text = raw.trim();
   const dusuk = text.toLocaleLowerCase("tr");
-  if (dusuk === "açık" || dusuk === "acik") return { durum: "acik" };
-  if (dusuk === "kabul") return { durum: "kabul" };
-  for (const [anahtar, durum] of [["ret", "ret"], ["insana", "insana"]] as const) {
-    if (dusuk === anahtar || dusuk.startsWith(`${anahtar}:`) || dusuk.startsWith(`${anahtar} —`)) {
-      const gerekce = text.slice(anahtar.length).replace(/^[\s:—–-]+/u, "").trim();
-      return gerekce === "" ? { durum } : { durum, gerekce };
-    }
+  for (const [anahtar, durum] of DURUMLAR) {
+    if (dusuk === anahtar) return { durum };
+    if (!dusuk.startsWith(anahtar)) continue;
+    const kalan = text.slice(anahtar.length);
+    if (!/^[\s]*[:—–-]/u.test(kalan)) continue;
+    const gerekce = kalan.replace(/^[\s:—–-]+/u, "").trim();
+    return gerekce === "" ? { durum } : { durum, gerekce };
   }
   return null;
 }

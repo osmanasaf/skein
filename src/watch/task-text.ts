@@ -135,7 +135,10 @@ const cevapBolumu = (
   "**commit'le**. Dosyaların HEPSİNİ yanıtla — atladığın itiraz açık",
   "sayılır:",
   "",
-  "- `**Durum:** kabul` — haklı. **Bu durumda planı da düzenle**;",
+  // Dördünde de sondaki gerekçe serbest; biçim örnekle veriliyor çünkü
+  // kampanyada yazar `kabul — Haklı. Plan güncellenmiştir: …` yazdı ve
+  // o gün ayrıştırıcı yalnızca tam `kabul` kabul ediyordu.
+  "- `**Durum:** kabul: <ne değiştirdin>` — haklı. **Bu durumda planı da düzenle**;",
   `  \`${planPath}\` değişmemişse kabul sayılmaz ve tur kabul edilmez.`,
   "- `**Durum:** ret: <gerekçe>` — katılmıyorsun. Gerekçe zorunlu.",
   "- `**Durum:** insana: <gerekçe>` — bu bir değer kararı; iş insana çıkar.",

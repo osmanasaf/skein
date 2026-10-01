@@ -121,3 +121,48 @@ describe("kanitYolu", () => {
     expect(kanitYolu("`hub/flows` altındaki örnekler")).toBe("hub/flows");
   });
 });
+
+// 6d kampanyasının üçüncü koşusundan: plan yazarı iki itirazı da
+// `kabul — Haklı. Plan güncellenmiştir: …` diye yanıtladı ve ayrıştırıcı
+// İKİSİNİ DE okunamaz saydı. `kabul` tam eşleşme istiyordu, `ret` ve
+// `insana` ise sondaki gerekçeyi kabul ediyordu. Projenin ilk gerçek
+// "itiraz açıldı ve kabul edildi" alışverişi böyle kayboldu.
+describe("Durum satırı — dört durum da gerekçe alır", () => {
+  const ile = (durum: string) => `# İtirazlar
+
+## İtiraz 1 — architect
+**Ne:** Replay stratejisi kontratı kırıyor.
+**Neden:** Aynı version için farklı nesne döner.
+**Neyi yanlışlar:** \`src/store.ts:9\` — değişmez orada yazılı.
+**Durum:** ${durum}
+`;
+
+  it("`kabul — gerekçe` okunur ve kabul sayılır", () => {
+    const d = parseItirazlar(ile("kabul — Haklı. Plan güncellenmiştir: state caching."));
+    expect(d.gecerli).toHaveLength(1);
+    expect(d.kabul).toHaveLength(1);
+    expect(d.itirazlar[0]?.gerekce).toMatch(/^Haklı/);
+  });
+
+  it("`kabul: gerekçe` de okunur", () => {
+    expect(parseItirazlar(ile("kabul: planı düzelttim")).kabul).toHaveLength(1);
+  });
+
+  it("`açık — not` okunur ve açık sayılır", () => {
+    const d = parseItirazlar(ile("açık — henüz yanıtlamadım"));
+    expect(d.acik).toHaveLength(1);
+    expect(d.itirazlar[0]?.gerekce).toBe("henüz yanıtlamadım");
+  });
+
+  // Ayraç zorunlu: yalnızca boşluk kabul edilseydi "kabul edilemez"
+  // `kabul` diye okunur ve itirazın anlamı TERSİNE dönerdi.
+  it("ayraçsız devam eden metin okunamaz sayılır — anlam tersine dönmez", () => {
+    const d = parseItirazlar(ile("kabul edilemez"));
+    expect(d.gecerli).toHaveLength(0);
+    expect(d.itirazlar[0]?.gecersiz).toMatch(/Durum. okunamadı/);
+  });
+
+  it("gerekçesiz `ret` hâlâ geçersiz", () => {
+    expect(parseItirazlar(ile("ret")).itirazlar[0]?.gecersiz).toMatch(/gerekçesiz olamaz/);
+  });
+});
