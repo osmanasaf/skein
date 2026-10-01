@@ -39,6 +39,15 @@ function printFlow(flow: Flow, root: string): void {
     if (role.reject !== null) {
       const source = role.rejectExplicit ? "" : "  ← varsayılan (gönderen)";
       console.log(`     ${" ".repeat(idW)}  reject   → ${role.reject}${source}  (KART döner)`);
+    } else if (i > 0 && flow.plan?.katilimcilar.includes(role.id)) {
+      // Kenarın YOKLUĞU da gösteriliyor: operatör "ret kenarı neden yok"
+      // sorusunu akış dosyasına bakarak cevaplayamaz, çünkü varsayılan
+      // kenar da kural 22 ile kaldırılıyor. Görünmeyen bir kural,
+      // hatırlanmayan bir kuraldır.
+      console.log(
+        `     ${" ".repeat(idW)}  reject   → YOK  (planlama katılımcısı, kural 22 — ` +
+          `itirazın yolu itiraz dosyası)`,
+      );
     }
   }
   console.log("");

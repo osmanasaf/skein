@@ -460,8 +460,12 @@ gates: []
 `;
 
 // PLANLAMA.md 6a: tek rol planı yazar, alışveriş yok. Kurallar 17-20.
-describe("loadFlow — planlama (kural 17-20)", () => {
+describe("loadFlow — planlama (kural 17-22)", () => {
   const withPlan = (blok: string) => `${VALID}\n${blok}\n`;
+  // Çok katılımcılı testler ÜÇ rollü fikstürü kullanıyor: `VALID`'de
+  // `reviewer` açık bir `reject: coder` taşıyor ve katılımcı olunca
+  // kural 22'ye çarpıyor — bu doğru davranış, fikstürün sorunu.
+  const withPlanUc = (blok: string) => `${UC_ROL}\n${blok}\n`;
 
   it("geçerli planlama bloğunu çözer ve hash'e katar", async () => {
     const yaml = withPlan("planlama:\n  katilimcilar: [coder]\n  plan: docs/plan/{kart}.md");
@@ -490,21 +494,21 @@ describe("loadFlow — planlama (kural 17-20)", () => {
   // Yazılmamış bir alanı sessizce yok saymak, çalıştığı sanılan bir alan
   // bırakır. `audit.enabled` bir dönem tam bunu yaptı.
   it("iki katılımcıyı ve tek turu kabul eder — 6b", async () => {
-    const yaml = withPlan("planlama:\n  katilimcilar: [coder, reviewer]\n  tur: 1\n  plan: docs/plan/{kart}.md");
+    const yaml = withPlanUc("planlama:\n  katilimcilar: [analyst, architect]\n  tur: 1\n  plan: docs/plan/{kart}.md");
     const flow = await load(await write(yaml));
-    expect(flow.plan?.katilimcilar).toEqual(["coder", "reviewer"]);
+    expect(flow.plan?.katilimcilar).toEqual(["analyst", "architect"]);
     expect(flow.plan?.tur).toBe(1);
   });
 
   // 6c: çok turlu alışveriş açıldı. Tavan dilin içinde, promptun değil.
   it("birden çok turu kabul eder — 6c", async () => {
-    const yaml = withPlan("planlama:\n  katilimcilar: [coder, reviewer]\n  tur: 3\n  plan: docs/plan/{kart}.md");
+    const yaml = withPlanUc("planlama:\n  katilimcilar: [analyst, architect]\n  tur: 3\n  plan: docs/plan/{kart}.md");
     const flow = await load(await write(yaml));
     expect(flow.plan?.tur).toBe(3);
   });
 
   it("tavanın üstündeki turu reddeder", async () => {
-    const yaml = withPlan("planlama:\n  katilimcilar: [coder, reviewer]\n  tur: 6\n  plan: docs/plan/{kart}.md");
+    const yaml = withPlanUc("planlama:\n  katilimcilar: [analyst, architect]\n  tur: 6\n  plan: docs/plan/{kart}.md");
     await expect(load(await write(yaml))).rejects.toThrow(/kural 18.*1 ile 5/s);
   });
 
@@ -519,12 +523,12 @@ describe("loadFlow — planlama (kural 17-20)", () => {
   // 6e: körleme uygulandı (fan-out/fan-in taşıma), alan artık kabul
   // ediliyor ve varsayılanı açık.
   it("körleme alanını okur; varsayılanı açık", async () => {
-    const acik = await load(await write(withPlan(
-      "planlama:\n  katilimcilar: [coder, reviewer]\n  plan: docs/plan/{kart}.md"), "kor-yok.yaml"));
+    const acik = await load(await write(withPlanUc(
+      "planlama:\n  katilimcilar: [analyst, architect]\n  plan: docs/plan/{kart}.md"), "kor-yok.yaml"));
     expect(acik.plan?.ilkTurKor).toBe(true);
 
-    const kapali = await load(await write(withPlan(
-      "planlama:\n  katilimcilar: [coder, reviewer]\n  ilk-tur-kor: false\n  plan: docs/plan/{kart}.md"),
+    const kapali = await load(await write(withPlanUc(
+      "planlama:\n  katilimcilar: [analyst, architect]\n  ilk-tur-kor: false\n  plan: docs/plan/{kart}.md"),
       "kor-false.yaml"));
     expect(kapali.plan?.ilkTurKor).toBe(false);
   });
@@ -539,19 +543,19 @@ describe("loadFlow — planlama (kural 17-20)", () => {
   // eklenmemişti: yalnızca `tur`da ayrışan iki akış aynı damgayı
   // üretiyordu, yani damga davranışı belirleyen bir kararı gizliyordu.
   it("tur tavanı hash'i değiştirir", async () => {
-    const bir = await load(await write(withPlan(
-      "planlama:\n  katilimcilar: [coder, reviewer]\n  tur: 1\n  plan: docs/plan/{kart}.md"), "t1.yaml"));
-    const uc = await load(await write(withPlan(
-      "planlama:\n  katilimcilar: [coder, reviewer]\n  tur: 3\n  plan: docs/plan/{kart}.md"), "t3.yaml"));
+    const bir = await load(await write(withPlanUc(
+      "planlama:\n  katilimcilar: [analyst, architect]\n  tur: 1\n  plan: docs/plan/{kart}.md"), "t1.yaml"));
+    const uc = await load(await write(withPlanUc(
+      "planlama:\n  katilimcilar: [analyst, architect]\n  tur: 3\n  plan: docs/plan/{kart}.md"), "t3.yaml"));
     expect(bir.hash).not.toBe(uc.hash);
   });
 
   // Körleme topolojinin parçası: değişirse yoldaki kart eskisiyle yaşar.
   it("körleme ayarı hash'i değiştirir", async () => {
-    const a = await load(await write(withPlan(
-      "planlama:\n  katilimcilar: [coder, reviewer]\n  plan: docs/plan/{kart}.md"), "h1.yaml"));
-    const b = await load(await write(withPlan(
-      "planlama:\n  katilimcilar: [coder, reviewer]\n  ilk-tur-kor: false\n  plan: docs/plan/{kart}.md"),
+    const a = await load(await write(withPlanUc(
+      "planlama:\n  katilimcilar: [analyst, architect]\n  plan: docs/plan/{kart}.md"), "h1.yaml"));
+    const b = await load(await write(withPlanUc(
+      "planlama:\n  katilimcilar: [analyst, architect]\n  ilk-tur-kor: false\n  plan: docs/plan/{kart}.md"),
       "h2.yaml"));
     expect(a.hash).not.toBe(b.hash);
   });
@@ -559,6 +563,55 @@ describe("loadFlow — planlama (kural 17-20)", () => {
   it("var olmayan role işaret eden katılımcıyı reddeder", async () => {
     const yaml = withPlan("planlama:\n  katilimcilar: [yok]\n  plan: docs/plan/{kart}.md");
     await expect(load(await write(yaml))).rejects.toThrow(/kural 17/);
+  });
+
+  // --- kural 22 ---
+  //
+  // 6d kampanyasından geliyor: itirazcı rolün hem `reject` kenarı hem
+  // itiraz dosyası vardı ve model tanıdık olanı seçti (7 ret, 0 itiraz).
+  it("katılımcıya yazılmış `reject`'i reddeder", async () => {
+    const yaml = `${UC_ROL.replace(
+      "    prompt: ../../roles/architect.prompt\n",
+      "    prompt: ../../roles/architect.prompt\n    reject: analyst\n",
+    )}\nplanlama:\n  katilimcilar: [analyst, architect]\n  plan: docs/plan/{kart}.md\n`;
+    await expect(load(await write(yaml, "k22.yaml"))).rejects.toThrow(/kural 22.*reject.*taşıyamaz/s);
+  });
+
+  // Varsayılan (gönderen) kenar da kaldırılıyor: akış dosyasında yazmayan
+  // bir kenarın mekanizmayı baypas etmesi, sessiz arızanın tanımı.
+  it("katılımcının VARSAYILAN ret kenarını da kaldırır", async () => {
+    const flow = await load(await write(
+      `${UC_ROL}\nplanlama:\n  katilimcilar: [analyst, architect]\n  plan: docs/plan/{kart}.md\n`,
+      "k22-vars.yaml",
+    ));
+    const architect = flow.roles.find((r) => r.id === "architect");
+    expect(architect?.reject).toBeNull();
+    // Katılımcı OLMAYAN rolün varsayılanı yerinde duruyor.
+    expect(flow.roles.find((r) => r.id === "coder")?.reject).toBe("architect");
+  });
+
+  it("katılımcı olmayan rol katılımcıya ret edebilir — plan çürümesi yolu", async () => {
+    const flow = await load(await write(
+      `${UC_ROL}\nplanlama:\n  katilimcilar: [analyst]\n  plan: docs/plan/{kart}.md\n`,
+      "k22-hedef.yaml",
+    ));
+    // `architect` katılımcı değil; varsayılan reti `analyst`e (katılımcı)
+    // işaret ediyor ve bu YASAK DEĞİL: kural 22 kenarın KAYNAĞINI
+    // sınırlıyor, hedefini değil.
+    expect(flow.roles.find((r) => r.id === "architect")?.reject).toBe("analyst");
+  });
+
+  // Ret kenarları en kötü hâl maliyetine giriyor; kural 22 onu düşürüyor.
+  it("katılımcının ret kenarı kalkınca en kötü maliyet düşer", async () => {
+    const plansiz = await load(await write(UC_ROL, "k22-m1.yaml"));
+    const planli = await load(await write(
+      `${UC_ROL}\nplanlama:\n  katilimcilar: [analyst, architect]\n  plan: docs/plan/{kart}.md\n`,
+      "k22-m2.yaml",
+    ));
+    const { estimateCost } = await import("./cost.js");
+    expect(estimateCost(planli).rejectEdges.length).toBeLessThan(
+      estimateCost(plansiz).rejectEdges.length,
+    );
   });
 
   // Kural 19: plan, iş yapıldıktan sonra tartışılmaz.

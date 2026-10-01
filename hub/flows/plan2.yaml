@@ -28,7 +28,6 @@ roles:
     workspace: architect
     prompt: ../prompts/roles/plan-itiraz.md
     receive: task
-    reject: planner
     next: coder
 
   - id: coder

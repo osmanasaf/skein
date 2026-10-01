@@ -153,8 +153,8 @@ planlama:
   plan: docs/plan/{kart}.md            # yol; `src/` altı yasak
 ```
 
-Yükleyiciye dört kural eklenir (o gün 16 vardı, bunlar 17-20; 6b bir de
-21'i ekledi):
+Yükleyiciye dört kural eklenir (o gün 16 vardı, bunlar 17-20; 6b 21'i,
+6d kampanyası 22'yi ekledi):
 
 | # | Kural | Neden |
 |---|---|---|
@@ -163,6 +163,7 @@ Yükleyiciye dört kural eklenir (o gün 16 vardı, bunlar 17-20; 6b bir de
 | 19 | Katılımcılar, kod yazan her rolden **önce** gelmeli | Plan, iş yapıldıktan sonra tartışılmaz |
 | 20 | `plan` yolu `src/` altında olamaz | Plan belge; kod taşıma yolu git, dosya değil |
 | 21 | `gates[].after` katılımcıya işaret edemez | Alışveriş kapı kontrolünden geçmiyor; o kapı hiç ateşlenmez |
+| 22 | Katılımcı `reject` kenarı taşıyamaz | İki kanal verilince model tanıdık olanı seçiyor — 7 ret, 0 itiraz (ölçüldü) |
 
 Kural numaraları kullanıcıya aynen gösterilir; bugünkü davranış böyle.
 
@@ -724,10 +725,8 @@ model tanıdık olanı seçiyor. Ve ret burada her açıdan daha kötü:
 | kayıt | `kabul`/`ret`/`insana` ayrımı, sayılabilir | tek gerekçe metni |
 | sonlanma | tur sayacı, doğal son | `reject.limit` dolunca kart kapıda |
 
-**Öneri (kural 22):** planlama katılımcısı `reject` kenarı taşıyamasın.
-Planlama aşamasında itirazın yolu itiraz dosyası; ret, kod aşamasının
-mekanizması. Kural 21 katılımcıya *kapı* koymayı zaten yasaklıyor, aynı
-gerekçenin kardeşi. Yazılmadı — akış dilini değiştiriyor, ayrı bir karar.
+**Kural 22 — YAZILDI (1 Ekim).** Planlama katılımcısı `reject` kenarı
+taşıyamaz. Ayrıntısı aşağıda, ayrı bölümde.
 
 ### Bulgu 2: kol kaybı ASİMETRİK ve deney kolunda
 
@@ -774,6 +773,82 @@ YETERSİZ okundu, düşen kollar `ÖLÇÜLEMEDİ` diye ayrı sayıldı ve "0 kı
 sayılmadı. Kampanyanın ürettiği tek "sonuç" cümlesi şu: **planlamanın
 ürünü daha doğru yapıp yapmadığı hâlâ bilinmiyor**, ve bugünkü haliyle
 mekanizma ölçülmeden önce bir tasarım düzeltmesi bekliyor (Bulgu 1).
+
+---
+
+## Kural 22 — planlama katılımcısı ret kenarı taşıyamaz (YAZILDI)
+
+6d kampanyasının en önemli bulgusunun kapatılması. Ölçülmüş kusur: itirazcı
+rolün hem `reject` kenarı hem itiraz dosyası vardı ve model **tanıdık**
+olanı seçti — 7 ret, 0 itiraz. Retlerin gerekçeleri tam da itiraz
+dosyasının istediği cinstendi, yani söyleyecek şey vardı, yanlış kanaldan
+söylendi.
+
+### Neden ret planlama aşamasında yanlış kanal
+
+| | yazılı itiraz | ret |
+|---|---|---|
+| maliyet | tur içinde kalır, plan baştan yazılmaz | her ret = bir yeniden planlama turu |
+| kayıt | `kabul`/`ret`/`insana` ayrımı, sayılabilir | tek gerekçe metni |
+| sonlanma | tur sayacı + doğal son | `reject.limit` dolunca kart kapıda |
+
+Kampanyada iki deney kolunu üçüncü kalemle kaybettik. Ve kayıp
+**asimetrik**: yalnızca planlı kol düşüyor, yani kural yalnızca para değil
+**ölçümün geçerliliğini** de kurtarıyor.
+
+### İki katman
+
+**Akış dili.** Katılımcıya yazılmış `reject` akışı reddediyor. Varsayılan
+(gönderen) kenar da kaldırılıyor — varsayılan bir kolaylık, beyan değil;
+akış dosyasında yazmayan bir kenarın mekanizmayı baypas etmesi sessiz
+arızanın tanımı. Kaldırma `flow check`'te satır satır görünüyor:
+
+```
+  2. architect  claude    architect  task   → analyst
+                reject   → YOK  (planlama katılımcısı, kural 22 — itirazın yolu itiraz dosyası)
+```
+
+Görünürlük şart: operatör "ret kenarı neden yok" sorusunu akış dosyasına
+bakarak cevaplayamaz, çünkü orada hiç yazmıyor.
+
+**Çalışma zamanı.** Kenarı kaldırmak yetmiyordu: ret kararı `planStep`'ten
+**önce** işleniyor ve kampanyada mekanizmanın baypas edilmesinin mekanik
+sebebi tam buydu. Üstelik kenarsız bir rolde `queue.reject` istisna atıp
+süpürmeyi düşürürdü. Artık planlama turunda verdikteki `decision` kanal
+sayılmıyor: `reject` yazılırsa kart geri gönderilmez, tur itiraz
+dosyasından okunur, ve **deneme uyarı olarak kayda geçer** — sessizce yok
+saymak, rolün ne yapmaya çalıştığını operatörden saklamak olurdu. Dosya
+yoksa `planStep` zaten reddediyor ve ne yapılması gerektiğini yazıyor.
+
+### Kuralın sınırı: kenarın kaynağı, hedefi değil
+
+Katılımcı **olmayan** bir rol katılımcıya ret edebilir — planın çürümesi
+yolu (`coder → planner`). Kural 22 yalnızca katılımcının *rededen* taraf
+olmasını yasaklıyor. O yolun kendisi ayrı bir açık soru: `reject: planner`
+kartı plan yazarına sıradan bir rol turu olarak geri veriyor ve planlama
+aşaması yeniden açılmıyor (tasarımın kararı: planı yalnızca insan açar),
+yani kart planlama zincirinden hiçbir iş yapmadan geçiyor. Ölçülmedi,
+yazılmadı.
+
+### Yan sonuç: en kötü maliyet düştü
+
+Ret kenarları en kötü hâl tahminine giriyor. `plan3.yaml` için **~29 → ~21
+aktivasyon**: iki katılımcı kenarı, en kötü bütçenin 8 aktivasyonuna
+karşılık geliyordu.
+
+### Neyle doğrulandı
+
+Yedi test: dördü yükleyicide (açık kenar reddi, varsayılan kenarın
+kaldırılması, hedefin serbest kalması, maliyet düşüşü), üçü çalışma
+zamanında (itiraz turunda `reject` kartı geri göndermiyor ve uyarı
+düşüyor; dosya yoksa tur kurtulmuyor; planlama dışı rolde ret kanalı
+çalışmaya devam ediyor). İki katman da mutasyonla doğrulandı: yükleyici
+kuralını kapatınca 3, çalışma zamanı dalını açınca 2 test kırmızıya döndü.
+685 test yeşil.
+
+**Canlı koşulmadı.** Kuralın asıl sınavı, aynı kampanyanın tekrar
+koşulduğunda itirazcının gerçekten itiraz dosyasını kullanması — ve bu
+henüz ölçülmedi.
 
 ---
 

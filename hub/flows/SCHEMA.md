@@ -277,6 +277,26 @@ görürsün.
     kapıdır. Planın kendisi için insan onayı hâlâ yok; alışveriş kilide
     çıktığında insan zaten devreye giriyor (`gate.kind: deadlock`). Kapıyı
     planlamadan sonraki bir role koy.
+22. **Bir planlama katılımcısı `reject` kenarı taşıyamaz.** Açık yazılmışsa
+    akış reddedilir; varsayılan (gönderen) kenar da kaldırılır ve
+    `flow check` bunu satır satır gösterir. Planlama aşamasında itirazın
+    yolu itiraz dosyası; ret, kod aşamasının mekanizması. Değer kararı
+    gerekiyorsa itirazın `Durum` satırı `insana: <gerekçe>` olur.
+
+    Kural 21'in kardeşi ve ölçülmüş bir kusuru kapatıyor: 6d kampanyasında
+    itirazcı rolün iki kanalı vardı ve model tanıdık olanı seçti — **7 ret,
+    0 itiraz**. Retlerin gerekçeleri tam da itiraz dosyasının istediği
+    cinstendi. Ret orada her açıdan daha kötü (her ret bir yeniden
+    planlama, `kabul`/`ret`/`insana` ayrımı yok, bütçe dolunca kart
+    kapıda) ve kampanyada iki deney kolunu böyle kaybettik — kayıp
+    **asimetrik** olduğu için ölçümü de bozuyordu.
+
+    Kuralın sınırladığı şey kenarın **kaynağı**, hedefi değil: katılımcı
+    OLMAYAN bir rol katılımcıya ret edebilir (planın çürümesi yolu).
+
+    Çalışma zamanı karşılığı: planlama turunda verdiktteki `decision`
+    kanal değildir. `reject` yazılırsa kart geri gönderilmez, tur itiraz
+    dosyasından okunur ve deneme uyarı olarak kayda geçer.
 
 Kural 9-11 akış yüklenirken değil, **prompt derlenirken** de yeniden
 uygulanır; ikisi de aynı birleştiriciden geçer.

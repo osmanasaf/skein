@@ -257,13 +257,16 @@ değişmezini kırar"). Yani söyleyecek şey vardı, yanlış kanaldan söylend
 Tören ölçüsünün "%100 itirazsız" demesi artık **yanıltıcı**.
 
 Sebep tasarımda: itirazcı rol hem `reject` kenarı hem itiraz dosyası
-taşıyor. **Öneri (kural 22): planlama katılımcısı `reject` taşıyamasın.**
-Kural 21 katılımcıya kapı koymayı zaten yasaklıyor; bu onun kardeşi.
-Yazılmadı — akış dilini değiştiriyor, senin kararın.
+taşıyordu. **Kural 22 yazıldı (1 Ekim):** planlama katılımcısı `reject`
+taşıyamaz — açık yazılmışsa akış reddedilir, varsayılan kenar da kaldırılır
+ve `flow check` bunu gösterir. Çalışma zamanında da kapandı: planlama
+turunda verdikteki `decision` kanal sayılmıyor, tur itiraz dosyasından
+okunur ve deneme uyarı olarak kayda geçer. Ayrıntı `PLANLAMA.md`'de.
 
 **2. Kol kaybı asimetrik ve deney kolunda.** Gerçek kayıpların ikisi de
 planlı kolda, `reject.limit` dolduğu için. Hiçbir kontrol kolu düşmedi.
-Bu ölçümü yavaşlatmıyor, **bozuyor** — ve (1) düzeltilirse bu da düzelir.
+Bu ölçümü yavaşlatmıyor, **bozuyor**. Kural 22 bu kaybın sebebini kaldırdı;
+tekrar koşuda sınanacak.
 
 **3. Hücre seçiminin doğru tablosu yok.** İlk deneme
 `snapshot-store × sonnet-5` ile başladı, kontrol kolu 16/16 yeşil verdi
@@ -284,12 +287,16 @@ kollar `ÖLÇÜLEMEDİ` sayıldı, "0 kırmızı" sayılmadı.
 
 ### Tekrar koşmadan önce
 
-1. **Kural 22'ye karar ver** (yukarıda). Bu düzeltilmeden kampanya
-   asimetrik kol kaybıyla koşar ve sonuç yanlı olur.
+1. ~~Kural 22'ye karar ver~~ — **yazıldı.** Asimetrik kol kaybının sebebi
+   kaldırıldı; kuralın asıl sınavı, tekrar koşuda itirazcının gerçekten
+   itiraz dosyasını kullanması.
 2. **Hücreleri zincire göre kalibre et.** `planab` öncesi her aday hücrede
-   tek bir kontrol kolu koş; kontrol kolu temizse o hücre ölçemez.
+   tek bir kontrol kolu koş; kontrol kolu temizse o hücre ölçemez. Bugünkü
+   bilgi: `snapshot-store × haiku` zincirde belirlenimci olarak 14/16
+   (ölçülebilir), `× sonnet` 16/16 (ölçülemez), `cache-refresh × haiku`
+   zincirde yalnızca 2/66 (zayıf).
 3. Sonra: `planab <görev> --k=3 --model=claude:claude-haiku-4-5-20251001`,
-   iki-üç görev, ~$12-15.
+   iki-üç görev, ~$12-15. Kol kaybı için fazladan tekrar bütçesi ayır.
 
 ---
 

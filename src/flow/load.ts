@@ -617,12 +617,48 @@ export async function loadFlow(path: string, options: LoadOptions): Promise<Flow
     promptPaths.set(role.id, abs);
   }
 
-  // --- kural 12, 13, 14: ret hedefi ---
+  const plan = parsePlan(doc, order, ids, file);
+  const katilimci = (id: string): boolean => plan?.katilimcilar.includes(id) ?? false;
+
+  // --- kural 12, 13, 14, 22: ret hedefi ---
   const rejectPolicy = parseRejectPolicy(doc, file);
   const rejectOf = new Map<string, string | null>();
   for (const [i, id] of order.entries()) {
     const role = byId.get(id) as RawRole;
     const sender = i === 0 ? null : (order[i - 1] as string);
+
+    // --- kural 22: planlama katılımcısı ret kenarı taşıyamaz ---
+    //
+    // 6d kampanyasından geliyor ve ölçülmüş bir kusuru kapatıyor: itirazcı
+    // rolün hem `reject` kenarı hem itiraz dosyası vardı ve model TANIDIK
+    // olanı seçti — 7 ret, 0 itiraz. Retlerin gerekçeleri tam da tasarımın
+    // istediği cinstendi, yani söyleyecek şey vardı, yanlış kanaldan
+    // söylendi.
+    //
+    // Ret planlama aşamasında her açıdan daha kötü: her ret tam bir
+    // yeniden planlama turu, `kabul`/`ret`/`insana` ayrımı yok, ve
+    // `reject.limit` dolunca kart kapıda kalıyor — kampanyada iki deney
+    // kolunu tam böyle kaybettik. Üstelik kayıp ASİMETRİK: yalnızca
+    // planlı kol düşüyor, yani ölçüm de bozuluyor.
+    //
+    // Kural 21'in kardeşi: orada katılımcıya konan KAPI hiç ateşlenmiyordu,
+    // burada katılımcıya konan RET yanlış mekanizmayı ateşliyor.
+    if (katilimci(id)) {
+      if (role.rejectRaw !== undefined) {
+        throw new FlowError(
+          file,
+          rule(22, `\`${id}\` bir planlama katılımcısı — \`reject\` taşıyamaz. ` +
+            `Planlama aşamasında itirazın yolu itiraz dosyası; ret, kod aşamasının ` +
+            `mekanizması. Değer kararı gerekiyorsa itirazın \`Durum\` satırına ` +
+            `\`insana: <gerekçe>\` yaz (bkz. PLANLAMA.md, kural 22).`),
+        );
+      }
+      // Varsayılan (gönderen) ret kenarı da kaldırılıyor. Varsayılan bir
+      // kolaylık, beyan değil: akış dosyasında yazmayan bir kenarın
+      // mekanizmayı baypas etmesi, sessiz arızanın tanımı.
+      rejectOf.set(id, null);
+      continue;
+    }
 
     if (role.rejectRaw === undefined) {
       rejectOf.set(id, sender);
@@ -671,7 +707,6 @@ export async function loadFlow(path: string, options: LoadOptions): Promise<Flow
     };
   });
 
-  const plan = parsePlan(doc, order, ids, file);
 
   // --- kural 21: katılımcıya kapı konamaz ---
   //

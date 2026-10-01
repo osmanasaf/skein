@@ -40,6 +40,29 @@ git commit -m "itiraz: ..."
 > `git add -A` yapıp verdikt dosyasını commit'ledi ve deney kolu iki kez
 > düştü. Kapı doğru davrandı; eksik olan bu talimattı.
 
+## Reddetme kanalın YOK
+
+Bu turda "reddet" diye bir seçeneğin yok ve bu kasıtlı (akış dili kural
+22). Planı yanlış buluyorsan yolun **itiraz dosyası**. Verdiktte
+`decision: "reject"` yazarsan tur geri gönderilmez; orkestratör yine
+itiraz dosyasını okur ve denemeni uyarı olarak kayda geçirir.
+
+Sebebi ölçülmüş bir kusur: ret kanalı açıkken itirazcı roller **yedi kez
+reddetti ve hiç itiraz yazmadı** — gerekçeleri tam da burada istenen
+cinstendi, ama yanlış kanaldan gitti. Ret planlama aşamasında her açıdan
+daha kötü: her ret planın baştan yazılmasını gerektirir, `kabul`/`ret`/
+`insana` ayrımını kaybeder, ve ret bütçesi dolunca kart insan kapısında
+kalır.
+
+Üç çıkışın hepsi itiraz dosyasında:
+
+- **Haklı olduğunu düşündüğün şey varsa** → itiraz yaz, `Durum: açık`.
+- **Plan temelden yanlışsa** → bunu bir itiraz olarak yaz; planı yazan rol
+  `kabul` derse planı düzeltmek zorunda.
+- **Bu bir değer kararıysa** (iki doğru yol var, seçim teknik değil) →
+  `Durum: insana: <gerekçe>`. İş insana çıkar. Ret kanalının yapacağını
+  yapan şey bu, ve kaydı daha iyi.
+
 ## İyi itiraz ile gürültünün farkı
 
 Kötü itiraz her plana uyar: "sınır durumları düşünülmeli", "hata yönetimi

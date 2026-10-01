@@ -253,7 +253,22 @@ async function runRole(card: Card, role: SnapshotRole, options: TickOptions): Pr
     return { status: "escalated", card: await queue.escalate(card, reason), reason };
   }
 
-  if (verdict.verdict.decision === "reject") {
+  // Planlama turunda `decision` KANAL DEĞİL: itirazın taşıyıcısı dosya.
+  //
+  // Kural 22'nin çalışma zamanı karşılığı. Kenar kaldırıldı ama karar
+  // ret turu `planStep`'ten ÖNCE işleniyor — 6d kampanyasında itirazcının
+  // mekanizmayı tamamen baypas etmesinin mekanik sebebi tam buydu.
+  // Kenarsız bir rolde `queue.reject` istisna atar ve süpürmeyi düşürürdü.
+  //
+  // Davranış: karar YOK SAYILMAZ, ama kanal olarak da kabul edilmiyor.
+  // Tur itiraz dosyasından okunmaya devam ediyor ve denemenin kendisi
+  // uyarı olarak kayda geçiyor. Dosya yoksa `planStep` zaten "itiraz
+  // dosyası yok" diye reddediyor ve ne yapılması gerektiğini yazıyor.
+  const planFazi = planPhase(card, role.id, card.topology);
+  const planTuru = planFazi.kind === "itiraz" || planFazi.kind === "cevap";
+  const yanlisKanal = planTuru && verdict.verdict.decision === "reject";
+
+  if (verdict.verdict.decision === "reject" && !planTuru) {
     const reason = verdict.verdict.reason as string;
     const sent = await queue.reject(card, { reason, ...(commit === undefined ? {} : { commit }) });
     // Limit dolduysa `reject` kartı kuyruğa değil kapıya koyar.
@@ -291,7 +306,15 @@ async function runRole(card: Card, role: SnapshotRole, options: TickOptions): Pr
   if (adim.kind === "hata") {
     return { status: "escalated", card: await queue.escalate(card, adim.reason), reason: adim.reason };
   }
-  if (adim.kind === "tasindi") return adim.result;
+  if (adim.kind === "tasindi") {
+    if (!yanlisKanal || adim.result.status !== "accepted") return adim.result;
+    // Deneme kayda geçiyor: sessizce yok saymak, rolün ne yapmaya
+    // çalıştığını operatörden saklamak olurdu.
+    const uyari = `\`${role.id}\` verdiktte "reject" dedi; planlama turunda ret kanalı ` +
+      `YOK (kural 22). Tur itiraz dosyasından okundu. Değer kararı için itirazın ` +
+      `\`Durum\` satırına \`insana: <gerekçe>\` yaz.`;
+    return { ...adim.result, warnings: [...(adim.result.warnings ?? []), uyari] };
+  }
   const plan = adim.kind === "devam" ? adim.plan : null;
 
   // KUSUR 2'nin kapısı: devir teslim kodu da taşır.

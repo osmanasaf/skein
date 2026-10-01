@@ -28,7 +28,6 @@ roles:
     provider: claude
     workspace: architect
     prompt: ../../roles/architect.prompt
-    reject: planner
     next: coder
   - id: coder
     provider: claude
@@ -301,6 +300,57 @@ describe("alışveriş — cevap turu", () => {
     expect(result.status).toBe("escalated");
     expect(result.status === "escalated" && result.reason).toMatch(/insana çıktı/);
     expect(gateKind((await queue.get(card.id)) as Card)).toBe("deadlock");
+  });
+});
+
+// Kural 22'nin ÇALIŞMA ZAMANI karşılığı. Kenar kaldırıldı ama ret kararı
+// `planStep`'ten önce işleniyor; 6d kampanyasında itirazcının mekanizmayı
+// baypas etmesinin mekanik sebebi tam buydu ve kenarsız bir rolde
+// `queue.reject` istisna atıp süpürmeyi düşürürdü.
+describe("alışveriş — planlama turunda ret kanalı yok (kural 22)", () => {
+  const reddet = (reason: string) => async (req: InvokeRequest): Promise<void> => {
+    await writeFile(join(req.workdir, VERDICT_FILE), JSON.stringify({ decision: "reject", reason }));
+  };
+
+  it("itiraz turunda 'reject' kartı geri göndermez; itiraz dosyası okunur", async () => {
+    const card = await put();
+    await planYaz(card);
+    dosyalar.set(at("architect", ITIRAZ_YOLU(card.id)), itiraz("açık"));
+    claude.answer = reddet("plan yanlış");
+
+    const result = await tick("architect", options);
+    // Kart YAZARA gidiyor (itiraz turunun normal sonucu), geri değil.
+    expect(result.status).toBe("accepted");
+    expect((await queue.get(card.id))?.role).toBe("planner");
+    // Deneme kayda geçiyor: sessizce yok saymak, rolün ne yapmaya
+    // çalıştığını operatörden saklamak olurdu.
+    expect(result.status === "accepted" && result.warnings?.join(" ")).toMatch(/kural 22/);
+  });
+
+  it("itiraz dosyası yoksa 'reject' turu kurtarmaz", async () => {
+    const card = await put();
+    await planYaz(card);
+    claude.answer = reddet("plan yanlış");
+
+    const result = await tick("architect", options);
+    expect(result.status).toBe("escalated");
+    expect(result.status === "escalated" && result.reason).toMatch(/itiraz dosyası yok/);
+  });
+
+  // Planlama DIŞINDAKİ rollerde ret kanalı yerinde duruyor: kural 22
+  // yalnızca katılımcıları bağlıyor.
+  it("planlama dışı rolde ret kanalı çalışmaya devam eder", async () => {
+    const card = await put();
+    await planYaz(card);
+    dosyalar.set(at("architect", ITIRAZ_YOLU(card.id)), "# İtirazlar\n\nİtirazım yok.\n");
+    claude.answer = kabulEt("itirazım yok");
+    await tick("architect", options);
+    expect((await queue.get(card.id))?.role).toBe("coder");
+
+    claude.answer = reddet("görev metni çelişkili");
+    const result = await tick("coder", options);
+    expect(result.status).toBe("rejected");
+    expect((await queue.get(card.id))?.role).toBe("planner");
   });
 });
 
