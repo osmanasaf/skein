@@ -226,6 +226,60 @@ async function run(taskId: string, provider: string, model: string, audit: boole
  * havuzu deposunda çalışıyor — ajanların ürettiği çözüm bu projeye
  * yazılmaz.
  */
+/**
+ * Ölçüm gücü ön kontrolü: YALNIZCA kontrol kolunu koşar.
+ *
+ * 6d kampanyasının üçüncü bulgusundan geliyor. Hücreler tek ajanlı
+ * `produce` yolunun eşik tablosuna göre seçilmişti; AB kolları ise
+ * koder+reviewer zinciri ve zincirdeki denetçi kusurların çoğunu
+ * yakalıyor. `snapshot-store × sonnet` böyle seçilmiş ve kontrol kolu
+ * 16/16 yeşil vermişti: ölçüm gücü yok, karar zorunlu olarak YETERSİZ.
+ *
+ * Kontrol kolunda kırmızı kanca yoksa "azalma" tanımsızdır — yani o
+ * hücreye harcanacak her tekrar boşa gider. Bu komut o soruyu tek kolla
+ * ve deney kolunun bedelini ödemeden cevaplıyor.
+ */
+async function kalibre(taskId: string, modelSpec: string): Promise<void> {
+  await mkdir(join(REPO, ".skein"), { recursive: true });
+  const adapters = armAdapters(modelSpec, adapterEnv());
+  const adapter = [...adapters.values()][0] as Adapter;
+
+  console.log(`ölçüm gücü ön kontrolü — ${taskId} · ${adapter.model}`);
+  console.log("yalnızca KONTROL kolu (ab-plansiz) koşuyor");
+  announceEnv();
+  console.log();
+
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const runId = `kalibre-${taskId}-${stamp}`;
+  const r = await runArm({
+    repo: REPO, taskId, arm: "plansiz",
+    sandbox: join(REPO, ".skein", "kalibre", runId),
+    adapters, logPath: LOG, runId, timeoutMs: 15 * 60_000,
+    onSweep: (sweep) => {
+      for (const { role, result } of sweep.results) {
+        if (result.status !== "idle") console.log(`   ${role}: ${result.status}`);
+      }
+    },
+  });
+
+  console.log();
+  if (!r.ran) {
+    console.log(`  ÖLÇÜLEMEDİ — kol düştü${r.escalation === undefined ? "" : `: ${r.escalation}`}`);
+    console.log("  Bu 'kusur yok' DEĞİL. Kolu düşüren sebebi gider ve tekrar koş.");
+    return;
+  }
+  console.log(`  ${r.total - r.red.length}/${r.total} yeşil  ·  ${r.activations} aktivasyon  ` +
+    `·  $${r.costUsd.toFixed(4)}`);
+  if (r.red.length === 0) {
+    console.log("\n  ÖLÇEMEZ — kontrol kolunda hiç kırmızı kanca yok.");
+    console.log("  Sıfırdan azalma olmaz: bu hücreye harcanan her tekrar boşa gider.");
+    console.log("  Daha zayıf bir üretici ya da daha zor bir görev dene.");
+    return;
+  }
+  console.log(`\n  ÖLÇER — ${r.red.length} kırmızı kanca: ${r.red.join("; ")}`);
+  console.log(`  Sıradaki: cli.ts planab ${taskId} --k=3 --model=${modelSpec}`);
+}
+
 async function planab(taskId: string, k: number, modelSpec: string): Promise<void> {
   await mkdir(join(REPO, ".skein"), { recursive: true });
   const adapters = armAdapters(modelSpec, adapterEnv());
@@ -801,6 +855,18 @@ if (cmd === "report") {
     Math.max(1, Number(deger("--k") ?? 3)),
     deger("--model") ?? konumsal.find((a) => a.includes(":")) ?? "claude:claude-sonnet-5",
   );
+} else if (cmd === "kalibre") {
+  const gorev = rest[0];
+  if (gorev === undefined) {
+    console.error("kullanım: cli.ts kalibre <görev-id> [--model sağ:model]");
+    process.exit(2);
+  }
+  const esit = argv.find((a) => a.startsWith("--model="));
+  const at = argv.indexOf("--model");
+  const model = esit !== undefined
+    ? esit.slice("--model=".length)
+    : at === -1 ? undefined : argv[at + 1];
+  await kalibre(gorev, model ?? rest.slice(1).find((a) => a.includes(":")) ?? "claude:claude-sonnet-5");
 } else if (cmd === "planrapor") {
   await planrapor();
 } else if (cmd === "turlar") {
@@ -816,6 +882,6 @@ if (cmd === "report") {
 } else if (cmd) {
   await run(cmd, rest[0] ?? "claude", rest[1] ?? "claude-opus-5", audit);
 } else {
-  console.error("kullanım: cli.ts <görev-id> [sağlayıcı] [model] [--audit]\n         cli.ts matrix <görev-id> [sağlayıcı:model] [sağlayıcı:model]\n         cli.ts doctor <sağlayıcı:model>\n         cli.ts puanla [hakem-modeli] [--kuru] [--yeniden]\n         cli.ts siniflandir [hakem-modeli] [--kuru] [--yeniden]\n         cli.ts selftest [görev-id]\n         cli.ts turlar [hücre-parçası] [--diff]\n         cli.ts planab <görev-id> [--k 3] [--model sağ:model]\n         cli.ts planrapor\n         cli.ts report [--gorev=<görev-id>]");
+  console.error("kullanım: cli.ts <görev-id> [sağlayıcı] [model] [--audit]\n         cli.ts matrix <görev-id> [sağlayıcı:model] [sağlayıcı:model]\n         cli.ts doctor <sağlayıcı:model>\n         cli.ts puanla [hakem-modeli] [--kuru] [--yeniden]\n         cli.ts siniflandir [hakem-modeli] [--kuru] [--yeniden]\n         cli.ts selftest [görev-id]\n         cli.ts turlar [hücre-parçası] [--diff]\n         cli.ts kalibre <görev-id> [--model sağ:model]   (ölçüm gücü ön kontrolü)\n         cli.ts planab <görev-id> [--k 3] [--model sağ:model]\n         cli.ts planrapor\n         cli.ts report [--gorev=<görev-id>]");
   process.exit(2);
 }
