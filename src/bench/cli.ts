@@ -20,6 +20,8 @@ import { effectReport, filterByTask, type EffectReport, type PairScore, type Sid
 import { noiseReport, type NoiseReport, type NoiseSide } from "./noise.js";
 import { adapterFor } from "../adapters/factory.js";
 
+import { modelTurns } from "./modelturns.js";
+
 const REPO = resolve(import.meta.dirname, "../..");
 
 /**
@@ -556,8 +558,17 @@ async function doctor(spec: string): Promise<void> {
 
   console.log("deneme çağrısı…");
   const r = await adapter.invoke(req);
-  console.log(`  exit=${r.exitCode}  süre=${(r.durationMs / 1000).toFixed(1)}s` +
-    (r.usage?.costUsd !== undefined ? `  maliyet=$${r.usage.costUsd.toFixed(4)}` : ""));
+  // Maliyet YOKSA token basılıyor. Codex'i ChatGPT aboneliğiyle koşturmak
+  // `total_cost_usd` üretmiyor: dolar alanı boş kalıyor ve doctor "çalıştı
+  // ama hiçbir şey ölçemedim" gibi görünüyordu. Token sayısı, modelin
+  // gerçekten çağrıldığının kanıtı ve çapraz satıcı karşılaştırmasında
+  // doların yerini tutan tek ortak birim.
+  const olcu = r.usage?.costUsd !== undefined
+    ? `  maliyet=$${r.usage.costUsd.toFixed(4)}`
+    : r.usage?.inputTokens !== undefined || r.usage?.outputTokens !== undefined
+      ? `  token=${r.usage.inputTokens ?? "?"}→${r.usage.outputTokens ?? "?"} (dolar maliyeti yok: abonelik kimliği)`
+      : "  ÖLÇÜ YOK: ne maliyet ne token okunabildi";
+  console.log(`  exit=${r.exitCode}  süre=${(r.durationMs / 1000).toFixed(1)}s${olcu}`);
   if (r.exitCode === 0) {
     // Çıkış kodu sıfır olabilir ama model hiç çalışmamış olabilir: sıfır tur,
     // boş modelUsage. Operatörün makinesinde tam olarak bu oldu ve "başarılı"
@@ -608,20 +619,6 @@ async function binVersion(bin: string): Promise<string> {
   }
 }
 
-/** Çıktıdaki model turu sayısı; biçim tanınmazsa undefined. */
-function modelTurns(stdout: string): number | undefined {
-  try {
-    const d = JSON.parse(stdout.trim()) as {
-      usage?: { iterations?: unknown[] };
-      modelUsage?: Record<string, unknown>;
-    };
-    if (Array.isArray(d.usage?.iterations)) return d.usage.iterations.length;
-    if (d.modelUsage) return Object.keys(d.modelUsage).length;
-    return undefined;
-  } catch {
-    return undefined;
-  }
-}
 
 /**
  * Her görevin kancalarını referans çözümüne karşı koşar.

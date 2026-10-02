@@ -7,7 +7,7 @@ yapıştırılabilsin diye yazıldı: aşağısı Skein'i tanımayan birine de y
 **Dal:** `claude/project-plan-brainstorm-pthvoc` — `claude/project-thread-sc56cs`
 ileri sarılıp üstüne devam edildi, yani iki dalın işi bu dalda birleşti.
 `sc56cs` olduğu yerde duruyor; yeni iş burada.
-**Durum:** 714 test yeşil, typecheck temiz, ağaç temiz.
+**Durum:** 724 test yeşil, typecheck temiz, ağaç temiz.
 `watch selftest` bu konteynerde **koşmuyor**: `hub/flows/selftest.yaml`
 depoda izlenmiyor (yalnızca yazarın makinesinde duruyordu, konteyner
 yenilenince gitti). Belgelenmiş bir komutun depoda olmayan bir dosyaya
@@ -351,6 +351,54 @@ askıda. Yani `planab <görev> --k=3` yerelde tek komutta biter; `--kol` ve
 
 **Not:** `watch selftest` için gereken `hub/flows/selftest.yaml` depoda
 izlenmiyor — senin eski klonunda duruyor olabilir; konteynerde yoktu.
+
+---
+
+## 1. ADIM BİTTİ: codex uçtan uca koştu (2 Ekim, operatörün makinesi)
+
+Projenin **ilk tamamlanmış codex koşusu**. `bench doctor codex:gpt-5.5`,
+Windows, codex-cli 0.153.4:
+
+```
+exit=0  süre=7.8s
+stdout: {"type":"thread.started",...} {"type":"turn.started"}
+        {"type":"item.completed","item":{"type":"agent_message","text":"4"}}
+        {"type":"turn.completed","usage":{"input_tokens":13607,
+          "cached_input_tokens":2432,"cache_write_input_tokens":0,"outp…
+ÇALIŞIYOR. Matriste kullanabilirsin.
+```
+
+Adaptörün bayrakları 0.153.4'te de geçerli; `codex doctor` sende
+`auth ✓ (chatgpt kipi)`, `websocket ✓ HTTP 101`, `reachability ✓` dedi.
+Model `gpt-5.5` olarak pinli (`~/.codex/config.toml`).
+
+Önemli ayrıntı: **`chatgpt` kimlik kipinde codex `api.openai.com`'a değil
+`chatgpt.com/backend-api`'ye konuşuyor.** Konteynerdeki vekil ikisini de
+kesiyordu, o yüzden orada ayrım görünmemişti.
+
+### Çıktının açtığı iki şey
+
+**1) `model turu: ?` kozmetik değildi.** `modelTurns` yalnızca tek JSON
+nesnesi okuyordu (claude `--output-format json`); codex JSONL basıyor ve
+`JSON.parse(stdout)` her zaman atıyordu. Altındaki boşluk şu: doctor'ın
+**"MODEL HİÇ ÇAĞRILMADI" koruması** — exit 0 dönen ama modeli hiç çağırmayan
+sessiz çağrı, operatörün makinesinde tam olarak bu olmuştu — `turns === 0`
+koşuluna bakıyor ve `undefined` sıfır olmadığı için **codex'te hiç
+ateşlenemiyordu.** `modelTurns` artık JSONL'de `turn.completed` sayıyor,
+`src/bench/modelturns.ts`'e taşındı (cli.ts modül düzeyinde kendini
+koşturduğu için oradan sınanamıyordu) ve 10 sınaması var, ikisi mutasyonla
+doğrulandı.
+
+**2) Dolar maliyeti YOK, ve bu ölçüm tasarımını etkiliyor.** ChatGPT
+aboneliğiyle koşan codex `total_cost_usd` üretmiyor; claude tarafı üretiyor.
+Doctor artık maliyet yoksa token basıyor (`token=13607→11`), ama asıl karar
+çapraz satıcı 2x2'sinde: **maliyet dolar olarak karşılaştırılamaz.**
+
+Öneri: ortak birim **token**. İki adaptör de `inputTokens`/`outputTokens`
+dolduruyor (claude `usage.input_tokens`'tan, codex `turn.completed.usage`'dan),
+yani karşılaştırma token üzerinden kurulabilir; dolar, onu bildiren sağlayıcı
+için EK alan olarak kalır. Gerekçe projenin kendi kuralıyla aynı: iki ayrı
+yer gerçeğini harmanlamıyoruz — dolar ile abonelik aynı birim değil.
 
 ---
 
