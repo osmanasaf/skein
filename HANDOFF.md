@@ -7,7 +7,7 @@ yapıştırılabilsin diye yazıldı: aşağısı Skein'i tanımayan birine de y
 **Dal:** `claude/project-plan-brainstorm-pthvoc` — `claude/project-thread-sc56cs`
 ileri sarılıp üstüne devam edildi, yani iki dalın işi bu dalda birleşti.
 `sc56cs` olduğu yerde duruyor; yeni iş burada.
-**Durum:** 737 test yeşil, typecheck temiz, ağaç temiz.
+**Durum:** 741 test yeşil, typecheck temiz, ağaç temiz.
 `watch selftest` bu konteynerde **koşmuyor**: `hub/flows/selftest.yaml`
 depoda izlenmiyor (yalnızca yazarın makinesinde duruyordu, konteyner
 yenilenince gitti). Belgelenmiş bir komutun depoda olmayan bir dosyaya
@@ -351,6 +351,53 @@ askıda. Yani `planab <görev> --k=3` yerelde tek komutta biter; `--kol` ve
 
 **Not:** `watch selftest` için gereken `hub/flows/selftest.yaml` depoda
 izlenmiyor — senin eski klonunda duruyor olabilir; konteynerde yoktu.
+
+---
+
+## AYNI KUSUR ÜÇÜNCÜ KEZ: adaptörü iki yoldan kurmak (2 Ekim)
+
+`bench <görev> codex gpt-5.5` — CLI'ın kendi kullanım metninde yazan komut —
+şunu dedi:
+
+```
+Error: Bilinmeyen sağlayıcı: codex. Kayıtlı olanlar: claude
+    at AdapterRegistry.get (contract.ts:109)
+    at run (cli.ts:134)
+```
+
+`doctor` ve `matrix` adaptörü **fabrikadan** (`adapterFor`) kuruyor; `run`
+elle bir `AdapterRegistry` kurup içine yalnızca `ClaudeCliAdapter` yazıyordu.
+Bu, aynı sınıf kusurun **üçüncü** görünüşü:
+
+1. 6d kolunda harita `adapter.id` ile anahtarlanmıştı → kampanya hiç başlamadı.
+2. Kanıt varlık haritası ayrıştırıcıdan ayrı düşmüştü → itiraz yanlış elendi.
+3. Burada: sağlayıcı listesi iki yerde, biri eksik.
+
+Ortak sebep tek: **aynı bilginin iki kopyası.** Sağlayıcıların tek kaynağı
+`KNOWN_PROVIDERS` ve onu okuyan tek kurucu `adapterFor`.
+
+Düzeltildi: `run` artık fabrikayı kullanıyor. `AdapterRegistry` üründe
+kullanılmıyor; silmek yerine başına "adaptör kurmanın yolu bu değil" notu
+düşüldü, çünkü silmek senin kararın (orkestratörün çalışma zamanı için
+tutmak isteyebilirsin). **Öneri: silinsin** — ikinci yol var oldukça aynı
+kusur dördüncü kez çıkar.
+
+### Yanında bir Windows tuzağı
+
+Fabrika `adapter.id`'yi model tanımının TAMAMI yapıyor (`codex:gpt-5.5`),
+çünkü 2x2 hücreleri model düzeyinde ayrışmalı. Ama `run` o `id`'yi hücre
+dizini adına koyuyordu ve **iki nokta Windows'ta geçersiz yol karakteri** —
+koşunun ortasında patlardı. `matrix` bunu yerel bir `safe()` ile
+temizliyordu; tek kopya `src/bench/safe-name.ts`'e alındı, ikisi de onu
+kullanıyor, 4 sınaması var.
+
+Dizin adlandırma biçimi KORUNDU (`claude--claude-opus-5`): geçmiş koşuların
+dizinleriyle aynı kalsın.
+
+Doğrulama (ikisi de koşturularak, iddia edilmeden):
+`codex gpt-5.5` → `üretici: codex / gpt-5.5`, hücre `codex--gpt-5.5`,
+"üretim koşuyor"a geçti ve ağda takıldı. `claude <olmayan-model>` →
+aynı yol, exit=1, 0.6s, bedava.
 
 ---
 

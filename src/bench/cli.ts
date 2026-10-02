@@ -1,8 +1,8 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { safeName } from "./safe-name.js";
 import { formatUsage, sumUsage } from "./usage.js";
 import { join, resolve } from "node:path";
-import { ClaudeCliAdapter } from "../adapters/claude.js";
-import { AdapterRegistry, type Adapter } from "../adapters/contract.js";
+import type { Adapter } from "../adapters/contract.js";
 import { EventLog, readEvents } from "../events/log.js";
 import { summarize } from "../events/summary.js";
 import { loadTask } from "./task.js";
@@ -132,17 +132,26 @@ function recorderFor(log: EventLog, cellDir: string): TurnRecorder {
 
 async function run(taskId: string, provider: string, model: string, audit: boolean): Promise<void> {
   const task = await loadTask(join(REPO, "bench/tasks", taskId));
-  const adapter: Adapter = new AdapterRegistry()
-    .register(new ClaudeCliAdapter({ model, ...adapterEnv() }))
-    .get(provider);
+  // Adaptör FABRİKADAN kuruluyor: sağlayıcıların tek kaynağı orası
+  // (`KNOWN_PROVIDERS`). Burada elle kurulan kayıt defterinde yalnızca
+  // claude vardı, yani CLI `cli.ts <görev> codex gpt-5.5` diye BELGELENMİŞ
+  // olduğu hâlde "Bilinmeyen sağlayıcı: codex" diyordu. Aynı sınıf kusuru 6d
+  // kolunda da yaşadık: adaptörü iki ayrı yoldan kurmak, yollardan birini
+  // sessizce eksik bırakıyor.
+  const adapter: Adapter = adapterFor(`${provider}:${model}`, adapterEnv());
 
   const runId = new Date().toISOString().replace(/[:.]/g, "-");
-  const cellDir = join(REPO, ".skein/runs", runId, task.id, `${adapter.id}--${adapter.model}`);
+  // Dizin adı sağlayıcı ve modelden kuruluyor, `adapter.id`'den DEĞİL:
+  // fabrika `id`'yi model tanımının tamamı yapıyor (`codex:gpt-5.5`) ve iki
+  // nokta Windows'ta geçersiz. Eski adlandırma biçimi korunuyor
+  // (`claude--claude-opus-5`) ki geçmiş koşuların dizinleriyle aynı kalsın.
+  const cellDir = join(REPO, ".skein/runs", runId, task.id,
+    `${safeName(provider)}--${safeName(model)}`);
   await mkdir(join(REPO, ".skein"), { recursive: true });
   const log = new EventLog(LOG, runId);
 
   console.log(`görev    : ${task.id} — ${task.title}`);
-  console.log(`üretici  : ${adapter.id} / ${adapter.model}`);
+  console.log(`üretici  : ${provider} / ${adapter.model}`);
   console.log(`hücre    : ${rel(cellDir)}`);
   announceEnv();
   console.log();
@@ -159,7 +168,7 @@ async function run(taskId: string, provider: string, model: string, audit: boole
   });
   await log.append({
     type: "agent.started", cell: rel(cellDir), role: "uretici",
-    provider: adapter.id, model: adapter.model, promptHash: p.promptHash,
+    provider, model: adapter.model, promptHash: p.promptHash,
   });
   const finished = {
     type: "agent.finished" as const, cell: rel(cellDir),

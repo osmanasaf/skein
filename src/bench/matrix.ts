@@ -1,4 +1,5 @@
 import { mkdir, writeFile } from "node:fs/promises";
+import { safeName } from "./safe-name.js";
 import { totalUsage, type UsageTotal } from "./usage.js";
 import { join } from "node:path";
 import { adapterFor, type AdapterOptions } from "../adapters/factory.js";
@@ -91,8 +92,6 @@ export function diagnose(
 const tail = (s: string): string => s.trim().slice(-200).replace(/\s+/g, " ");
 
 /** Dosya adında kullanılamayacak karakterleri temizler. */
-const safe = (s: string): string => s.replace(/[^A-Za-z0-9._-]/g, "_");
-
 export async function runMatrix(options: MatrixOptions): Promise<MatrixOutcome> {
   const { repo, taskId, models, runRoot, log, timeoutMs } = options;
   const task = await loadTask(join(repo, "bench/tasks", taskId));
@@ -105,7 +104,7 @@ export async function runMatrix(options: MatrixOptions): Promise<MatrixOutcome> 
   }[] = [];
 
   for (const adapter of adapters) {
-    const cellDir = join(runRoot, task.id, safe(adapter.id));
+    const cellDir = join(runRoot, task.id, safeName(adapter.id));
     console.log(`üretim: ${adapter.model}`);
     // Üretim hücresinde iki tur kalıyor: "tohum" ve "uretim". `seed/` verilen
     // görevlerde ölçmek istediğimiz şey tam olarak ikisinin farkı — ajanın
@@ -184,7 +183,7 @@ export async function runMatrix(options: MatrixOptions): Promise<MatrixOutcome> 
   for (const prod of produced) {
     for (const rev of adapters) {
       const crossed = prod.adapter.id !== rev.id;
-      const workdir = join(runRoot, task.id, "denetim", `${safe(prod.adapter.id)}--by--${safe(rev.id)}`);
+      const workdir = join(runRoot, task.id, "denetim", `${safeName(prod.adapter.id)}--by--${safeName(rev.id)}`);
       await mkdir(workdir, { recursive: true });
       console.log(`denetim: ${prod.adapter.model} üretti, ${rev.model} inceliyor ${crossed ? "(ÇAPRAZ)" : "(aynı)"}`);
 

@@ -87,8 +87,21 @@ export interface Adapter {
 }
 
 /**
- * SCHEMA.md 8. doğrulama kuralı ("her provider kayıtlı bir adaptöre karşılık
- * gelir") bir kayıt gerektiriyor. Kayıt buydu.
+ * ADAPTÖR KURMANIN YOLU BU DEĞİL — `adapterFor` (factory.ts) kullan.
+ *
+ * Bu sınıf üründe kullanılmıyor. İki kez aynı kusuru doğurduğu için not
+ * düşülüyor: adaptörü elle kurup kaydeden bir yol, sağlayıcı listesi
+ * büyüdüğünde sessizce eksik kalıyor.
+ *
+ * - 6d kolunda harita `adapter.id` ile anahtarlanmıştı; `requireAdapters`
+ *   fırlattı ve kampanya hiç başlamadı.
+ * - `bench <görev> codex gpt-5.5` yolunda kayıt defterine yalnızca claude
+ *   yazılmıştı; CLI o kullanımı belgelediği hâlde "Bilinmeyen sağlayıcı:
+ *   codex" dedi.
+ *
+ * Sağlayıcıların tek kaynağı `KNOWN_PROVIDERS`; onu okuyan tek kurucu
+ * `adapterFor`. Akış doğrulamasının (SCHEMA kural 8) ihtiyaç duyduğu
+ * `has`/`ids` yüzeyi için `knownProviderSet()` var.
  */
 export class AdapterRegistry {
   readonly #byId = new Map<string, Adapter>();
