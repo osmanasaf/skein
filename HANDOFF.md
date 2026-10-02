@@ -236,6 +236,46 @@ turun gerçek toplamını gösterir.
 
 ---
 
+## YERELE TAŞIMA: klonla GELMEYEN şeyler (2 Ekim)
+
+Bulut konteynerinde koşulan her şey geçici bir makinede duruyor. Kod ve
+belgeler git'te, ama ölçüm kaydı **değil** — `.gitignore` `.skein/`'i dışarıda
+tutuyor. Klon attığında bunlar gelmez:
+
+| gelmeyen | ne | neden önemli |
+|---|---|---|
+| `.skein/arsiv/*.jsonl` | 9 kampanya günlüğü, 2.0 MB | üç kampanyanın ham kaydı — ~$25'lık gerçek koşu. Yeniden üretmek para demek. |
+| `.skein/olcum/` | kum havuzları, 34 MB | plan ve itiraz belgeleri burada; hizalama analizinin ham malzemesi |
+| `.skein/events.jsonl` | canlı günlük | `planrapor` bunu okuyor |
+| `.worktrees/`, `node_modules/` | çalışma zamanı | yeniden üretilebilir |
+
+Kaydı yitirmemek için `.skein/arsiv/` + kum havuzlarının `docs/plan/`
+belgeleri ayrı paketlendi (2 Ekim, 262 KB). Yerelde `.skein/arsiv/` altına
+açılırsa geçmiş kampanyalar okunabilir kalır; `planrapor` yalnızca
+`.skein/events.jsonl`'e baktığı için rapor için bir şey yapmak gerekmiyor.
+
+### Yerelde kurulum
+
+```
+npm ci            # Node 22
+npm test          # 709 test
+npm run typecheck
+```
+
+İzin modu: **yerelde ortam değişkeni gerekmiyor.** Varsayılan
+`bypassPermissions` normal kullanıcıda çalışıyor; `SKEIN_PERMISSION_MODE`
+yalnızca konteyner root altında koştuğu için gerekiyordu.
+
+Yerelde geçerli olmayan üç konteyner sınırı: oturum boşta kalınca konteyner
+geri alınıyor, tek komut 10 dakikada kesiliyor, araç çağrısı yoksa konteyner
+askıda. Yani `planab <görev> --k=3` yerelde tek komutta biter; `--kol` ve
+`--devam` bölmeye gerek kalmaz.
+
+**Not:** `watch selftest` için gereken `hub/flows/selftest.yaml` depoda
+izlenmiyor — senin eski klonunda duruyor olabilir; konteynerde yoktu.
+
+---
+
 ## 1. adım: codex adaptörü canlı — ağ sınırına kadar (2 Ekim)
 
 `codex` bu konteynerde kurulu değildi; `npm i -g @openai/codex` ile
