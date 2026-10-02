@@ -302,9 +302,15 @@ Sınır performans hakkında bir şey iddia etmiyor — ne kadar sürdüğü
 5 saniye birim sınaması ölçüsü; bu dosyanın her sınaması geçici git deposu
 kurup worktree açıp gizli süiti koşturuyor.
 
-**Durum:** Linux'ta 714 test yeşil, typecheck temiz. İlk dört düzeltme
-**Windows'ta doğrulandı** (712/714 → kalan ikisi bu zaman aşımıydı);
-beşincisinin Windows'ta doğrulanması gerekiyor.
+**Durum: KAPANDI.** Beş düzeltmenin hepsi **Windows'ta doğrulandı** —
+`C:\dev\skein`, Node 22, `714 passed (714)`, 24 saniye. Linux'ta da 714
+yeşil ve typecheck temiz, yani proje artık iki platformda koşuyor.
+
+Windows'a çıkmanın bilançosu: üç gerçek hata (yol kısaltma, çok satırlı
+metnin cmd.exe'den sağlam geçmemesi, zamana yapışık bütünleşme sınaması) ve
+bir dördüncüsü kod okurken yakalandı (kanıt haritasının yalnızca ilk yola
+bakması). Üçüncü ve dördüncü ikisi de platformdan bağımsızdı; Windows
+yalnızca bakmaya zorladı.
 
 ---
 
