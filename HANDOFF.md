@@ -287,9 +287,24 @@ diyor, ve itiraz "yolların hepsi kendi belgesi" diye eleniyordu. Yani 1
 Ekim'de kapattığımı sandığım yanlış eleme bir katman aşağıda duruyordu.
 Düzeltildi; mutasyonla doğrulandı.
 
-**Durum:** Linux'ta 714 test yeşil, typecheck temiz. Windows düzeltmeleri
-hata çıktısından ve koddan türetildi; **Windows'ta doğrulanmadı** — orada
-`npm test` koşmak gerekiyor.
+### Beşinci kök neden: gizli bir kırılganlık, platformdan bağımsız
+
+İlk dört düzeltmeden sonra Windows'ta 712/714 kaldı. Kalan ikisi assertion
+değil **zaman aşımıydı** (5031ms, 5035ms — tam 5s varsayılanında), ve ikisi
+de `ab.test.ts`'in en ağır bütünleşme sınaması. POSIX'te aynı ikisi 4.6s ve
+3.7s sürüyor: sınıra zaten yapışıktı. Yani bu bir Windows kusuru değil,
+**her iki platformda da var olan gizli kırılganlık**; Windows (git daha
+yavaş, dosyalar taranıyor) onu görünür yaptı.
+
+`ab.test.ts` artık `vi.setConfig({ testTimeout: 60_000 })` ile koşuyor.
+Sınır performans hakkında bir şey iddia etmiyor — ne kadar sürdüğü
+ölçülmüyor, yalnızca takılmanın sonsuza kilitlenmemesi isteniyor. Varsayılan
+5 saniye birim sınaması ölçüsü; bu dosyanın her sınaması geçici git deposu
+kurup worktree açıp gizli süiti koşturuyor.
+
+**Durum:** Linux'ta 714 test yeşil, typecheck temiz. İlk dört düzeltme
+**Windows'ta doğrulandı** (712/714 → kalan ikisi bu zaman aşımıydı);
+beşincisinin Windows'ta doğrulanması gerekiyor.
 
 ---
 

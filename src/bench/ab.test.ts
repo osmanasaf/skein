@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -8,6 +8,18 @@ import { VERDICT_FILE } from "../watch/verdict.js";
 import {
   ArmError, armAdapters, armMetrics, prepareSandbox, requireAdapters, runArm, type Arm,
 } from "./ab.js";
+
+// Bu dosyanın sınamaları BÜTÜNLEŞME sınaması: her biri geçici bir git deposu
+// kuruyor, worktree açıyor, kartı rol zinciri boyunca yürütüyor ve gizli
+// süiti üretilen koda karşı koşturuyor. Varsayılan 5 saniye birim sınaması
+// ölçüsü; buradaki en ağır ikisi POSIX'te 4.6s ve 3.7s sürüyordu, yani
+// sınıra yapışıktı — platformdan bağımsız, gizli bir kırılganlık. Windows'ta
+// (git daha yavaş, dosyalar taranıyor) ikisi de sınırı aştı ve sınama
+// zaman aşımından kırmızı yandı; ürün kodu doğruydu.
+//
+// Sınır performans hakkında bir şey İDDİA ETMİYOR: ne kadar sürdüğü
+// ölçülmüyor, yalnızca takılmanın sonsuza kilitlenmemesi isteniyor.
+vi.setConfig({ testTimeout: 60_000 });
 
 const REPO = resolve(import.meta.dirname, "../..");
 
