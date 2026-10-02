@@ -20,9 +20,22 @@ itiraz dört alan taşır ve mekanizma bunları **makineyle** okur:
 **Durum:** açık
 ```
 
-**`Neyi yanlışlar` depodan bir yere işaret etmek zorunda.** Yolu var
-olmayan itiraz sayılmaz — ne senin lehine (planı durdurmaz) ne aleyhine
+**`Neyi yanlışlar` depodan bir DOSYA YOLU vermek zorunda.** Yol yoksa
+itiraz sayılmaz — ne senin lehine (planı durdurmaz) ne aleyhine
 (reddedilmiş sayılmaz). Sayılmaz.
+
+Satır numarası tek başına yol değildir. En sık kaybedilen itiraz böyle
+kaybediliyor:
+
+```
+YANLIŞ  **Neyi yanlışlar:** Satır 47-49 — sıra koruması mekanizması açık değil.
+YANLIŞ  **Neyi yanlışlar:** Planın 3. maddesi bu durumu ele almıyor.
+DOĞRU   **Neyi yanlışlar:** `src/pool.ts:47-49` — kuyruk sırasını orada
+        indeksle tutuyor, plan bunu değiştirirse çağıran kırılır.
+```
+
+Yolu yazmak zahmetli diye atlamak, itirazı çöpe atmak demek: makine onu
+okuyamaz, yazar görmez, sayılmaz.
 
 **Plan belgesinin kendisini kanıt gösterme.** `docs/plan/<kart>.md` depoda
 var, ama onu göstermek "plan şöyle diyor" demektir; planın *dokunacağı*
