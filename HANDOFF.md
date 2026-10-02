@@ -7,7 +7,7 @@ yapıştırılabilsin diye yazıldı: aşağısı Skein'i tanımayan birine de y
 **Dal:** `claude/project-plan-brainstorm-pthvoc` — `claude/project-thread-sc56cs`
 ileri sarılıp üstüne devam edildi, yani iki dalın işi bu dalda birleşti.
 `sc56cs` olduğu yerde duruyor; yeni iş burada.
-**Durum:** 724 test yeşil, typecheck temiz, ağaç temiz.
+**Durum:** 737 test yeşil, typecheck temiz, ağaç temiz.
 `watch selftest` bu konteynerde **koşmuyor**: `hub/flows/selftest.yaml`
 depoda izlenmiyor (yalnızca yazarın makinesinde duruyordu, konteyner
 yenilenince gitti). Belgelenmiş bir komutun depoda olmayan bir dosyaya
@@ -351,6 +351,46 @@ askıda. Yani `planab <görev> --k=3` yerelde tek komutta biter; `--kol` ve
 
 **Not:** `watch selftest` için gereken `hub/flows/selftest.yaml` depoda
 izlenmiyor — senin eski klonunda duruyor olabilir; konteynerde yoktu.
+
+---
+
+## ÇEKİRDEKTE YARIŞ KUSURU — kuyruk, yarışı kaybedince ÇÖKÜYORDU (2 Ekim)
+
+2x2'ye hazırlanırken tam takım bir kez `queue.test.ts > aynı kartı iki
+koşucu birden alamaz` sınamasında kırıldı, sonra izole 3/3 geçti. "Takılma"
+deyip geçmek yerine zorladım ve **gerçek bir kusur** çıktı:
+
+```
+Error: ENOENT: ... .skein/queue/coder/1-...json
+  at CardQueue.#readCard (queue.ts:88)
+  at CardQueue.#scan (queue.ts:110)
+  at CardQueue.take (queue.ts:181)
+```
+
+`#scan` dizini listeleyip SONRA dosyaları okuyor. Arada öteki `take` dosyayı
+yeniden adlandırırsa ENOENT taramadan dışarı fırlıyor ve **`take` yarışı
+kaybeden tarafta `null` dönmek yerine çöküyor.** Gözcü süreci bir kartı
+kaçırmakla kalmaz, ölür.
+
+Kuyruk aynı yarışı **rename** yolunda zaten bilerek tolere ediyordu
+("başaramayan ENOENT alıp sıradakine geçer"); eksik olan **tarama** yoluydu.
+Düzeltildi: kaybolan dosya atlanıyor, **bozuk** dosya hâlâ hata — birincisi
+eşzamanlılığın normali, ikincisi veri kaybı.
+
+### Sınaması neden yarıştırmıyor
+
+Önce yarıştıran bir sınama yazdım; **mutasyon ısırmadı.** Pencereyi ölçtüm:
+düzeltme kaldırılmış hâlde 450 turluk zorlamada (2 ve 8 eşzamanlı `take`)
+bir kez bile yakalanmadı — ilk gözlem tek seferlik bir şanstı. Yarışa
+dayanan bir sınama ısırmıyorsa güven vermesi sahtedir, o yüzden atıldı.
+
+Yerine `readdir`'in LİSTELEDİĞİ ama `readFile`'ın ENOENT verdiği durum
+doğrudan kuruluyor: **kopuk sembolik bağ.** Determinist, mutasyonla tam o
+ENOENT ile ısırıyor, Windows'ta sembolik bağ ayrıcalık istediği için orada
+atlanıyor (`it.skipIf`).
+
+Bu, bugünün dördüncü "yük altında takılan sınama" vakası ve ilk üçü gibi
+altında gerçek bir şey vardı.
 
 ---
 

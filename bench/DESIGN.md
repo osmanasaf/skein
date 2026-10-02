@@ -896,6 +896,32 @@ ve koşu başına ~$0.07. Çapraz satıcı 2x2'sinde üretici olarak sonnet
 kullanmak, sonucu daha ilginç bir güç sınıfına taşır — "zayıf model kusur
 üretti" itirazını da zayıflatır.
 
+## Çapraz satıcıda maliyetin birimi: TOKEN, dolar değil
+
+2 Ekim'de codex ilk kez uçtan uca koştu ve ölçüm tasarımında bir şeyi
+zorladı: **ChatGPT aboneliğiyle koşan codex `total_cost_usd` üretmiyor.**
+Claude tarafı üretiyor. Eski kod her yerde `usage?.costUsd ?? 0` topluyordu,
+yani codex hücreleri `$0.0000` görünecekti — eksik veri değil, **yanlış
+bilgi**: codex bedava sanılır ve "çapraz denetim pahalı mı" sorusu sessizce
+bozulur.
+
+Karar: **ortak birim token.** İki adaptör de `inputTokens`/`outputTokens`
+dolduruyor (claude `usage.input_tokens`'tan, codex
+`turn.completed.usage`'dan), yani karşılaştırma token üzerinden kurulabilir.
+Dolar, onu BİLDİREN sağlayıcı için ek alan olarak kalıyor ve bildirilmediğinde
+**boş** — sıfır değil.
+
+Gerekçe projenin kendi kuralının aynısı: iki ayrı yer gerçeğini
+harmanlamıyoruz (objektif süit ile hakem katmanı gibi). Dolar ile abonelik
+aynı birim değil; birini ötekinin yerine saymak, ölçülmemiş olanı ölçülmüş
+göstermek olur.
+
+Uygulama `src/bench/usage.ts`: `totalUsage` bildirilmemiş alanı boş bırakıyor,
+`formatUsage` ekranda neyin bilinmediğini söylüyor
+(`13607→11 token · dolar yok (abonelik kimliği)`), ve hiç ölçü yoksa
+`ÖLÇÜ YOK` diyor — çünkü ölçülemeyen bir hücre ucuz bir hücre değildir.
+2x2 raporu artık hücre başına ve toplamda bunu basıyor.
+
 ## Çapraz satıcı nerede koşulabilir
 
 `codex` CLI'ın API anahtarına ihtiyacı yok — ChatGPT oturumuyla da çalışıyor.

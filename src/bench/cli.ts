@@ -1,4 +1,5 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { formatUsage, sumUsage } from "./usage.js";
 import { join, resolve } from "node:path";
 import { ClaudeCliAdapter } from "../adapters/claude.js";
 import { AdapterRegistry, type Adapter } from "../adapters/contract.js";
@@ -689,10 +690,15 @@ async function matrix(taskId: string, a: string, b: string, force: boolean): Pro
   }
   console.log("\n=== denetim hücreleri ===");
   for (const c of out.cells) {
-    console.log(`  ${c.producer} üretti → ${c.reviewer} inceledi  ${c.crossed ? "ÇAPRAZ" : "aynı  "}  ${c.reviewPath}`);
+    console.log(`  ${c.producer} üretti → ${c.reviewer} inceledi  ${c.crossed ? "ÇAPRAZ" : "aynı  "}  ` +
+      `${c.reviewPath}  ·  ${formatUsage(c.usage)}`);
   }
-  const total = out.producers.reduce((s2, p) => s2 + p.costUsd, 0) + out.cells.reduce((s2, c) => s2 + c.costUsd, 0);
-  console.log(`\n  toplam: $${total.toFixed(4)}`);
+  // Toplam dolar olarak basılamıyor: hücrelerin bir kısmı abonelik
+  // kimliğiyle koşmuşsa dolar bildirmiyor ve `?? 0` ile toplamak eksik bir
+  // toplamı tam gibi gösterirdi. `formatUsage` neyin bilinmediğini söylüyor.
+  const toplam = [...out.producers.map((p) => p.usage), ...out.cells.map((c) => c.usage)]
+    .reduce((a, b) => sumUsage(a, b), {});
+  console.log(`\n  toplam: ${formatUsage(toplam)}`);
   console.log("\nSıradaki: cli.ts puanla — kanıtlanmış kusuru hangi hücreler yakaladı?");
 }
 

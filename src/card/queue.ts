@@ -85,7 +85,33 @@ export class CardQueue {
   // ---- okuma ----
 
   async #readCard(path: string): Promise<Card> {
-    const text = await readFile(path, "utf8");
+    const card = await this.#readCardIfPresent(path);
+    if (card === null) {
+      throw new QueueError(`Kart dosyası yok: ${path}`);
+    }
+    return card;
+  }
+
+  /**
+   * Kartı okur; dosya YOKSA null.
+   *
+   * Taramayla okuma arasında bir dosya kaybolabiliyor ve bu iyi huylu bir
+   * yarış: öteki koşucu kartı aldı, yani yeniden adlandırdı. Eskiden ENOENT
+   * `#scan`'den dışarı fırlıyordu ve `take` yarışı KAYBEDEN tarafta `null`
+   * dönmek yerine çöküyordu — gözcü süreci bir kartı kaybetmekle kalmayıp
+   * ölürdü. 300 denemelik zorlamada ilk denemede çıktı.
+   *
+   * Ayrım korunuyor: kaybolan dosya atlanıyor, BOZUK dosya hâlâ hata.
+   * Birincisi eşzamanlılığın normali, ikincisi veri kaybı.
+   */
+  async #readCardIfPresent(path: string): Promise<Card | null> {
+    let text: string;
+    try {
+      text = await readFile(path, "utf8");
+    } catch (cause) {
+      if ((cause as NodeJS.ErrnoException).code === "ENOENT") return null;
+      throw cause;
+    }
     try {
       return parseCard(text);
     } catch (cause) {
@@ -107,7 +133,9 @@ export class CardQueue {
       if (entry.isDirectory()) {
         found.push(...(await this.#scan(path)));
       } else if (entry.name.endsWith(".json") && !entry.name.startsWith(".tmp-")) {
-        found.push({ card: await this.#readCard(path), path });
+        // Dosya tarandıktan sonra kaybolmuş olabilir: öteki koşucu aldı.
+        const card = await this.#readCardIfPresent(path);
+        if (card !== null) found.push({ card, path });
       }
     }
     return found;

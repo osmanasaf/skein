@@ -1,4 +1,5 @@
 import { mkdir, writeFile } from "node:fs/promises";
+import { totalUsage, type UsageTotal } from "./usage.js";
 import { join } from "node:path";
 import { adapterFor, type AdapterOptions } from "../adapters/factory.js";
 import type { Adapter } from "../adapters/contract.js";
@@ -31,11 +32,19 @@ export interface CellOutcome {
   reviewer: string;
   crossed: boolean;
   reviewPath: string;
-  costUsd: number;
+  /**
+   * Hücrenin ölçüsü: dolar VE token, ayrı ayrı.
+   *
+   * Eskiden `costUsd: number` idi ve `?? 0` ile dolduruluyordu. Çapraz
+   * satıcıda bu yanlış bilgi üretiyor: abonelik kimliğiyle koşan bir
+   * sağlayıcı dolar bildirmiyor, hücre `$0.0000` görünüyor ve bedava
+   * sanılıyor. Ortak birim token.
+   */
+  usage: UsageTotal;
 }
 
 export interface MatrixOutcome {
-  producers: { model: string; redHooks: string[]; total: number; ran: boolean; costUsd: number }[];
+  producers: { model: string; redHooks: string[]; total: number; ran: boolean; usage: UsageTotal }[];
   cells: CellOutcome[];
   /** Denetim hücreleri neden atlandı; koştularsa undefined. */
   skipped?: string;
@@ -92,7 +101,7 @@ export async function runMatrix(options: MatrixOptions): Promise<MatrixOutcome> 
   const adapters: Adapter[] = models.map((spec) => adapterFor(spec, options.adapter ?? {}));
   const produced: {
     adapter: Adapter; artifactDir: string; redHooks: string[];
-    total: number; ran: boolean; costUsd: number;
+    total: number; ran: boolean; usage: UsageTotal;
   }[] = [];
 
   for (const adapter of adapters) {
@@ -139,7 +148,7 @@ export async function runMatrix(options: MatrixOptions): Promise<MatrixOutcome> 
 
     produced.push({
       adapter, artifactDir: p.artifactDir, redHooks: h.red, total: h.hooks.length, ran: h.ran,
-      costUsd: p.invoke.usage?.costUsd ?? 0,
+      usage: totalUsage([p.invoke.usage]),
     });
   }
 
@@ -164,7 +173,7 @@ export async function runMatrix(options: MatrixOptions): Promise<MatrixOutcome> 
     console.log("Denetim hücreleri atlandı (yine de koşmak için --force).");
     return {
       producers: produced.map((p) => ({
-        model: p.adapter.model, redHooks: p.redHooks, total: p.total, ran: p.ran, costUsd: p.costUsd,
+        model: p.adapter.model, redHooks: p.redHooks, total: p.total, ran: p.ran, usage: p.usage,
       })),
       cells: [],
       skipped,
@@ -200,14 +209,14 @@ export async function runMatrix(options: MatrixOptions): Promise<MatrixOutcome> 
 
       cells.push({
         producer: prod.adapter.model, reviewer: rev.model, crossed,
-        reviewPath: rel(reviewPath), costUsd: r.invoke.usage?.costUsd ?? 0,
+        reviewPath: rel(reviewPath), usage: totalUsage([r.invoke.usage]),
       });
     }
   }
 
   return {
     producers: produced.map((p) => ({
-      model: p.adapter.model, redHooks: p.redHooks, total: p.total, ran: p.ran, costUsd: p.costUsd,
+      model: p.adapter.model, redHooks: p.redHooks, total: p.total, ran: p.ran, usage: p.usage,
     })),
     cells,
   };

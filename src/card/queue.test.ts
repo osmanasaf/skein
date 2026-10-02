@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import { mkdtemp, readdir, readFile, rm, writeFile, mkdir } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, symlink, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -328,6 +328,46 @@ describe("CardQueue — çökme ve yarış", () => {
     await put(daily);
     const [a, b] = await Promise.all([queue.take("coder"), queue.take("coder")]);
     expect([a, b].filter((c) => c !== null)).toHaveLength(1);
+  });
+
+  // Yarışı KAYBEDEN taraf nazikçe `null` dönmek zorunda: `#scan` dizini
+  // listeleyip SONRA dosyaları okuyor, arada öteki `take` dosyayı yeniden
+  // adlandırmış olabilir. Eskiden ENOENT taramadan dışarı fırlıyordu ve
+  // `take` çöküyordu — gözcü süreci bir kartı kaçırmakla kalmayıp ölürdü.
+  // Canlı bir zorlamada yığın iziyle görüldü (`#scan` → `#readCard` →
+  // `readFile` ENOENT).
+  //
+  // Yarıştırarak sınanmıyor ve bu bilinçli: pencere o kadar dar ki 450
+  // turluk zorlamada bir kez bile yakalanmadı. Yarışa dayanan bir sınama
+  // ısırmıyor, yani güven vermesi sahte olurdu. Onun yerine `readdir`'in
+  // LİSTELEDİĞİ ama `readFile`'ın ENOENT verdiği durum doğrudan kuruluyor:
+  // kopuk bir sembolik bağ. Windows'ta sembolik bağ ayrıcalık istiyor, o
+  // yüzden orada atlanıyor.
+  it.skipIf(process.platform === "win32")(
+    "taramada kaybolmuş dosya kartı düşürmez, çökmez",
+    async () => {
+      const card = await put(daily);
+      const [gercek] = await copiesOf(card.id);
+      // Aynı dizinde, var olmayan bir hedefe işaret eden bir `.json`.
+      await symlink(join(dirname(gercek as string), "yok.json"),
+        join(dirname(gercek as string), "0-kopuk.json"));
+
+      // Kopuk bağ atlanıyor, gerçek kart alınıyor.
+      const alinan = await queue.take("coder");
+      expect(alinan?.id).toBe(card.id);
+
+      // Kart kalmayınca da çökmüyor: null dönüyor.
+      expect(await queue.take("coder")).toBeNull();
+    },
+  );
+
+  // Kaybolan dosya iyi huylu, BOZUK dosya değil: ikincisi veri kaybı ve
+  // sessizce atlanırsa kart yok sayılır.
+  it("bozuk kart dosyasını atlamaz, hata verir", async () => {
+    const card = await put(daily);
+    const [bulunan] = await copiesOf(card.id);
+    await writeFile(bulunan as string, "{ bu json değil", "utf8");
+    await expect(queue.take("coder")).rejects.toThrow(/Bozuk kart dosyası/);
   });
 
   it("recover yarıda kalan aktif kartı kuyruğa geri koyar", async () => {
