@@ -2,7 +2,7 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import { mkdtemp, writeFile, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ClaudeCliAdapter } from "./claude.js";
+import { ClaudeCliAdapter, needsStdin } from "./claude.js";
 import type { AgentStep } from "./contract.js";
 import { makeFakeCli, type FakeCliSpec } from "../testing/fake-cli.js";
 
@@ -274,6 +274,24 @@ describe("ClaudeCliAdapter — akış modu", () => {
     expect(steps[0]?.detail).toBe(join("src", "retry.ts").split("\\").join("/"));
   });
 
+  // Windows'ta `join` ters eğik çizgi üretiyor ama önek eğik çizgiyle
+  // kuruluyordu: hiçbir yol kısalmıyor, ekranda her satır mutlak yolla
+  // doluyordu. Saf dizi işi, o yüzden POSIX'te de sınanabiliyor.
+  it("ters eğik çizgili yolu kısaltır ve POSIX ayraçla verir", async () => {
+    // Çalışma dizini GERÇEK kalıyor (olmayan bir cwd'de süreç hiç başlamaz);
+    // Windows'ın ürettiği biçim, ajanın bildirdiği yolu ters eğik çizgiye
+    // çevirerek taklit ediliyor. Sınanan şey saf dizi işi.
+    const tersYol = `${root}/src/a.ts`.split("/").join("\\");
+    const line = JSON.stringify({
+      type: "assistant",
+      message: { content: [{ type: "tool_use", name: "Edit", input: { file_path: tersYol } }] },
+    });
+    const bin = await fakeCli({ stdout: `${line}\n${S_RESULT}\n` });
+    const steps: AgentStep[] = [];
+    await new ClaudeCliAdapter({ model: "m", bin }).invoke(req({ onStep: (x) => steps.push(x) }));
+    expect(steps[0]?.detail).toBe("src/a.ts");
+  });
+
   it("dizin dışındaki yol olduğu gibi kalır", async () => {
     const line = JSON.stringify({
       type: "assistant",
@@ -355,5 +373,28 @@ describe("ClaudeCliAdapter — akış modu", () => {
     expect(result.exitCode).toBe(0);
     // Sonuç satırı ancak adım görüldükten SONRA yazıldı; yine de okundu.
     expect(result.usage?.costUsd).toBe(0.02);
+  });
+});
+
+// Windows'ta sağlayıcı CLI'ı genelde bir `.cmd` sarmalayıcısı ve cmd.exe
+// `%*` ile argümanları yeniden ayrıştırıyor: satır sonları ve `>` `<`
+// yönlendirme sanılıyor, görev metni SESSİZCE eksik gidiyor.
+describe("needsStdin", () => {
+  it("kısa tek satırlık metni pozisyonelde bırakır — iki platformda da", () => {
+    expect(needsStdin("işi yap", false)).toBe(false);
+    expect(needsStdin("işi yap", true)).toBe(false);
+  });
+
+  it("çok satırlı metni Windows'ta stdin'e düşürür, POSIX'te düşürmez", () => {
+    const metin = "## İş\n\nundo ekle\n";
+    expect(needsStdin(metin, true)).toBe(true);
+    // POSIX davranışı DEĞİŞMİYOR: ölçülmüş koşuların yolu aynı kalsın.
+    expect(needsStdin(metin, false)).toBe(false);
+  });
+
+  it("uzun metni her platformda stdin'e düşürür", () => {
+    const uzun = "x".repeat(8001);
+    expect(needsStdin(uzun, false)).toBe(true);
+    expect(needsStdin(uzun, true)).toBe(true);
   });
 });

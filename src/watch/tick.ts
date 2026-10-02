@@ -11,7 +11,7 @@ import {
   planPathFor, promptLayers, roleOf, type SnapshotRole,
 } from "../flow/snapshot.js";
 import { objectionBaseline, planPhase } from "../plan/phase.js";
-import { birlestirItirazlar, kanitYolu, parseItirazlar } from "../plan/itiraz.js";
+import { birlestirItirazlar, kanitYollari, parseItirazlar } from "../plan/itiraz.js";
 import { assemblePrompt } from "../prompt/assemble.js";
 import { dirtyPaths, head, isTracked, mergeForward, ORCHESTRATOR_PATHS } from "./git.js";
 import { buildTaskText } from "./task-text.js";
@@ -460,12 +460,14 @@ async function planStep(
   // itiraz hiçbir dosyaya işaret edemez ve planı durduramaz.
   const yollar = new Map<string, boolean>();
   for (const parca of okunan.flatMap((o) => o.text.split(/\r?\n/u))) {
-    // Satırdaki HER ters tırnaklı parça denetleniyor: ayrıştırıcı "yol
-    // gibi görünen ilk parçayı" seçiyor ve o, satırın ilk parçası olmak
-    // zorunda değil. İkisi farklı parçaya bakarsa geçerli bir itiraz
-    // "depoda yok" diye elenir.
-    const aday = kanitYolu(parca);
-    if (aday !== null && !yollar.has(aday)) {
+    // Satırdaki BÜTÜN yollar denetleniyor, yalnızca ilki değil. Ayrıştırıcı
+    // da hepsine bakıyor (`kanitYollari`); burada yalnızca ilkine bakmak
+    // ikisini ayrı düşürüyordu: aynı satırda plan belgesini ve kodu gösteren
+    // bir itirazın KOD yolu haritaya hiç girmiyor, `varMi` false diyor, ve
+    // itiraz "yolların hepsi kendi belgesi" sayılıp eleniyordu — tam olarak
+    // kapatmaya çalıştığım yanlış eleme.
+    for (const aday of kanitYollari(parca)) {
+      if (yollar.has(aday)) continue;
       yollar.set(aday, await exists(join(workdir, aday)));
     }
   }

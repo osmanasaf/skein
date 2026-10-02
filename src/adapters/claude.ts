@@ -248,8 +248,20 @@ async function readFileSafe(path: string): Promise<string | undefined> {
  * Windows'ta tüm komut satırı ~32767 karakterle sınırlı; prompt yolu ve
  * bayraklar da aynı bütçeden yiyor, o yüzden geniş bir pay bırakılıyor.
  */
-export function needsStdin(taskText: string): boolean {
-  return taskText.length > 8000;
+export function needsStdin(
+  taskText: string,
+  windows: boolean = process.platform === "win32",
+): boolean {
+  if (taskText.length > 8000) return true;
+  // Windows'ta sağlayıcı CLI'ı genelde bir `.cmd` sarmalayıcısı (npm global
+  // kurulumu böyle kuruyor) ve cmd.exe `%*` ile argümanları yeniden
+  // ayrıştırıyor: satır sonları ve `>` `<` `&` `|` gibi karakterler
+  // yönlendirme sanılıyor. Çok satırlı bir görev metni pozisyonel argümanla
+  // SAĞLAM geçmiyor — ajan görevi eksik görüyor ve bu sessizce oluyor.
+  // POSIX'te böyle bir sorun yok; kural platforma bağlı tutuluyor ki
+  // ölçülmüş koşuların davranışı değişmesin.
+  if (windows && /[\r\n]/u.test(taskText)) return true;
+  return false;
 }
 
 /** Çıktı JSON değilse (CLI hata metni bastıysa) sessizce yutulur; stdout korunur. */
@@ -340,8 +352,17 @@ export function stepsOf(record: StreamRecord, workdir?: string): AgentStep[] {
  */
 function relativize(value: string, workdir?: string): string {
   if (workdir === undefined || workdir === "") return value;
-  const prefix = workdir.endsWith("/") || workdir.endsWith("\\") ? workdir : `${workdir}/`;
-  return value.startsWith(prefix) ? value.slice(prefix.length) : value;
+  // Karşılaştırma TEK bir ayraç biçiminde yapılıyor. Windows'ta `join`
+  // ters eğik çizgi üretiyor, önek ise eğik çizgiyle kuruluyordu: hiçbir
+  // yol kısalmıyor ve ekranda her satır mutlak yolla doluyordu.
+  const duz = (x: string): string => x.split("\\").join("/");
+  const taban = duz(workdir).replace(/\/+$/u, "");
+  const yol = duz(value);
+  const onek = `${taban}/`;
+  // Kısalan yol POSIX ayraçlı dönüyor: ekranda ve günlükte tek biçim.
+  // Eşleşmezse değer OLDUĞU GİBİ kalıyor — dizin dışındaki bir yolu
+  // yeniden yazmak bilgi kaybı olurdu.
+  return yol.startsWith(onek) ? yol.slice(onek.length) : value;
 }
 
 /**

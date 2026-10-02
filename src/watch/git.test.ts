@@ -20,6 +20,13 @@ beforeEach(async () => {
   await git(root, "init", "-q", "-b", "ana", "repo");
   await git(main, "config", "user.email", "skein@local");
   await git(main, "config", "user.name", "skein");
+  // Satır sonu dönüşümü KAPALI. Windows'ta kullanıcının global
+  // `core.autocrlf=true` ayarı checkout'ta LF'i CRLF'e çeviriyor ve bu
+  // dosyanın bayt düzeyindeki iddiaları (`"...\n"`) kırılıyor. Burada
+  // sınanan şey birleştirmenin davranışı, git'in satır sonu politikası
+  // değil; o yüzden deponun kendi ayarıyla sabitleniyor.
+  await git(main, "config", "core.autocrlf", "false");
+  await git(main, "config", "core.eol", "lf");
   await writeFile(join(main, "README.md"), "# iskelet\n");
   await git(main, "add", "-A");
   await git(main, "commit", "-qm", "iskelet");

@@ -95,11 +95,16 @@ const wsDir = (ws: string): string =>
 
 /** Mutlak yolu (çalışma-alanı, relatif) çiftine çözer; en uzun önek kazanır. */
 function coz(abs: string): { ws: string; rel: string } | null {
+  // Windows'ta `join` ters eğik çizgi üretiyor, sahte dosya sisteminin
+  // anahtarları ise POSIX. Normalize edilmezse hiçbir yol çözülmüyor:
+  // ürün kodu doğru olduğu halde bu dosyanın 20 sınaması kırmızı yanıyordu.
+  const duz = (x: string): string => x.split("\\").join("/");
+  const yolu = duz(abs);
   let best: { ws: string; rel: string } | null = null;
   for (const ws of WORKSPACES) {
-    const dir = wsDir(ws) + "/";
-    if (!abs.startsWith(dir)) continue;
-    const rel = abs.slice(dir.length);
+    const dir = duz(wsDir(ws)) + "/";
+    if (!yolu.startsWith(dir)) continue;
+    const rel = yolu.slice(dir.length);
     if (best === null || rel.length < best.rel.length) best = { ws, rel };
   }
   return best;
@@ -317,6 +322,31 @@ describe("6e — körlü tur: taşıma dallanıyor ve toplanıyor", () => {
     const { events } = await readEvents(logPath);
     expect(events.filter((e) => e.type === "plan.settled")[0]).toMatchObject({
       outcome: "anlasma", rounds: 1, objections: 0, invalid: 1,
+    });
+  });
+
+  // Kanıt varlık haritası SATIR SATIR kuruluyordu ve her satırdan yalnızca
+  // İLK yolu alıyordu. Ayrıştırıcı ise bütün yollara bakıyor. İkisi ayrı
+  // düşünce, aynı satırda plan belgesini ve kodu gösteren bir itirazın KOD
+  // yolu haritaya hiç girmiyor, "depoda yok" sayılıyor, ve itiraz "yolların
+  // hepsi kendi belgesi" diye eleniyordu — kapatmaya çalıştığım yanlış
+  // elemenin ta kendisi, bir katman aşağıda.
+  it("aynı satırda plan belgesi VE kod gösteren itiraz ayakta kalır", async () => {
+    const card = await put();
+    await planYaz(card);
+    yaz("architect", ITIRAZ(card.id, "architect"),
+      `# İtirazlar — architect\n\n## İtiraz 1 — architect\n` +
+      `**Ne:** Plan sürüm sayacına güveniyor.\n` +
+      `**Neden:** Tüketici önbelleği sürüme bakıyor.\n` +
+      `**Neyi yanlışlar:** \`${PLAN(card.id)}:44\` yüzeysel, \`src/var.ts:3\` kırılıyor.\n` +
+      `**Durum:** açık\n`);
+    await tick("architect", options);
+    yaz("analyst", ITIRAZ(card.id, "analyst"), YOK);
+    await tick("analyst", options);
+
+    const { events } = await readEvents(logPath);
+    expect(events.filter((e) => e.type === "plan.round")[0]).toMatchObject({
+      role: "architect", newObjections: 1, openObjections: 1, invalid: 0,
     });
   });
 

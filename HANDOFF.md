@@ -7,7 +7,7 @@ yapıştırılabilsin diye yazıldı: aşağısı Skein'i tanımayan birine de y
 **Dal:** `claude/project-plan-brainstorm-pthvoc` — `claude/project-thread-sc56cs`
 ileri sarılıp üstüne devam edildi, yani iki dalın işi bu dalda birleşti.
 `sc56cs` olduğu yerde duruyor; yeni iş burada.
-**Durum:** 709 test yeşil, typecheck temiz, ağaç temiz.
+**Durum:** 714 test yeşil, typecheck temiz, ağaç temiz.
 `watch selftest` bu konteynerde **koşmuyor**: `hub/flows/selftest.yaml`
 depoda izlenmiyor (yalnızca yazarın makinesinde duruyordu, konteyner
 yenilenince gitti). Belgelenmiş bir komutun depoda olmayan bir dosyaya
@@ -233,6 +233,63 @@ Kart yazara döndüğünde `ls "$SB/docs/plan/"` iki itiraz dosyasını da
 göstermeli — fan-in budur. Günlükte `plan.round` olaylarının `blind` alanı
 `true`, ve itirazcıların `newObjections` değeri kendi katkısını, yazarınki
 turun gerçek toplamını gösterir.
+
+---
+
+## WINDOWS'TA İLK KOŞU: 24 kırılma, dört kök neden (2 Ekim)
+
+Proje ilk kez Windows'ta koşuldu (`C:\dev\skein`, Node 22) ve
+**685/709 geçti, 24 kırıldı.** Dördü ayrı kök nedendi; ikisi GERÇEK ürün
+kusuru, ikisi sınama koşumunun POSIX varsayımı. Hepsi düzeltildi.
+
+### Ürün kusuru 1: yol kısaltma ayraç farkında kalıyordu
+
+`relativize` (claude adaptörü) öneki `${workdir}/` diye kuruyordu; Windows'ta
+`join` ters eğik çizgi üretiyor, `startsWith` hiç tutmuyor ve **ekranda her
+adım mutlak yolla doluyordu**. Artık karşılaştırma tek ayraç biçiminde
+yapılıyor ve kısalan yol POSIX ayraçla dönüyor. Dizin dışındaki yol olduğu
+gibi kalıyor — onu yeniden yazmak bilgi kaybı olurdu.
+
+### Ürün kusuru 2: çok satırlı görev metni cmd.exe'den sağlam geçmiyor
+
+Windows'ta sağlayıcı CLI'ı genelde bir `.cmd` sarmalayıcısı (npm global
+kurulumu böyle kuruyor) ve cmd.exe `%*` ile argümanları yeniden ayrıştırıyor:
+satır sonları ve `>` `<` `&` `|` yönlendirme sanılıyor. `needsStdin` yalnızca
+uzunluğa (>8000) bakıyordu, yani **çok satırlı ama kısa bir görev metni
+pozisyonel argümanla gidiyor ve ajan görevi eksik görüyordu — sessizce.**
+`needsStdin` artık Windows'ta çok satırlı metni de stdin'e düşürüyor.
+
+Kural platforma bağlı tutuldu: POSIX davranışı DEĞİŞMEDİ, çünkü ölçülmüş
+kampanyaların yolu aynı kalsın. Platform parametre olarak geçtiği için iki
+davranış da POSIX'te sınanabiliyor.
+
+### Sınama koşumu 1: sahte dosya sisteminin yol çözücüsü
+
+`exchange3.test.ts`'in `coz()`'ü `abs.startsWith(wsDir + "/")` diyordu;
+Windows'ta hiçbir yol çözülmüyor, `readPlan` undefined dönüyor ve kart
+"plan dosyası yok" diye kapıya çıkıyordu. **20 kırılmanın hepsi buydu** —
+ürün kodu doğruydu. Çözücü artık ayraçları normalize ediyor.
+
+### Sınama koşumu 2: git'in satır sonu dönüşümü
+
+`git.test.ts` bayt düzeyinde iddia ediyor (`"...\n"`), ama kullanıcının
+global `core.autocrlf=true` ayarı checkout'ta CRLF üretiyor. Sınama
+depoları artık `core.autocrlf=false` + `core.eol=lf` ile kuruluyor:
+sınanan şey birleştirmenin davranışı, git'in satır sonu politikası değil.
+
+### Yolda çıkan AYRI kusur — Windows'la ilgisi yok
+
+Kanıt varlık haritası (`tick.ts`) satır satır kuruluyordu ve her satırdan
+yalnızca İLK yolu alıyordu; ayrıştırıcı ise (1 Ekim düzeltmesinden sonra)
+bütün yollara bakıyor. İkisi ayrı düştüğü için **aynı satırda plan belgesini
+ve kodu gösteren bir itirazın KOD yolu haritaya hiç girmiyor**, `varMi` false
+diyor, ve itiraz "yolların hepsi kendi belgesi" diye eleniyordu. Yani 1
+Ekim'de kapattığımı sandığım yanlış eleme bir katman aşağıda duruyordu.
+Düzeltildi; mutasyonla doğrulandı.
+
+**Durum:** Linux'ta 714 test yeşil, typecheck temiz. Windows düzeltmeleri
+hata çıktısından ve koddan türetildi; **Windows'ta doğrulanmadı** — orada
+`npm test` koşmak gerekiyor.
 
 ---
 
