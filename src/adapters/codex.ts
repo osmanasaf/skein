@@ -20,7 +20,18 @@ export interface CodexCliOptions {
 /**
  * Codex CLI adaptörü — headless çağrı.
  *
- * Bayraklar `codex-cli 0.155.0` üzerinde doğrulandı — ama iki farklı
+ * Bayraklar `codex-cli 0.160.0` üzerinde yeniden doğrulandı (2 Ekim):
+ * dördü de duruyor. `--output-last-message` yardım çıktısında kısa
+ * biçimiyle (`-o, --output-last-message <FILE>`) listelendiği için uzun
+ * bayrakları tarayan bir göz onu "kaybolmuş" sanabiliyor — sanmıştım.
+ *
+ * 0.160.0 çağrıyı WEBSOCKET üzerinden kuruyor:
+ * `wss://api.openai.com/v1/responses`. Ağ politikası yazılırken bunun
+ * önemi var — host'a izin vermek yetmiyorsa protokol de bakılmalı.
+ * Bağlantı kurulamazsa codex yeniden denemeyi sürdürüyor, kendi kendine
+ * çıkmıyor: `doctor` zaman aşımında ağacı öldürüyor (exit 137).
+ *
+ * Bayraklar önce `0.155.0` üzerinde doğrulanmıştı — ama iki farklı
  * güçte, ve aradaki fark kayda değer:
  *
  * - `exec`, `--model`, `--skip-git-repo-check`,
@@ -28,7 +39,8 @@ export interface CodexCliOptions {
  *   sınandı. CLI hepsini kabul etti, oturumu açtı (`approval: never`,
  *   `sandbox: danger-full-access`) ve stdin'den giden rol promptu + görev
  *   metnini doğru yerde gösterdi. Çağrı yalnızca ağ katmanında durdu:
- *   kurumsal vekil `api.openai.com`'a CONNECT'i reddediyor.
+ *   kurumsal vekil `api.openai.com`'a CONNECT'i reddediyor. 2 Ekim'de
+ *   `doctor` ile bir daha aynı yere kadar koşuldu; sonuç değişmedi.
  * - `--json`, `--output-last-message`: yalnızca `codex exec --help`
  *   çıktısında doğrulandı. Var oldukları kesin, ürettikleri BİÇİM
  *   görülmedi. Bu yüzden ikisi de kırılırsa sessizce değil, boş dönecek

@@ -236,6 +236,44 @@ turun gerçek toplamını gösterir.
 
 ---
 
+## 1. adım: codex adaptörü canlı — ağ sınırına kadar (2 Ekim)
+
+`codex` bu konteynerde kurulu değildi; `npm i -g @openai/codex` ile
+**codex-cli 0.160.0** kuruldu. `bench doctor codex:gpt-5.5` sonucu:
+
+```
+komut: codex exec --model gpt-5.5 --skip-git-repo-check \
+       --dangerously-bypass-approvals-and-sandbox --json --output-last-message <dosya>
+exit=137  süre=120.0s
+stderr: failed to connect to websocket: Proxy connection failed:
+        HTTP CONNECT failed with status 403, url: wss://api.openai.com/v1/responses
+ÇALIŞMIYOR — ama bayraklar yüzünden değil
+```
+
+Ne öğrenildi:
+
+1. **Adaptörün bayrakları 0.160.0'da da geçerli** (önce 0.155.0'da
+   doğrulanmıştı). `--output-last-message` yardımda kısa biçimiyle
+   (`-o, --output-last-message`) listeleniyor; uzun bayrakları tarayan bir
+   göz onu kaybolmuş sanıyor.
+2. **Çağrı doğru kuruluyor:** CLI argümanları kabul etti, oturumu açtı,
+   promptu stdin'den okudu. Kalan tek engel ağ.
+3. **0.160.0 WEBSOCKET kullanıyor** (`wss://api.openai.com/v1/responses`).
+   Ağ politikasına host eklenirken bunun önemi var.
+4. **Ortamda OpenAI kimlik bilgisi yok.** Host açılsa bile kimlik ayrıca
+   gerekiyor.
+5. Bağlantı kurulamayınca codex yeniden denemeyi sürdürüyor, kendi kendine
+   çıkmıyor; `doctor` zaman aşımında ağacı öldürüyor (exit 137).
+
+`doctor`ın varlık sebebi tam buydu: "bayraklar yanlış" ile "ağ kapalı"yı
+ayırmak. Ayırdı.
+
+**Durum:** adaptör gidebileceği yere kadar doğrulandı; ölçüm arşivinde hâlâ
+tek bir tamamlanmış codex koşusu yok, çünkü hiçbiri ağ katmanını geçemedi.
+Çapraz satıcı 2x2'si (2. adım) buna bağlı olduğu için açılmadı.
+
+---
+
 ## YENİ KURALLA TEKRAR KOŞULDU (1 Ekim, ikinci kampanya): OLUMSUZ
 
 İki görev × `claude-haiku-4-5` × k=3, iki kol da baştan (12 koşu, **$4.56**).
