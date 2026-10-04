@@ -896,6 +896,69 @@ ve koşu başına ~$0.07. Çapraz satıcı 2x2'sinde üretici olarak sonnet
 kullanmak, sonucu daha ilginç bir güç sınıfına taşır — "zayıf model kusur
 üretti" itirazını da zayıflatır.
 
+## "0/2 YAKALANDI" NE DEMEK DEĞİL — raporu okumak (4 Ekim)
+
+Kaçıran hücrenin raporu okundu (`claude_claude-sonnet-5--by--codex_gpt-5.5`).
+Sonuç: **hakem doğru, kaçırma gerçek** — ama "denetim işe yaramadı" demek
+değil, ve aradaki fark yöntemsel.
+
+Codex'in yazdığı bulgu:
+
+> **Ne**: `undo()` durumu geçmişten yeniden hesaplayarak aynı `version` için
+> daha önce verilmiş `State` nesnesinin kimliğini koruma sözleşmesini bozuyor.
+> **Nerede**: `src/store.ts:39`
+> … `oncekiV1.version === yeniV1.version` ve içerik yine yalnızca `a`
+> öğesidir; fakat `oncekiV1 !== yeniV1`.
+
+Üç şey birlikte doğru:
+
+1. **Bulgu GERÇEK ve sözleşme uydurma değil.** Tohumun kendi başlığında
+   yazılı (`seed/src/store.ts:10`): *"`getSnapshot()` aynı sürüm için aynı
+   nesneyi döndürür (kimlik sabit)."* Codex belgelenmiş bir değişmezin
+   gerçek bir ihlalini buldu.
+2. **Ama ölçülen kusur bu değil.** Gizli kancalar sürüm tekdüzeliğini sınıyor:
+   `version geri gitmez`, `version hiçbir zaman tekrar etmez`.
+3. **Codex sürümün tekrar ettiğini GÖRDÜ ve sorun saymadı.** Kendi örneğinde
+   `oncekiV1.version === yeniV1.version` yazdı, ama içerik aynı olduğu için
+   bunu kabul edilebilir saydı ve tehlikeli hâle hiç gitmedi: geri alıp
+   BAŞKA bir olay gönderince aynı sürüm numarası farklı içerikle beliriyor ve
+   sürüme göre önbellekleyen tüketici bozuluyor. Bir adım uzaktaydı, atmadı.
+
+Yani 0/2 bir ayrıştırma/alıntı artefaktı değil. Hakem katmanının alıntı
+süzgeci burada yanılmadı.
+
+### Bunun yöntemsel sonucu: ikinci katman okunmadı
+
+"0/2 yakalandı" ile "denetim değersiz" aynı şey değil ve tasarım bunu zaten
+biliyordu: **iki katman var ve harmanlanmıyor.** Objektif katman yalnızca
+KANITLANMIŞ kusuru (gizli kancaları) sayar; hakem katmanı (`siniflandir`)
+bulguları ayrıca sınıflar ve `gerçek ama kanıtlanmamış` olanı AYRI tutar.
+
+Bu koşuda yalnızca birinci katman okundu. Codex'in kimlik bulgusu ikinci
+katmanda bir yere düşer; şu an hiçbir yere düşmüyor çünkü `siniflandir`
+koşulmadı.
+
+Tezin kendisi için de keskinleşen soru bu: çeşitliliğin değeri yalnızca
+"aynı kusuru kim yakaladı" değil, **"birinin bulduğu gerçek kusuru öteki
+buldu mu"** olabilir. Claude'un aynı-satıcı denetimi kimlik ihlalini de
+buldu mu? O raporu okumak bu soruyu cevaplar ve hiçbir yeni koşu
+gerektirmez.
+
+### Okuma notları (kusur değil, ortam)
+
+- Rapor dosyası UTF-8; PowerShell'in `type` komutu konsol kod sayfasıyla
+  (857) okuduğu için bozuk görünüyor. `Get-Content -Encoding utf8 <yol>`
+  doğru basar.
+- Üretim hücrelerinde `8→801 token` gibi sayılar **token düzeltmesinden
+  ÖNCEKİ** koşulardan geliyor: günlük, koşu anında ayrıştırılmış `usage`'ı
+  saklıyor. Düzeltme yalnızca yeni koşuları etkiliyor; eski kayıtlar
+  olduğu gibi duruyor (ve durmalı).
+- Denetim hücrelerinde `ölçüm yok` doğru: gizli süit üretim artefaktına
+  karşı koşuyor, denetim raporuna karşı değil.
+- Rapor `gpt-5.5 uretici` satırını iki kez gösteriyor; `--gorev` göreve göre
+  süzüyor ve tek başına koşan kalibrasyon da aynı göreve ait. Toplamları
+  okurken akılda tutulmalı.
+
 ## İLK ÇAPRAZ SATICI SONUCU — ve denetçi tarafında güçsüz hücre (4 Ekim)
 
 Puanlama koştu (`claude-opus-5`, körlenmiş, $0.7286):
