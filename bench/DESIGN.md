@@ -896,6 +896,74 @@ ve koşu başına ~$0.07. Çapraz satıcı 2x2'sinde üretici olarak sonnet
 kullanmak, sonucu daha ilginç bir güç sınıfına taşır — "zayıf model kusur
 üretti" itirazını da zayıflatır.
 
+## İLK ÇAPRAZ SATICI SONUCU — ve denetçi tarafında güçsüz hücre (4 Ekim)
+
+Puanlama koştu (`claude-opus-5`, körlenmiş, $0.7286):
+
+```
+claude-sonnet-5 → claude-sonnet-5  aynı    2/2 yakalandı
+claude-sonnet-5 → gpt-5.5          ÇAPRAZ  0/2 yakalandı
+gpt-5.5         → claude-sonnet-5  ÇAPRAZ  2/2 yakalandı
+gpt-5.5         → gpt-5.5          aynı    2/2 yakalandı
+```
+
+|  | denetçi claude | denetçi codex |
+|---|---|---|
+| **üretici claude** | 2/2 | **0/2** |
+| **üretici codex** | 2/2 | 2/2 |
+
+- aynı-satıcı hücreler: **4/4 yakalandı** (kaçırma oranı 0)
+- çapraz hücreler: **2/4 yakalandı** (kaçırma oranı 0.5)
+- etkileşim terimi: **−0.25** → çeşitlilik ALEYHİNE
+- karar: **YETERSİZ** (k=1; kural k≥3 ve işaret tutarlılığı istiyor)
+
+**İlk gözlenen yön tezin aleyhine.** Çaprazlama yardım etmedi; tek kaçırma
+bir çapraz hücrede oldu. Bunu yumuşatmanın bir yolu yok ve k=1 olduğu için
+de bir şey kanıtlamıyor.
+
+### Ama asıl bulgu bu değil: göreli azalma TANIMSIZ
+
+`reduction()` burada `null` dönüyor ve sebebi kodda yazılı: *"aynı-model
+hücrelerinde hiç kaçırma yoksa azalma tanımsız — sıfırdan azalma yok."*
+Aynı-satıcı denetim kusurun **ikisini de** yakaladı, yani iyileştirilecek
+bir kaçırma yok.
+
+Bu, projenin iyi bildiği **güçsüz hücre** sorununun denetçi tarafındaki
+ikizi. Üretici tarafında kuralı biliyoruz: ölçüm gücü için üreticinin kusur
+ÜRETMESİ gerekir. Denetçi tarafı için simetrik kural şu ve bugüne kadar
+yazılmamıştı:
+
+> **Çapraz denetimin değerini ölçmek için, aynı-satıcı denetimin bir şeyi
+> KAÇIRMASI gerekir.** Aynı-satıcı denetim %100 yakalıyorsa, çaprazlama en
+> iyi durumda eşitler; tez olumlu yönde gösterilemez, yalnızca aleyhine
+> gösterilebilir.
+
+`snapshot-store` kusuru üretici için zor, denetçi için kolay: kodu okuyan
+bir modelin `version` sayacının geri gitmesini görmesi, o kodu yazarken
+görmesinden daha kolay. Yani bu hücre tezi olumlu yönde sınayamaz.
+
+### Tek kaçırma gerçek mi, hakem artefaktı mı
+
+Kaçıran hücre `codex, claude'un kodunu inceliyor`. Dikkat çekici olan şu:
+codex **kendi** kodundaki aynı sınıf kusuru 2/2 yakaladı. Aynı model, aynı
+kusur sınıfı, farklı kod.
+
+İki açıklama var ve ikisi çok farklı şeyler:
+
+1. **Gerçekten görmedi.** Claude'un uygulaması kusuru daha örtük bırakmış
+   olabilir.
+2. **Gördü ama hakem saymadı.** Puanlama, bulgunun alıntısını raporda
+   arıyor (`applyFindings`: "alıntısı raporda bulunmayan bulguyu sayıya
+   katmaz, ayrı sayar"). Başka sözcüklerle ifade edilmiş gerçek bir bulgu
+   bu süzgeçten düşebilir.
+
+İkincisi doğruysa ölçüm yanlış, model değil. Dolaylı bir ipucu var: codex
+claude'un kodu için **1464** çıktı token'ı yazdı, kendi kodu için **2492** —
+belirgin biçimde daha kısa bir rapor. İpucu, kanıt değil.
+
+Karara geçmeden önce okunması gereken dosya:
+`denetim/claude_claude-sonnet-5--by--codex_gpt-5.5/rapor.txt`.
+
 ## İLK ÇAPRAZ SATICI 2x2'si KOŞTU (4 Ekim)
 
 Projenin başından beri tıkalı olan şey koştu: dört hücre, iki ayrı satıcı.
