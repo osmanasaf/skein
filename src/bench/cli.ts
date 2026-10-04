@@ -1,5 +1,6 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { layerGaps, type LayerGap } from "./gap.js";
+import { power2x2, powerLines } from "./power.js";
 import { safeName } from "./safe-name.js";
 import { formatUsage, sumUsage, totalUsage } from "./usage.js";
 import { join, resolve } from "node:path";
@@ -293,6 +294,95 @@ async function kalibre(taskId: string, modelSpec: string): Promise<void> {
   }
   console.log(`\n  ÖLÇER — ${r.red.length} kırmızı kanca: ${r.red.join("; ")}`);
   console.log(`  Sıradaki: cli.ts planab ${taskId} --k=3 --model=${modelSpec}`);
+}
+
+/**
+ * 2x2'NİN ÖLÇÜM GÜCÜ ÖN KONTROLÜ — iki koşul birlikte.
+ *
+ * 4 Ekim'deki ilk çapraz satıcı koşusu YETERSİZ verdi ve sebebi yeni bir
+ * ölçüt öğretti. Üretici tarafını zaten biliyorduk:
+ *
+ *   (1) Üretici kusur ÜRETMELİ — yoksa denetçinin yakalayacağı şey yok.
+ *
+ * Eksik olan ikinci koşuldu ve `reduction()` onu kodda söylüyor ("aynı-model
+ * hücrelerinde hiç kaçırma yoksa azalma tanımsız"):
+ *
+ *   (2) AYNI-SATICI denetim o kusuru KAÇIRMALI — yoksa çeşitliliğin
+ *       iyileştirecek bir şeyi yok. Aynı-satıcı %100 yakalıyorsa çaprazlama
+ *       en iyi durumda eşitler; tez olumlu yönde gösterilemez, yalnızca
+ *       aleyhine gösterilebilir.
+ *
+ * `snapshot-store` birinci koşulu geçiyor, ikincisinde kalıyor: kusuru
+ * üretmek zor, GÖRMEK kolay. Dört hücreli tam matrise para harcamadan bunu
+ * anlamanın yolu burası — tek model, tek üretim, tek aynı-satıcı denetim.
+ *
+ * `kalibre`den ayrı bir komut, çünkü ayrı bir deneyi ölçüyor: o 6d'nin plan
+ * kollarına, bu 2x2'nin denetim hücrelerine bakıyor.
+ */
+async function kalibre2x2(taskId: string, modelSpec: string, judgeSpec: string): Promise<void> {
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const runId = `kalibre2x2-${taskId}-${stamp}`;
+  await mkdir(join(REPO, ".skein"), { recursive: true });
+  const log = new EventLog(LOG, runId);
+  await log.append({ type: "run.started", taskId });
+
+  console.log(`2x2 ölçüm gücü ön kontrolü — ${taskId} · ${modelSpec}`);
+  console.log("tek model: üretim + AYNI-SATICI denetim (çapraz hücre koşmuyor)");
+  announceEnv();
+  console.log();
+
+  // Tek model verildiğinde `runMatrix` tam olarak bunu yapıyor: bir üretim,
+  // bir aynı-satıcı denetim. Ayrı bir koşucu yazmak aynı mantığın ikinci
+  // kopyası olurdu — bu projede aynı bilginin iki kopyası üç kez kusur
+  // doğurdu.
+  const out = await runMatrix({
+    repo: REPO, taskId, models: [modelSpec],
+    runRoot: join(REPO, ".skein/runs", runId), log, timeoutMs: 10 * 60_000,
+    adapter: adapterEnv(),
+  });
+
+  const p = out.producers[0];
+  const ran = p !== undefined && p.ran;
+  const redHooks = p?.redHooks ?? [];
+  if (p !== undefined && p.ran) {
+    console.log(`\n  üretim: ${p.total - redHooks.length}/${p.total} yeşil  ·  ${formatUsage(p.usage)}`);
+    if (redHooks.length > 0) console.log(`  kanıtlanmış kusur: ${redHooks.join("; ")}`);
+  }
+
+  // Üretici koşulu sağlanmadıysa denetim zaten koşmadı (`runMatrix` atlıyor);
+  // karar yine de tek yerden veriliyor.
+  let caught: string[] = [];
+  let missed: string[] = [];
+  let scored = false;
+  if (ran && redHooks.length > 0) {
+    const { events } = await readEvents(LOG);
+    const mine = scoreTargets(events, {}).targets.filter((t) => t.runId === runId);
+    if (mine.length > 0) {
+      const judge = adapterFor(judgeSpec, adapterEnv());
+      console.log(`\n  aynı-satıcı denetim puanlanıyor (${judge.model}, körlenmiş)…`);
+      const puan = await scoreAll({
+        repo: REPO, judge, logPath: LOG, timeoutMs: 5 * 60_000,
+        layers: [{ name: "judge", path: join(REPO, "bench/prompts/judge.md") }],
+        targets: mine,
+        onCell: (t, r) => {
+          caught = r.caught;
+          missed = r.missed;
+          console.log(`  ${t.producer} → ${t.reviewer}  aynı  ` +
+            `${r.caught.length}/${t.redHooks.length} yakalandı`);
+          for (const m of r.missed) console.log(`      kaçırdı: ${m}`);
+        },
+      });
+      for (const f of puan.failed) console.log(`  PUANLANAMADI ${f.cell}\n      ${f.error}`);
+      scored = puan.scored > 0;
+    }
+  }
+
+  console.log();
+  const karar = power2x2({ ran, producerExit: p?.exitCode ?? 1, redHooks, scored, caught, missed });
+  for (const satir of powerLines(karar)) console.log(`  ${satir}`);
+  if (karar.kind === "olcer") {
+    console.log(`  Sıradaki: cli.ts matrix ${taskId} ${modelSpec} <öteki-satıcı:model>`);
+  }
 }
 
 async function planab(
@@ -983,6 +1073,23 @@ if (cmd === "report") {
     ? esit.slice("--model=".length)
     : at === -1 ? undefined : argv[at + 1];
   await kalibre(gorev, model ?? rest.slice(1).find((a) => a.includes(":")) ?? "claude:claude-sonnet-5");
+} else if (cmd === "kalibre2x2") {
+  const gorev = rest[0];
+  if (gorev === undefined) {
+    console.error("kullanım: cli.ts kalibre2x2 <görev-id> [--model sağ:model] [--hakem sağ:model]");
+    process.exit(2);
+  }
+  const bayrak = (ad: string): string | undefined => {
+    const esit = argv.find((a) => a.startsWith(`--${ad}=`));
+    if (esit !== undefined) return esit.slice(ad.length + 3);
+    const at = argv.indexOf(`--${ad}`);
+    return at === -1 ? undefined : argv[at + 1];
+  };
+  await kalibre2x2(
+    gorev,
+    bayrak("model") ?? rest.slice(1).find((a) => a.includes(":")) ?? "claude:claude-sonnet-5",
+    bayrak("hakem") ?? "claude:claude-opus-5",
+  );
 } else if (cmd === "planrapor") {
   await planrapor();
 } else if (cmd === "turlar") {
@@ -998,6 +1105,6 @@ if (cmd === "report") {
 } else if (cmd) {
   await run(cmd, rest[0] ?? "claude", rest[1] ?? "claude-opus-5", audit);
 } else {
-  console.error("kullanım: cli.ts <görev-id> [sağlayıcı] [model] [--audit]\n         cli.ts matrix <görev-id> [sağlayıcı:model] [sağlayıcı:model]\n         cli.ts doctor <sağlayıcı:model>\n         cli.ts puanla [hakem-modeli] [--kuru] [--yeniden]\n         cli.ts siniflandir [hakem-modeli] [--kuru] [--yeniden]\n         cli.ts selftest [görev-id]\n         cli.ts turlar [hücre-parçası] [--diff]\n         cli.ts kalibre <görev-id> [--model sağ:model]   (ölçüm gücü ön kontrolü)\n         cli.ts planab <görev-id> [--k 3] [--model sağ:model] [--kol planli|plansiz] [--devam]\n         cli.ts planrapor\n         cli.ts report [--gorev=<görev-id>]");
+  console.error("kullanım: cli.ts <görev-id> [sağlayıcı] [model] [--audit]\n         cli.ts matrix <görev-id> [sağlayıcı:model] [sağlayıcı:model]\n         cli.ts doctor <sağlayıcı:model>\n         cli.ts puanla [hakem-modeli] [--kuru] [--yeniden]\n         cli.ts siniflandir [hakem-modeli] [--kuru] [--yeniden]\n         cli.ts selftest [görev-id]\n         cli.ts turlar [hücre-parçası] [--diff]\n         cli.ts kalibre <görev-id> [--model sağ:model]   (6d ölçüm gücü ön kontrolü)\n         cli.ts kalibre2x2 <görev-id> [--model s:m] [--hakem s:m]  (2x2 ölçüm gücü)\n         cli.ts planab <görev-id> [--k 3] [--model sağ:model] [--kol planli|plansiz] [--devam]\n         cli.ts planrapor\n         cli.ts report [--gorev=<görev-id>]");
   process.exit(2);
 }

@@ -7,7 +7,7 @@ yapıştırılabilsin diye yazıldı: aşağısı Skein'i tanımayan birine de y
 **Dal:** `claude/project-plan-brainstorm-pthvoc` — `claude/project-thread-sc56cs`
 ileri sarılıp üstüne devam edildi, yani iki dalın işi bu dalda birleşti.
 `sc56cs` olduğu yerde duruyor; yeni iş burada.
-**Durum:** 741 test yeşil, typecheck temiz, ağaç temiz.
+**Durum:** 759 test yeşil, typecheck temiz, ağaç temiz.
 `watch selftest` bu konteynerde **koşmuyor**: `hub/flows/selftest.yaml`
 depoda izlenmiyor (yalnızca yazarın makinesinde duruyordu, konteyner
 yenilenince gitti). Belgelenmiş bir komutun depoda olmayan bir dosyaya
@@ -398,6 +398,47 @@ Doğrulama (ikisi de koşturularak, iddia edilmeden):
 `codex gpt-5.5` → `üretici: codex / gpt-5.5`, hücre `codex--gpt-5.5`,
 "üretim koşuyor"a geçti ve ağda takıldı. `claude <olmayan-model>` →
 aynı yol, exit=1, 0.6s, bedava.
+
+---
+
+## SIRADAKİ İŞ: hangi görev tezi ÖLÇEBİLİR (4 Ekim)
+
+Çapraz satıcı 2x2'si koştu, karar çıkmadı, ve sebebi yeni bir ölçüt verdi:
+çeşitliliğin değerini ölçmek için **aynı-satıcı denetimin kaçırdığı** bir
+kusur gerekiyor. `snapshot-store`'da kusuru üretmek zor, GÖRMEK kolay.
+
+Ölçüt artık bir komut: `cli.ts kalibre2x2 <görev>` (ayrıntı `bench/DESIGN.md`).
+
+**Önemli: 8 görevin yalnızca BİRİNDE denetçi tarafı ölçüldü.** Öteki 7'sinin
+kusuru denetçiye görünür mü bilinmiyor. Yeni görev yazmadan önce elde olanı
+ölçmek gerekiyor:
+
+```
+npx tsx src/bench/cli.ts kalibre2x2 async-pool
+npx tsx src/bench/cli.ts kalibre2x2 cache-refresh
+npx tsx src/bench/cli.ts kalibre2x2 config-patch
+npx tsx src/bench/cli.ts kalibre2x2 csv-roundtrip
+npx tsx src/bench/cli.ts kalibre2x2 outbox-flush
+npx tsx src/bench/cli.ts kalibre2x2 retry-backoff
+npx tsx src/bench/cli.ts kalibre2x2 token-bucket
+```
+
+Görev başına kabaca **$0.45** (üretim + denetim + puanlama), yedisi ~$3.
+Biri `ÖLÇER` derse yeni görev yazmaya gerek yok ve tam matris oraya koşulur.
+Hepsi `ÖLÇEMEZ (2. koşul)` derse, o zaman yeni görev sınıfı yazmak ölçülmüş
+bir gereksinim olur — tahmin değil.
+
+### Yeni görev sınıfı gerekirse: tasarım kaldıracı
+
+Bugünkü kusur neden görünürdü? İhlal edilen değişmez, denetçinin okuduğu
+dosyanın BAŞLIĞINDA yazılıydı (`seed/src/store.ts:10`). İki denetçi de onu
+okuyup buldu.
+
+Kaldıraç bu: kusurun ihlal ettiği sözleşme, değiştirilen kodun yanında
+PROZA olarak durmamalı — ama keyfi de olmamalı, yoksa denetçinin onu
+söylemesi tahmin olur ve hakem katmanı bozulur. Ortası: sözleşmeyi bir
+tüketici modülün **kodu** zorunlu kılsın, yorum söylemesin. Bulmak için
+tüketiciyi okuyup iki adımlı bir senaryo kurmak gerekir.
 
 ---
 

@@ -896,6 +896,51 @@ ve koşu başına ~$0.07. Çapraz satıcı 2x2'sinde üretici olarak sonnet
 kullanmak, sonucu daha ilginç bir güç sınıfına taşır — "zayıf model kusur
 üretti" itirazını da zayıflatır.
 
+## 2x2 ÖLÇÜM GÜCÜ ÖN KONTROLÜ — `kalibre2x2` (4 Ekim)
+
+İlk çapraz satıcı koşusu YETERSİZ verdi ve ölçütü öğretti. Artık ölçüt bir
+komut: **iki koşul birlikte sınanıyor.**
+
+```
+cli.ts kalibre2x2 <görev-id> [--model s:m] [--hakem s:m]
+```
+
+Tek model veriliyor, yani bir üretim + bir **aynı-satıcı** denetim + o
+denetimin puanlanması. Dört hücreli tam matrise para harcamadan hücrenin
+ölçüp ölçemeyeceğini söylüyor.
+
+| karar | ne demek |
+|---|---|
+| `ÖLÇÜLEMEDİ` | süit koşmadı, üretim çöktü ya da puanlama bitmedi — "kusur yok" DEĞİL |
+| `ÖLÇEMEZ (1. koşul)` | üretici kusur üretmedi; denetçinin yakalayacağı şey yok |
+| `ÖLÇEMEZ (2. koşul)` | aynı-satıcı denetim **hepsini yakaladı**; göreli azalma tanımsız kalır |
+| `ÖLÇER` | aynı-satıcı denetim kaçırdı; çaprazlamanın iyileştirecek bir şeyi var |
+
+İkinci koşul bugünün bulgusu. `effect.ts`'in `reduction()`'ı onu zaten
+kodda söylüyordu ("aynı-model hücrelerinde hiç kaçırma yoksa azalma
+tanımsız") ama ÖN KONTROL olarak yazılmamıştı; o yüzden `snapshot-store`
+hücresine tam matris parası harcandı ve karar çıkmadı.
+
+Karar saf bir fonksiyonda (`src/bench/power.ts`), çünkü ölçütün kendisi
+bugünün bulgusu ve sınanmadan kalmamalı: 10 sınama, üçü mutasyonla
+doğrulandı (2. koşulu kaldırmak, koşul sırasını ters çevirmek, çıkış kodu
+denetimini kaldırmak — üçü de ısırıyor).
+
+Koşucu ayrı yazılmadı: tek model verildiğinde `runMatrix` zaten bir üretim +
+bir aynı-satıcı denetim koşuyor. Bu projede aynı bilginin iki kopyası üç kez
+kusur doğurdu; dördüncüsü eklenmedi.
+
+### Ön kontrol kendi kusurunu buldurdu
+
+Komut olmayan bir modelle denendi (bedava, ajan çağrılmadan hata vermesi
+için). Ajan çöktü, artefakt boş kaldı ve gizli süit **14 kancayı kırmızı**
+düşürdü — yani sayıya bakan ön kontrol o hücreyi "ölçüm gücü en yüksek"
+diye okudu. Başarısız bir üretim, ölçüm için ideal hücre gibi görünüyordu.
+
+Düzeltildi: üretim çağrısının çıkış kodu kancalardan ÖNCE soruluyor. Sıfır
+değilse kırmızı kancalar kusur değil, **artefaktın yokluğu**. `matrix`
+çıktısı da bu alanı taşıyor artık.
+
 ## İKİNCİ KATMAN OKUNDU — ve katmanlar arası bir BOŞLUK çıktı (4 Ekim)
 
 `siniflandir` koştu (`claude-opus-5`, körlenmiş, kod dahil, $0.7298):

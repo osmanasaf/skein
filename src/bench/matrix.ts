@@ -18,7 +18,14 @@ export interface MatrixOptions {
    * 2x2'nin iki köşesi, "sağlayıcı:model" biçiminde.
    * Farklı MODEL olmaları yeterli; satıcı ayrımı tezin daha güçlü hali.
    */
-  models: [string, string];
+  /**
+   * İki model: 2x2'nin dört hücresi bunların çarpımı.
+   *
+   * TEK model de geçerli ve kasıtlı: o zaman bir üretim + bir aynı-satıcı
+   * denetim koşuyor, yani 2x2'nin ÖLÇÜM GÜCÜ ön kontrolü (`kalibre2x2`).
+   * Ayrı bir koşucu yazmak aynı mantığın ikinci kopyası olurdu.
+   */
+  models: [string] | [string, string];
   runRoot: string;
   log: EventLog;
   timeoutMs: number;
@@ -45,7 +52,18 @@ export interface CellOutcome {
 }
 
 export interface MatrixOutcome {
-  producers: { model: string; redHooks: string[]; total: number; ran: boolean; usage: UsageTotal }[];
+  producers: {
+    model: string; redHooks: string[]; total: number; ran: boolean; usage: UsageTotal;
+    /**
+     * Üretim çağrısının çıkış kodu.
+     *
+     * Sıfır değilse kancaların kırmızılığı KUSUR DEĞİL: ajan çökmüşse
+     * artefakt boş kalıyor ve neredeyse her kanca kırmızı düşüyor — yani
+     * başarısız bir üretim, ölçüm için en iyi hücre gibi görünüyor. Bu,
+     * `kalibre2x2`yi olmayan bir modelle koşturunca ortaya çıktı.
+     */
+    exitCode: number;
+  }[];
   cells: CellOutcome[];
   /** Denetim hücreleri neden atlandı; koştularsa undefined. */
   skipped?: string;
@@ -100,7 +118,7 @@ export async function runMatrix(options: MatrixOptions): Promise<MatrixOutcome> 
   const adapters: Adapter[] = models.map((spec) => adapterFor(spec, options.adapter ?? {}));
   const produced: {
     adapter: Adapter; artifactDir: string; redHooks: string[];
-    total: number; ran: boolean; usage: UsageTotal;
+    total: number; ran: boolean; usage: UsageTotal; exitCode: number;
   }[] = [];
 
   for (const adapter of adapters) {
@@ -147,7 +165,7 @@ export async function runMatrix(options: MatrixOptions): Promise<MatrixOutcome> 
 
     produced.push({
       adapter, artifactDir: p.artifactDir, redHooks: h.red, total: h.hooks.length, ran: h.ran,
-      usage: totalUsage([p.invoke.usage]),
+      usage: totalUsage([p.invoke.usage]), exitCode: p.invoke.exitCode,
     });
   }
 
@@ -172,7 +190,8 @@ export async function runMatrix(options: MatrixOptions): Promise<MatrixOutcome> 
     console.log("Denetim hücreleri atlandı (yine de koşmak için --force).");
     return {
       producers: produced.map((p) => ({
-        model: p.adapter.model, redHooks: p.redHooks, total: p.total, ran: p.ran, usage: p.usage,
+        model: p.adapter.model, redHooks: p.redHooks, total: p.total, ran: p.ran,
+        usage: p.usage, exitCode: p.exitCode,
       })),
       cells: [],
       skipped,
@@ -215,7 +234,8 @@ export async function runMatrix(options: MatrixOptions): Promise<MatrixOutcome> 
 
   return {
     producers: produced.map((p) => ({
-      model: p.adapter.model, redHooks: p.redHooks, total: p.total, ran: p.ran, usage: p.usage,
+      model: p.adapter.model, redHooks: p.redHooks, total: p.total, ran: p.ran,
+      usage: p.usage, exitCode: p.exitCode,
     })),
     cells,
   };
