@@ -1,3 +1,4 @@
+import { sumUsage, totalUsage, type UsageTotal } from "../bench/usage.js";
 import type { SkeinEvent } from "./log.js";
 
 export interface CellRow {
@@ -11,7 +12,14 @@ export interface CellRow {
   promptHash?: string;
   exitCode?: number;
   durationMs?: number;
-  costUsd?: number;
+  /**
+   * Hücrenin ölçüsü: dolar VE token, ayrı ayrı.
+   *
+   * Eskiden yalnızca `costUsd?: number` vardı ve rapor `?? 0` ile basıyordu.
+   * Abonelik kimliğiyle koşan bir sağlayıcı dolar bildirmiyor, yani codex
+   * hücreleri `$0.0000` görünüyordu — bedava sanılırdı.
+   */
+  usage: UsageTotal;
   /** Ölçüm hiç yapılmadıysa undefined; koşup sıfır kırmızı vermekten farklı. */
   hooks?: { total: number; red: number; ran: boolean };
 }
@@ -19,7 +27,8 @@ export interface CellRow {
 export interface Summary {
   runIds: string[];
   cells: CellRow[];
-  totalCostUsd: number;
+  /** Bütün hücrelerin toplamı; bildirilmeyen alan BOŞ kalır, sıfır olmaz. */
+  usage: UsageTotal;
   totalDurationMs: number;
 }
 
@@ -35,7 +44,7 @@ export function summarize(events: SkeinEvent[]): Summary {
   const runIds: string[] = [];
   const row = (cell: string): CellRow => {
     let r = byCell.get(cell);
-    if (!r) byCell.set(cell, (r = { cell }));
+    if (!r) byCell.set(cell, (r = { cell, usage: {} }));
     return r;
   };
 
@@ -52,7 +61,10 @@ export function summarize(events: SkeinEvent[]): Summary {
         const r = row(e.cell);
         r.exitCode = e.exitCode;
         r.durationMs = e.durationMs;
-        if (typeof e.usage?.costUsd === "number") r.costUsd = e.usage.costUsd;
+        // Yalnızca bir şey bildirildiyse yazılıyor: eski davranış korunuyor
+        // ki ölçülmüş koşuların sayıları değişmesin.
+        const u = totalUsage([e.usage]);
+        if (Object.keys(u).length > 0) r.usage = u;
         break;
       }
       case "review.done": {
@@ -75,7 +87,7 @@ export function summarize(events: SkeinEvent[]): Summary {
   return {
     runIds,
     cells,
-    totalCostUsd: cells.reduce((s, c) => s + (c.costUsd ?? 0), 0),
+    usage: cells.reduce<UsageTotal>((a, c) => sumUsage(a, c.usage), {}),
     totalDurationMs: cells.reduce((s, c) => s + (c.durationMs ?? 0), 0),
   };
 }

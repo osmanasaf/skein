@@ -17,7 +17,7 @@ describe("summarize", () => {
     ]);
     expect(s.cells).toHaveLength(1);
     expect(s.cells[0]).toMatchObject({
-      cell: "c1", provider: "claude", exitCode: 0, durationMs: 1200, costUsd: 0.05,
+      cell: "c1", provider: "claude", exitCode: 0, durationMs: 1200, usage: { costUsd: 0.05 },
       hooks: { total: 9, red: 2, ran: true },
     });
   });
@@ -29,7 +29,7 @@ describe("summarize", () => {
       started("c2", "codex"),
       ev({ type: "agent.finished", cell: "c2", exitCode: 0, durationMs: 2000, usage: { costUsd: 0.2 } }),
     ]);
-    expect(s.totalCostUsd).toBeCloseTo(0.3);
+    expect(s.usage.costUsd).toBeCloseTo(0.3);
     expect(s.totalDurationMs).toBe(3000);
     expect(s.cells.map((c) => c.provider)).toEqual(["claude", "codex"]);
   });
@@ -59,7 +59,7 @@ describe("summarize", () => {
     ]);
     expect(s.cells[0]).toMatchObject({
       role: "denetci", model: "sonnet", producer: "opus", crossed: true,
-      promptHash: "h", costUsd: 0.2,
+      promptHash: "h", usage: { costUsd: 0.2 },
     });
   });
 
@@ -71,12 +71,31 @@ describe("summarize", () => {
     expect(s.runIds).toEqual(["r1", "r2"]);
   });
 
-  it("maliyeti olmayan hücre toplamı bozmaz", () => {
+  // Bildirilmemiş maliyet SIFIR DEĞİL: boş kalıyor. Abonelik kimliğiyle
+  // koşan bir sağlayıcı dolar bildirmiyor ve `$0.0000` basmak onu bedava
+  // gösterirdi.
+  it("maliyet bildirmeyen hücrede dolar BOŞ kalır, sıfır olmaz", () => {
     const s = summarize([
       started("c1", "claude"),
       ev({ type: "agent.finished", cell: "c1", exitCode: 1, durationMs: 500 }),
     ]);
-    expect(s.totalCostUsd).toBe(0);
+    expect(s.usage.costUsd).toBeUndefined();
     expect(s.totalDurationMs).toBe(500);
+  });
+
+  // Karışık koşu: bir hücre dolar bildiriyor, öteki yalnızca token.
+  // Dolar toplamı yalnızca bildireni kapsıyor; token ortak birim.
+  it("dolar bildiren ve bildirmeyen hücreler karışıkken ikisini ayrı tutar", () => {
+    const s = summarize([
+      started("c1", "claude"),
+      ev({ type: "agent.finished", cell: "c1", exitCode: 0, durationMs: 100,
+        usage: { costUsd: 0.3, inputTokens: 1000, outputTokens: 10 } }),
+      started("c2", "codex"),
+      ev({ type: "agent.finished", cell: "c2", exitCode: 0, durationMs: 200,
+        usage: { inputTokens: 13607, outputTokens: 11 } }),
+    ]);
+    expect(s.usage.costUsd).toBeCloseTo(0.3);
+    expect(s.usage.inputTokens).toBe(14607);
+    expect(s.usage.outputTokens).toBe(21);
   });
 });

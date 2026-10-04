@@ -896,6 +896,43 @@ ve koşu başına ~$0.07. Çapraz satıcı 2x2'sinde üretici olarak sonnet
 kullanmak, sonucu daha ilginç bir güç sınıfına taşır — "zayıf model kusur
 üretti" itirazını da zayıflatır.
 
+## Codex kalibrasyonu: AYNI İKİ KANCA (4 Ekim)
+
+Çapraz satıcı 2x2'sinin ölçülebilir olup olmadığı tek soruya bağlıydı: codex
+üretici olarak kusur üretiyor mu? Koşuldu:
+
+```
+cli.ts snapshot-store codex gpt-5.5
+  tur 1 (uretim): src/store.ts (degisti, +10/−0)
+  exit=0  süre=30.7s
+  14/16 kanca yeşil, 2 KIRMIZI
+    ✗ version geri gitmez
+    ✗ version hiçbir zaman tekrar etmez
+```
+
+**Ölçüm gücü var: 2x2 koşulabilir.** Dört hücrenin hepsinde kanıtlanmış bir
+kusur bulunacak, yani denetçilerin yakalayacağı bir şey var ve kaçırma
+metriği hesaplanabilir. Atlama koruması (`defective.length === 0`)
+ateşlenmeyecek.
+
+### Ama kırmızı kancalar AYNI — ve bu teze dair bir veri
+
+`claude-haiku-4-5` ve `claude-sonnet-5` bu görevde tam olarak **bu iki
+kancayı** düşürüyor. Codex de aynı ikisini düşürdü. Yani iki ayrı eğitim
+soyundan gelen iki satıcı, aynı değişmezi aynı şekilde kaçırdı:
+`undo()` sürüm sayacını geri alıyor ve sürüm tekrar edebiliyor.
+
+Bu, tezin **üretici tarafı** için olumsuz bir veri noktası: "farklı
+satıcıların kör noktaları farklıdır" varsayımı bu kusur için tutmuyor; kör
+nokta PAYLAŞILIYOR. Dikkat: tez üreticilerin farklı kusur üretmesi değil,
+**denetçinin farklı satıcıdan olmasının kusuru yakalama oranını artırması.**
+Onu 2x2 ölçecek. Yine de kayda geçiyor, çünkü "çeşitlilik kör noktaları
+ayırır" cümlesinin en dar hâli burada bir kez yanlışlandı.
+
+Üretici tarafındaki bu benzerlik, denetçi tarafını **daha ilginç** yapıyor:
+iki satıcı aynı kusuru üretiyorsa, o kusuru kendi kodunda görmeyen bir
+modelin BAŞKASININ kodunda görüp görmediği tam olarak ölçülebilir bir soru.
+
 ## Çapraz satıcıda maliyetin birimi: TOKEN, dolar değil
 
 2 Ekim'de codex ilk kez uçtan uca koştu ve ölçüm tasarımında bir şeyi

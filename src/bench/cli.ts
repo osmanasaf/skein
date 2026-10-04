@@ -1,6 +1,6 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { safeName } from "./safe-name.js";
-import { formatUsage, sumUsage } from "./usage.js";
+import { formatUsage, sumUsage, totalUsage } from "./usage.js";
 import { join, resolve } from "node:path";
 import type { Adapter } from "../adapters/contract.js";
 import { EventLog, readEvents } from "../events/log.js";
@@ -94,9 +94,9 @@ async function report(taskFilter?: string): Promise<void> {
       : `${c.model ?? c.provider ?? "?"}  ${c.role ?? ""}`;
     console.log(`  ${who}`);
     console.log(`    ${hooks}  ·  ${((c.durationMs ?? 0) / 1000).toFixed(1)}s  ·  ` +
-      `$${(c.costUsd ?? 0).toFixed(4)}  ·  exit=${c.exitCode ?? "?"}  ·  prompt ${c.promptHash?.slice(0, 12)}…`);
+      `${formatUsage(c.usage)}  ·  exit=${c.exitCode ?? "?"}  ·  prompt ${c.promptHash?.slice(0, 12)}…`);
   }
-  console.log(`\n  toplam: $${s.totalCostUsd.toFixed(4)}  ·  ${(s.totalDurationMs / 1000).toFixed(1)}s`);
+  console.log(`\n  toplam: ${formatUsage(s.usage)}  ·  ${(s.totalDurationMs / 1000).toFixed(1)}s`);
   printEffect(effectReport(events));
   printNoise(noiseReport(events));
 }
@@ -178,9 +178,10 @@ async function run(taskId: string, provider: string, model: string, audit: boole
   };
   await log.append(finished);
 
-  const u = p.invoke.usage;
+  // Dolar yoksa token basılıyor: abonelik kimliğiyle koşan bir sağlayıcıda
+  // satır tamamen boş kalıyordu ve koşunun ölçüsü hiç görünmüyordu.
   console.log(`  exit=${p.invoke.exitCode} süre=${(p.invoke.durationMs / 1000).toFixed(1)}s` +
-    (u?.costUsd !== undefined ? ` maliyet=$${u.costUsd.toFixed(4)}` : ""));
+    `  ${formatUsage(totalUsage([p.invoke.usage]))}`);
   console.log(`  prompt hash: ${p.promptHash.slice(0, 16)}…`);
 
   if (p.invoke.exitCode !== 0) {
