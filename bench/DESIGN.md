@@ -896,6 +896,62 @@ ve koşu başına ~$0.07. Çapraz satıcı 2x2'sinde üretici olarak sonnet
 kullanmak, sonucu daha ilginç bir güç sınıfına taşır — "zayıf model kusur
 üretti" itirazını da zayıflatır.
 
+## İKİNCİ KATMAN OKUNDU — ve katmanlar arası bir BOŞLUK çıktı (4 Ekim)
+
+`siniflandir` koştu (`claude-opus-5`, körlenmiş, kod dahil, $0.7298):
+
+```
+claude-sonnet-5 → claude-sonnet-5  aynı    2 bulgu: 0 gerçek, 2 nit  · proven 2
+claude-sonnet-5 → gpt-5.5          ÇAPRAZ  0 bulgu                   · proven 1
+gpt-5.5         → claude-sonnet-5  ÇAPRAZ  2 bulgu: 0 gerçek, 2 nit  · proven 2
+gpt-5.5         → gpt-5.5          aynı    0 bulgu                   · proven 1
+```
+
+### Önce bir etiket tuzağı — ve ona düşüldü
+
+Çıktıdaki `proven` sayısı bir **yakalama ölçüsü değil, dışlama sayısı**:
+kanıtlanmış kusura ait bulgular 2. katmanın oranlarından çıkarılıyor, çünkü
+o soru 1. katmanın alanı (`log.ts`: *"1. katmanın alanı, oranlara girmez"*).
+Eski etiket bunu `N kanıtlı (1. katman)` diye basıyordu ve `puanla`nın
+sayısıyla ÇELİŞİYOR gibi görünüyordu — iki sayı iki ayrı soruya ait.
+Etiket düzeltildi: `N bulgu 1. KATMANA ait sayıldı (oranların dışında)`.
+
+### Asıl bulgu: gerçek bir bulgu HİÇBİR YERE düşmüyor
+
+`claude-sonnet-5 → gpt-5.5` hücresinde:
+
+| katman | ne dedi |
+|---|---|
+| 1. katman (`judge.scored`) | iki kancadan **hiçbirini** söylemiyor → kaçırma |
+| 2. katman (`judge.classified`) | bulguyu **kanıtlanmışa ait** saydı → oranlardan dışladı |
+
+Oysa o bulgu gerçek: tohumun kendi başlığında yazılı bir değişmezin
+(`getSnapshot()` aynı sürüm için aynı nesneyi döndürür) ihlali. Yani çapraz
+satıcı denetiminin bulduğu gerçek bir kusur, iki katmanın arasından düştü ve
+ölçümde **hiçbir yere** yazılmadı.
+
+Katmanları harmanlamak çözüm değil — harmanlamak zayıf katmanın gücünü
+güçlüden ödünç almasıdır (bu tasarımın kurucu kararı). Çözüm boşluğun
+GÖRÜNÜR olması: `src/bench/gap.ts` + `report` çıktısında yeni bir bölüm,
+`2. katmanın kanıtlanmışa saydığı bulgu sayısı 1. katmanın kredilediğinden
+fazlaysa` o hücreyi sınır vakası olarak bildiriyor ve insanın okumasını
+istiyor. Karara girmiyor.
+
+Ters yön boşluk sayılmıyor: tek bir bulgu iki kancayı birden söyleyebilir,
+yani 1. katmanın daha çok kredilemesi beklenen bir durum. (4 sınama, biri
+mutasyonla doğrulandı.)
+
+### Aynı-satıcı rapor kancalardan DAHA İYİ
+
+`claude → claude` raporu okundu ve kaydedilmeye değer: kusuru bizim kanca
+adlarımızdan daha iyi anlatıyor. Somut senaryoyu kuruyor (`ekle a` →
+`bitir a` → `undo` → `ekle b` → aynı `version` farklı içerik), hangi
+tüketicinin bozulduğunu adıyla söylüyor (`createBitmemisSayaci`), ve
+*"bu, `apply.ts`/`state.ts`'e dokunmadan kökünden çözülmesi zor bir yapısal
+çelişki"* diye kusurun sınırını da çiziyor. Ayrıca ayrı bir bölümde
+"baktığım ama sorun bulmadığım yerler"i sayıyor — denetim raporunun
+okunabilirliği için bugüne kadar istemediğimiz ama işe yarayan bir biçim.
+
 ## "0/2 YAKALANDI" NE DEMEK DEĞİL — raporu okumak (4 Ekim)
 
 Kaçıran hücrenin raporu okundu (`claude_claude-sonnet-5--by--codex_gpt-5.5`).

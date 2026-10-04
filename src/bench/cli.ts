@@ -1,4 +1,5 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { layerGaps, type LayerGap } from "./gap.js";
 import { safeName } from "./safe-name.js";
 import { formatUsage, sumUsage, totalUsage } from "./usage.js";
 import { join, resolve } from "node:path";
@@ -98,6 +99,7 @@ async function report(taskFilter?: string): Promise<void> {
   }
   console.log(`\n  toplam: ${formatUsage(s.usage)}  ·  ${(s.totalDurationMs / 1000).toFixed(1)}s`);
   printEffect(effectReport(events));
+  printLayerGaps(layerGaps(events));
   printNoise(noiseReport(events));
 }
 
@@ -809,7 +811,12 @@ async function siniflandir(judgeSpec: string, reclassify: boolean, dry: boolean)
       console.log(`  ${t.producer} → ${t.reviewer}  ${t.crossed ? "ÇAPRAZ" : "aynı  "}  ` +
         `${c.findings} bulgu: ${c.real} gerçek, ${c.nit} nit, ${c.wrong} yanlış` +
         (c.uncertain > 0 ? `, ${c.uncertain} belirsiz` : "") +
-        (c.proven > 0 ? `  · ${c.proven} kanıtlı (1. katman)` : "") +
+        // Bu sayı bir YAKALAMA ölçüsü değil, bir DIŞLAMA sayısı: kanıtlanmış
+        // kusura ait bulgular 2. katmanın oranlarından çıkarılıyor çünkü o
+        // soru 1. katmanın alanı. Eski etiket ("N kanıtlı (1. katman)")
+        // 1. katmanın cevabıymış gibi okunuyordu ve `puanla`nın sayısıyla
+        // çelişiyor sanılabiliyordu — iki sayı iki ayrı soruya ait.
+        (c.proven > 0 ? `  · ${c.proven} bulgu 1. KATMANA ait sayıldı (oranların dışında)` : "") +
         (r.unverified > 0 ? `  · ${r.unverified} alıntı doğrulanamadı` : ""));
     },
   });
@@ -857,6 +864,25 @@ function printSide(e: { pairs: PairScore[]; same: Side | null; crossed: Side | n
  * gizleyebiliyor. Havuz sayısını üste koymak, okuyanı yanlış sayıya
  * bakmaya davet ederdi.
  */
+/**
+ * İki katmanın arasından düşen bulgular.
+ *
+ * Karara GİRMEZ ve girmemeli: karar yalnızca nesnel katmandan okunuyor. Ama
+ * görünmez kalmamalı — 1. katmanın kredilemediği, 2. katmanın da oranlardan
+ * dışladığı bir bulgu, gerçek olsa bile ölçümde hiçbir yere düşmüyor.
+ */
+function printLayerGaps(gaps: LayerGap[]): void {
+  if (gaps.length === 0) return;
+  console.log(`\n=== katmanlar arası boşluk: ${gaps.length} hücre ===`);
+  console.log("  1. katman kredilemedi, 2. katman kanıtlanmışa saydı — bulgu hiçbir orana girmiyor.");
+  for (const g of gaps) {
+    console.log(`  ${g.producer} → ${g.reviewer}  ${g.crossed ? "ÇAPRAZ" : "aynı  "}  ` +
+      `1. katman ${g.caught}/${g.hooks} · 2. katman ${g.proven} bulguyu kanıtlanmışa saydı`);
+    console.log(`    ${g.cell}`);
+  }
+  console.log("  Bu hücrelerin raporu İNSAN tarafından okunmalı: sınır vakası.");
+}
+
 function printEffect(e: EffectReport): void {
   if (e.groups.length === 0) {
     console.log("\nPuanlanmış denetim hücresi yok (cli.ts puanla).");
