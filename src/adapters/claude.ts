@@ -37,7 +37,18 @@ interface ClaudeJsonResult {
   is_error?: boolean;
   result?: string;
   total_cost_usd?: number;
-  usage?: { input_tokens?: number; output_tokens?: number };
+  /**
+   * `input_tokens` ÖNBELLEĞE GİRMEMİŞ kısmı sayıyor, girdinin tamamını değil.
+   * Önbellekten okunan ve önbelleğe yazılan token'lar ayrı alanlarda ve üçü
+   * toplanabilir (Anthropic API belgesi: input = uncached, cache_read =
+   * önbellekten servis edilen, cache_creation = önbelleğe yazılan).
+   */
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_read_input_tokens?: number;
+    cache_creation_input_tokens?: number;
+  };
 }
 
 /**
@@ -276,10 +287,32 @@ function parseResult(stdout: string): ClaudeJsonResult | undefined {
   }
 }
 
+/**
+ * Girdi token'ının TAMAMI: önbelleğe girmemiş + önbellekten okunan + yazılan.
+ *
+ * `input_tokens` tek başına yalnızca önbelleğe girmemiş kısmı sayıyor. Bir
+ * kod denetimi çağrısında neredeyse her şey önbellekten geldiği için o alan
+ * `2` görünüyordu; çapraz satıcı 2x2'sinin raporu claude'u "2 girdi token'ı",
+ * codex'i "15253 girdi token'ı" diye bastı. Ortak birimin token olmasına
+ * karar vermişken ölçünün kendisi bozuktu.
+ *
+ * Üç alan toplanabilir ve farklı fiyatlanır (önbellek okuması ~0.1x,
+ * yazması ~1.25x); burada toplanan şey HACİM, para değil — dolar zaten
+ * `total_cost_usd`'den geliyor.
+ */
+function girdiToplami(u: NonNullable<ClaudeJsonResult["usage"]>): number | undefined {
+  const parcalar = [u.input_tokens, u.cache_read_input_tokens, u.cache_creation_input_tokens]
+    .filter((v): v is number => typeof v === "number");
+  return parcalar.length === 0 ? undefined : parcalar.reduce((a, b) => a + b, 0);
+}
+
 function toUsage(parsed: ClaudeJsonResult | undefined): Usage | undefined {
   if (!parsed) return undefined;
   const usage: Usage = {};
-  if (typeof parsed.usage?.input_tokens === "number") usage.inputTokens = parsed.usage.input_tokens;
+  if (parsed.usage !== undefined) {
+    const girdi = girdiToplami(parsed.usage);
+    if (girdi !== undefined) usage.inputTokens = girdi;
+  }
   if (typeof parsed.usage?.output_tokens === "number") usage.outputTokens = parsed.usage.output_tokens;
   if (typeof parsed.total_cost_usd === "number") usage.costUsd = parsed.total_cost_usd;
   return Object.keys(usage).length > 0 ? usage : undefined;

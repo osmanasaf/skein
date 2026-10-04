@@ -161,6 +161,43 @@ describe("ClaudeCliAdapter", () => {
     expect(r.durationMs).toBeGreaterThanOrEqual(0);
   });
 
+  // ÖLÇÜM BÜTÜNLÜĞÜ. `input_tokens` yalnızca önbelleğe girmemiş kısmı sayıyor.
+  // Çapraz satıcı 2x2'sinde bir denetim çağrısı neredeyse tamamen
+  // önbellekten geldi ve rapor claude'u "2 girdi token'ı", codex'i "15253"
+  // diye bastı — ortak birimin token olmasına karar vermişken ölçü bozuktu.
+  it("girdi token'ına önbellek okumasını ve yazmasını da katar", async () => {
+    const bin = await fakeCli({
+      stdout: JSON.stringify({
+        is_error: false, result: "ok", total_cost_usd: 0.1859,
+        usage: {
+          input_tokens: 2, output_tokens: 12897,
+          cache_read_input_tokens: 15000, cache_creation_input_tokens: 251,
+        },
+      }),
+    });
+    const r = await new ClaudeCliAdapter({ model: "m", bin }).invoke(req());
+    expect(r.usage).toEqual({ inputTokens: 15253, outputTokens: 12897, costUsd: 0.1859 });
+  });
+
+  it("önbellek alanları yoksa girdi yalnızca input_tokens olur", async () => {
+    const bin = await fakeCli({
+      stdout: JSON.stringify({ is_error: false, result: "ok", usage: { input_tokens: 7, output_tokens: 1 } }),
+    });
+    const r = await new ClaudeCliAdapter({ model: "m", bin }).invoke(req());
+    expect(r.usage).toMatchObject({ inputTokens: 7, outputTokens: 1 });
+  });
+
+  // Hiç girdi alanı yoksa alan BOŞ kalıyor; sıfır yazmak "ölçtüm, sıfırdı"
+  // demek olurdu.
+  it("hiç girdi alanı yoksa inputTokens boş kalır", async () => {
+    const bin = await fakeCli({
+      stdout: JSON.stringify({ is_error: false, result: "ok", usage: { output_tokens: 3 } }),
+    });
+    const r = await new ClaudeCliAdapter({ model: "m", bin }).invoke(req());
+    expect(r.usage?.inputTokens).toBeUndefined();
+    expect(r.usage?.outputTokens).toBe(3);
+  });
+
   it("uzun metin stdin'e düşer", async () => {
     const out = join(root, "stdin.txt");
     const bin = await fakeCli({ stdinTo: out, stdout: OK });

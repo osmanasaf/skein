@@ -896,6 +896,58 @@ ve koşu başına ~$0.07. Çapraz satıcı 2x2'sinde üretici olarak sonnet
 kullanmak, sonucu daha ilginç bir güç sınıfına taşır — "zayıf model kusur
 üretti" itirazını da zayıflatır.
 
+## İLK ÇAPRAZ SATICI 2x2'si KOŞTU (4 Ekim)
+
+Projenin başından beri tıkalı olan şey koştu: dört hücre, iki ayrı satıcı.
+`claude:claude-sonnet-5` × `codex:gpt-5.5`, `snapshot-store`, **$0.6025 +
+abonelik tarafı**.
+
+```
+üretim  claude-sonnet-5  14/16 — kusur: version geri gitmez; version hiçbir zaman tekrar etmez
+üretim  gpt-5.5          14/16 — AYNI iki kusur
+denetim claude → claude  (aynı)    $0.1859
+denetim claude → codex   (ÇAPRAZ)  dolar yok (abonelik)
+denetim codex  → claude  (ÇAPRAZ)  $0.2503
+denetim codex  → codex   (aynı)    dolar yok (abonelik)
+```
+
+Dört denetim raporu da yazıldı. **Puanlama henüz koşulmadı**, yani "çapraz
+denetim kusuru daha çok yakalıyor mu" sorusunun cevabı HENÜZ YOK; bu bölüm
+yalnızca boru hattının çalıştığını kaydediyor.
+
+### Çıktı bir ölçüm kusuru açtı: `input_tokens` girdinin tamamı DEĞİL
+
+Rapor `claude → claude` hücresini `2→12897 token` diye bastı. Bir kod
+denetimi 2 girdi token'ı olamaz. Sebep Anthropic API'sinin alan anlamları:
+
+| alan | ne sayar |
+|---|---|
+| `input_tokens` | **yalnızca önbelleğe girmemiş** kısım |
+| `cache_read_input_tokens` | önbellekten servis edilen |
+| `cache_creation_input_tokens` | önbelleğe yazılan |
+
+Üçü toplanabilir ve adaptör yalnızca ilkini okuyordu. Yani bir gün önce
+"ortak birim token" diye karar verdiğimiz ölçü, claude tarafında baştan
+bozuktu: rapor claude'u "2 girdi token'ı", codex'i "15253" diye gösteriyordu
+ve bu, çapraz satıcı karşılaştırmasını tamamen anlamsız kılardı.
+
+Düzeltildi: girdi artık üç alanın toplamı. Toplanan şey HACİM, para değil —
+dolar `total_cost_usd`'den geliyor ve önbellek okuması/yazması farklı
+fiyatlanıyor. Üç sınama, biri mutasyonla doğrulandı.
+
+### Codex tarafında AÇIK KALAN bir soru
+
+Codex `turn.completed.usage` içinde `input_tokens`, `cached_input_tokens` ve
+`cache_write_input_tokens` bildiriyor. **`input_tokens`'ın önbelleklenmiş
+kısmı İÇERİP içermediği bilinmiyor** — claude'un tersi bir kural olabilir.
+Doğrulanmadan toplanmadı, çünkü yanlış toplamak çift sayma olur.
+
+Elimizdeki tek dolaylı kanıt: aynı denetim promptu için codex 15253, claude
+(düzeltmeden sonra) 2 + 15000 + 251 = 15253. Birebir aynı sayı, iki bağımsız
+sağlayıcıdan. Bu, codex'in `input_tokens`'ının da TOPLAM olduğuna güçlü bir
+işaret — ama tek bir koşudan geliyor ve bir `turn.completed` satırının tamamı
+okunarak teyit edilmeli.
+
 ## Codex kalibrasyonu: AYNI İKİ KANCA (4 Ekim)
 
 Çapraz satıcı 2x2'sinin ölçülebilir olup olmadığı tek soruya bağlıydı: codex
