@@ -110,6 +110,51 @@ export function diagnose(
 const tail = (s: string): string => s.trim().slice(-200).replace(/\s+/g, " ");
 
 /** Dosya adında kullanılamayacak karakterleri temizler. */
+export interface ProducerSummary {
+  model: string;
+  ran: boolean;
+  exitCode: number;
+  redHooks: string[];
+}
+
+/**
+ * Denetim hücreleri koşmalı mı; koşmamalıysa SEBEBİ.
+ *
+ * Denetim hücreleri pahalı ve yer gerçeği olmadan hiçbir şey ölçmezler, o
+ * yüzden karar ÜRETİMDEN SONRA, denetimden önce veriliyor. Üç durum ayrı
+ * tutuluyor çünkü üçü ayrı şey:
+ *
+ * 1. **Üretim ÇÖKTÜ** (`exitCode !== 0`). En pahalı yanılgı buydu: ajan
+ *    çökünce artefakt boş kalıyor ve gizli süit neredeyse her kancayı
+ *    kırmızı düşürüyor — yani çöp artefakt "ölçüm gücü en yüksek hücre"
+ *    gibi görünüyor ve üstüne denetim parası harcanıyor. `kalibre2x2`
+ *    ilk kez koşulduğunda tam bu oldu: üretim exit 1 verdi, denetim ve
+ *    puanlama yine koştu.
+ * 2. **Süit koşmadı** (`!ran`). Yer gerçeği yok; "kusur yok" DEĞİL.
+ * 3. **Kusur yok.** Denetçilerin yakalayacağı bir şey olmadığı için dört
+ *    hücre de aynı sonucu verir.
+ *
+ * Sıra önemli: çökmüş üretimin kırmızı kancaları 3. koşulu "geçiyor" gibi
+ * görünür, o yüzden 1. koşul önce soruluyor.
+ */
+export function matrixSkip(producers: readonly ProducerSummary[]): string | undefined {
+  const crashed = producers.filter((p) => p.exitCode !== 0);
+  if (crashed.length > 0) {
+    return `ÜRETİM ÇÖKTÜ: ${crashed.map((p) => `${p.model} (exit ${p.exitCode})`).join(", ")}. ` +
+      `Kırmızı kancalar kusur değil, artefaktın yokluğu — denetim koşturmak parayı çöpe atar.`;
+  }
+  const unmeasured = producers.filter((p) => !p.ran);
+  if (unmeasured.length > 0) {
+    return `ÖLÇÜLEMEDİ: ${unmeasured.map((p) => p.model).join(", ")} için gizli süit hiç koşmadı. ` +
+      `Bu "kusur yok" DEĞİLDİR — yer gerçeği yok, denetim puanlanamaz.`;
+  }
+  if (producers.every((p) => p.redHooks.length === 0)) {
+    return `Ölçüm gücü yok: hiçbir üreticide kanıtlanmış kusur yok, denetçilerin ` +
+      `yakalayacağı bir şey olmadığı için dört hücre de aynı sonucu verir.`;
+  }
+  return undefined;
+}
+
 export async function runMatrix(options: MatrixOptions): Promise<MatrixOutcome> {
   const { repo, taskId, models, runRoot, log, timeoutMs } = options;
   const task = await loadTask(join(repo, "bench/tasks", taskId));
@@ -174,16 +219,9 @@ export async function runMatrix(options: MatrixOptions): Promise<MatrixOutcome> 
   // sonuç üretmeyecek bir koşuya harcamaktır. Bu koruma tek koşu yolunda
   // vardı ama matriste yoktu ve gerçek bir koşuda "0/0 yeşil — kusur yok"
   // diye raporlanıp dört denetim boşa koştu.
-  const unmeasured = produced.filter((p) => !p.ran);
-  const defective = produced.filter((p) => p.redHooks.length > 0);
-  const skipped =
-    unmeasured.length > 0
-      ? `ÖLÇÜLEMEDİ: ${unmeasured.map((p) => p.adapter.model).join(", ")} için gizli süit hiç koşmadı. ` +
-        `Bu "kusur yok" DEĞİLDİR — yer gerçeği yok, denetim puanlanamaz.`
-      : defective.length === 0
-        ? `Ölçüm gücü yok: hiçbir üreticide kanıtlanmış kusur yok, denetçilerin ` +
-          `yakalayacağı bir şey olmadığı için dört hücre de aynı sonucu verir.`
-        : undefined;
+  const skipped = matrixSkip(produced.map((p) => ({
+    model: p.adapter.model, ran: p.ran, exitCode: p.exitCode, redHooks: p.redHooks,
+  })));
 
   if (skipped !== undefined && options.force !== true) {
     console.log(`\n${skipped}`);

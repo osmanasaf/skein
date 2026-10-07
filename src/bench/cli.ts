@@ -1103,6 +1103,23 @@ if (cmd === "report") {
 } else if (cmd === "matrix") {
   await matrix(rest[0] ?? "retry-backoff", rest[1] ?? "claude:claude-opus-5", rest[2] ?? "claude:claude-sonnet-5", force);
 } else if (cmd) {
+  // `cli.ts <görev-id>` belgelenmiş bir biçim, o yüzden tanınmayan komut
+  // göreve düşüyor. Ama görev de yoksa sebebi SÖYLEMEK gerekiyor: eskiden
+  // `loadTask` "geçerli YAML değil" diyordu ve bilinmeyen bir komut (ya da
+  // henüz çekilmemiş yeni bir komut) tamamen alakasız bir hata üretiyordu.
+  const taskRoot = join(REPO, "bench/tasks");
+  const varMi = await readdir(taskRoot).then((d) => d.includes(cmd)).catch(() => false);
+  if (!varMi) {
+    const gorevler = await readdir(taskRoot, { withFileTypes: true })
+      .then((d) => d.filter((e) => e.isDirectory()).map((e) => e.name).sort())
+      .catch(() => [] as string[]);
+    console.error(`bilinmeyen komut ya da görev: \`${cmd}\``);
+    console.error(`  komutlar  : matrix, doctor, puanla, siniflandir, selftest, turlar,`);
+    console.error(`              kalibre, kalibre2x2, planab, planrapor, report`);
+    console.error(`  görevler  : ${gorevler.join(", ")}`);
+    console.error(`  Yeni bir komutu çekmediysen: git pull`);
+    process.exit(2);
+  }
   await run(cmd, rest[0] ?? "claude", rest[1] ?? "claude-opus-5", audit);
 } else {
   console.error("kullanım: cli.ts <görev-id> [sağlayıcı] [model] [--audit]\n         cli.ts matrix <görev-id> [sağlayıcı:model] [sağlayıcı:model]\n         cli.ts doctor <sağlayıcı:model>\n         cli.ts puanla [hakem-modeli] [--kuru] [--yeniden]\n         cli.ts siniflandir [hakem-modeli] [--kuru] [--yeniden]\n         cli.ts selftest [görev-id]\n         cli.ts turlar [hücre-parçası] [--diff]\n         cli.ts kalibre <görev-id> [--model sağ:model]   (6d ölçüm gücü ön kontrolü)\n         cli.ts kalibre2x2 <görev-id> [--model s:m] [--hakem s:m]  (2x2 ölçüm gücü)\n         cli.ts planab <görev-id> [--k 3] [--model sağ:model] [--kol planli|plansiz] [--devam]\n         cli.ts planrapor\n         cli.ts report [--gorev=<görev-id>]");

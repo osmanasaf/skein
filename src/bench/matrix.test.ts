@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { diagnose } from "./matrix.js";
+import { diagnose, matrixSkip, type ProducerSummary } from "./matrix.js";
 
 describe("diagnose", () => {
   it("hiç dosya yazılmadıysa izin/çağrı sorununu işaret eder", () => {
@@ -24,5 +24,49 @@ describe("diagnose", () => {
     expect(msg).toMatch(/DIŞINA/);
     expect(msg).toContain("/repo/src/x.ts");
     expect(msg).not.toMatch(/HİÇBİR dosya/);
+  });
+});
+
+// Denetim hücreleri pahalı: karar üretimden SONRA, denetimden ÖNCE veriliyor.
+// En pahalı yanılgı çökmüş üretimdi — `kalibre2x2` ilk koşuldugunda üretim
+// exit 1 verdi, artefakt boş kaldı, 23 kanca kırmızı düştü ve denetim yine
+// koştu. Çöp artefakt "ölçüm gücü en yüksek hücre" gibi görünüyordu.
+describe("matrixSkip", () => {
+  const u = (over: Partial<ProducerSummary> = {}): ProducerSummary =>
+    ({ model: "m", ran: true, exitCode: 0, redHooks: ["k1"], ...over });
+
+  it("iki koşul da sağlamsa denetim koşar", () => {
+    expect(matrixSkip([u(), u({ model: "m2" })])).toBeUndefined();
+  });
+
+  it("üretim çöktüyse DURDURUR ve parayı anar", () => {
+    const r = matrixSkip([u(), u({ model: "m2", exitCode: 1 })]);
+    expect(r).toMatch(/ÜRETİM ÇÖKTÜ/);
+    expect(r).toMatch(/m2 \(exit 1\)/);
+    expect(r).toMatch(/parayı çöpe atar/);
+  });
+
+  // Sıra önemli: çökmüş üretimin kırmızı kancaları "kusur var" gibi görünür.
+  it("çökmüş üretimde kırmızı kanca VARSA da durdurur", () => {
+    expect(matrixSkip([u({ exitCode: 1, redHooks: ["k1", "k2", "k3"] })]))
+      .toMatch(/ÜRETİM ÇÖKTÜ/);
+  });
+
+  it("süit koşmadıysa 'kusur yok' demediğini söyler", () => {
+    const r = matrixSkip([u({ ran: false, redHooks: [] })]);
+    expect(r).toMatch(/ÖLÇÜLEMEDİ/);
+    expect(r).toMatch(/"kusur yok" DEĞİLDİR/);
+  });
+
+  it("hiçbir üreticide kusur yoksa ölçüm gücü yok der", () => {
+    expect(matrixSkip([u({ redHooks: [] }), u({ model: "m2", redHooks: [] })]))
+      .toMatch(/Ölçüm gücü yok/);
+  });
+
+  // Tek üreticide kusur varsa matris anlamlı: o artefakt üzerinde denetçiler
+  // karşılaştırılabilir.
+  it("tek üreticide kusur varsa koşar", () => {
+    expect(matrixSkip([u({ redHooks: [] }), u({ model: "m2", redHooks: ["k1"] })]))
+      .toBeUndefined();
   });
 });

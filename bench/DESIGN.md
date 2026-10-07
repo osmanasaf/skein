@@ -930,16 +930,39 @@ Koşucu ayrı yazılmadı: tek model verildiğinde `runMatrix` zaten bir üretim
 bir aynı-satıcı denetim koşuyor. Bu projede aynı bilginin iki kopyası üç kez
 kusur doğurdu; dördüncüsü eklenmedi.
 
-### Ön kontrol kendi kusurunu buldurdu
+### Ön kontrol kendi kusurunu buldurdu — ve düzeltmenin ilki yetmedi
 
 Komut olmayan bir modelle denendi (bedava, ajan çağrılmadan hata vermesi
 için). Ajan çöktü, artefakt boş kaldı ve gizli süit **14 kancayı kırmızı**
 düşürdü — yani sayıya bakan ön kontrol o hücreyi "ölçüm gücü en yüksek"
 diye okudu. Başarısız bir üretim, ölçüm için ideal hücre gibi görünüyordu.
 
-Düzeltildi: üretim çağrısının çıkış kodu kancalardan ÖNCE soruluyor. Sıfır
-değilse kırmızı kancalar kusur değil, **artefaktın yokluğu**. `matrix`
-çıktısı da bu alanı taşıyor artık.
+İlk düzeltme kararı doğru veriyordu ama **paradan sonra**: çıkış kodu
+yalnızca son karar satırına giriyordu, oysa `runMatrix` o arada denetimi
+koşturmuştu. Gerçek bir koşuda bu, çöp artefakt üzerine denetim ve puanlama
+parası demek. İkinci koşuda görüldü: üretim exit 1, ardından `denetim:` satırı.
+
+Düzeltme bir kat yukarıya taşındı: `matrixSkip` (saf fonksiyon, `matrix.ts`)
+üretimden SONRA, denetimden ÖNCE karar veriyor ve üç durumu ayrı tutuyor:
+
+| durum | sebep |
+|---|---|
+| **ÜRETİM ÇÖKTÜ** (`exitCode !== 0`) | kırmızılar kusur değil, artefaktın yokluğu — "denetim koşturmak parayı çöpe atar" |
+| **ÖLÇÜLEMEDİ** (`!ran`) | yer gerçeği yok; "kusur yok" DEĞİL |
+| **Ölçüm gücü yok** | hiçbir üreticide kusur yok |
+
+Sıra önemli ve sınanıyor: çökmüş üretimin kırmızı kancaları üçüncü koşulu
+"geçiyor" gibi görünür, o yüzden çökme önce soruluyor. 6 sınama, ikisi
+mutasyonla doğrulandı; canlı koşuda `denetim:` satırının kaybolduğu
+görülerek doğrulandı.
+
+### Bilinmeyen komut artık sessizce göreve düşmüyor
+
+`cli.ts <görev-id>` belgelenmiş bir biçim, o yüzden tanınmayan komut göreve
+düşüyordu. Henüz çekilmemiş yeni bir komut yazıldığında sonuç şuydu:
+`TaskError: kalibre2x2\task.yaml: okunamadı ya da geçerli YAML değil` —
+dosya hiç yokken "geçerli YAML değil" diyen, komutla ilgisi görünmeyen bir
+hata. Artık komut ve görev listesi basılıyor ve `git pull` hatırlatılıyor.
 
 ## İKİNCİ KATMAN OKUNDU — ve katmanlar arası bir BOŞLUK çıktı (4 Ekim)
 
