@@ -7,7 +7,7 @@ yapıştırılabilsin diye yazıldı: aşağısı Skein'i tanımayan birine de y
 **Dal:** `claude/project-plan-brainstorm-pthvoc` — `claude/project-thread-sc56cs`
 ileri sarılıp üstüne devam edildi, yani iki dalın işi bu dalda birleşti.
 `sc56cs` olduğu yerde duruyor; yeni iş burada.
-**Durum:** 759 test yeşil, typecheck temiz, ağaç temiz.
+**Durum:** 765 test yeşil (POSIX); Windows'ta kuyruk yarışı AÇIK, typecheck temiz, ağaç temiz.
 `watch selftest` bu konteynerde **koşmuyor**: `hub/flows/selftest.yaml`
 depoda izlenmiyor (yalnızca yazarın makinesinde duruyordu, konteyner
 yenilenince gitti). Belgelenmiş bir komutun depoda olmayan bir dosyaya
@@ -398,6 +398,59 @@ Doğrulama (ikisi de koşturularak, iddia edilmeden):
 `codex gpt-5.5` → `üretici: codex / gpt-5.5`, hücre `codex--gpt-5.5`,
 "üretim koşuyor"a geçti ve ağda takıldı. `claude <olmayan-model>` →
 aynı yol, exit=1, 0.6s, bedava.
+
+---
+
+## AÇIK KUSUR: Windows'ta iki koşucu AYNI kartı aldı (7 Ekim)
+
+`npm test` Windows'ta şunu verdi:
+
+```
+FAIL  src/card/queue.test.ts > aynı kartı iki koşucu birden alamaz
+AssertionError: expected [ …(2) ] to have a length of 1 but got 2
+```
+
+**İkisi de kart aldı.** Bu, 2 Ekim'de düzelttiğim ENOENT çökmesinden FARKLI
+bir şey: orada yarışı kaybeden taraf çöküyordu, burada kaybeden diye bir
+taraf yok. Kuyruğun en temel güvencesi — iki koşucu aynı kartı alamaz —
+kırılmış görünüyor.
+
+**POSIX'te üretilemiyor:** 450 turluk zorlamada (2 ve 8 eşzamanlı `take`) bir
+kez bile olmadı; 7 Ekim'de 150 tur daha koşuldu, yine sıfır. Yani ya Windows'a
+özgü, ya da çok seyrek.
+
+### Teşhis hazır, veri eksik
+
+Tahmin etmek yerine ölçmek için iki şey yazıldı:
+
+1. **Sınamanın iddiası artık teşhis taşıyor.** Eski iddia yalnızca "kaç
+   tanesi null değil" diye bakıyordu; kırıldığında hangi şeyin kırıldığı
+   anlaşılamadı. Artık KİMLİKLER karşılaştırılıyor, çünkü "ikisi de kart
+   aldı" iki ayrı şey olabilir:
+   - **aynı kimlik iki kez** → çekirdekte yarış, ciddi
+   - **ayrı kimlikler** → kuyrukta iki kart vardı, sınamanın kendi kusuru
+   Ayrıca `depth("coder")` ile kuyrukta gerçekten tek kart olduğu sabitlendi.
+
+2. **`scripts/yaris-teshis.ts`** — ajan çağırmayan, para harcamayan bir
+   zorlama betiği. İki parçası var:
+   - **VARSAYIM:** tasarımın dayandığı rename davranışı. Taşınmış bir kaynağı
+     yeniden rename etmek ENOENT vermeli. Vermiyorsa sahiplenme mekanizması
+     o platformda **baştan geçersiz** — kuyruğun tek güvencesi bu davranış.
+   - **ZORLAMA:** tek kartlı taze kuyrukta iki eşzamanlı `take`, N tur,
+     sonuçlar sınıflanmış.
+
+   POSIX temel çizgisi (7 Ekim, 150 tur): `VARSAYIM ENOENT ✓`,
+   `tam bir kart: 150`, geri kalan her sayı sıfır.
+
+**Sıradaki adım Windows'ta:** `npx tsx scripts/yaris-teshis.ts 200`.
+`VARSAYIM` satırı ✗ derse kök neden bulundu ve sahiplenme mekanizması
+Windows için yeniden kurulmalı (kilit dosyası ya da `O_EXCL` ile oluşturma).
+`VARSAYIM ✓` ama `aynı kimlik > 0` ise yarış başka yerde — büyük olasılıkla
+`#scan` ile `rename` arasındaki pencerede.
+
+Not: bu kusur **gerçek koşuları** etkiler, yalnızca sınamayı değil. İki
+koşucu aynı kartı alırsa aynı iş iki kez yapılır ve kart durumu bozulur.
+Windows'ta kampanya koşturmadan önce kapatılmalı.
 
 ---
 

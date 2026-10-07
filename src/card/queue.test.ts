@@ -324,10 +324,22 @@ describe("CardQueue — ret", () => {
 });
 
 describe("CardQueue — çökme ve yarış", () => {
+  // Hata mesajı TEŞHİS taşımalı. Eski iddia yalnızca "kaç tanesi null değil"
+  // diye bakıyordu ve Windows'ta kırıldığında hangi şeyin kırıldığı
+  // anlaşılamadı — "ikisi de kart aldı" iki ayrı şey olabilir:
+  //   · aynı kart iki kez alındı  → çekirdekte yarış, ciddi
+  //   · kuyrukta iki kart vardı   → sınamanın kendi kusuru
+  // Kimlikleri karşılaştırmak ikisini ayırıyor.
   it("aynı kartı iki koşucu birden alamaz", async () => {
-    await put(daily);
+    const card = await put(daily);
+    expect(await queue.depth("coder")).toBe(1);
+
     const [a, b] = await Promise.all([queue.take("coder"), queue.take("coder")]);
-    expect([a, b].filter((c) => c !== null)).toHaveLength(1);
+    const alinan = [a, b].filter((c): c is Card => c !== null);
+    // Tek bir kimlik beklenir. İki kez aynı kimlik çıkarsa yarış, iki ayrı
+    // kimlik çıkarsa kuyruk kurgusu bozuk — mesaj ikisini de gösterir.
+    expect(alinan.map((c) => c.id).join(" + ")).toBe(card.id);
+    expect(await queue.depth("coder")).toBe(0);
   });
 
   // Yarışı KAYBEDEN taraf nazikçe `null` dönmek zorunda: `#scan` dizini
