@@ -896,6 +896,49 @@ ve koşu başına ~$0.07. Çapraz satıcı 2x2'sinde üretici olarak sonnet
 kullanmak, sonucu daha ilginç bir güç sınıfına taşır — "zayıf model kusur
 üretti" itirazını da zayıflatır.
 
+## ÖN KONTROL İLK SONUÇLARI (8 Ekim)
+
+`config-patch` × `claude-sonnet-5`:
+
+```
+üretim: 25/25 yeşil — kusur yok     ·  $0.1972 · 142046→2311 token
+Denetim hücreleri atlandı.
+ÖLÇEMEZ (1. koşul) — üretici kusur üretmedi.
+```
+
+İki şey kayda geçiyor. **Birincisi kalibrasyon bilgisi:** `config-patch`
+sonnet için kolay; eşik tablosuna bir satır daha. **İkincisi ön kontrolün
+kendi değeri:** denetim hücreleri atlandı, yani koşu ~$0.20'de durdu.
+Tam matris burada koşulsaydı dört denetim + puanlama parası, hiçbir şey
+ölçmeyen bir hücreye giderdi.
+
+### Sıradaki hücreler NEDEN bunlar
+
+Belgedeki kalibrasyon tablosu haiku üreticisiyle kusur veren üç hücre
+tanımlıyor. Biri zaten sınandı ve 2. koşulda kaldı:
+
+| hücre | kusur | 2. koşul |
+|---|---|---|
+| `snapshot-store` × haiku/sonnet | sürüm geri gidiyor/tekrar ediyor | ✗ aynı-satıcı denetim İKİSİNİ DE yakaladı |
+| `csv-roundtrip` × haiku | gidiş-dönüş: tek boş alanlı tek satır | **sınanmadı** |
+| `async-pool` × haiku | reddetme semantiği (2 kanca) | **sınanmadı** |
+
+Kalan ikisi aradığımız şeye daha yakın ve sebebi kusurun TÜRÜ:
+
+- `snapshot-store` kusuru bir **prozaya yazılı değişmezin** ihlaliydi
+  (`seed/src/store.ts:10`). Denetçi dosyanın başlığını okuyup buldu.
+- `csv-roundtrip` ve `async-pool` **tohumsuz** görevler: tüketici modül yok,
+  dosya başlığında değişmez yok. Tek yetke görev tanımı. Kusurlar da
+  girdiye özgü (`""` alanının gidiş-dönüşü) ya da sıralamaya özgü
+  (reddetme sonrası davranış) — kodu okuyup fark etmek için belirli bir
+  senaryoyu kurmak gerekiyor.
+
+Yani 2. koşulun tutma olasılığı burada daha yüksek. Ön kontrol üreticiyi ve
+denetçiyi aynı model yapıyor; bu kasıtlı, çünkü gerçek 2x2'nin aynı-satıcı
+hücresi de öyle. `ÖLÇER` çıkarsa tam matris
+`claude:claude-haiku-4-5-20251001 × codex:gpt-5.5` olarak koşulur ve sonuç
+"bu güç sınıfındaki modellerde" der — DESIGN'ın 1. yolu.
+
 ## 2x2 ÖLÇÜM GÜCÜ ÖN KONTROLÜ — `kalibre2x2` (4 Ekim)
 
 İlk çapraz satıcı koşusu YETERSİZ verdi ve ölçütü öğretti. Artık ölçüt bir
