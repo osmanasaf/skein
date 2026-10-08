@@ -7,7 +7,7 @@ yapıştırılabilsin diye yazıldı: aşağısı Skein'i tanımayan birine de y
 **Dal:** `claude/project-plan-brainstorm-pthvoc` — `claude/project-thread-sc56cs`
 ileri sarılıp üstüne devam edildi, yani iki dalın işi bu dalda birleşti.
 `sc56cs` olduğu yerde duruyor; yeni iş burada.
-**Durum:** 765 test yeşil (POSIX); Windows'ta kuyruk yarışı AÇIK, typecheck temiz, ağaç temiz.
+**Durum:** 765 test yeşil, iki platformda da; kuyruk sahiplenmesinde üretilemeyen bir kırılma AÇIK, typecheck temiz, ağaç temiz.
 `watch selftest` bu konteynerde **koşmuyor**: `hub/flows/selftest.yaml`
 depoda izlenmiyor (yalnızca yazarın makinesinde duruyordu, konteyner
 yenilenince gitti). Belgelenmiş bir komutun depoda olmayan bir dosyaya
@@ -401,7 +401,7 @@ aynı yol, exit=1, 0.6s, bedava.
 
 ---
 
-## AÇIK KUSUR: Windows'ta iki koşucu AYNI kartı aldı (7 Ekim)
+## AÇIK AMA ÜRETİLEMEYEN: kuyruk sahiplenmesi (7–8 Ekim)
 
 `npm test` Windows'ta şunu verdi:
 
@@ -442,15 +442,55 @@ Tahmin etmek yerine ölçmek için iki şey yazıldı:
    POSIX temel çizgisi (7 Ekim, 150 tur): `VARSAYIM ENOENT ✓`,
    `tam bir kart: 150`, geri kalan her sayı sıfır.
 
-**Sıradaki adım Windows'ta:** `npx tsx scripts/yaris-teshis.ts 200`.
-`VARSAYIM` satırı ✗ derse kök neden bulundu ve sahiplenme mekanizması
-Windows için yeniden kurulmalı (kilit dosyası ya da `O_EXCL` ile oluşturma).
-`VARSAYIM ✓` ama `aynı kimlik > 0` ise yarış başka yerde — büyük olasılıkla
-`#scan` ile `rename` arasındaki pencerede.
+### Ölçüldü: mekanizma İKİ PLATFORMDA DA sağlam
 
-Not: bu kusur **gerçek koşuları** etkiler, yalnızca sınamayı değil. İki
-koşucu aynı kartı alırsa aynı iş iki kez yapılır ve kart durumu bozulur.
-Windows'ta kampanya koşturmadan önce kapatılmalı.
+Teşhis Windows'ta koşuldu (8 Ekim) ve sonuç mekanizmayı temize çıkardı:
+
+```
+platform : win32 · node v22.15.0
+VARSAYIM  taşınmış kaynağı yeniden rename → ENOENT  ✓
+ZORLAMA   200 turda: tam bir kart 200 · aynı kimlik 0 · ayrı kimlik 0 · fırlattı 0
+```
+
+Kanıt tablosu:
+
+| ne denendi | sonuç |
+|---|---|
+| Tasarım varsayımı (rename → ENOENT), Windows | ✓ geçerli |
+| Tasarım varsayımı, POSIX | ✓ geçerli |
+| İzole zorlama, Windows, 200 tur | temiz |
+| İzole zorlama, POSIX, 600+ tur (2 ve 8 eşzamanlı) | temiz |
+| **Tam takım**, POSIX, 6 koşu (8 Ekim) | temiz |
+| **Tam takım**, POSIX, 2 Ekim | 1 kez kırıldı — ENOENT çökmesi (düzeltildi) |
+| **Tam takım**, Windows, 7 Ekim | 1 kez kırıldı — "ikisi de kart aldı" |
+
+**Severity yeniden okundu.** 7 Ekim'de "kuyruğun en temel güvencesi kırılmış
+görünüyor" dedim; eldeki ölçüm bunu desteklemiyor. Sahiplenme `rename`'in
+tek-kazanan davranışına dayanıyor ve o davranış iki platformda da doğrudan
+sınandı. İki `take`'in tek kart üzerinde ikisinin de başarması, kurgu gereği
+mümkün görünmüyor: tek dosya, tek yol, kazanan dosyayı taşıyor.
+
+Yani iki olasılık kaldı ve ikisi çok farklı:
+
+1. **Çok seyrek bir pencere** — 800+ izole turda ve 6 tam koşuda bir kez bile
+   çıkmayacak kadar seyrek, ama var.
+2. **Sınama koşumunun artefaktı** — kuyrukta beklenmedik bir ikinci kart ya
+   da yük altında bozulan bir kurgu. Eski iddia bunu ayırt edemiyordu.
+
+### Tuzak kuruldu: bir sonraki kırılma kendini açıklayacak
+
+Daha fazla tahmin yürütmek yerine sınamanın iddiası teşhis taşıyacak hâle
+getirildi (`queue.test.ts`): kuyruk derinliği önce 1, sonra 0 diye
+sabitleniyor ve alınan kartların KİMLİKLERİ karşılaştırılıyor. Bir dahaki
+kırılmada mesaj doğrudan söyleyecek:
+
+- `"<id> + <id>"` (aynı kimlik iki kez) → çekirdekte yarış, 1. olasılık
+- `"<id1> + <id2>"` (ayrı kimlikler) → kuyrukta iki kart vardı, 2. olasılık
+- `depth` iddiası kırılırsa → kurgu zaten bozuktu, `take` suçsuz
+
+**Durum: AÇIK ve ÜRETİLEMEYEN.** Windows'ta kampanya koşturmak için bunun
+kapanmasını beklemek gerekmiyor — mekanizma sınandı — ama `npm test` orada
+tekrar kırılırsa çıktıyı saklamak gerekiyor: artık kök nedeni söylüyor.
 
 ---
 
