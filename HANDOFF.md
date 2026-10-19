@@ -8,12 +8,13 @@ yapıştırılabilsin diye yazıldı: aşağısı Skein'i tanımayan birine de y
 ileri sarılıp üstüne devam edildi, yani iki dalın işi bu dalda birleşti.
 `sc56cs` olduğu yerde duruyor; yeni iş burada.
 **Durum:** 765 test yeşil, iki platformda da; kuyruk sahiplenmesinde üretilemeyen bir kırılma AÇIK, typecheck temiz, ağaç temiz.
+**Durum raporu:** `DURUM.md` — ne inşa edildi, ne ölçüldü, bugün ne kullanılabilir.
 `watch selftest` bu konteynerde **koşmuyor**: `hub/flows/selftest.yaml`
 depoda izlenmiyor (yalnızca yazarın makinesinde duruyordu, konteyner
 yenilenince gitti). Belgelenmiş bir komutun depoda olmayan bir dosyaya
 dayanması açık bir eksik; akış dosyasını depoya almak bir tasarım kararı
 olduğu için kendiliğinden eklenmedi.
-**Kod:** ~9.3k satır ürün + ~6.1k satır test.
+**Kod:** ~13.9k satır ürün + ~10.2k satır test.
 
 ---
 
@@ -28,7 +29,8 @@ biterse **kapı**da (gate) durup insanı bekler.
 
 Tez: farklı satıcıların modelleri farklı kör noktalara sahip, dolayısıyla
 birbirini denetlediklerinde tek modelin kaçırdığı kusur yakalanır. **Bu tez
-hâlâ ölçülmedi** — ama ölçmenin önündeki engel artık teknik değil.
+hâlâ kanıtlanmadı** — ama artık "ölçülmedi" de değil: ölçüldü ve ölçüm,
+elimizdeki görev setiyle sorunun cevaplanamayacağını söyledi (`DURUM.md`).
 
 Uzun vadeli hedef bir kütüphane değil, bir **ajan geliştirme ortamı (ADK)**:
 rolleri/görevleri tanımladığın, koşarken izlediğin, ne değiştirdiklerini
@@ -38,17 +40,29 @@ gördüğün yer. Kod editörü **değil** — bu sınır kasıtlı (`ARCHITECTU
 
 ## Tek cümlede nerede kaldık
 
-**İki ölçüm takımı da bitti (çapraz denetim ve 6d planlama A/B'si); kalan
-iş ikisini koşmak — ve artık daha iyi bir üreticiyle.** Bu oturumda eşik ölçüldü: `snapshot-store` görevinde
-`claude-haiku-4-5` ve `claude-sonnet-5` üçer koşunun üçünde de **aynı iki
-kancayı** kırmızıya düşürüyor, `claude-opus-5` üçünde de temiz. Yani
-kampanya artık haiku sınıfına mahkûm değil; sonnet üreticisiyle koşulabilir
-(koşu başına ~$0.07). Ayrıca dürüst bir kötü haber: Açık Soru #1'in
-dayandığı `retry-backoff` kusuru bugünkü hatla **hiçbir modelde**
-tekrarlanmadı. **Kalan iki iş de koşmak: çapraz satıcı 2x2'si ve 6d kampanyası** —
-ve o, uzak konteynerde değil senin makinende yapılmalı (aşağıda sebebi;
-bugün bir kez daha sınandı, vekil `api.openai.com` CONNECT'ini hâlâ 403 ile
-kesiyor).
+**İkisi de koştu, ikisi de cevap verdi — ve ikinci cevap "hayır" değil
+"bu hücrede sorulamaz" oldu.** 6d planlama kampanyası üçüncü kez koştu ve
+karar kuralı ilk kez net konuştu: **OLUMSUZ** (iki görevde de %0 azalma,
+~2.2 kat bedel). Çapraz satıcı 2x2'si de koştu (`claude-sonnet-5` ×
+`gpt-5.5`, puanlandı ve sınıflandırıldı) ve **YETERSİZ** verdi: aynı-satıcı
+hücreler 4/4 yakaladı, yani çeşitliliğin iyileştireceği bir kaçırma yok,
+göreli azalma tanımsız.
+
+Oradan projenin şimdiye kadarki en önemli bulgusu çıktı. Ölçüm gücü iki
+koşul istiyor — üretici kusur üretmeli **ve** aynı-satıcı denetim o kusuru
+kaçırmalı — ve ikinci koşul `kalibre2x2` ile üç kez sınandı, **üç kez
+tutmadı** (`snapshot-store` × sonnet, `snapshot-store` × gpt-5.5,
+`csv-roundtrip` × haiku). Teze karşı kanıt değil, görev seti hakkında
+kanıt: bu kusurların hepsi okuyunca görülebilir sınıfından. Eksik olan sayı
+değil **sınıf**: sözleşmesi ne görev metninde ne artefaktın başlığında
+yazılı olan, yalnızca bir tüketici modülün kodundan çıkarılabilen kusur.
+Gerekçesi ve yanlışlanan ilk hipotez `bench/DESIGN.md`'de (19 Ekim bölümü).
+
+**Projenin bütün durumu ve "bugün kullanılabilir mi" cevabı `DURUM.md`'de.**
+Kısası: orkestratör kullanılabilir (tek satıcılı denetim zinciri, iki
+platform, 765 test); planlama turu kullanılmamalı (ölçüm olumsuz); çapraz
+satıcı denetimi bir sonuç değil bir tasarım; ve en sağlam ürün ölçüm
+takımının kendisi.
 
 | # | Adım | Durum |
 |---|---|---|
