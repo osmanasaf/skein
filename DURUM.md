@@ -34,13 +34,34 @@ projenin en kayda değer bulgusu o.
 
 ## 2. Ne ölçüldü — ve her ölçüm ne dedi
 
-**(a) Planlama turu ürünü daha doğru yapıyor mu? → OLUMSUZ**
+**(a) Planlama turu ürünü daha doğru yapıyor mu? → ÖLÇÜLEMEDİ (bedel gerçek)**
 
 Üç kampanya, iki görev × k=3. Son kampanya iki görevde de **%0 azalma**
-verdi ve karar kuralı ilk kez net konuştu: planlama turu ürünü daha doğru
-yapmıyor, bedeli ~2.2 kat aktivasyon. Ama sebep "planlama işe yaramıyor"
-değil: mekanizma sustu — 6 planlı koşuda 4'ü hiç itiraz yazmadı, yazılan
-4 itiraz kanıtta dosya yolu vermediği için elendi.
+verdi ve "OLUMSUZ" diye kaydedildi. **19 Ekim'de o karar hükümsüz çıktı.**
+
+Önceden ilan edilmiş ölçüt tablosunda beş metrik var ve ikisi ürüne değil
+mekanizmaya bakıyor — *itirazsız alışveriş oranı >%50 ise mekanizma tören.*
+Kampanyada bu oran %67 ve %100'dü, yani eşiğin iki katı; ama eşik
+hesaplanıp basılıyor olmasına rağmen **karar yolunda yoktu.** İtiraz
+yazılmayan koşuda planlı kol kontrol kolunun aynısıdır: o %0 bir bulgu
+değil, kurgunun aynası. (`power.ts`'i doğuran kusurun aynısı — ölçüt
+prozada durup karar yolunda durmaması.)
+
+Kapı artık karar yolunda (`planeffect.ts`, 6 sınama, 4 mutasyon ısırıyor).
+Geriye kalan iki cümle ikisi de doğru, ayrı ölçeklerde:
+
+- **Ürün anahtarı olarak kapalı kalmalı:** açılacak şey tam olarak bu
+  tören-baskın mekanizma ve bedeli ~2.2 kat aktivasyon. Bedel gösterildi,
+  kazanç gösterilmedi.
+- **Bilimsel iddia olarak açık:** "planlama ürünü daha doğru yapmıyor"
+  kanıtlanmadı. Ölçülen şey 4/6 koşuda koşmayan bir mekanizmaydı.
+
+Kapının arkasında daha derin bir engel var ve o bir istem ayarı değil:
+`snapshot-store` 1. koşusunda iki itiraz da doğru tüketici modülü gösterdi,
+ikisi de kabul edildi, plan değişti — **ürün değişmedi.** Kabul edilmiş
+itiraz bugün yalnızca proza üretiyor; `coder` prozayı okuyup kodu yeniden
+türetiyor ve aynı kusuru tekrar yazabiliyor. Plan ile kod arasında kapı yok.
+Düzeltme merdiveni `PLANLAMA.md`'de (19 Ekim bölümü).
 
 **(b) Çapraz satıcı denetimi değer katıyor mu? → YETERSİZ (ölçülemedi)**
 
@@ -86,8 +107,10 @@ atıyor, ve rol promptları ekrandan düzenlenemiyor (bilerek bekliyor).
 
 ### Bugün kullanılmaması gereken
 
-**Planlama/itiraz turu.** Ölçüm olumsuz: 2.2 kat bedel, gösterilebilir
-kazanç yok. Mekanizma açık ama ürüne değmiyor.
+**Planlama/itiraz turu.** 2.2 kat bedel, gösterilebilir kazanç yok —
+ama "ölçtük, olumsuz" değil: ölçüm hükümsüz çıktı (yukarıda). Bugün kapalı
+kalmasının sebebi kanıtlanmış bir başarısızlık değil, **ölçülmemiş bir
+kazanca karşı ölçülmüş bir bedel.**
 
 ### Sayılmaması gereken
 
@@ -121,8 +144,12 @@ değerli olan kısım bu. Tez kanıtlanmasa da bu makine duruyor.
    başlığında PROZAYLA yazılı bir değişmezin ihlaliydi ve iki denetçi de onu
    okuyup buldu. Yeni görevde sözleşmeyi bir tüketici modülün **kodu**
    zorunlu kılmalı, yorum söylememeli.
-2. **Planlamada kanıt biçimi.** İsteme karşı örnek kondu, üçüncü kampanya
-   yarım kaldı (kontrol kolunun 2 koşusu ölçüldü).
+2. **Planlamanın ön kontrolü** — `kalibre2x2`'nin planlama tarafındaki
+   karşılığı: k=1, tek hücre, ~$0.5, iki koşulu sırayla sorar (alışveriş
+   geçerli itiraz üretti mi; üretilen itiraz **kodu** değiştirdi mi).
+   Dördüncü kampanyaya ~$4.5 harcamadan önce bu. Ardından asıl kaldıraç:
+   kabul edilmiş itirazı **bağlayıcı** kılmak — proza değil, makineyle
+   denetlenebilir bir yükümlülük (kabul ölçütü ya da düşen bir test).
 3. **Görev seti 8/12** — ve asıl eksik sayı değil sınıf (bkz. 1).
 4. **`AdapterRegistry`'yi silmek** — ikinci kurucu yol var oldukça aynı
    kusur dördüncü kez çıkar.

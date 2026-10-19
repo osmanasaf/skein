@@ -852,7 +852,168 @@ elendiğinde itirazcı koda bakmaya zorlanır mı?
 
 ---
 
+## OLUMSUZ KARARI HÜKÜMSÜZ — ölçüt prozada duruyordu, karar yolunda durmuyordu (19 Ekim)
+
+"Planlamayı düzeltebilir miyiz" sorusu soruldu ve cevap vermek için önce
+kararın neye dayandığına bakıldı. Dayanmadığı şey çıktı.
+
+### Bulgu
+
+`PLANLAMA.md`'nin "Nasıl bileceğiz işe yaradığını" tablosu **beş** metrik
+ilan ediyor ve ikisi ürüne değil **mekanizmaya** bakıyor:
+
+| Metrik | Eşik (önceden ilan) |
+|---|---|
+| Kabul edilen itiraz oranı | **<%20 ise mekanizma gürültü** |
+| İtirazsız alışveriş oranı | **>%50 ise mekanizma tören** |
+
+`planeffect.ts` ikisini de hesaplıyor (`ceremony`) ve rapor ikisini de
+basıyor. Ama `decide()` yalnızca üç şey okuyor: göreli azalma, k, ve işaret
+tutarlılığı. **Mekanizma eşikleri karar yolunda hiç yok.**
+
+1 Ekim kampanyasının çıktısı aynı satırda ikisini birden söylüyordu:
+
+```
+  göreli azalma %0 · koşu başına %0, %0, %0 · %67 itirazsız   → karar: OLUMSUZ
+  göreli azalma %0 · koşu başına %0, %0, %0 · %100 itirazsız  → karar: OLUMSUZ
+```
+
+%67 ve %100, ilan edilmiş %50 eşiğinin iki katı. Yani **projenin kendi
+ölçütüne göre o kampanya "mekanizma tören" demeliydi ve ürün farkını hiç
+okumamalıydı.** İtiraz yazılmayan koşuda planlı kol kontrol kolunun
+aynısıdır — plan belgesi yazılır, kimse itiraz etmez, `coder` aynı girdiyle
+aynı işi yapar. O koşuda %0 azalma bir bulgu değil, **kurgunun aynası**.
+
+Bu, `power.ts`'i doğuran kusurun tıpatıp aynısı: ölçüt prozada duruyor,
+karar yolunda durmuyor. 2x2'de bedeli bir tam matris parasıydı; burada
+bedeli projenin "ilk net kararı" diye kaydedilmiş bir hükümsüz karar.
+
+### İki okuma, iki ayrı ölçek — ikisi de doğru
+
+Karar hükümsüz olmak, planlamayı açmak gerektiği anlamına GELMİYOR:
+
+- **Ürün anahtarı olarak:** kapalı kalmalı. Açılacak şey tam olarak bu
+  tören-baskın mekanizma ve bedeli ~2.2 kat aktivasyon. Kazanç gösterilmedi,
+  bedel gösterildi. Bu okuma ayakta.
+- **Bilimsel iddia olarak:** "planlama turu ürünü daha doğru yapmıyor"
+  cümlesi **kanıtlanmadı.** Ölçülen şey planlama değil, 4/6 koşuda
+  koşmayan bir mekanizmaydı. Soru açık.
+
+### Kapı karar yoluna kondu
+
+`decide()` artık mekanizmayı ürün farkından ÖNCE soruyor. Sıra
+`matrixSkip`'in sırasıyla aynı mantıkta:
+
+1. kol ölçülmedi mi → `yetersiz`
+2. kontrol kolu temiz mi (**görevin gücü yok**) → `yetersiz`
+3. alışveriş kaydı var mı — kolun ADI planlı olması planlamanın koştuğunu göstermez
+4. **tören mi** (`withoutObjection/exchanges > %50`) → `yetersiz`
+5. **gürültü mü** (`accepted/objections < %20`) → `yetersiz`
+6. k yeterli mi → sonra ürün farkı
+
+Sıradaki iki karar gerekçeli ve sınanıyor. **Görev gücü mekanizmadan önce:**
+tersi olsa, kusur üretmeyen hücre "mekanizma bozuk" diye teşhis edilirdi.
+**Mekanizma k'den önce:** alışveriş törenselse "k artırılmalı" yanlış
+tavsiyedir, çünkü kollar kurgu gereği aynıdır ve k büyüdükçe %0'a daha çok
+güvenilir.
+
+Tören gerekçesi elenen itiraz sayısını da söylüyor
+(`N itiraz kanıt biçiminden elendi — ilk bakılacak yer orası`), çünkü
+"itiraz yok"un sebebi operatörün istemi mi kuralı mı düzelteceğini belirler.
+
+6 yeni sınama; dört mutasyon da ısırıyor: tören eşiğini kaldırmak (3),
+gürültü eşiğini kaldırmak (1), kapıyı k'nin arkasına almak (1), kapıyı
+görev gücü denetiminin önüne almak (3 — ikisi eski sınama).
+
+**Eski kampanya kaydı yeniden okunabilir:** `.skein/arsiv/` operatörün
+makinesinde duruyor, `cli.ts planrapor` yeni kuralla aynı veriyi okur ve
+yeni koşu parası istemez.
+
+### Asıl engel kapının arkasında: PLAN ile KOD arasında kapı yok
+
+Tören kapısı ölçümü düzeltiyor, mekanizmayı düzeltmiyor. Mekanizmanın kendi
+engeli daha derinde ve bu belgede **zaten bir kez yanlışlanmış** hâlde
+duruyor — `snapshot-store` 1. koşusu:
+
+> iki itiraz da yazıldı, ikisi de `src/selector.ts`'i gösterdi, ikisi de
+> KABUL edildi — ve ürün yine 14/16 kaldı.
+
+Yani alışverişin dört adımı da çalıştı: itirazcı doğru tüketici modülü
+gösterdi, kanıt kuralından geçti, itiraz kabul edildi, plan değişti. Ürün
+değişmedi. Sebebi o gün yazılmış:
+
+> İtirazın kabul edilmesi planın DEĞİŞMESİ demek, kodun değişmesi demek
+> değil. `coder` güncellenmiş planı okuyup aynı kusuru yazabiliyor.
+> Alışverişin kapısı planla kod arasında değil, plan belgesinin içinde.
+
+Bu bir istem ayarı değil, **mekanizma eksiği**. Kabul edilmiş itiraz bugün
+proza üretiyor; `coder` prozayı okuyup kodu yeniden türetiyor ve aynı kusuru
+tekrar yazabiliyor. Hiçbir şey onu bağlamıyor.
+
+### Planlamanın iki ölçüm gücü koşulu
+
+2x2'nin iki koşulunun tam karşılığı, ve bu kez sonuçtan önce yazılıyor:
+
+| # | Koşul | Tutmazsa |
+|---|---|---|
+| 1 | Alışveriş **geçerli bir itiraz üretmeli** | kollar aynı; azalma kurgunun aynası |
+| 2 | Kabul edilen itiraz **kodu değiştirmeli**, planı değil | plan değişir, ürün değişmez; etki ölçülemez |
+
+1. koşul artık karar yolunda (tören/gürültü kapısı). **2. koşul değil** — ve
+`snapshot-store` 1. koşusunda bir kez tutmadığı görüldü. Üç 6d kampanyası
+ön kontrol olmadan koşuldu; 2x2'de aynı eksiğin bedeli ölçülmüştü.
+
+### Düzeltme merdiveni — ucuzdan pahalıya
+
+**(a) Kanıt biçimi — yazıldı, koşulmadı.** Baskın kayıp "yol göstermeyen
+kanıt" (4/6). İtirazcı istemine karşı örnek kondu
+(`"Satır 47-49" bir yol DEĞİLDİR`), hiç kampanyada sınanmadı.
+
+**(b) Sessizliği görünür kıl.** 4/6 koşu hiç itiraz yazmadı ve sebebi
+bilinmiyor: itirazcı gerçekten bir şey görmedi mi, yoksa susmak bedava mı?
+İtirazcıdan ya kanıtlı itiraz ya da **neyi denetlediğini yazan açık bir
+"itirazım yok"** istenirse, sessizlik denetlenebilir hâle gelir. Bu, 1.
+koşulun teşhisini ucuzlatır.
+
+**(c) İtirazı BAĞLAYICI kıl — asıl kaldıraç.** Kabul edilmiş itiraz plan
+prozası değil, **makineyle denetlenebilir bir yükümlülük** üretmeli. İki
+biçim:
+   - *kabul ölçütü*: itiraz karta açık bir kabul maddesi ekler; `coder`
+     onu sağlamak, denetçi onu sınamak zorunda.
+   - *başarısız sınama*: itirazcı, planın bozduğunu düşündüğü değişmeze
+     karşı **düşen bir test** yazar. O zaman mekanizmanın ürünü prozadan
+     makineye geçer ve `coder` onu yeniden türetip aşamaz.
+
+İkincisi daha güçlü ve projenin kendi kuralıyla aynı yönde (yer gerçeği,
+proza değil). Dürüst yan sonucu da yazılmalı: itirazcı düşen test
+yazabiliyorsa mekanizma artık "planlama alışverişi" değil, **düşman test
+yazarıyla test-öncelikli geliştirme**. Daha umut verici olabilir, ama ölçülen
+şey başka bir şey olur ve belge bunu başka bir mekanizma olarak kaydetmeli.
+
+**(d) Belki ölçülen çıktı yanlış.** İlan edilmiş tablonun BİRİNCİ metriği
+"downstream ret sayısı" — planlamanın asıl değer iddiası: *yanlış plan,
+kendisinden sonraki bütün turların faturasını yanlış yere yazar.* Kampanya
+bunu değil kırmızı kancayı okudu. Bench görevlerinde downstream neredeyse
+yok: tek artefakt, kısa zincir, israf edilecek tur yok. Yani kurgu,
+planlamanın iddia ettiği kazancı **yapısal olarak göremiyor**. Planlamanın
+hipotezi uzun zincirli, pahalı yeniden-iş olan işte yaşıyor ve o iş
+şeklinin ölçüm takımı yok.
+
+### Öneri: kampanya değil ÖN KONTROL
+
+Dördüncü 6d kampanyasını koşmak ~$4.5 ve tören kapısı muhtemelen yine
+kapanır. Projenin kendi öğrendiği ucuz hamle var: **planlamanın
+`kalibre2x2`'si.** k=1, tek görev, tek hücre, ~$0.5 — ve iki koşulu sırayla
+sorar: alışveriş geçerli bir itiraz üretti mi, üretilen itiraz kodu
+değiştirdi mi. `ÖLÇER` çıkmadan kampanya parası harcanmaz.
+
+---
+
 ## 6d kampanyası — YENİ KURALLA TEKRAR (1 Ekim, ikinci koşu): OLUMSUZ
+
+> **19 Ekim notu:** bu bölümdeki OLUMSUZ kararı HÜKÜMSÜZ. Önceden ilan
+> edilmiş tören eşiği (%50) iki grupta da aşılmıştı (%67 ve %100) ama karar
+> yolunda yoktu. Gerekçe ve düzeltme bir üstteki bölümde.
 
 İki görev × `claude-haiku-4-5` × k=3, iki kol da baştan koşuldu (12 koşu,
 **$4.56**). Eski kuralın kaydı `.skein/arsiv/events-6d-kampanya-2026-10-01-eskikural.jsonl`'e

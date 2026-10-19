@@ -3,6 +3,27 @@ import { MIN_REPEATS, NEGATIVE_THRESHOLD, POSITIVE_THRESHOLD, type VerdictCode }
 import type { Arm } from "./ab.js";
 
 /**
+ * Mekanizma eşikleri — `PLANLAMA.md`'nin "Nasıl bileceğiz işe yaradığını"
+ * tablosundan, sonuçtan önce ilan edilmiş hâlleriyle.
+ *
+ * Tabloda beş metrik var ve ikisi ürüne değil MEKANİZMAYA bakıyor. İkisi de
+ * hesaplanıp raporda basılıyordu ama KARARA GİRMİYORDU; 1 Ekim kampanyası
+ * bu yüzden %67 ve %100 itirazsız alışverişle "OLUMSUZ" dedi. Oysa itiraz
+ * yazılmayan koşuda planlı kol kontrol kolunun aynısıdır: ölçülen şey
+ * planlama değil, koşmayan bir mekanizmaydı.
+ *
+ * Aynı kusurun 2x2'deki hâli ölçüm gücü ön kontrolünü doğurmuştu
+ * (`power.ts`): ölçüt prozada duruyor, karar yolunda durmuyor. Burada da
+ * karar yolunun içine konuyor.
+ */
+/** İtirazsız kapanan alışveriş oranı bunun ÜSTÜNDEyse mekanizma tören. */
+export const CEREMONY_THRESHOLD = 0.5;
+/** Kabul edilen itiraz oranı bunun ALTINDAysa mekanizma gürültü. */
+export const NOISE_THRESHOLD = 0.2;
+
+const pct = (n: number): string => `%${(n * 100).toFixed(0)}`;
+
+/**
  * 6d'nin raporu: planlama turu ürünü daha doğru yapıyor mu?
  *
  * Ölçüt `PLANLAMA.md`'de SONUÇTAN ÖNCE yazıldı ve eşikler `effect.ts`'ten
@@ -37,6 +58,18 @@ export interface ArmSide {
  * GETİRDİĞİ kusur sınıfları. Göreli azalma olumlu çıkarken bu küme boş
  * değilse, "daha az kusur" ile "daha iyi ürün" aynı şey değildir.
  */
+/** Mekanizmanın kendi ölçüsü: alışveriş koştu mu, itirazlar bilgi taşıdı mı. */
+export interface Ceremony {
+  /** Planlama bloğu kaydı olan koşu sayısı. */
+  exchanges: number;
+  /** Hiç itiraz yazılmadan kapanan alışveriş sayısı. */
+  withoutObjection: number;
+  objections: number;
+  accepted: number;
+  /** Kanıt kuralından elenen itiraz sayısı — "itiraz yok"un sebebi burada. */
+  invalid: number;
+}
+
 export interface HookSets {
   /** Kontrol kolunda en az bir koşuda kırmızı olan kancalar. */
   plansiz: string[];
@@ -70,7 +103,7 @@ export interface PlanGroup {
   perRun: { runId: string; relativeReduction: number | null }[];
   repeats: number;
   /** Alışverişin töreni: itirazsız kapanan oran ve kabul oranı. */
-  ceremony: { exchanges: number; withoutObjection: number; objections: number; accepted: number; invalid: number };
+  ceremony: Ceremony;
   /** Kanca kimlikleri; sayının göremediği kusur kayması buradan okunuyor. */
   hooks: HookSets;
   verdict: { code: VerdictCode; reason: string };
@@ -249,7 +282,7 @@ export function planEffect(events: SkeinEvent[]): PlanEffectReport {
     return {
       taskId, model, planli, plansiz, relativeReduction, perRun, repeats, ceremony,
       hooks: hookSets(plansizRuns, planliRuns),
-      verdict: decide(relativeReduction, repeats, perRun, plansiz, planli),
+      verdict: decide(relativeReduction, repeats, perRun, plansiz, planli, ceremony),
     };
   });
 
@@ -262,6 +295,7 @@ function decide(
   perRun: { relativeReduction: number | null }[],
   plansiz: ArmSide | null,
   planli: ArmSide | null,
+  ceremony: Ceremony,
 ): { code: VerdictCode; reason: string } {
   if (plansiz === null || plansiz.runs === 0) {
     return { code: "yetersiz", reason: "Kontrol kolu ölçülmedi; karşılaştırılacak bir şey yok." };
@@ -286,6 +320,43 @@ function decide(
         "Kusur üretmeyen görevde planlamanın etkisi ölçülemez.",
     };
   }
+  // MEKANİZMA KAPISI — ürün farkını okumadan ÖNCE.
+  //
+  // Sıra kasıtlı ve `matrixSkip`'in sırasıyla aynı mantıkta: kusur üretmeyen
+  // görev (yukarıda) mekanizmadan önce sorulur, mekanizma da k'den önce.
+  // Alışveriş törenselse "k artırılmalı" YANLIŞ tavsiyedir — kollar kurgu
+  // gereği aynı olduğu için k büyüdükçe %0'a daha çok güvenilir, oysa
+  // ölçülen şey planlama değil.
+  if (ceremony.exchanges === 0) {
+    return {
+      code: "yetersiz",
+      reason: "Planlı kolda hiç alışveriş kaydı yok; planlama bloğunun koştuğu " +
+        "doğrulanamıyor. Kolun adı planlı olması planlamanın olduğunu göstermez.",
+    };
+  }
+  const torensel = ceremony.withoutObjection / ceremony.exchanges;
+  if (torensel > CEREMONY_THRESHOLD) {
+    return {
+      code: "yetersiz",
+      reason: `Alışverişlerin ${pct(torensel)}'si itirazsız kapandı ` +
+        `(${ceremony.withoutObjection}/${ceremony.exchanges}, eşik ${pct(CEREMONY_THRESHOLD)}): ` +
+        "mekanizma TÖREN. İtiraz yazılmayan koşuda planlı kol kontrol kolunun " +
+        "aynısıdır, yani ürün farkı planlamayı ölçmüyor." +
+        (ceremony.invalid > 0
+          ? ` ${ceremony.invalid} itiraz kanıt biçiminden elendi — ilk bakılacak yer orası.`
+          : ""),
+    };
+  }
+  const kabul = ceremony.objections === 0 ? 0 : ceremony.accepted / ceremony.objections;
+  if (kabul < NOISE_THRESHOLD) {
+    return {
+      code: "yetersiz",
+      reason: `İtirazların ${pct(kabul)}'si kabul edildi ` +
+        `(${ceremony.accepted}/${ceremony.objections}, eşik ${pct(NOISE_THRESHOLD)}): ` +
+        "mekanizma GÜRÜLTÜ. Kabul edilmeyen itiraz planı değiştirmez, " +
+        "değişmeyen plan da ürün farkına yazılamaz.",
+    };
+  }
   if (repeats < MIN_REPEATS) {
     return {
       code: "yetersiz",
@@ -295,7 +366,6 @@ function decide(
   }
   const signs = perRun.map((r) => r.relativeReduction).filter((r): r is number => r !== null);
   const consistent = signs.length > 0 && signs.every((r) => r > 0);
-  const pct = (n: number): string => `%${(n * 100).toFixed(0)}`;
 
   if (relative >= POSITIVE_THRESHOLD && consistent) {
     return {

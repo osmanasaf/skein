@@ -94,9 +94,9 @@ describe("planEffect", () => {
   // tekrar yok.
   it("kollardan biri eksikse k küçük olanı sayar ve karar vermez", () => {
     const r = planEffect([
-      ...kosu("p1", "g", "planli", { red: 1 }),
-      ...kosu("p2", "g", "planli", { red: 1 }),
-      ...kosu("p3", "g", "planli", { red: 1 }),
+      ...kosu("p1", "g", "planli", { red: 1, planning: { objections: 1, accepted: 1, invalid: 0 } }),
+      ...kosu("p2", "g", "planli", { red: 1, planning: { objections: 1, accepted: 1, invalid: 0 } }),
+      ...kosu("p3", "g", "planli", { red: 1, planning: { objections: 1, accepted: 1, invalid: 0 } }),
       ...kosu("s1", "g", "plansiz", { red: 4 }),
     ]);
     expect(r.groups[0]?.repeats).toBe(1);
@@ -126,9 +126,9 @@ describe("planEffect", () => {
 
   it("tekrarlar arasında işaret tutarsızsa olumlu demez", () => {
     const r = planEffect([
-      ...kosu("p1", "g", "planli", { red: 1 }), ...kosu("s1", "g", "plansiz", { red: 8 }),
-      ...kosu("p2", "g", "planli", { red: 1 }), ...kosu("s2", "g", "plansiz", { red: 6 }),
-      ...kosu("p3", "g", "planli", { red: 5 }), ...kosu("s3", "g", "plansiz", { red: 2 }),
+      ...kosu("p1", "g", "planli", { red: 1, planning: { objections: 1, accepted: 1, invalid: 0 } }), ...kosu("s1", "g", "plansiz", { red: 8 }),
+      ...kosu("p2", "g", "planli", { red: 1, planning: { objections: 1, accepted: 1, invalid: 0 } }), ...kosu("s2", "g", "plansiz", { red: 6 }),
+      ...kosu("p3", "g", "planli", { red: 5, planning: { objections: 1, accepted: 1, invalid: 0 } }), ...kosu("s3", "g", "plansiz", { red: 2 }),
     ]);
     expect(r.groups[0]?.relativeReduction).toBeGreaterThan(0.2);
     expect(r.groups[0]?.verdict.code).toBe("belirsiz");
@@ -136,6 +136,77 @@ describe("planEffect", () => {
   });
 
   // Alışverişin töreni ayrı sayılıyor: itiraz hiç çıkmıyorsa mekanizma
+  // MEKANİZMA KAPISI. Bu eşikler `PLANLAMA.md`'de sonuçtan önce ilan
+  // edilmişti ama karara girmiyordu; 1 Ekim kampanyası %67 ve %100 itirazsız
+  // alışverişle "OLUMSUZ" dedi. Kapının kendisi artık sınanıyor, çünkü
+  // ölçütün prozada durup karar yolunda durmaması bu projede ikinci kez oldu.
+  it("alışverişlerin yarısından çoğu itirazsızsa ürün farkını okumaz", () => {
+    const sessiz = { objections: 0, accepted: 0, invalid: 0 };
+    const r = planEffect([
+      ...[1, 2, 3].flatMap((k) => kosu(`p${k}`, "g", "planli", { red: 0, planning: sessiz })),
+      ...[1, 2, 3].flatMap((k) => kosu(`s${k}`, "g", "plansiz", { red: 4 })),
+    ]);
+    // Azalma %100: eski karar yolu bunu "olumlu" diye okurdu.
+    expect(r.groups[0]?.relativeReduction).toBe(1);
+    expect(r.groups[0]?.verdict.code).toBe("yetersiz");
+    expect(r.groups[0]?.verdict.reason).toMatch(/TÖREN/);
+  });
+
+  // Elenen itiraz "itiraz yok"un SEBEBİ; kapı onu söylemeli, yoksa operatör
+  // istemi mi kuralı mı düzelteceğini bilemez.
+  it("tören gerekçesinde elenen itiraz sayısını söyler", () => {
+    const elendi = { objections: 2, accepted: 0, invalid: 2 };
+    const r = planEffect([
+      ...[1, 2, 3].flatMap((k) => kosu(`p${k}`, "g", "planli", { red: 0, planning: k === 1 ? elendi : { objections: 0, accepted: 0, invalid: 0 } })),
+      ...[1, 2, 3].flatMap((k) => kosu(`s${k}`, "g", "plansiz", { red: 4 })),
+    ]);
+    expect(r.groups[0]?.verdict.reason).toMatch(/2 itiraz kanıt biçiminden elendi/);
+  });
+
+  it("itirazlar yazılıp kabul edilmiyorsa mekanizma gürültüdür", () => {
+    const gurultu = { objections: 5, accepted: 0, invalid: 0 };
+    const r = planEffect([
+      ...[1, 2, 3].flatMap((k) => kosu(`p${k}`, "g", "planli", { red: 0, planning: gurultu })),
+      ...[1, 2, 3].flatMap((k) => kosu(`s${k}`, "g", "plansiz", { red: 4 })),
+    ]);
+    expect(r.groups[0]?.verdict.code).toBe("yetersiz");
+    expect(r.groups[0]?.verdict.reason).toMatch(/GÜRÜLTÜ/);
+  });
+
+  // Kolun ADI planlı olması planlamanın koştuğunu göstermez.
+  it("planlı kolda alışveriş kaydı yoksa tören demez, kayıt yok der", () => {
+    const r = planEffect([
+      ...[1, 2, 3].flatMap((k) => kosu(`p${k}`, "g", "planli", { red: 0 })),
+      ...[1, 2, 3].flatMap((k) => kosu(`s${k}`, "g", "plansiz", { red: 4 })),
+    ]);
+    expect(r.groups[0]?.verdict.code).toBe("yetersiz");
+    expect(r.groups[0]?.verdict.reason).toMatch(/hiç alışveriş kaydı yok/);
+  });
+
+  // Sıra: kusur üretmeyen görev mekanizmadan ÖNCE sorulur. Tersi olsa, güç
+  // sorunu olan hücre "mekanizma bozuk" diye teşhis edilirdi.
+  it("kontrol kolu temizse tören değil tanımsızlık der", () => {
+    const sessiz = { objections: 0, accepted: 0, invalid: 0 };
+    const r = planEffect([
+      ...[1, 2, 3].flatMap((k) => kosu(`p${k}`, "g", "planli", { red: 0, planning: sessiz })),
+      ...[1, 2, 3].flatMap((k) => kosu(`s${k}`, "g", "plansiz", { red: 0 })),
+    ]);
+    expect(r.groups[0]?.verdict.reason).toMatch(/tanımsız/);
+  });
+
+  // Mekanizma kapısı k'den ÖNCE: alışveriş törenselse "k artırılmalı"
+  // yanlış tavsiye, çünkü kollar kurgu gereği aynı.
+  it("tören k eksikliğinden önce teşhis edilir", () => {
+    const sessiz = { objections: 0, accepted: 0, invalid: 0 };
+    const r = planEffect([
+      ...kosu("p1", "g", "planli", { red: 0, planning: sessiz }),
+      ...kosu("s1", "g", "plansiz", { red: 4 }),
+    ]);
+    expect(r.groups[0]?.repeats).toBe(1);
+    expect(r.groups[0]?.verdict.reason).toMatch(/TÖREN/);
+    expect(r.groups[0]?.verdict.reason).not.toMatch(/k=1/);
+  });
+
   // ikinci bir çift göz olabilir ama itiraz üretmiyor.
   it("itirazsız alışverişleri ve kabul oranını sayar", () => {
     const r = planEffect([
