@@ -102,6 +102,23 @@ export interface PlanPolicy {
    * bulunmuyor.
    */
   ilkTurKor: boolean;
+  /**
+   * Kabul edilmiş itirazları DENETLEYECEK rol; yoksa yükümlülük kapısı yok.
+   *
+   * Niye ayrı bir rol ve niye katılımcı olamıyor: kabul edilmiş itiraz
+   * bugün yalnızca plan prozası üretiyor, `coder` prozayı okuyup kodu
+   * yeniden türetiyor ve aynı kusuru tekrar yazabiliyor (PLANLAMA.md,
+   * `snapshot-store` 1. koşusu: iki itiraz da kabul edildi, ürün
+   * değişmedi). Yükümlülüğü denetleyen bir rol olmadan, kabul edilmiş bir
+   * itirazın karşılanıp karşılanmadığı HİÇBİR YERDE yazılı olmuyor.
+   *
+   * Yükümlülük ÜRETİCİYE verilmiyor, denetçiye veriliyor. İki sebep:
+   * plan sözleşmedir ve sözleşmenin tek başına yetip yetmediği ancak
+   * üretici yalnızca onu okursa ölçülebilir; ikincisi, denetçiye denetim
+   * listesi vermek süreci ürüne sızdırmak değil. Bench'in kurgusunun
+   * aynısı: üretici gizli kancaları görmez, yer gerçeği sonradan denetler.
+   */
+  denetci?: string;
 }
 
 export interface Flow {
@@ -414,7 +431,49 @@ function parsePlan(
   // Yan faydası, 6c'nin "ortak dosyayı ezme" tuzağının tamamen kalkması.
   const itiraz = yol.replace(/\.md$/u, "") + ".itiraz.{rol}.md";
 
-  return { katilimcilar, plan: yol, tur: turRaw, itiraz, ilkTurKor: korRaw };
+  // --- kural 23: yükümlülük denetçisi ---
+  //
+  // Alan isteğe bağlı: yoksa yükümlülük kapısı kapalı ve mekanizma eski
+  // hâliyle çalışır. Varsa KATI, çünkü yarım bir denetçi beyanı "kabul
+  // edilmiş itiraz denetleniyor" izlenimi verip denetlemez.
+  const denetciRaw = raw["denetci"];
+  let denetci: string | undefined;
+  if (denetciRaw !== undefined && denetciRaw !== null) {
+    if (typeof denetciRaw !== "string" || denetciRaw.trim() === "") {
+      throw new FlowError(file, rule(23, "`planlama.denetci` boş olmayan bir rol adı olmalı"));
+    }
+    denetci = denetciRaw.trim();
+    if (!ids.has(denetci)) {
+      throw new FlowError(
+        file,
+        rule(23, `\`planlama.denetci\` var olmayan bir role işaret ediyor: ${denetci}`),
+      );
+    }
+    // Katılımcı kendi kabul ettiği itirazı denetleyemez: kural 22'nin ve
+    // `kendiBelgeleri` kuralının aynı gerekçesi — döngüsel denetim.
+    if (katilimcilar.includes(denetci)) {
+      throw new FlowError(
+        file,
+        rule(23, `\`planlama.denetci\` bir planlama katılımcısı olamaz: ${denetci}. ` +
+          `Kendi kabul ettiği itirazı denetleyen rol, denetlemiyor.`),
+      );
+    }
+    // Zincirde katılımcıların ARKASINDA olmalı: yükümlülük, iş yapıldıktan
+    // sonra denetlenir. Kural 19'un kardeşi.
+    const sonKatilimci = order.indexOf(katilimcilar[katilimcilar.length - 1] as string);
+    if (order.indexOf(denetci) <= sonKatilimci) {
+      throw new FlowError(
+        file,
+        rule(23, `\`planlama.denetci\` planlama katılımcılarından SONRA gelmeli: ` +
+          `${denetci}. Henüz yapılmamış iş yükümlülük denetimine girmez.`),
+      );
+    }
+  }
+
+  return {
+    katilimcilar, plan: yol, tur: turRaw, itiraz, ilkTurKor: korRaw,
+    ...(denetci === undefined ? {} : { denetci }),
+  };
 }
 
 function parseAudit(doc: Record<string, unknown>, file: string): AuditPolicy {
@@ -690,6 +749,19 @@ export async function loadFlow(path: string, options: LoadOptions): Promise<Flow
     rejectOf.set(id, role.rejectRaw);
   }
 
+  // Denetçinin ret hakkı AYRI bir kural olarak denetlenmiyor, çünkü
+  // denetlenemez: böyle bir kural hiç ateşlenemezdi.
+  //
+  // Yazıldı ve ateşlenmediği görüldü. Sebebi şu: açık `reject` yazmayan
+  // rol varsayılan olarak GÖNDERENE geri dönüyor (yukarıdaki ilk dal),
+  // yani ret kenarsız kalan tek rol zincirin başı. Kural 23 denetçiyi
+  // katılımcıların arkasına zorluyor ve kural 19 katılımcıları zincirin
+  // başına koyuyor — yani denetçi hiçbir zaman baş olamaz ve her zaman
+  // bir ret kenarı taşır. Garanti yapısal.
+  //
+  // Bağımlılık `load.test.ts`'te özellik olarak sınanıyor: varsayılan ret
+  // kenarı davranışı değişirse o sınama düşer ve bu akıl yürütme çöker.
+
   const audit = parseAudit(doc, file);
 
   const ordered: FlowRole[] = order.map((id) => {
@@ -800,8 +872,12 @@ function topologyHash(input: {
   // yalnızca bu alanlarda ayrışan iki akış AYNI hash'i üretiyordu — yani
   // topoloji damgası, davranışı belirleyen bir kararı gizliyordu.
   if (input.plan !== undefined) {
+    // `denetci` hash'te: yükümlülük kapısı olan ve olmayan iki akış aynı
+    // damgayı taşısa, topoloji damgası davranışı belirleyen bir kararı
+    // gizlerdi — `tur` ve `ilk-tur-kor` için bir kez öğrenilen ders.
     lines.push(["plan", input.plan.katilimcilar.join(M), input.plan.plan,
-      String(input.plan.tur), String(input.plan.ilkTurKor)].join(F));
+      String(input.plan.tur), String(input.plan.ilkTurKor),
+      input.plan.denetci ?? ""].join(F));
   }
 
   return createHash("sha256").update(lines.join(L), "utf8").digest("hex");

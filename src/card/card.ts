@@ -131,7 +131,37 @@ export interface Card {
    * sonradan düzenlense bile sonradan bilinebilsin. Sonraki roller planı
    * dosyadan okur; bu alan "hangi sürümünü okuması gerekiyordu"nun kaydı.
    */
-  plan?: { path: string; hash: string };
+  plan?: { path: string; hash: string; kabuller?: PlanKabul[] };
+}
+
+/**
+ * Kabul edilmiş bir itiraz — alışverişin ürettiği YÜKÜMLÜLÜK.
+ *
+ * Niye kartta: kabul edilmiş itirazın karşılanıp karşılanmadığını
+ * denetleyecek rol başka bir turda, başka bir çalışma ağacında koşuyor.
+ * Kapının kaç yükümlülük beklediğini orkestratörün bilmesi gerekiyor ve
+ * bu projenin kuralı durumu kartta taşımak — itiraz dosyalarını her
+ * turda yeniden ayrıştırmak, kartla senkron kalması gereken ikinci bir
+ * gerçek olurdu.
+ *
+ * Üreticiye VERİLMİYOR; yalnızca denetçinin iş metnine giriyor. Plan
+ * sözleşmedir ve sözleşmenin tek başına yetip yetmediği ancak üretici
+ * yalnızca onu okursa ölçülebilir.
+ */
+export interface PlanKabul {
+  /**
+   * `rol#no` — itiraz dosyaları birleşince `no` ÇAKIŞABİLİYOR.
+   *
+   * `birlestirItirazlar` dosyaları uç uca ekliyor ve her dosya 1'den
+   * numaralanıyor, yani iki itirazcının 1 numaralı itirazı aynı `no`yu
+   * taşıyor. Kimliğin yer gerçeği rol + numara.
+   */
+  id: string;
+  role: string;
+  /** İtirazın iddiası — `**Ne:**` alanı. */
+  ne: string;
+  /** Depodan gösterdiği yer: hangi sözleşmenin tehlikede olduğu. */
+  kanit: string;
 }
 
 export class CardError extends Error {
@@ -310,14 +340,42 @@ export function parseCard(text: string): Card {
   // Plan isteğe bağlı ama varsa KATI: yarım bir plan kaydı, "hangi planla
   // yürüdü" sorusunu cevaplıyormuş gibi görünüp cevaplamaz.
   const planRaw = doc["plan"];
-  let plan: { path: string; hash: string } | undefined;
+  let plan: { path: string; hash: string; kabuller?: PlanKabul[] } | undefined;
   if (planRaw !== undefined && planRaw !== null) {
     const rec = planRaw as Record<string, unknown>;
     if (typeof rec["path"] !== "string" || typeof rec["hash"] !== "string"
       || rec["path"].trim() === "" || rec["hash"].trim() === "") {
       throw new CardError("Kart alanı geçersiz: `plan` — `path` ve `hash` boş olmayan metin olmalı");
     }
-    plan = { path: rec["path"], hash: rec["hash"] };
+    // Yükümlülükler de varsa KATI, aynı gerekçeyle: yarım bir yükümlülük
+    // kaydı, denetçiye eksik liste verip kapıyı eksik kurar. Boş liste ile
+    // alanın hiç olmaması ayrı tutuluyor — biri "itiraz kabul edilmedi",
+    // öteki "bu kart yükümlülük taşımıyor".
+    const kabulRaw = rec["kabuller"];
+    let kabuller: PlanKabul[] | undefined;
+    if (kabulRaw !== undefined && kabulRaw !== null) {
+      if (!Array.isArray(kabulRaw)) {
+        throw new CardError("Kart alanı geçersiz: `plan.kabuller` bir dizi olmalı");
+      }
+      kabuller = kabulRaw.map((ham) => {
+        const k = ham as Record<string, unknown>;
+        for (const alan of ["id", "role", "ne", "kanit"] as const) {
+          if (typeof k[alan] !== "string" || (k[alan] as string).trim() === "") {
+            throw new CardError(
+              `Kart alanı geçersiz: \`plan.kabuller[].${alan}\` boş olmayan metin olmalı`,
+            );
+          }
+        }
+        return {
+          id: k["id"] as string, role: k["role"] as string,
+          ne: k["ne"] as string, kanit: k["kanit"] as string,
+        };
+      });
+    }
+    plan = {
+      path: rec["path"], hash: rec["hash"],
+      ...(kabuller === undefined ? {} : { kabuller }),
+    };
   }
 
   return {

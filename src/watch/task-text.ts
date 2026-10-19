@@ -1,6 +1,6 @@
-import type { Card } from "../card/card.js";
+import type { Card, PlanKabul } from "../card/card.js";
 import {
-  isPlanner, itirazPathFor, itirazPathsFor, planBlind, planPathFor, type SnapshotRole,
+  isPlanner, itirazPathFor, itirazPathsFor, planAuditor, planBlind, planPathFor, type SnapshotRole,
 } from "../flow/snapshot.js";
 import { planPhase } from "../plan/phase.js";
 import { verdictInstructions, VERDICT_FILE } from "./verdict.js";
@@ -68,6 +68,52 @@ const planOkuBolumu = (planPath: string, card: Card): string[] => [
  * alanının depoda karşılığı olup olmadığına bakıyor. Bu yüzden biçim
  * metnin içinde, örneğiyle birlikte veriliyor.
  */
+/**
+ * Yükümlülük denetimi — yalnızca `planlama.denetci` olan role.
+ *
+ * ÜRETİCİYE verilmiyor. İki gerekçe PLANLAMA.md'de: plan sözleşmedir ve
+ * sözleşmenin tek başına yetip yetmediği ancak üretici yalnızca onu
+ * okursa ölçülebilir; ayrıca denetçiye denetim listesi vermek süreci
+ * ürüne sızdırmak değil, auditöre audit listesi vermektir.
+ *
+ * Serbest denetimden AYRI bölüm, ve bu bir ölçüm kararı: tartışılan
+ * noktaları gösteren bir liste denetçiyi o bölgeye yönlendirip başka
+ * yerlere karşı körleştirebilir. İki sonuç ayrı tutulmazsa o yanlılık
+ * ölçüye karışır.
+ */
+const yukumlulukBolumu = (kabuller: PlanKabul[]): string[] => [
+  "",
+  "## İtiraz üzerine değişen maddeler",
+  "",
+  `Bu planın ${kabuller.length} maddesi planlama turunda tartışıldı ve`,
+  "plan yazarı KABUL etti. Her birinin gerçekten karşılanıp",
+  "karşılanmadığını **tek tek** yanıtlamak zorundasın.",
+  "",
+  ...kabuller.flatMap((k) => [
+    `- \`${k.id}\` — ${k.ne}`,
+    `  kanıt: ${k.kanit}`,
+  ]),
+  "",
+  "Verdikt dosyasına `yukumlulukler` alanını ekle; her madde için:",
+  "",
+  "```json",
+  '"yukumlulukler": {',
+  ...kabuller.map((k, i) => `  "${k.id}": { "durum": "karsilandi", "not": "neye baktığın" }` +
+    (i === kabuller.length - 1 ? "" : ",")),
+  "}",
+  "```",
+  "",
+  "`durum` yalnızca `karsilandi` ya da `karsilanmadi`. `not` boş olamaz:",
+  "\"karşılandı\" tek başına kanıt değil, neye baktığını yaz.",
+  "",
+  "**Atladığın madde turu düşürür** — cevapsız madde karşılanmış sayılmaz.",
+  "`karsilanmadi` dediğin bir madde varsa kararın `reject` olmak zorunda;",
+  "`accept` + karşılanmamış madde kabul edilmez.",
+  "",
+  "Bu bölüm serbest denetiminin YERİNE geçmiyor. Önce işi normalde nasıl",
+  "denetliyorsan denetle; bu liste ek bir yükümlülük.",
+];
+
 const itirazBolumu = (
   planPath: string, itirazPath: string, roleId: string, round: number, blind: boolean,
 ): string[] => [
@@ -222,7 +268,16 @@ export function buildTaskText(card: Card, role: SnapshotRole): string {
       parts.push(...cevapBolumu(
         planPath, itirazPathsFor(card.topology, card.id), phase.round, limit,
       ));
-    } else if (!isPlanner(card.topology, role.id)) parts.push(...planOkuBolumu(planPath, card));
+    } else if (!isPlanner(card.topology, role.id)) {
+      parts.push(...planOkuBolumu(planPath, card));
+      // Yükümlülük bölümü yalnızca beyan edilmiş denetçiye ve yalnızca
+      // kart gerçekten yükümlülük taşıyorsa. Boş liste için başlık basmak,
+      // olmayan bir şeyi varmış gibi okutur.
+      const kabuller = card.plan?.kabuller ?? [];
+      if (planAuditor(card.topology) === role.id && kabuller.length > 0) {
+        parts.push(...yukumlulukBolumu(kabuller));
+      }
+    }
   }
 
   const rejection = lastRejectTo(card, role.id);

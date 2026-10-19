@@ -852,6 +852,131 @@ elendiğinde itirazcı koda bakmaya zorlanır mı?
 
 ---
 
+## YÜKÜMLÜLÜK KAPISI — kabul edilmiş itiraz artık bağlayıcı (19 Ekim)
+
+Düzeltme merdiveninin (a) ve (b) adımları atlandı, doğrudan (c) yazıldı.
+Gerekçe operatörün itirazından çıktı ve benim adım sıralamamı devirdi.
+
+### Benim ilk tasarımım yanlış varsayıma dayanıyordu
+
+Önce şunu önermiştim: kabul edilen itirazlar `coder`'ın iş metnine
+yazılsın, çünkü `coder` planın NEYİN üzerine tartışıldığını görmüyor.
+
+İtiraz şuydu: *"coder bilmek zorunda mı kararları?"* Ve haklıydı. Üç şey
+birden çıktı:
+
+1. **Dosyalar zaten `coder`'ın ağacında.** `docs/plan/{kart}.itiraz.{rol}.md`
+   normal bir depo yolu, commit'leniyor, kodla birlikte taşınıyor. "coder
+   göremiyor" demek yanlıştı — kimse ona "oku" demiyor, o kadar.
+2. **Teşhisin kanıtı yoktu.** `snapshot-store` 1. koşusunda ürün 14/16
+   kaldı ve ben bunu "coder kararları bilmiyordu" diye okudum. Üç olasılık
+   var ve ayırt edemiyorum: plan kısıtı işe yarar biçimde yazmadı mı,
+   `coder` atladı mı, yoksa anlayıp yine mi hatalı yazdı. Üçüncüsü
+   planlamanın hiç çözemeyeceği bir şey.
+3. **Plan sözleşmedir.** Kabul edilen itiraz plana işlenmediyse düzeltilecek
+   yer plan, `coder`'a açılacak yan kanal değil. Yan kanal yetersiz plan
+   revizyonunu MASKELER.
+
+### Bağlayıcılığın değeri bilgilendirmek değil, YERELLEŞTİRMEK
+
+Gerekçe yeniden kuruldu. Bugün ürün yanlış çıktığında elimizde tek sayı
+var: 14/16. Yukarıdaki üç olasılıktan hangisi olduğunu söyleyen hiçbir
+kayıt yok — üç kampanya da bu yüzden aynı belirsizliğe çıktı.
+
+Yükümlülük bunu yerelleştiriyor. Ve bu, yükümlülüğü **üreticiye değil
+denetçiye** koymak demek:
+
+- **`coder` yalnızca planı okur.** Sözleşme sözleşme kalır. Dahası:
+  sözleşmenin tek başına yetip yetmediği ancak üretici YALNIZCA onu
+  okursa ölçülebilir. `coder`'a itiraz listesini de verirsen o soruyu bir
+  daha hiç soramazsın.
+- **Denetçi listeyi görür** ve her maddeye tek tek verdikt verir.
+  Denetçinin işi üretmek değil denetlemek; auditöre audit listesi vermek
+  süreci ürüne sızdırmak değil. Bench'in kurgusunun aynısı: üretici gizli
+  kancaları görmez, yer gerçeği sonradan denetler.
+
+Bedeli de yazılı: tartışılan noktaları gösteren liste denetçiyi o bölgeye
+yönlendirip başka yerlere karşı körleştirebilir. Bu yüzden iş metninde
+AYRI bölüm, "serbest denetiminin YERİNE geçmiyor" diye yazılı, ve ölçümde
+ayrı sayılıyor.
+
+### Yazılanlar
+
+| katman | ne |
+|---|---|
+| akış dili | `planlama.denetci` + **kural 23** (`load.ts`), hash'e giriyor |
+| kart | `plan.kabuller[]` — `{ id, role, ne, kanit }`, varsa KATI ayrıştırma |
+| `tick` | cevap turunda `dosya.kabul` → karta; denetçi turunda KAPI |
+| iş metni | yalnızca denetçiye `## İtiraz üzerine değişen maddeler` |
+| verdikt | `yukumlulukler: { "<id>": { durum, not } }`, katı doğrulama |
+| günlük | madde başına `plan.obligation` olayı |
+| örnek akış | `hub/flows/plan4.yaml` |
+
+Kimlik `rol#no`: `birlestirItirazlar` dosyaları uç uca ekliyor ve her dosya
+1'den numaralanıyor, yani iki itirazcının 1 numaralı itirazı aynı `no`yu
+taşıyor. Kimliğin yer gerçeği rol + numara.
+
+Kapının üç dişi:
+
+1. **Cevapsız madde turu düşürür** — cevap vermemek bir cevap değildir
+   (verdikt dosyasının `missing`/`reject` ayrımıyla aynı gerekçe).
+2. **`karsilanmadi` + `accept` kabul edilmez** — rol maddeyi karşılanmadı
+   sayıp işi yine ileri gönderiyorsa bu bir çelişki; metin açıkça
+   yasaklıyor, yani sözleşme ihlali, insana çıkar.
+3. **Boş `not` kabul edilmez** — "karşılandı" tek başına kanıt değil;
+   neye bakıldığı yazılmazsa denetim bir onay kutusuna iner.
+
+Kapı yalnızca KABUL yolunda. Ret turunda kart geri dönüyor ve maddeler bir
+sonraki geçişte denetlenir: iddia "kart yükümlülük yanıtlanmadan KAPANMAZ",
+"her tur denetlenir" değil.
+
+### `ab-planli.yaml`e EKLENMEDİ
+
+Ölçüm kolunun kendisi o akış. Topoloji hash'i değişirse önceki
+kampanyalarla karşılaştırılamaz hâle gelir — kayıt üzerinde veri ameliyatı
+olurdu. Mekanizma `plan4.yaml`de duruyor; dördüncü kampanya koşulacaksa
+kolun hangi akışla koşulduğu ayrı bir karar.
+
+### Yazdığım bir kural ATEŞLENEMEDİ
+
+Kural 23'e bir diş daha koymuştum: denetçinin `reject` kenarı olmalı,
+yoksa "karşılanmadı" kayda geçer ve kart yine ilerler. Sınaması yazıldı ve
+**geçmedi** — akış hatasız yüklendi.
+
+Sebebi: açık `reject` yazmayan rol varsayılan olarak GÖNDERENE dönüyor,
+yani ret kenarsız kalan tek rol zincirin başı. Kural 23 denetçiyi
+katılımcıların arkasına zorluyor, kural 19 katılımcıları zincirin başına
+koyuyor — denetçi hiçbir zaman baş olamaz, yani her zaman bir ret kenarı
+taşır. Garanti **yapısal**, kural gereksiz.
+
+Kural silindi. Yerine bağımlılığı tutan bir özellik sınaması kondu:
+varsayılan ret kenarı davranışı bir gün değişirse oradan haber gelir.
+Ateşlenemeyen bir kural, denetlendiği sanılan bir şeyi denetlemez.
+
+### Ne doğrulandı
+
+24 yeni sınama (795 toplam). Mekanizmanın beş mutasyonu da ısırıyor:
+
+| mutasyon | düşen sınama |
+|---|---|
+| cevapsız madde denetimi kaldırıldı | 1 |
+| `karsilanmadi` denetimi kaldırıldı | 1 |
+| liste üreticiye de verildi | 1 — tasarımın en önemli iddiası |
+| kabuller karta yazılmadı | 5 |
+| kapı her role uygulandı (ret dahil) | 4 |
+
+Akış özeti (`flow check`) kapıyı artık basıyor, kapalıyken de: "yazılmayan
+alan = kapalı kapı" çıkarımını operatöre bırakmak sessiz arızanın kapısı.
+
+### Kalan: adım 4
+
+İtirazın **düşen test** taşıması. O zaman kapı iddiaya değil makineye
+bakar. Bedeli: plan somut arayüz ilan etmek zorunda kalır. Dürüst yan
+sonucu: bu artık "planlama alışverişi" değil, düşman test yazarıyla
+test-öncelikli geliştirme — başka bir mekanizma, belgeye öyle geçmeli.
+
+---
+
 ## OLUMSUZ KARARI HÜKÜMSÜZ — ölçüt prozada duruyordu, karar yolunda durmuyordu (19 Ekim)
 
 "Planlamayı düzeltebilir miyiz" sorusu soruldu ve cevap vermek için önce

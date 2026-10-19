@@ -425,3 +425,194 @@ describe("alışveriş — kilit kapısından çıkış", () => {
     expect(released.role).toBe("planner");
   });
 });
+
+/**
+ * YÜKÜMLÜLÜK — kabul edilmiş itiraz bağlayıcı (adım 1-3).
+ *
+ * Ölçülen kusur şu: `snapshot-store` 1. koşusunda iki itiraz da doğru
+ * tüketici modülü gösterdi, ikisi de KABUL edildi, plan değişti — ürün
+ * değişmedi (PLANLAMA.md). Kabul edilmiş itirazın karşılanıp
+ * karşılanmadığı hiçbir yerde yazılı olmadığı için zincirin hangi
+ * halkasının koptuğu bilinemedi: plan mı yetersiz yazdı, üretici mi
+ * atladı, yoksa anlayıp yine mi hatalı yazdı.
+ *
+ * Mekanizma bu üç olasılığı ayırmak için var — üreticiyi bilgilendirmek
+ * için değil.
+ */
+describe("yükümlülük — kabul edilmiş itiraz bağlayıcı", () => {
+  const FLOW_DENETCI = `
+name: denetci-test
+constitution:
+  - ../prompts/base.md
+roles:
+  - id: planner
+    provider: claude
+    workspace: main
+    prompt: ../../roles/planner.prompt
+    next: architect
+  - id: architect
+    provider: claude
+    workspace: architect
+    prompt: ../../roles/architect.prompt
+    next: coder
+  - id: coder
+    provider: claude
+    workspace: coder
+    prompt: ../../roles/coder.prompt
+    reject: planner
+    next: reviewer
+  - id: reviewer
+    provider: claude
+    workspace: reviewer
+    prompt: ../../roles/reviewer.prompt
+    reject: coder
+    next: done
+planlama:
+  katilimcilar: [planner, architect]
+  tur: 1
+  plan: docs/plan/{kart}.md
+  denetci: reviewer
+reject:
+  limit: 2
+  onExhausted: gate
+`;
+  let topo: TopologySnapshot;
+
+  beforeEach(async () => {
+    await mkdir(join(root, WORKTREE_DIR, "reviewer"), { recursive: true });
+    await writeFile(join(root, "roles", "reviewer.prompt"), "# reviewer\n");
+    await writeFile(join(root, "hub", "flows", "denetci-test.yaml"), FLOW_DENETCI);
+    const flow = await loadFlow(join(root, "hub", "flows", "denetci-test.yaml"), {
+      root, providers: knownProviderSet(),
+    });
+    topo = snapshot(flow, root);
+  });
+
+  /** Alışverişi KABUL edilmiş itirazla bitirir; kart `coder`'a geçer. */
+  async function kabulluAlisveris(): Promise<Card> {
+    const card = await queue.add(newCard({ title: "iş", task: "undo ekle", topology: topo }));
+    dosyalar.set(at("main", PLAN_YOLU(card.id)), "# Plan\nselector.ts sürüme bakıyor.\n");
+    // Kanıt yolu GERÇEKTEN var olmalı: yoksa itiraz "depoda olmayan yol"
+    // diye elenir ve kabul hiç oluşmaz.
+    dosyalar.set(at("main", "src/var.ts"), "export const x = 1;\n");
+    dosyalar.set(at("architect", "src/var.ts"), "export const x = 1;\n");
+    claude.answer = kabulEt("plan yazıldı");
+    await tick("planner", options);
+    dosyalar.set(at("architect", ITIRAZ_YOLU(card.id)), itiraz("açık"));
+    claude.answer = kabulEt("itirazım var");
+    await tick("architect", options);
+    dosyalar.set(at("main", ITIRAZ_YOLU(card.id)), itiraz("kabul"));
+    dosyalar.set(at("main", PLAN_YOLU(card.id)), "# Plan\nSürüm ileri gider.\n");
+    claude.answer = kabulEt("planı düzelttim");
+    await tick("planner", options);
+    return (await queue.get(card.id)) as Card;
+  }
+
+  /** Kartı `coder`'dan geçirip `reviewer`'a getirir. */
+  async function denetciyeKadar(): Promise<Card> {
+    const card = await kabulluAlisveris();
+    claude.answer = kabulEt("kodu yazdım");
+    await tick("coder", options);
+    return (await queue.get(card.id)) as Card;
+  }
+
+  it("kabul edilen itirazı karta yazar — kimlik `rol#no`", async () => {
+    const card = await kabulluAlisveris();
+    expect(card.role).toBe("coder");
+    expect(card.plan?.kabuller).toEqual([{
+      id: "architect#1",
+      role: "architect",
+      ne: "Plan geçmişi baştan oynatıyor.",
+      kanit: "`src/var.ts:3` — orada sürüm önbellek anahtarı.",
+    }]);
+  });
+
+  // TASARIM KARARI, en önemli iddia: yükümlülük ÜRETİCİYE verilmiyor.
+  //
+  // Plan sözleşmedir; sözleşmenin tek başına yetip yetmediği ancak üretici
+  // yalnızca onu okursa ölçülebilir. Üreticiye itiraz listesini de verirsen
+  // o soruyu bir daha hiç soramazsın.
+  it("üreticiye yükümlülük listesi VERİLMEZ", async () => {
+    const card = await kabulluAlisveris();
+    const text = buildTaskText(card, roleOf(topo, "coder")!);
+    expect(text).toContain("## Plan");
+    expect(text).not.toContain("## İtiraz üzerine değişen maddeler");
+    expect(text).not.toContain("architect#1");
+  });
+
+  it("denetçiye madde listesini ve biçimi verir", async () => {
+    const card = await denetciyeKadar();
+    const text = buildTaskText(card, roleOf(topo, "reviewer")!);
+    expect(text).toContain("## İtiraz üzerine değişen maddeler");
+    expect(text).toContain("architect#1");
+    expect(text).toContain("src/var.ts:3");
+    expect(text).toContain("yukumlulukler");
+    // Serbest denetimin YERİNE geçmediği metinde yazılı olmalı: liste
+    // denetçiyi o bölgeye yönlendirip başka yerlere karşı körleştirebilir.
+    expect(text).toContain("serbest denetiminin YERİNE geçmiyor");
+  });
+
+  it("yükümlülük yoksa denetçiye bölüm basılmaz", async () => {
+    const card = await queue.add(newCard({ title: "iş", task: "x", topology: topo }));
+    const text = buildTaskText({ ...card, role: "reviewer" }, roleOf(topo, "reviewer")!);
+    expect(text).not.toContain("## İtiraz üzerine değişen maddeler");
+  });
+
+  // Cevapsız madde karşılanmış SAYILMAZ: cevap vermemek bir cevap değildir.
+  it("yanıtlanmayan yükümlülükle kabul kartı geçirmez", async () => {
+    await denetciyeKadar();
+    claude.answer = kabulEt("denetledim");
+    const result = await tick("reviewer", options);
+    expect(result.status).toBe("escalated");
+    expect(result.status === "escalated" && result.reason).toMatch(/yükümlülüğü yanıtlamadı/);
+  });
+
+  // `accept` + karşılanmamış madde bir ÇELİŞKİ: rol maddeyi karşılanmadı
+  // sayıyor ve işi yine ileri gönderiyor.
+  it("karşılanmadı diyip kabul etmeyi reddeder", async () => {
+    await denetciyeKadar();
+    claude.answer = async (req: InvokeRequest): Promise<void> => {
+      await writeFile(join(req.workdir, VERDICT_FILE), JSON.stringify({
+        decision: "accept", summary: "x",
+        yukumlulukler: { "architect#1": { durum: "karsilanmadi", not: "sürüm hâlâ geriye düşüyor" } },
+      }));
+    };
+    const result = await tick("reviewer", options);
+    expect(result.status).toBe("escalated");
+    expect(result.status === "escalated" && result.reason).toMatch(/KARŞILANMADI saydı ama/);
+  });
+
+  it("hepsi karşılandıysa kartı ilerletir ve madde başına olay yazar", async () => {
+    await denetciyeKadar();
+    claude.answer = async (req: InvokeRequest): Promise<void> => {
+      await writeFile(join(req.workdir, VERDICT_FILE), JSON.stringify({
+        decision: "accept", summary: "x",
+        yukumlulukler: { "architect#1": { durum: "karsilandi", not: "selector.ts sürümü artırıyor" } },
+      }));
+    };
+    const yol = join(root, "yukumluluk.jsonl");
+    const result = await tick("reviewer", { ...options, log: new EventLog(yol, "r1") });
+    expect(result.status).toBe("accepted");
+    const { events } = await readEvents(yol);
+    const olaylar = events.filter((e) => e.type === "plan.obligation");
+    expect(olaylar).toHaveLength(1);
+    expect(olaylar[0]).toMatchObject({
+      role: "reviewer",
+      id: "architect#1", objector: "architect", durum: "karsilandi",
+    });
+  });
+
+  // Ret turunda kart geri dönüyor ve maddeler bir sonraki geçişte
+  // denetlenir: kapının iddiası "kart yükümlülük yanıtlanmadan KAPANMAZ",
+  // "her tur denetlenir" değil.
+  it("ret turunda yükümlülük istemez", async () => {
+    await denetciyeKadar();
+    claude.answer = async (req: InvokeRequest): Promise<void> => {
+      await writeFile(join(req.workdir, VERDICT_FILE), JSON.stringify({
+        decision: "reject", reason: "kod planı hiç uygulamamış",
+      }));
+    };
+    const result = await tick("reviewer", options);
+    expect(result.status).toBe("rejected");
+  });
+});

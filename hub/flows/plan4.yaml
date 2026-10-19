@@ -1,0 +1,95 @@
+# Örnek akış — kabul edilmiş itiraz BAĞLAYICI (PLANLAMA.md, yükümlülük kapısı).
+#
+# `plan3.yaml`ten tek farkı `planlama.denetci` satırı. Çözdüğü ölçülmüş
+# kusur şu: `snapshot-store` 1. koşusunda iki itiraz da doğru tüketici
+# modülü gösterdi, ikisi de KABUL edildi, plan değişti — ürün değişmedi.
+# Kabul edilmiş itirazın karşılanıp karşılanmadığı hiçbir yerde yazılı
+# olmadığı için zincirin hangi halkasının koptuğu bilinemedi: plan mı
+# kısıtı işe yarar biçimde yazmadı, `coder` mı atladı, yoksa anlayıp yine
+# mi hatalı yazdı.
+#
+# Mekanizma: kabul edilen her itiraz karta YÜKÜMLÜLÜK olarak yazılıyor.
+# `denetci` rolü her maddeye tek tek verdikt vermek zorunda; cevapsız
+# madde turu düşürür, `karsilanmadi` + `accept` kabul edilmez. Her madde
+# günlüğe `plan.obligation` olarak düşüyor.
+#
+# YÜKÜMLÜLÜK ÜRETİCİYE VERİLMİYOR — bu kasıtlı ve iki gerekçesi var:
+#
+#   1. Plan sözleşmedir. Sözleşmenin tek başına yetip yetmediği ancak
+#      üretici YALNIZCA onu okursa ölçülebilir. `coder`'a itiraz listesini
+#      de verirsen o soruyu bir daha hiç soramazsın.
+#   2. Denetçiye denetim listesi vermek süreci ürüne sızdırmak değil.
+#      Bench'in kurgusunun aynısı: üretici gizli kancaları görmez, yer
+#      gerçeği sonradan denetler.
+#
+# Bedeli de yazılı: tartışılan noktaları gösteren liste denetçiyi o bölgeye
+# yönlendirip başka yerlere karşı körleştirebilir. Bu yüzden iş metninde
+# AYRI bölüm ve "serbest denetiminin yerine geçmiyor" diye yazılı; ölçümde
+# de ayrı sayılıyor.
+#
+# `ab-planli.yaml`e EKLENMEDİ: o akış ölçüm kolunun kendisi ve topoloji
+# hash'i değişirse önceki kampanyalarla karşılaştırılamaz hâle gelir.
+
+name: plan4
+description: Planı tartışır, kabul edilen itirazı denetçiye yükümlülük olarak bağlar.
+
+constitution:
+  - ../prompts/constitution/base.md
+  - ../prompts/constitution/engineering-ts.md
+
+roles:
+  - id: planner
+    provider: claude
+    workspace: main
+    prompt: ../prompts/roles/planner.md
+    receive: task
+    next: architect
+
+  - id: architect
+    provider: claude
+    workspace: architect
+    prompt: ../prompts/roles/plan-itiraz.md
+    receive: task
+    next: analyst
+
+  - id: analyst
+    provider: claude
+    workspace: analyst
+    prompt: ../prompts/roles/plan-itiraz.md
+    receive: task
+    next: coder
+
+  - id: coder
+    provider: claude
+    workspace: coder
+    prompt: ../prompts/roles/coder.md
+    receive: task
+    reject: planner
+    next: reviewer
+
+  - id: reviewer
+    provider: claude
+    workspace: reviewer
+    prompt: ../prompts/roles/reviewer.md
+    receive: batch
+    syncBack: [coder]
+    reject: coder
+    next: done
+
+planlama:
+  katilimcilar: [planner, architect, analyst]  # ilki yazar, ötekiler itiraz eder
+  tur: 2                                       # tavan; doğal son daha erken gelebilir
+  ilk-tur-kor: true                            # varsayılan; fan-out/fan-in taşıma
+  plan: docs/plan/{kart}.md                    # itirazlar: docs/plan/{kart}.itiraz.md
+  denetci: reviewer                            # kabul edilen itirazı DENETLEYECEK rol
+
+reject:
+  limit: 2
+  onExhausted: gate
+
+audit:
+  enabled: false
+
+# Maliyet `plan3.yaml` ile AYNI: yükümlülük kapısı yeni aktivasyon açmıyor,
+# var olan denetçi turuna bir bölüm ekliyor. Eklediği şey ölçüm: ürün yine
+# yanlış kalırsa günlük artık hangi halkanın koptuğunu söylüyor.

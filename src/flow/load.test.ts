@@ -467,6 +467,101 @@ describe("loadFlow — planlama (kural 17-22)", () => {
   // kural 22'ye çarpıyor — bu doğru davranış, fikstürün sorunu.
   const withPlanUc = (blok: string) => `${UC_ROL}\n${blok}\n`;
 
+  // KURAL 23 — yükümlülük denetçisi. Dört rollü fikstür: denetçi
+  // katılımcıların ARKASINDA ve ret kenarı taşıyor, yani kuralın geçtiği
+  // tek şekil.
+  const DORT_ROL = `
+name: dort
+description: Dört rollü deneme akışı
+constitution:
+  - ../prompts/base.md
+roles:
+  - id: analyst
+    provider: claude
+    workspace: main
+    prompt: ../../roles/analyst.prompt
+    receive: task
+    next: architect
+  - id: architect
+    provider: claude
+    workspace: architect
+    prompt: ../../roles/architect.prompt
+    receive: batch
+    next: coder
+  - id: coder
+    provider: claude
+    workspace: coder
+    prompt: ../../roles/coder.prompt
+    receive: batch
+    next: reviewer
+  - id: reviewer
+    provider: claude
+    workspace: reviewer
+    prompt: ../../roles/reviewer.prompt
+    receive: batch
+    reject: coder
+    next: done
+gates: []
+reject:
+  limit: 2
+  onExhausted: gate
+audit:
+  enabled: false
+`;
+  const PLAN23 = "planlama:\n  katilimcilar: [analyst, architect]\n  plan: docs/plan/{kart}.md";
+  const dort = (blok: string): string => `${DORT_ROL}\n${blok}\n`;
+
+  it("yükümlülük denetçisini çözer — kural 23", async () => {
+    const flow = await load(await write(dort(`${PLAN23}\n  denetci: reviewer`)));
+    expect(flow.plan?.denetci).toBe("reviewer");
+  });
+
+  it("denetçi yazılmadıysa alan boş kalır — kapı kapalı", async () => {
+    const flow = await load(await write(dort(PLAN23)));
+    expect(flow.plan?.denetci).toBeUndefined();
+  });
+
+  it("var olmayan rolü denetçi saymaz", async () => {
+    await expect(load(await write(dort(`${PLAN23}\n  denetci: yok`))))
+      .rejects.toThrow(/kural 23.*var olmayan/s);
+  });
+
+  // Kendi kabul ettiği itirazı denetleyen rol denetlemiyor — kural 22'nin
+  // ve `kendiBelgeleri` kuralının aynı gerekçesi.
+  it("planlama katılımcısını denetçi saymaz", async () => {
+    await expect(load(await write(dort(`${PLAN23}\n  denetci: architect`))))
+      .rejects.toThrow(/kural 23.*katılımcısı olamaz/s);
+  });
+
+  // Henüz yapılmamış iş yükümlülük denetimine girmez — kural 19'un kardeşi.
+  it("katılımcılardan önce gelen rolü denetçi saymaz", async () => {
+    const plan = "planlama:\n  katilimcilar: [analyst, architect, coder]\n  plan: docs/plan/{kart}.md";
+    await expect(load(await write(dort(`${plan}\n  denetci: analyst`))))
+      .rejects.toThrow(/kural 23/s);
+  });
+
+  // Denetçinin ret hakkı YAPISAL bir garanti, kural değil: açık `reject`
+  // yazmayan rol varsayılan olarak gönderene döner, ret kenarsız kalan tek
+  // rol zincirin başı, ve kural 23 denetçiyi baş olamayacak yere koyuyor.
+  //
+  // Bu sınama o akıl yürütmenin bağımlılığını tutuyor. Önce kural olarak
+  // yazılmıştı ve HİÇ ATEŞLENMEDİ; varsayılan ret kenarı davranışı bir gün
+  // değişirse buradan haber gelsin diye özellik olarak sınanıyor.
+  it("denetçi açık `reject` yazmasa da ret kenarı taşır", async () => {
+    const yaml = DORT_ROL.replace("    reject: coder\n", "");
+    const flow = await load(await write(`${yaml}\n${PLAN23}\n  denetci: reviewer\n`));
+    expect(flow.plan?.denetci).toBe("reviewer");
+    expect(flow.roles.find((r) => r.id === "reviewer")?.reject).toBe("coder");
+  });
+
+  // `tur` ve `ilk-tur-kor` için bir kez öğrenilen ders: davranışı
+  // belirleyen alan hash'e girmezse topoloji damgası onu GİZLER.
+  it("denetçi topoloji hash'ini değiştirir", async () => {
+    const a = await load(await write(dort(PLAN23)));
+    const b = await load(await write(dort(`${PLAN23}\n  denetci: reviewer`)));
+    expect(a.hash).not.toBe(b.hash);
+  });
+
   it("geçerli planlama bloğunu çözer ve hash'e katar", async () => {
     const yaml = withPlan("planlama:\n  katilimcilar: [coder]\n  plan: docs/plan/{kart}.md");
     const flow = await load(await write(yaml));

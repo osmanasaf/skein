@@ -196,6 +196,29 @@ export type EventInput =
     }
   | {
       /**
+       * Kabul edilmiş bir itirazın DENETİM sonucu — madde başına bir olay.
+       *
+       * Niye var: üç kampanya da aynı belirsizliğe çıktı. Ürün yanlış
+       * kaldığında üç olasılığı ayırt edemiyorduk — plan kısıtı işe yarar
+       * biçimde yazmadı mı, üretici atladı mı, yoksa anlayıp yine mi
+       * hatalı yazdı. Bu olay zincirin hangi halkasının koptuğunu
+       * yerelleştiriyor.
+       *
+       * Madde başına ayrı olay, çünkü günlük şeması dizi/eşleme değil
+       * düz alan taşıyor ve sayım böyle doğrudan okunuyor.
+       */
+      type: "plan.obligation";
+      card: string;
+      /** Denetleyen rol — `planlama.denetci`. */
+      role: string;
+      /** `rol#no` — kabul edilmiş itirazın kimliği. */
+      id: string;
+      /** İtirazı yazan rol. */
+      objector: string;
+      durum: "karsilandi" | "karsilanmadi";
+    }
+  | {
+      /**
        * Ölçüm koşusunun HANGİ KOLU (PLANLAMA.md 6d).
        *
        * Kol günlüğe açıkça yazılıyor; "plan olayı var mı" diye çıkarsamak,
@@ -320,6 +343,10 @@ const REQUIRED: Record<EventInput["type"], { strings: string[]; numbers: string[
   "plan.settled": {
     strings: ["card", "role", "outcome", "path", "planHash"],
     numbers: ["rounds", "objections", "accepted", "invalid"],
+  },
+  "plan.obligation": {
+    strings: ["card", "role", "id", "objector", "durum"],
+    numbers: [],
   },
   "artifact.snapshot": {
     strings: ["cell", "label", "path", "fingerprint"],

@@ -22,14 +22,14 @@ projenin en kayda değer bulgusu o.
 | katman | durum |
 |---|---|
 | Kart kuyruğu, worktree, git ile taşıma, ret/kapı | ✅ |
-| Akış dili — 22 doğrulama kuralı, topoloji hash'i donuyor | ✅ |
+| Akış dili — 23 doğrulama kuralı, topoloji hash'i donuyor | ✅ |
 | `--serve` gözcü, okuyucu ekran, kapı ve akış ekrandan | ✅ |
 | Ölçüm: 8 görevli set, gizli kancalar, körlenmiş hakem, karar kuralı | ✅ |
 | Adım 6 bütünüyle (plan belgesi, itiraz turu, çok tur, körleme, A/B) | ✅ canlı doğrulandı |
 | Çapraz satıcı: codex adaptörü uçtan uca | ✅ |
 | Ölçüm gücü ön kontrolleri (`kalibre`, `kalibre2x2`) | ✅ |
 
-765 test yeşil, typecheck temiz, Linux ve Windows'ta koşuyor.
+795 test yeşil, typecheck temiz, Linux ve Windows'ta koşuyor.
 ~13.9k satır ürün + ~10.2k satır test.
 
 ## 2. Ne ölçüldü — ve her ölçüm ne dedi
@@ -144,12 +144,13 @@ değerli olan kısım bu. Tez kanıtlanmasa da bu makine duruyor.
    başlığında PROZAYLA yazılı bir değişmezin ihlaliydi ve iki denetçi de onu
    okuyup buldu. Yeni görevde sözleşmeyi bir tüketici modülün **kodu**
    zorunlu kılmalı, yorum söylememeli.
-2. **Planlamanın ön kontrolü** — `kalibre2x2`'nin planlama tarafındaki
-   karşılığı: k=1, tek hücre, ~$0.5, iki koşulu sırayla sorar (alışveriş
-   geçerli itiraz üretti mi; üretilen itiraz **kodu** değiştirdi mi).
-   Dördüncü kampanyaya ~$4.5 harcamadan önce bu. Ardından asıl kaldıraç:
-   kabul edilmiş itirazı **bağlayıcı** kılmak — proza değil, makineyle
-   denetlenebilir bir yükümlülük (kabul ölçütü ya da düşen bir test).
+2. **Yükümlülük kapısı yazıldı** (19 Ekim): kabul edilmiş itiraz artık
+   karta yazılıyor ve `planlama.denetci` rolü her maddeye tek tek verdikt
+   vermek zorunda — `hub/flows/plan4.yaml`. Liste ÜRETİCİYE verilmiyor:
+   plan sözleşmedir ve sözleşmenin tek başına yetip yetmediği ancak
+   üretici yalnızca onu okursa ölçülebilir. Kalan: itirazın **düşen test**
+   taşıması (adım 4), sonra planlamanın ön kontrolü (k=1, ~$0.5) ve ancak
+   `ÖLÇER` çıkarsa dördüncü kampanya (~$4.5).
 3. **Görev seti 8/12** — ve asıl eksik sayı değil sınıf (bkz. 1).
 4. **`AdapterRegistry`'yi silmek** — ikinci kurucu yol var oldukça aynı
    kusur dördüncü kez çıkar.

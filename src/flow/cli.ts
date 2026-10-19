@@ -90,6 +90,16 @@ function printFlow(flow: Flow, root: string): void {
                 : "KÖR: her itirazcı yazarın ağacından dallanır, tur sonunda birleşir"
           }`,
     );
+    // Yükümlülük kapısı davranış belirleyen bir alan ve hash'e giriyor;
+    // operatörün akışı anlamak için okuduğu yerde görünmez kalamaz.
+    // Kapalıyken de yazılıyor, çünkü "yazılmayan alan = kapalı kapı"
+    // çıkarımını operatöre bırakmak sessiz arızanın kapısıdır.
+    console.log(
+      flow.plan.denetci === undefined
+        ? "       yükümlülük kapısı YOK — kabul edilen itiraz yalnızca planı değiştirir"
+        : `       yükümlülük: ${flow.plan.denetci} kabul edilen her itiraza tek tek verdikt verir\n` +
+          "                   (cevapsız madde turu düşürür; üreticiye liste VERİLMEZ)",
+    );
   }
   console.log("");
 

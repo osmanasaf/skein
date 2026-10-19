@@ -8,7 +8,7 @@ import type { CardQueue } from "../card/queue.js";
 import type { EventLog } from "../events/log.js";
 import {
   DONE, afterPlanning, isPlanner, itirazPathsFor, planAuthor, planBlind, planObjectors,
-  planPathFor, promptLayers, roleOf, type SnapshotRole,
+  planAuditor, planPathFor, promptLayers, roleOf, type SnapshotRole,
 } from "../flow/snapshot.js";
 import { objectionBaseline, planPhase } from "../plan/phase.js";
 import { birlestirItirazlar, kanitYollari, parseItirazlar } from "../plan/itiraz.js";
@@ -293,6 +293,52 @@ async function runRole(card: Card, role: SnapshotRole, options: TickOptions): Pr
       `${dirty.slice(0, 8).join(", ")}${dirty.length > 8 ? ` (+${dirty.length - 8})` : ""}. ` +
       `İşlenmemiş iş devredilemez — sonraki rol onu göremez.`;
     return { status: "escalated", card: await queue.escalate(card, reason), reason };
+  }
+
+  // YÜKÜMLÜLÜK KAPISI — kabul edilmiş itiraz sessizce atlanamaz.
+  //
+  // Yalnızca KABUL yolunda. Ret turunda kart geri dönüyor ve maddeler bir
+  // sonraki geçişte denetlenir; kapının iddiası "kart yükümlülük
+  // yanıtlanmadan KAPANMAZ", "her tur denetlenir" değil.
+  //
+  // Niye bu kapı var: `snapshot-store` 1. koşusunda iki itiraz da doğru
+  // tüketici modülü gösterdi, ikisi de kabul edildi, plan değişti — ürün
+  // değişmedi. Kabul edilmiş itirazın karşılanıp karşılanmadığı hiçbir
+  // yerde yazılı değildi, o yüzden hangi halkanın koptuğu bilinemedi.
+  const denetlenecek = planAuditor(card.topology) === role.id
+    ? (card.plan?.kabuller ?? [])
+    : [];
+  if (denetlenecek.length > 0) {
+    const cevaplar = verdict.verdict.yukumlulukler ?? {};
+    const cevapsiz = denetlenecek.filter((k) => cevaplar[k.id] === undefined);
+    if (cevapsiz.length > 0) {
+      // Cevapsız madde karşılanmış SAYILMAZ: cevap vermemek bir cevap
+      // değildir (verdikt dosyasının `missing`/`reject` ayrımıyla aynı).
+      const reason =
+        `\`${role.id}\` kabul etti ama ${cevapsiz.length} yükümlülüğü yanıtlamadı: ` +
+        cevapsiz.map((k) => `\`${k.id}\` (${k.ne})`).join(" · ") +
+        `. Kabul edilmiş itiraz, karşılandığı yazılmadan geçemez.`;
+      return { status: "escalated", card: await queue.escalate(card, reason), reason };
+    }
+    const karsilanmayan = denetlenecek.filter((k) => cevaplar[k.id]?.durum === "karsilanmadi");
+    if (karsilanmayan.length > 0) {
+      // `accept` + karşılanmamış madde bir ÇELİŞKİ: rol maddeyi
+      // karşılanmadı sayıyor ve işi yine ileri gönderiyor. Metin bunu
+      // açıkça yasaklıyor, o yüzden sözleşme ihlali — insana çıkar.
+      const reason =
+        `\`${role.id}\` ${karsilanmayan.length} yükümlülüğü KARŞILANMADI saydı ama ` +
+        `kararı \`accept\`: ` +
+        karsilanmayan.map((k) => `\`${k.id}\` — ${cevaplar[k.id]?.not ?? ""}`).join(" · ") +
+        `. Karşılanmamış yükümlülükle kabul edilmez; kararın \`reject\` olmalıydı.`;
+      return { status: "escalated", card: await queue.escalate(card, reason), reason };
+    }
+    for (const k of denetlenecek) {
+      await options.log?.append({
+        type: "plan.obligation", card: card.id, role: role.id,
+        id: k.id, objector: k.role,
+        durum: cevaplar[k.id]?.durum ?? "karsilanmadi",
+      });
+    }
   }
 
   // Planlama turunun kapıları: plan gerçekten yazıldı mı, itirazlar
@@ -691,7 +737,22 @@ async function planStep(
     };
   }
 
-  const yeniPlan = yeniHash === undefined ? undefined : { path: planPath, hash: yeniHash };
+  // Kabul edilmiş itirazlar YÜKÜMLÜLÜK olarak karta yazılıyor: denetçi
+  // başka bir turda, başka bir ağaçta koşuyor ve kapının kaç madde
+  // beklediğini orkestratörün bilmesi gerekiyor.
+  //
+  // Kimlik `rol#no`, çünkü `birlestirItirazlar` dosyaları uç uca ekliyor
+  // ve her dosya 1'den numaralanıyor — iki itirazcının 1 numaralı itirazı
+  // aynı `no`yu taşıyor.
+  const kabuller = kabul.map((i) => ({
+    id: `${i.role}#${i.no}`, role: i.role, ne: i.ne, kanit: i.kanit,
+  }));
+  const yeniPlan = yeniHash === undefined
+    ? undefined
+    : {
+      path: planPath, hash: yeniHash,
+      ...(kabuller.length === 0 ? {} : { kabuller }),
+    };
 
   // Tavan dolmadı: yeni bir tur açılıyor ve söz ilk itirazcıya geçiyor.
   // İtirazcılar DÜZELTİLMİŞ planı okuyup yeni itiraz yazabilir; hiçbiri
@@ -731,7 +792,7 @@ async function planMove(
   workdir: string,
   hedef: string,
   entry: Extract<Card["history"][number], { event: "plan" }>,
-  plan: { path: string; hash: string } | undefined,
+  plan: Card["plan"] | undefined,
   summary?: string,
   /** Kodun geldiği roller; körlü turda bu rol DEĞİL (bkz. `handOverCode`). */
   sources?: string[],

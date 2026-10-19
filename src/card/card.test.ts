@@ -60,6 +60,41 @@ describe("parseCard / serializeCard", () => {
     expect(parseCard(serializeCard(card))).toEqual(card);
   });
 
+  // Yükümlülükler: kabul edilmiş itirazlar kartta taşınıyor, çünkü
+  // denetçi başka bir turda başka bir ağaçta koşuyor.
+  it("yükümlülükler gidiş dönüşte kaybolmuyor", async () => {
+    const taban = newCard({ title: "Jitter", task: "iş", topology: await daily() });
+    const card = {
+      ...taban,
+      plan: {
+        path: "docs/plan/x.md", hash: "a".repeat(64),
+        kabuller: [{ id: "architect#1", role: "architect", ne: "sürüm geriye düşer", kanit: "`src/a.ts:3`" }],
+      },
+    };
+    expect(parseCard(serializeCard(card))).toEqual(card);
+  });
+
+  // Varsa KATI, `plan`ın kendisiyle aynı gerekçe: yarım bir yükümlülük
+  // kaydı denetçiye eksik liste verir ve kapıyı eksik kurar — yani
+  // denetlenmemiş bir madde denetlenmiş sayılır.
+  it("eksik alanlı yükümlülüğü reddeder", async () => {
+    const taban = newCard({ title: "x", task: "y", topology: await daily() });
+    const doc = JSON.parse(serializeCard(taban)) as Record<string, unknown>;
+    doc["plan"] = {
+      path: "docs/plan/x.md", hash: "a".repeat(64),
+      kabuller: [{ id: "architect#1", role: "architect", ne: "" , kanit: "`src/a.ts:3`" }],
+    };
+    expect(() => parseCard(JSON.stringify(doc))).toThrow(CardError);
+    expect(() => parseCard(JSON.stringify(doc))).toThrow(/kabuller\[\]\.ne/);
+  });
+
+  it("dizi olmayan yükümlülük alanını reddeder", async () => {
+    const taban = newCard({ title: "x", task: "y", topology: await daily() });
+    const doc = JSON.parse(serializeCard(taban)) as Record<string, unknown>;
+    doc["plan"] = { path: "docs/plan/x.md", hash: "a".repeat(64), kabuller: { a: 1 } };
+    expect(() => parseCard(JSON.stringify(doc))).toThrow(/dizi olmalı/);
+  });
+
   it("serileştirme satır sonuyla biter — dosya olarak okunabilir dursun", async () => {
     const card = newCard({ title: "x", task: "y", topology: await daily() });
     expect(serializeCard(card).endsWith("\n")).toBe(true);

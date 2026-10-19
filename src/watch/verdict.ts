@@ -14,12 +14,34 @@ export const VERDICT_FILE = ".skein-verdict.json";
 
 export type Decision = "accept" | "reject";
 
+/**
+ * Bir yükümlülüğün denetim sonucu.
+ *
+ * `karsilanmadi` ile cevapsız bırakmak KASITLI olarak ayrı: cevap
+ * vermemek bir cevap değildir (bu dosyanın `missing`/`reject` ayrımının
+ * aynı gerekçesi). Cevapsız madde kapıyı kapatır.
+ */
+export interface YukumlulukCevabi {
+  durum: "karsilandi" | "karsilanmadi";
+  /** Neye bakıldığı; boş bırakılamaz — "karşılandı" tek başına kanıt değil. */
+  not: string;
+}
+
 export interface Verdict {
   decision: Decision;
   /** `reject` için zorunlu — ret boş dönmez. */
   reason?: string;
   /** `accept` için, ne yapıldığının bir cümlelik özeti. */
   summary?: string;
+  /**
+   * Kabul edilmiş itirazların tek tek denetimi; anahtar `plan.kabuller[].id`.
+   *
+   * Yalnızca `planlama.denetci` olan rolden isteniyor. Serbest denetimden
+   * AYRI tutuluyor: tartışılan noktaları gösteren bir liste denetçiyi o
+   * bölgeye yönlendirip başka yerlere karşı körleştirebilir, o yüzden iki
+   * sonuç ölçümde de ayrı sayılıyor.
+   */
+  yukumlulukler?: Record<string, YukumlulukCevabi>;
 }
 
 /**
@@ -50,7 +72,18 @@ export async function readVerdict(workdir: string): Promise<VerdictResult> {
   } catch {
     return { kind: "missing" };
   }
+  return parseVerdict(text);
+}
 
+/**
+ * Verdikt metnini çözer — saf, dosya sistemi yok.
+ *
+ * `readVerdict`'ten ayrıldı çünkü doğrulama kuralları sınanmak zorunda ve
+ * dosya üzerinden sınamak kuralı değil dosya okumayı sınar. Bu projede
+ * karar kurallarının saf fonksiyona çıkarılması yerleşik bir karar
+ * (`power.ts`, `matrixSkip`, `planeffect`).
+ */
+export function parseVerdict(text: string): VerdictResult {
   let raw: unknown;
   try {
     raw = JSON.parse(text);
@@ -80,12 +113,47 @@ export async function readVerdict(workdir: string): Promise<VerdictResult> {
     };
   }
 
+  // Yükümlülük cevapları: varsa KATI. Yarım bir cevap ("durum" var, "not"
+  // yok) kapıyı geçerse, denetlenmemiş bir madde denetlenmiş sayılır.
+  const yukRaw = doc["yukumlulukler"];
+  let yukumlulukler: Record<string, YukumlulukCevabi> | undefined;
+  if (yukRaw !== undefined && yukRaw !== null) {
+    if (typeof yukRaw !== "object" || Array.isArray(yukRaw)) {
+      return { kind: "invalid", problem: "`yukumlulukler` bir nesne olmalı" };
+    }
+    const out: Record<string, YukumlulukCevabi> = {};
+    for (const [id, ham] of Object.entries(yukRaw as Record<string, unknown>)) {
+      if (ham === null || typeof ham !== "object" || Array.isArray(ham)) {
+        return { kind: "invalid", problem: `\`yukumlulukler.${id}\` bir nesne olmalı` };
+      }
+      const k = ham as Record<string, unknown>;
+      const durum = k["durum"];
+      if (durum !== "karsilandi" && durum !== "karsilanmadi") {
+        return {
+          kind: "invalid",
+          problem: `\`yukumlulukler.${id}.durum\` "karsilandi" ya da "karsilanmadi" olmalı, ` +
+            `"${String(durum)}" değil`,
+        };
+      }
+      const not = typeof k["not"] === "string" ? k["not"].trim() : "";
+      if (not === "") {
+        return {
+          kind: "invalid",
+          problem: `\`yukumlulukler.${id}.not\` boş olamaz — "karşılandı" tek başına kanıt değil`,
+        };
+      }
+      out[id] = { durum, not };
+    }
+    yukumlulukler = out;
+  }
+
   return {
     kind: "ok",
     verdict: {
       decision,
       ...(reason === "" ? {} : { reason }),
       ...(summary === "" ? {} : { summary }),
+      ...(yukumlulukler === undefined ? {} : { yukumlulukler }),
     },
   };
 }

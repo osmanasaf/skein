@@ -78,6 +78,7 @@ export function snapshot(flow: Flow, root: string): TopologySnapshot {
             tur: flow.plan.tur,
             itiraz: flow.plan.itiraz,
             ilkTurKor: flow.plan.ilkTurKor,
+            ...(flow.plan.denetci === undefined ? {} : { denetci: flow.plan.denetci }),
           },
         }),
     constitution: flow.constitution.map((path) => rel(root, path)),
@@ -170,6 +171,18 @@ export function itirazPathFor(
   const plan = topology.plan;
   if (plan === undefined) return null;
   return plan.itiraz.replaceAll("{kart}", cardId).replaceAll("{rol}", roleId);
+}
+
+/**
+ * Kabul edilmiş itirazları denetleyecek rol; akış beyan etmediyse null.
+ *
+ * `planAuthor`/`planObjectors` gibi okuyucu: "kim denetliyor" sorusu
+ * ÇIKARSANMIYOR, akış dosyasında yazıyor. Ret kenarı taşıyan rolü denetçi
+ * saymak, bu projede bir kez bedeli ödenen "aynı bilgi iki yerde"
+ * kusurunun aynısı olurdu.
+ */
+export function planAuditor(topology: TopologySnapshot): string | null {
+  return topology.plan?.denetci ?? null;
 }
 
 /** Bütün itirazcıların dosyaları, zincir sırasında. */

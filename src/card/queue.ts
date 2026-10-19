@@ -315,7 +315,7 @@ export class CardQueue {
     card: Card,
     to: string,
     entry: Extract<HistoryEntry, { event: "plan" }>,
-    plan?: { path: string; hash: string },
+    plan?: Card["plan"],
   ): Promise<Card> {
     const { path } = this.#requireActive(card);
     const withPlan = plan === undefined ? card : { ...card, plan };
