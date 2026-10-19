@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -251,18 +252,27 @@ describe("alışveriş — cevap turu", () => {
   });
 
   it("kabul + düzeltilmiş plan kartı zincirde ilerletir", async () => {
+    const DUZELTILMIS = "# Plan\nSürüm ileri gider; selector.ts korunur.\n";
     const card = await put();
     await itirazaKadar(card);
     dosyalar.set(at("main", ITIRAZ_YOLU(card.id)), itiraz("kabul"));
-    dosyalar.set(at("main", PLAN_YOLU(card.id)), "# Plan\nSürüm ileri gider; selector.ts korunur.\n");
+    dosyalar.set(at("main", PLAN_YOLU(card.id)), DUZELTILMIS);
     claude.answer = kabulEt("planı düzelttim");
 
     const result = await tick("planner", options);
     expect(result.status).toBe("accepted");
     const moved = await queue.get(card.id);
     expect(moved?.role).toBe("coder");
-    // Plan hash'i yeni sürümü göstermeli.
-    expect(moved?.plan?.hash).not.toBe(card.plan?.hash);
+    // Kartın dondurduğu hash DÜZELTİLMİŞ planı göstermeli — aşağıdaki rol
+    // "sürüm X" diye okuyacağı şeyle elindeki dosya aynı olmak zorunda.
+    //
+    // Eski hâli `not.toBe(card.plan?.hash)` idi ve ISIRMIYORDU: `card`
+    // `put()`'tan geliyor, yani `card.plan` undefined, yani iddia "hash
+    // undefined değil"e iniyordu. İlk yazım hash'in hangi sürüme ait
+    // olduğunu hiç sormuyordu.
+    expect(moved?.plan?.hash).toBe(
+      createHash("sha256").update(DUZELTILMIS, "utf8").digest("hex"),
+    );
   });
 
   it("gerekçeli ret kartı ilerletir, plan değişmeden", async () => {
