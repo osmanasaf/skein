@@ -852,6 +852,122 @@ elendiğinde itirazcı koda bakmaya zorlanır mı?
 
 ---
 
+## DUMAN TESTİ KOŞTU — kapı çalıştı, mekanizma üç kusurunu buldurdu (23 Ekim)
+
+`plan4.yaml` gerçek ajanlarla baştan sona koştu (`claude-sonnet-5`, 5 rol,
+2 planlama turu, 8 aktivasyon, **$6.07**). Kart `bitti`.
+
+### Kapı ateşlendi
+
+```
+plan.obligation  analyst#1  objector=analyst  role=reviewer  durum=karsilandi
+plan.obligation  analyst#2  objector=analyst  role=reviewer  durum=karsilandi
+```
+
+Zincirin tamamı yürüdü: `analyst` depodan doğrulanmış iki itiraz yazdı →
+`planner` ikisini kabul etti → kabuller karta yükümlülük olarak yazıldı →
+`coder` **listeyi görmeden** üretti → `reviewer` listeyi aldı, istenen JSON
+biçiminde ikisini de yanıtladı, kart kapandı.
+
+Üç sorunun üçü de EVET: itiraz yazılıyor, kabul denetçiye ulaşıyor, model
+biçimi tutuyor. İkinci bir veri noktası var: aynı akış operatörün
+makinesinde de koştu ve orada da `analyst` itiraz yazıp kabul edildi — iki
+bağımsız koşuda aynı rol aynı sınıfta itiraz üretti.
+
+### Kusur 1: `durum: karsilanmadi` üretimde HİÇ yazılmıyordu
+
+Bunu akışın kendi `architect` rolü buldu ve kodu satır satır okuyarak
+teşhis etti:
+
+> `karsilanmayan.length > 0` kontrolü `denetlenecek` listesindeki TÜM
+> maddelerin yazımını iptal ediyor ve kartı escalate ediyor; yazım döngüsü
+> yalnızca kapıların ARKASINDA. Dolayısıyla üretimden
+> `durum: "karsilanmadi"` taşıyan bir olay asla çıkmaz.
+
+Doğru. Olayın var oluş sebebi "zincirin hangi halkası koptu" sorusuydu ve
+**en bilgilendirici hâl — denetçi karşılanmadı diyor — tam olarak
+kaydedilmeyen hâldi.** Teşhis yarı kördü; raporun "kaç karşılanmadı"
+sütunu yapısal olarak hep 0 olurdu.
+
+Düzeltildi: günlük kapılardan ÖNCE yazılıyor. Ayrım projenin kendi kuralı —
+**günlük ne olduğunu yazar, kapı ne yapılacağına karar verir.** İkisini aynı
+dala bağlamak, kaydı kararın yan etkisi yapmaktı.
+
+### Kusur 2: biçimin sonlandırıcısı yoktu — ve o itirazı YEDİ
+
+Yukarıdaki itiraz **sayılmadı.** Sebebi:
+
+```
+`Durum` okunamadı: "açık ## Kontrol ettiklerim (bu tur) - `ArmRun`/olay
+döngüsü — `src/bench/planeffect.ts:116-173` plan metninin tarif ettiğiyle …"
+Beklenen: açık | kabul | ret: … | insana: …
+```
+
+Rol biçime uygun yazdı, `**Durum:** açık` koydu, sonra `## Kontrol
+ettiklerim` diye serbest bir bölüm açtı. `alanlar()` bir sonraki ALANA
+kadar topluyordu; markdown başlığı alan saymadığı için bütün bölüm `Durum`
+değerinin içine aktı ve itiraz elendi.
+
+Alanların çok satırlı olması kasıtlı (`Neyi yanlışlar` madde madde
+yazılıyor), o yüzden çare alanları tek satıra indirmek değil: **başlık
+bloğu bitirir.** Düzeltme canlı koşunun gerçek artefaktıyla doğrulandı —
+aynı dosya artık `1 itiraz · 1 geçerli` veriyor.
+
+Bu, biçimin bir itirazı yediği **ÜÇÜNCÜ** vaka: önce kanıtta yol
+göstermemek (kampanyada 4/6), sonra kanıtın yalnızca kendi belgesini
+göstermesi, şimdi sonlandırıcı eksikliği. Biçim pazarlık konusu değil ama
+biçimin tuzakları ÖLÇÜMÜN KENDİ KUSURU — ve her biri gerçek bir itirazı
+sessizce çöpe attı.
+
+### Kusur 3 ve 4: teşhis yolları bildiğinden azını söylüyordu
+
+Koşu kapıya varmadan iki rapor kusuru daha buldurdu:
+
+- **`exitCode !== 0` dalı yalnızca stderr'e bakıyordu.** İlk deneme
+  sağlayıcının OAuth oturumu düşmüş olduğu için 1 ile çıktı, stderr boştu,
+  sebep stdout'taydı (`result: "Failed to authenticate…"`). Operatörün
+  gördüğü tek şey "Ajan hata kodu 1 ile bitti" oldu. `agentSaid` zaten
+  stdout'u okuyor, ama yalnızca verdikt dallarında çağrılıyordu.
+- **`mergeForward` yok saydığı yolu git'in de yok sayacağını varsayıyordu.**
+  `coder → reviewer` merge'i `.skein-verdict.json` yüzünden düştü; ön
+  denetim "temiz" demişti. Yok sayma doğru bir karar ama yanlış bir
+  KEHANET. Artık yol hedefte izleniyor ve değişmişse merge denenmeden önce
+  çaresiyle bildiriliyor.
+- Ayrıca `card show` planı ve kabulleri hiç basmıyordu: kart `analyst#1`
+  yükümlülüğünü taşırken operatörün bunu görmesinin yolu yoktu.
+
+Dördü de **sahte ajanla hiç çıkmayacak** sınıftan: `FakeAdapter` hatayı
+hep bizim koyduğumuz yere koyuyor, sahte git çakışma üretmiyor, sınamalar
+`console.log`'u okumuyor. Duman testinin asıl getirisi bu oldu.
+
+### Planın kalitesi: tuzağa düşülmedi
+
+Görev metni kasten söylemiyordu, `planner` kodu okuyup kendisi yazdı:
+*"karar yoluna dokunulmuyor, `ab-planli.yaml`'e `denetci` alanı
+eklenmiyor (kapsam dışı)."* İkisi de doğru kararlar ve ikisi de
+`cli.ts:960`'taki *"Karara GİRMEZ ve girmemeli"* kuralından çıkarılabilir.
+Yani kurduğum tuzağa düşülmedi — bu, itiraz olasılığını düşürdü ama plan
+kalitesi hakkında olumlu bir veri.
+
+### Maliyet tahminim yanlıştı
+
+**$1–3 demiştim, gerçek $6.07.** İki katı. Sebebi muhtemelen 8 aktivasyonun
+her birinin depo bağlamını yeniden yüklemesi (deneme çağrısı tek başına
+$0.05 tuttu, boş bir soruya). Duman testi için kabul edilebilir, ama
+kampanya tahminlerinde bu çarpanı hesaba katmak gerekiyor: 6 koşuluk bir
+6d kampanyası ~$4.5 değil, plan4 şeklinde bir akışla ~$36 olurdu.
+
+### Ajanların ürettiği kod
+
+`deneme/yukumluluk` dalında duruyor: `planeffect.ts`'e `ObligationRecord`/
+`ObligationStats` ve `obligationStats()`, `cli.ts planrapor` çıktısına madde
+satırları. Kendi iddiasına göre 806 test ve typecheck geçiyor. Bu dalın
+ana dala alınıp alınmayacağı ayrı bir karar — **kusur 1'in düzeltmesi onu
+etkiliyor**, çünkü artık `karsilanmadi` de günlüğe düşüyor ve raporun o
+sütunu gerçekten dolabilir.
+
+---
+
 ## YÜKÜMLÜLÜK KAPISI — kabul edilmiş itiraz artık bağlayıcı (19 Ekim)
 
 Düzeltme merdiveninin (a) ve (b) adımları atlandı, doğrudan (c) yazıldı.

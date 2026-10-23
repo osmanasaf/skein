@@ -319,6 +319,32 @@ async function runRole(card: Card, role: SnapshotRole, options: TickOptions): Pr
     : [];
   if (denetlenecek.length > 0) {
     const cevaplar = verdict.verdict.yukumlulukler ?? {};
+
+    // Günlük KAPIDAN ÖNCE yazılıyor, ve bu bir düzeltme.
+    //
+    // İlk hâlinde yazım döngüsü kapıların ARKASINDAYDI: `karsilanmadi`
+    // gören dal escalate edip dönüyordu, yani üretimde `durum` alanı HER
+    // ZAMAN `karsilandi` oluyordu ve `?? "karsilanmadi"` düşen dalı hiç
+    // tetiklenemiyordu. Olayın var oluş sebebi "hangi halka koptu" sorusunu
+    // cevaplamaktı; en bilgilendirici hâl — denetçi karşılanmadı diyor —
+    // tam olarak kaydedilmeyen hâldi. Teşhis yarı kördü.
+    //
+    // Kusuru bu akışın kendi `architect` rolü buldu ve kodu satır satır
+    // okuyarak teşhis etti; itirazı biçim yüzünden elenmişti (bkz.
+    // `itiraz.ts`'teki `alanlar`).
+    //
+    // Ayrım projenin kendi kuralı: GÜNLÜK ne olduğunu yazar, KAPI ne
+    // yapılacağına karar verir. İkisini aynı dala bağlamak, kaydı kararın
+    // yan etkisi yapmaktı.
+    for (const k of denetlenecek) {
+      const cevap = cevaplar[k.id];
+      if (cevap === undefined) continue;
+      await options.log?.append({
+        type: "plan.obligation", card: card.id, role: role.id,
+        id: k.id, objector: k.role, durum: cevap.durum,
+      });
+    }
+
     const cevapsiz = denetlenecek.filter((k) => cevaplar[k.id] === undefined);
     if (cevapsiz.length > 0) {
       // Cevapsız madde karşılanmış SAYILMAZ: cevap vermemek bir cevap
@@ -340,13 +366,6 @@ async function runRole(card: Card, role: SnapshotRole, options: TickOptions): Pr
         karsilanmayan.map((k) => `\`${k.id}\` — ${cevaplar[k.id]?.not ?? ""}`).join(" · ") +
         `. Karşılanmamış yükümlülükle kabul edilmez; kararın \`reject\` olmalıydı.`;
       return { status: "escalated", card: await queue.escalate(card, reason), reason };
-    }
-    for (const k of denetlenecek) {
-      await options.log?.append({
-        type: "plan.obligation", card: card.id, role: role.id,
-        id: k.id, objector: k.role,
-        durum: cevaplar[k.id]?.durum ?? "karsilanmadi",
-      });
     }
   }
 

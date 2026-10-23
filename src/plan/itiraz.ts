@@ -41,19 +41,44 @@ export interface ItirazDosyasi {
 
 const BASLIK = /^##\s+İtiraz\s+(\d+)\s*[—–-]\s*(.+)$/u;
 
-/** `**Alan:** değer` satırlarını, bir sonraki alana kadar toplar. */
+/**
+ * `**Alan:** değer` satırlarını, bir sonraki alana YA DA BAŞLIĞA kadar toplar.
+ *
+ * Başlığın alanı bitirmesi canlı bir koşuda ölçülen kusurdan geldi. Bir rol
+ * biçime uygun bir itiraz yazdı, sonuna `**Durum:** açık` koydu ve ardından
+ * `## Kontrol ettiklerim` diye serbest bir bölüm açtı. Başlık alan
+ * sayılmadığı için bütün bölüm `Durum` değerinin içine aktı,
+ * `Durum okunamadı: "açık ## Kontrol ettiklerim — ..."` dedi ve itiraz
+ * ELENDİ. Elenen şey gerçek bir kusurun doğru teşhisiydi.
+ *
+ * Alanların çok satırlı olması kasıtlı (`Neyi yanlışlar` madde madde
+ * yazılabiliyor), o yüzden çare alanları tek satıra indirmek değil —
+ * markdown başlığının bloğu bitirdiğini kabul etmek. Biçimin sonlandırıcısı
+ * yoktu; artık var.
+ *
+ * Bu, biçimin bir itirazı yediği ÜÇÜNCÜ vaka (öncekiler: kanıtta yol
+ * göstermemek, kanıtın yalnızca kendi belgesini göstermesi). Biçim pazarlık
+ * konusu değil ama biçimin tuzakları ölçümün kendi kusuru.
+ */
 function alanlar(govde: string[]): Map<string, string> {
   const out = new Map<string, string>();
   let aktif: string | null = null;
   for (const satir of govde) {
-    const m = /^\*\*(.+?):\*\*\s*(.*)$/u.exec(satir.trim());
+    const temiz = satir.trim();
+    const m = /^\*\*(.+?):\*\*\s*(.*)$/u.exec(temiz);
     if (m) {
       aktif = (m[1] as string).trim().toLocaleLowerCase("tr");
       out.set(aktif, (m[2] as string).trim());
       continue;
     }
-    if (aktif !== null && satir.trim() !== "") {
-      out.set(aktif, `${out.get(aktif) as string} ${satir.trim()}`.trim());
+    // Başlık bloğu bitirir. `## İtiraz N` zaten gövdeyi bölüyor; buradaki
+    // başlıklar itirazın İÇİNDEKİ serbest bölümler.
+    if (/^#{1,6}\s/u.test(temiz)) {
+      aktif = null;
+      continue;
+    }
+    if (aktif !== null && temiz !== "") {
+      out.set(aktif, `${out.get(aktif) as string} ${temiz}`.trim());
     }
   }
   return out;

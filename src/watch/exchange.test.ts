@@ -602,6 +602,44 @@ reject:
     });
   });
 
+  // CANLI KOŞUDA ÖLÇÜLEN KUSUR, ve bu akışın kendi `architect` rolü buldu:
+  // yazım döngüsü kapıların ARKASINDAYDI, yani `karsilanmadi` gören dal
+  // escalate edip dönüyordu ve üretimde `durum` HER ZAMAN `karsilandi`
+  // oluyordu. Olayın var oluş sebebi "hangi halka koptu" sorusuydu; en
+  // bilgilendirici hâl tam olarak kaydedilmeyen hâldi.
+  //
+  // Ayrım: GÜNLÜK ne olduğunu yazar, KAPI ne yapılacağına karar verir.
+  it("karşılanmadı kararı kapı kapansa da günlüğe DÜŞER", async () => {
+    await denetciyeKadar();
+    claude.answer = async (req: InvokeRequest): Promise<void> => {
+      await writeFile(join(req.workdir, VERDICT_FILE), JSON.stringify({
+        decision: "accept", summary: "x",
+        yukumlulukler: { "architect#1": { durum: "karsilanmadi", not: "sürüm hâlâ geriye düşüyor" } },
+      }));
+    };
+    const yol = join(root, "karsilanmadi.jsonl");
+    const result = await tick("reviewer", { ...options, log: new EventLog(yol, "r1") });
+
+    expect(result.status).toBe("escalated");
+    const { events } = await readEvents(yol);
+    const olaylar = events.filter((e) => e.type === "plan.obligation");
+    expect(olaylar).toHaveLength(1);
+    expect(olaylar[0]).toMatchObject({ id: "architect#1", durum: "karsilanmadi" });
+  });
+
+  // Cevapsız madde yazılmıyor: olmayan bir cevabı kaydetmek, cevap
+  // vermemeyi bir cevap saymak olurdu.
+  it("yanıtlanmayan madde günlüğe yazılmaz", async () => {
+    await denetciyeKadar();
+    claude.answer = kabulEt("denetledim");
+    const yol = join(root, "cevapsiz.jsonl");
+    const result = await tick("reviewer", { ...options, log: new EventLog(yol, "r1") });
+
+    expect(result.status).toBe("escalated");
+    const { events } = await readEvents(yol);
+    expect(events.filter((e) => e.type === "plan.obligation")).toHaveLength(0);
+  });
+
   // Ret turunda kart geri dönüyor ve maddeler bir sonraki geçişte
   // denetlenir: kapının iddiası "kart yükümlülük yanıtlanmadan KAPANMAZ",
   // "her tur denetlenir" değil.

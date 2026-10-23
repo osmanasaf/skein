@@ -29,7 +29,7 @@ projenin en kayda değer bulgusu o.
 | Çapraz satıcı: codex adaptörü uçtan uca | ✅ |
 | Ölçüm gücü ön kontrolleri (`kalibre`, `kalibre2x2`) | ✅ |
 
-795 test yeşil, typecheck temiz, Linux ve Windows'ta koşuyor.
+805 test yeşil, typecheck temiz, Linux ve Windows'ta koşuyor.
 ~13.9k satır ürün + ~10.2k satır test.
 
 ## 2. Ne ölçüldü — ve her ölçüm ne dedi

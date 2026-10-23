@@ -13,6 +13,47 @@ baştan oynatma sürümü geriye düşürür.
 
 const varMi = (yol: string): boolean => yol === "src/selector.ts";
 
+// CANLI KOŞUDA ÖLÇÜLEN KUSUR. Bir rol biçime uygun bir itiraz yazdı,
+// `**Durum:** açık` koydu ve ardından `## Kontrol ettiklerim` diye serbest
+// bir bölüm açtı. Başlık alan saymadığı için bütün bölüm `Durum` değerinin
+// içine aktı ve itiraz ELENDİ — elenen şey gerçek bir kusurun doğru
+// teşhisiydi. Biçimin sonlandırıcısı yoktu.
+describe("alanlar — başlık bloğu bitirir", () => {
+  const GOVDE = `## İtiraz 1 — architect
+**Ne:** Üretimde \`karsilanmadi\` hiç yazılmıyor.
+**Neden:** Kapı yazımdan önce escalate ediyor.
+**Neyi yanlışlar:** \`src/watch/tick.ts:332\` — yazım döngüsü kapının arkasında.
+**Durum:** açık
+
+## Kontrol ettiklerim (bu tur)
+- \`src/bench/planeffect.ts:116-173\` plan metniyle örtüşüyor.
+- \`src/events/log.ts:210-219\` şema birebir.
+`;
+
+  it("başlıktan sonraki serbest bölüm `Durum`u yemiyor", () => {
+    const d = parseItirazlar(GOVDE, { varMi: () => true });
+    expect(d.itirazlar).toHaveLength(1);
+    expect(d.itirazlar[0]?.gecersiz).toBeUndefined();
+    expect(d.itirazlar[0]?.durum).toBe("acik");
+    expect(d.gecerli).toHaveLength(1);
+  });
+
+  // Alanların çok satırlı olması KASITLI: `Neyi yanlışlar` madde madde
+  // yazılabiliyor. Çare alanları tek satıra indirmek değildi.
+  it("çok satırlı alan hâlâ toplanıyor", () => {
+    const d = parseItirazlar(`## İtiraz 1 — x
+**Ne:** bir
+iki
+**Neden:** üç
+**Neyi yanlışlar:** \`src/a.ts:1\` — dört
+beş
+**Durum:** açık
+`, { varMi: () => true });
+    expect(d.itirazlar[0]?.ne).toBe("bir iki");
+    expect(d.itirazlar[0]?.kanit).toContain("dört beş");
+  });
+});
+
 describe("parseItirazlar", () => {
   it("dört alanı ve rolü okur", () => {
     const d = parseItirazlar(ITIRAZ, { varMi });
