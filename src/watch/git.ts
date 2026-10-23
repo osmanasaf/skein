@@ -84,11 +84,40 @@ export async function mergeForward(opts: {
     return { kind: "blocked", reason: `kaynak ağaç ayrık HEAD'de: ${opts.fromDir}` };
   }
 
-  const dirty = await dirtyPaths(opts.toDir, opts.ignoreDirty ?? []);
+  const yoksay = opts.ignoreDirty ?? [];
+  const dirty = await dirtyPaths(opts.toDir, yoksay);
   if (dirty.length > 0) {
     return {
       kind: "blocked",
       reason: `hedef ağaçta işlenmemiş değişiklik var, birleştirme yapılamaz: ${dirty.join(", ")}`,
+    };
+  }
+
+  // Yok saydığımız yollar git için yok sayılmıyor.
+  //
+  // `ignoreDirty` doğru bir karar ama yanlış bir KEHANET: orkestratörün
+  // kontrol dosyaları ajanın işi değil, o yüzden kirlilik sayılmazlar —
+  // git ise o yolu İZLİYORSA yerel değişikliği merge'ün önüne koyar.
+  // Sonuç, canlı bir koşuda ölçüldü: ön denetim "temiz" dedi, merge
+  // "Your local changes would be overwritten" diye düştü ve operatöre
+  // çıplak git hatası gitti.
+  //
+  // Çare, yok saymayı kaldırmak değil (o kirliliği gerçekten ajanın işi
+  // saymak olurdu) — kehaneti düzeltmek: yok sayılan bir yol hedefte
+  // izleniyorsa, bunu ÖNCEDEN ve yapılacak işle birlikte söylemek.
+  // tick.ts rolün kendi ağacı için aynı denetimi zaten yapıyor; eksik
+  // olan, HEDEF ağacın hiç sorulmamasıydı.
+  for (const yol of yoksay) {
+    if (yol === "" || yol.endsWith("/")) continue;
+    if (!(await isTracked(opts.toDir, yol))) continue;
+    const kirli = await git(opts.toDir, ["status", "--porcelain", "--", yol]);
+    if (kirli.out === "") continue;
+    return {
+      kind: "blocked",
+      reason: `hedef ağaçta \`${yol}\` git tarafından İZLENİYOR ve değişmiş: ` +
+        `orkestratörün kontrol dosyası ürünün geçmişinde duramaz, merge'ü de durduruyor.\n` +
+        `  Düzeltmek için (${opts.toDir}): ` +
+        `git rm --cached ${yol} && git commit -m "orkestratör izini kaldır"`,
     };
   }
 

@@ -139,6 +139,43 @@ describe("mergeForward", () => {
 
     expect(result.kind).toBe("merged");
   });
+
+  // CANLI KOŞUDA ÖLÇÜLEN KUSUR. `ignoreDirty` doğru bir karar ama yanlış
+  // bir KEHANET: orkestratörün kontrol dosyası ajanın işi değil, o yüzden
+  // kirlilik sayılmıyor — git ise o yolu İZLİYORSA yerel değişikliği
+  // merge'ün önüne koyuyor. Ön denetim "temiz" dedi, merge "Your local
+  // changes would be overwritten" diye düştü, operatöre çıplak git hatası
+  // gitti.
+  it("hedefte İZLENEN ve değişmiş verdikt dosyasını çaresiyle bildirir", async () => {
+    await commit(review, ".skein-verdict.json", '{"decision":"accept"}\n', "izlenen verdikt");
+    await commit(main, "retry.ts", "a\n", "retry");
+    await writeFile(join(review, ".skein-verdict.json"), '{"decision":"reject"}');
+
+    const result = await mergeForward({
+      fromDir: main, toDir: review, message: "x", ignoreDirty: ORCHESTRATOR_PATHS,
+    });
+
+    expect(result.kind).toBe("blocked");
+    const reason = result.kind === "blocked" ? result.reason : "";
+    expect(reason).toMatch(/İZLENİYOR/);
+    // Teşhis tek başına yetmez: yapılacak iş de yazılı olmalı. tick.ts
+    // rolün kendi ağacı için aynı çareyi zaten basıyor.
+    expect(reason).toMatch(/git rm --cached \.skein-verdict\.json/);
+  });
+
+  // İzlenen ama DEĞİŞMEMİŞ dosya merge'ü durdurmuyor, o yüzden iş de
+  // durdurulmuyor. Gizli bir kusur, ama henüz ısırmayan bir kusur için
+  // akışı kesmek "her turu insana çıkaran kapı" olurdu.
+  it("izlenen ama değişmemiş kontrol dosyası birleştirmeyi engellemez", async () => {
+    await commit(review, ".skein-verdict.json", '{"decision":"accept"}\n', "izlenen verdikt");
+    await commit(main, "retry.ts", "a\n", "retry");
+
+    const result = await mergeForward({
+      fromDir: main, toDir: review, message: "x", ignoreDirty: ORCHESTRATOR_PATHS,
+    });
+
+    expect(result.kind).toBe("merged");
+  });
 });
 
 async function readFileText(path: string): Promise<string> {
