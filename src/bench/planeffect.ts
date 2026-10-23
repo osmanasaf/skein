@@ -267,8 +267,26 @@ function side(runs: ArmRun[]): ArmSide | null {
  */
 function obligationStats(runs: ArmRun[]): ObligationStats {
   const records = runs.flatMap((r) => r.obligations);
-  const met = records.filter((o) => o.durum === "karsilandi").length;
-  const unmet = records.filter((o) => o.durum === "karsilanmadi").length;
+
+  // SAYILAR madde başına, kayıt listesi ise ham geçmiş.
+  //
+  // Ham sayım bu kodun yazıldığı sırada doğruydu: `karsilanmadi` gören dal
+  // escalate edip dönüyordu, yani bir maddeye ait en çok bir olay vardı.
+  // O dal sonradan düzeltildi (günlük artık kapıdan ÖNCE yazılıyor, çünkü
+  // en bilgilendirici hâl tam olarak kaydedilmeyen hâldi) ve bu, sayımın
+  // varsayımını kırdı: kapıya çıkan tur `retry` ile baştan koştuğunda aynı
+  // `(runId, id)` için İKİNCİ bir olay düşüyor.
+  //
+  // Sonucu bir etiket yalanı olurdu: rapor "N madde" diyip olay sayısını
+  // basardı ve bir maddeyi iki kez sayardı. Son karar maddenin durumudur;
+  // önceki karar geçmiştir. O yüzden sayılar `(runId, id)` başına SON
+  // kayıttan okunuyor, `records` ise geçmişi olduğu gibi taşıyor — teşhis
+  // değeri tam orada: bir maddenin karşılanmadıdan karşılandıya geçişi.
+  const son = new Map<string, ObligationRecord>();
+  for (const o of records) son.set(`${o.runId}\u0000${o.id}`, o);
+  const guncel = [...son.values()];
+  const met = guncel.filter((o) => o.durum === "karsilandi").length;
+  const unmet = guncel.filter((o) => o.durum === "karsilanmadi").length;
   return { total: met + unmet, met, unmet, records };
 }
 

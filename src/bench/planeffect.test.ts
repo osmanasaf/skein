@@ -98,6 +98,49 @@ describe("armRuns", () => {
   });
 });
 
+// İNCELEME BULGUSU. Ham olay sayımı, kodun yazıldığı sırada doğruydu:
+// `karsilanmadi` gören dal escalate edip dönüyordu, bir maddeye en çok bir
+// olay düşüyordu. O dal sonradan düzeltildi (günlük kapıdan ÖNCE yazılıyor)
+// ve `retry` ile baştan koşan tur aynı maddeye ikinci bir olay yazıyor.
+// Rapor "N madde" diyip olay sayardı — bir etiket yalanı.
+describe("obligationStats — madde başına son karar", () => {
+  const olay = (runId: string, id: string, durum: string): SkeinEvent =>
+    ev({ type: "plan.obligation", card: "k", role: "reviewer", id, objector: "analyst", durum }, runId);
+
+  it("aynı maddeye iki karar düşerse maddeyi bir sayar", () => {
+    const r = planEffect([
+      ...[1, 2, 3].flatMap((k) => kosu(`p${k}`, "g", "planli", {
+        red: 0, planning: { objections: 1, accepted: 1, invalid: 0 },
+      })),
+      ...[1, 2, 3].flatMap((k) => kosu(`s${k}`, "g", "plansiz", { red: 4 })),
+      // `p1` koşusu kapıya çıktı, `retry` ile baştan koştu: ikinci karar.
+      olay("p1", "analyst#1", "karsilanmadi"),
+      olay("p1", "analyst#1", "karsilandi"),
+    ]);
+    const o = r.groups[0]?.obligations;
+    expect(o?.total).toBe(1);
+    expect(o?.met).toBe(1);
+    expect(o?.unmet).toBe(0);
+    // Geçmiş KAYBOLMUYOR: teşhis değeri tam olarak bu geçişte.
+    expect(o?.records).toHaveLength(2);
+  });
+
+  it("ayrı koşuların aynı kimlikli maddeleri ayrı sayılır", () => {
+    const r = planEffect([
+      ...[1, 2, 3].flatMap((k) => kosu(`p${k}`, "g", "planli", {
+        red: 0, planning: { objections: 1, accepted: 1, invalid: 0 },
+      })),
+      ...[1, 2, 3].flatMap((k) => kosu(`s${k}`, "g", "plansiz", { red: 4 })),
+      olay("p1", "analyst#1", "karsilandi"),
+      olay("p2", "analyst#1", "karsilanmadi"),
+    ]);
+    const o = r.groups[0]?.obligations;
+    expect(o?.total).toBe(2);
+    expect(o?.met).toBe(1);
+    expect(o?.unmet).toBe(1);
+  });
+});
+
 describe("planEffect", () => {
   it("eşiğin üstünde ve tutarlı azalma olumlu karardır", () => {
     const r = planEffect(ucTekrar(1));
