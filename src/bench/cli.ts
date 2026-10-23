@@ -518,6 +518,16 @@ function printPlanEffect(r: PlanEffectReport): void {
         `(${pct(c.withoutObjection / c.exchanges)}) · ${c.objections} itiraz, ${c.accepted} kabul` +
         (c.invalid > 0 ? `, ${c.invalid} sayılmadı` : ""));
     }
+    // Yükümlülük: çapraz denetimin madde başına sonucu. Sıfırsa basılmaz —
+    // ceremony/hooks bloklarıyla aynı kural: olmayan bir şeye başlık basmak
+    // onu varmış gibi okutur.
+    const o = g.obligations;
+    if (o.total > 0) {
+      console.log(`  yükümlülük: ${o.total} madde · ${o.met} karşılandı · ${o.unmet} karşılanmadı`);
+      for (const rec of o.records) {
+        console.log(`    [${rec.runId}] ${rec.id} — itirazcı ${rec.objector} → denetçi ${rec.auditor}: ${rec.durum}`);
+      }
+    }
     // Kanca KİMLİĞİ: sayının göremediği kusur kayması. `yalnizPlanli` boş
     // değilse, "daha az kusur" ile "daha iyi ürün" aynı şey değil.
     const h = g.hooks;
