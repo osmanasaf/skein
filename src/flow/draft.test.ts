@@ -195,6 +195,61 @@ describe("fromFlow — gidiş dönüş", () => {
   });
 });
 
+// EKRANDAN VERİ KAYBI. `toYaml` belgeyi sıfırdan kuruyor ve `planlama`
+// bloğunu hiç modellemiyor; `plan4.yaml`'i ekrandan düzenlemek o bloğu —
+// `denetci` dahil — sessizce siliyordu. Blok isteğe bağlı olduğu için akış
+// hâlâ geçerli doğruluyordu, yani kayıp hiçbir yere yazılmıyordu.
+describe("ekranın modellemediği bloklar korunuyor", () => {
+  const PLANLAMA = `
+planlama:
+  katilimcilar: [coder]
+  plan: docs/plan/{kart}.md
+  denetci: reviewer
+`;
+
+  it("planlama bloğu düzenlemeden sonra dosyada DURUYOR", async () => {
+    await writeFile(path, `${toYaml(taslak())}${PLANLAMA}`);
+
+    const yeni = taslak();
+    yeni.description = "ekrandan düzenlendi";
+    const sonuc = await writeDraft(path, yeni, opts);
+
+    expect(sonuc.ok).toBe(true);
+    const yazilan = await readFile(path, "utf8");
+    expect(yazilan).toContain("planlama:");
+    expect(yazilan).toContain("denetci: reviewer");
+    expect(yazilan).toContain("ekrandan düzenlendi");
+    // Yüklenen akış da bloğu taşımalı: metinde durup çözülmemesi yetmez.
+    const flow = await loadFlow(path, opts);
+    expect(flow.plan?.denetci).toBe("reviewer");
+  });
+
+  // Yan fayda: blok korunduğu için kurallar artık KONUŞUYOR. Düşürüldüğünde
+  // hiç konuşmuyordu — kullanıcı planlama katılımcısını silip geçerli bir
+  // akış elde ediyordu.
+  it("rolleri planlamayla çelişecek şekilde değiştirmek artık hata veriyor", async () => {
+    await writeFile(path, `${toYaml(taslak())}${PLANLAMA}`);
+
+    const yeni = taslak();
+    // Rol adı değişiyor ve ONA BAĞLI her kenar da düzeltiliyor: amaç
+    // yalnızca planlama bloğunu çelişkide bırakmak, başka kuralı değil.
+    (yeni.roles[0] as { id: string }).id = "yazar";
+    (yeni.roles[1] as { reject?: string }).reject = "yazar";
+    (yeni.roles[1] as { syncBack?: string[] }).syncBack = ["yazar"];
+    const sonuc = await checkDraft(path, yeni, opts);
+
+    expect(sonuc.ok).toBe(false);
+    expect(sonuc.ok === false && sonuc.message).toMatch(/kural 17/);
+  });
+
+  it("planlama bloğu olmayan akışta hiçbir şey eklenmiyor", async () => {
+    await writeFile(path, toYaml(taslak()));
+    const sonuc = await writeDraft(path, taslak(), opts);
+    expect(sonuc.ok).toBe(true);
+    expect(await readFile(path, "utf8")).not.toContain("planlama");
+  });
+});
+
 describe("writeDraft", () => {
   it("geçerli taslağı yazar", async () => {
     const yeni = taslak();

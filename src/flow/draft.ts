@@ -1,6 +1,6 @@
-import { rename, writeFile } from "node:fs/promises";
+import { readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, relative, sep } from "node:path";
-import { stringify } from "yaml";
+import { parse, stringify } from "yaml";
 import { estimateCost, type CostEstimate } from "./cost.js";
 import { loadFlow, type Flow, type LoadOptions } from "./load.js";
 
@@ -84,7 +84,46 @@ export type DraftCheck =
  * dosyasını okunmaz yapardı ve `reject: coder` gibi satırların "bu kasıtlı"
  * anlamını sulandırırdı.
  */
-export function toYaml(draft: FlowDraft): string {
+/**
+ * Ekranın MODELLEMEDİĞİ ama dosyada duran bloklar.
+ *
+ * `planlama` buraya düşüyor. Ekranın akış düzenleyicisi planlama bloğunu
+ * tanımıyor ve `toYaml` belgeyi SIFIRDAN kuruyordu: `plan4.yaml`'i
+ * ekrandan düzenlemek, planlama bloğunu — `denetci` dahil — sessizce
+ * siliyordu. Blok isteğe bağlı olduğu için akış hâlâ geçerli doğruluyordu,
+ * yani kayıp hiçbir yere yazılmıyordu.
+ *
+ * Çare bloğu modellemek değil (o, ekranda alan açmak demek) — dosyada
+ * bulduğunu AYNEN taşımak. Yan faydası: kullanıcı rolleri planlama
+ * bloğuyla çelişecek şekilde değiştirirse kural 17/19/23 artık konuşuyor;
+ * blok düşürüldüğünde hiç konuşmuyordu.
+ */
+const KORUNAN_BLOKLAR = ["planlama"] as const;
+
+async function korunanlar(path: string): Promise<Record<string, unknown>> {
+  const out: Record<string, unknown> = {};
+  let text: string;
+  try {
+    text = await readFile(path, "utf8");
+  } catch {
+    return out;
+  }
+  let doc: unknown;
+  try {
+    doc = parse(text);
+  } catch {
+    // Bozuk bir dosyadan blok taşımak, bozukluğu yeni dosyaya taşımak olur.
+    return out;
+  }
+  if (doc === null || typeof doc !== "object" || Array.isArray(doc)) return out;
+  for (const ad of KORUNAN_BLOKLAR) {
+    const deger = (doc as Record<string, unknown>)[ad];
+    if (deger !== undefined && deger !== null) out[ad] = deger;
+  }
+  return out;
+}
+
+export function toYaml(draft: FlowDraft, korunan: Record<string, unknown> = {}): string {
   const doc: Record<string, unknown> = { name: draft.name };
   if (draft.description !== undefined && draft.description.trim() !== "") {
     doc["description"] = draft.description;
@@ -106,6 +145,9 @@ export function toYaml(draft: FlowDraft): string {
   if (draft.gates !== undefined && draft.gates.length > 0) doc["gates"] = draft.gates;
   if (draft.reject !== undefined) doc["reject"] = draft.reject;
   if (draft.audit !== undefined) doc["audit"] = draft.audit;
+  // Ekranın modellemediği bloklar dosyadan aynen geçiyor; taslağın kendi
+  // alanları onları EZMİYOR, çünkü taslak o blokları hiç taşımıyor.
+  for (const [ad, deger] of Object.entries(korunan)) doc[ad] = deger;
 
   return `${stringify(doc, { lineWidth: 0 })}`;
 }
@@ -122,7 +164,7 @@ export async function checkDraft(
   draft: FlowDraft,
   options: LoadOptions,
 ): Promise<DraftCheck> {
-  const yaml = toYaml(draft);
+  const yaml = toYaml(draft, await korunanlar(path));
   try {
     const flow = await loadFlow(path, { ...options, text: yaml });
     return { ok: true, yaml, hash: flow.hash, cost: estimateCost(flow) };
