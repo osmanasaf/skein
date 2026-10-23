@@ -1,0 +1,121 @@
+# Örnek akış — ÇAPRAZ SATICI PLANLAMA (PLANLAMA.md'nin açık sorusu).
+#
+# `plan3.yaml` ile tek farkı: itirazcılardan biri `codex`. Ama fark o kadar
+# küçük değil, çünkü ölçtüğü şey başka.
+#
+# NE ÖLÇER
+#
+# Projenin tezi "farklı satıcıların modelleri farklı kör noktalara sahip".
+# Denetim tarafında bu tez ÖLÇÜLDÜ ve cevap alınamadı: `kalibre2x2` üç
+# hücrede üç kez "aynı-satıcı denetim hiçbir şey kaçırmadı" dedi, yani
+# çeşitliliğin iyileştireceği bir kaçırma yoktu (bkz. `bench/DESIGN.md`).
+#
+# Planlama tarafı AYRI bir soru ve hiç veri yok. Belki daha umutlu: plan
+# prozası, kodun aksine, iki modelin farklı okuduğu bir yüzey — kod ya
+# derlenir ya derlenmez, plan ise yorumlanır.
+#
+# NİYE İKİ İTİRAZCI, BİRİ HER SATICIDAN
+#
+# Tek codex itirazcısıyla öğrenilen şey "codex itiraz etti" olur; bu bir
+# karşılaştırma değil. Aynı plana aynı turda `claude` ve `codex` birden
+# itiraz ederse soru ölçülebilir hâle gelir: iki model AYNI maddeleri mi
+# gösteriyor, yoksa ayrı mı? Ayrı gösteriyorsa çeşitlilik planlama
+# yüzeyinde bir şey katıyor demektir.
+#
+# Bu, bench'in 2x2 kurgusunun planlama tarafındaki karşılığı: aynı
+# artefakt, iki denetçi, biri aynı satıcı biri çapraz.
+#
+# KÖRLEME BURADA ZORUNLU
+#
+# `ilk-tur-kor: true` bu akışta atıl değil, ölçümün ta kendisi. Körleme
+# kapalıysa ikinci itirazcı birincinin dosyasını okur ve "aynı şeyi
+# gördüler mi" sorusu sorulamaz hâle gelir — ikincisi birinciyi onaylamış
+# da olabilir. Körlü turda her itirazcı YAZARIN ağacından dallanır, yani
+# ötekinin itiraz dosyası onun ağacında hiç yoktur.
+#
+# YÜKÜMLÜLÜK KAPISI AÇIK
+#
+# `denetci: reviewer`. Kabul edilen itiraz karta yükümlülük olarak düşüyor
+# ve `reviewer` her maddeye tek tek verdikt vermek zorunda. Ölçüm değeri
+# şu: itiraz hangi satıcıdan geldiyse `plan.obligation` olayının
+# `objector` alanı onu söylüyor, yani "çapraz itiraz karşılandı mı" ayrı
+# sayılabiliyor.
+#
+# NEREDE KOŞULUR
+#
+# Codex'in ağ erişimi gerekiyor ve Claude Code'un uzak çalışma ortamında
+# vekil `api.openai.com` CONNECT'ini 403 ile kesiyor. Bu akış OPERATÖRÜN
+# KENDİ MAKİNESİNDE koşulmalı. Önce `npm run doctor -- codex:gpt-5.5`.
+#
+# Model pini koşarken veriliyor, akış dosyasında değil:
+#   npx tsx src/watch/cli.ts plan-capraz \
+#     --model claude:claude-sonnet-5 --model codex:gpt-5.5
+
+name: plan-capraz
+description: Claude planı yazar; Claude ve Codex aynı turda körlemeyle itiraz eder.
+
+constitution:
+  - ../prompts/constitution/base.md
+  - ../prompts/constitution/engineering-ts.md
+
+roles:
+  - id: planner
+    provider: claude
+    workspace: main
+    prompt: ../prompts/roles/planner.md
+    receive: task
+    next: architect
+
+  # AYNI satıcı itirazcısı — karşılaştırmanın kontrol tarafı.
+  - id: architect
+    provider: claude
+    workspace: architect
+    prompt: ../prompts/roles/plan-itiraz.md
+    receive: task
+    next: analyst
+
+  # ÇAPRAZ satıcı itirazcısı. Rol promptu ve itiraz biçimi aynı; değişen
+  # tek şey sağlayıcı, çünkü ölçülen şey sağlayıcı farkı.
+  - id: analyst
+    provider: codex
+    workspace: analyst
+    prompt: ../prompts/roles/plan-itiraz.md
+    receive: task
+    next: coder
+
+  - id: coder
+    provider: claude
+    workspace: coder
+    prompt: ../prompts/roles/coder.md
+    receive: task
+    reject: planner
+    next: reviewer
+
+  - id: reviewer
+    provider: claude
+    workspace: reviewer
+    prompt: ../prompts/roles/reviewer.md
+    receive: batch
+    syncBack: [coder]
+    reject: coder
+    next: done
+
+planlama:
+  katilimcilar: [planner, architect, analyst]  # ilki yazar, ötekiler itiraz eder
+  tur: 2                                       # tavan; doğal son daha erken gelebilir
+  ilk-tur-kor: true                            # ÖLÇÜMÜN KENDİSİ, atıl değil
+  plan: docs/plan/{kart}.md
+  denetci: reviewer                            # kabul edilen itirazı denetleyen rol
+
+reject:
+  limit: 2
+  onExhausted: gate
+
+audit:
+  enabled: false
+
+# Maliyet, en kötü hâl: 2 tur × (2 itirazcı + 1 yanıt) + plan yazma = 7
+# planlama aktivasyonu, üstüne coder + reviewer = 9. `plan4`'ün duman
+# testi 8 aktivasyonda $6.07 tuttu (sonnet, bu depo bağlamıyla), yani
+# bu akış $6-8 bandında beklenir. Codex tarafı abonelikle koşuyorsa dolar
+# bildirmiyor; ortak birim TOKEN (bkz. bench/DESIGN.md).
