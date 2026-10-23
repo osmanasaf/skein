@@ -29,7 +29,7 @@ projenin en kayda değer bulgusu o.
 | Çapraz satıcı: codex adaptörü uçtan uca | ✅ |
 | Ölçüm gücü ön kontrolleri (`kalibre`, `kalibre2x2`) | ✅ |
 
-805 test yeşil, typecheck temiz, Linux ve Windows'ta koşuyor.
+807 test yeşil, typecheck temiz, Linux ve Windows'ta koşuyor.
 ~13.9k satır ürün + ~10.2k satır test.
 
 ## 2. Ne ölçüldü — ve her ölçüm ne dedi
@@ -55,6 +55,13 @@ Geriye kalan iki cümle ikisi de doğru, ayrı ölçeklerde:
   kazanç gösterilmedi.
 - **Bilimsel iddia olarak açık:** "planlama ürünü daha doğru yapmıyor"
   kanıtlanmadı. Ölçülen şey 4/6 koşuda koşmayan bir mekanizmaydı.
+
+**23 Ekim: kapı gerçek ajanlarla canlı doğrulandı.** `plan4.yaml` baştan
+sona koştu ($6.07, 8 aktivasyon): `analyst` depodan doğrulanmış iki itiraz
+yazdı, `planner` ikisini kabul etti, kabuller karta yazıldı, `coder`
+**listeyi görmeden** üretti, `reviewer` listeyi aldı ve istenen JSON
+biçiminde ikisini de yanıtladı. Günlükte iki `plan.obligation` kaydı var.
+Mekanizma çalışıyor; ürün etkisi hâlâ ölçülmedi.
 
 Kapının arkasında daha derin bir engel var ve o bir istem ayarı değil:
 `snapshot-store` 1. koşusunda iki itiraz da doğru tüketici modülü gösterdi,
@@ -132,6 +139,12 @@ buldurdu:
 - çökmüş üretim "ölçüm gücü en yüksek hücre" gibi görünüyordu
 - iki katmanın arasından gerçek bir bulgu düşüyordu (artık `report` bildiriyor)
 - kuyrukta yarışı kaybeden taraf çöküyordu
+- önceden ilan edilmiş beş metrikten ikisi karara hiç girmiyordu (tören kapısı)
+- `exitCode != 0` dalı yalnızca stderr'e bakıyordu: sağlayıcının
+  kimlik hatası "hata kodu 1" diye göründü
+- `mergeForward` yok saydığı yolu git'in de yok sayacağını varsayıyordu
+- `durum: karsilanmadi` üretimde hiç yazılmıyordu — teşhis yarı kördü
+- itiraz biçiminin sonlandırıcısı yoktu ve gerçek bir itirazı yedi
 
 Ajan hatlarına dair **herhangi bir** iddiayı ölçmek isteyen biri için
 değerli olan kısım bu. Tez kanıtlanmasa da bu makine duruyor.
@@ -171,3 +184,44 @@ teşhis taşıyor: bir dahaki kırılmada kök nedeni kendisi söyleyecek.
 satıcı 2x2 + puanlama + sınıflama ~$2, ön kontroller ~$0.5). Ön kontroller
 bunun karşılığını veriyor: üç hücrede tam matris koşulsaydı ~$3 daha
 giderdi ve hiçbiri sonuç üretmeyecekti.
+
+---
+
+## 5. Bitiş çizgisi — iki ürün, iki ayrı çizgi
+
+"Proje bitti" cümlesi burada iki ayrı şeye bakıyor ve ikisini aynı cümlede
+söylemek dürüst olmaz.
+
+### Orkestratör + ölçüm takımı: BİTTİ sayılabilir
+
+Çalışıyor, iki platformda sınanmış, belgeli, ve kurulduğundan beri
+tekrar tekrar kendi kusurunu buldurdu (yukarıdaki liste). Son teknik borç
+da kapandı: `AdapterRegistry` silindi — üretimde kullanılmayan ikinci
+kurucu yol, üç kez kusur doğurmuştu.
+
+Kalan iki madde küçük ve isteğe bağlı:
+
+- ADK tarafı: rol promptlarını ekrandan düzenlemek (bilerek bekliyor)
+- Windows'ta üretilemeyen kuyruk kırılması — teşhis tuzağı kurulu, bir
+  dahaki kırılmada kök nedeni kendisi söyleyecek
+
+### Tez: BİTMEDİ, ve sebebi efor değil
+
+Üç hücrede üç kez aynı-satıcı denetim hiçbir şey kaçırmadı. Bu, tezin
+yanlış olduğunu göstermiyor — **elimizdeki görev setiyle sorulamayacağını**
+gösteriyor. Kapanması için gereken şey kod değil **içerik**: sözleşmesi ne
+görev metninde ne artefaktın başlığında yazılı olan, yalnızca bir tüketici
+modülün kodundan çıkarılabilen kusur sınıfı. O, açık uçlu bir araştırma
+işi ve bu belgenin kapatabileceği bir şey değil.
+
+Aynısı planlama için de geçerli ama bir adım daha ilerde: mekanizma artık
+bağlayıcı ve canlı doğrulandı, yani dördüncü kampanya **anlamlı bir soru
+soracak** — öncekiler sormuyordu. Bedeli `plan4` şeklinde bir akışla ~$36,
+asgari `ab-planli` şeklinde ~$4.5.
+
+### Dürüst kapanış cümlesi
+
+Skein, **ajan hatlarına dair iddiaları ölçen çalışan bir tezgâh** olarak
+bitti. Kurucu tezini kanıtlamadı ve kanıtlamak için gereken şeyi de
+ölçtü: eksik olan sayı değil, kusur SINIFI. Tezgâhın kendisi o sınıf
+yazıldığı gün hazır bekliyor olacak.

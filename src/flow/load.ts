@@ -16,7 +16,7 @@ export type Receive = "task" | "batch";
 export type GateType = "approval" | "none";
 
 /**
- * Rule 8'in ihtiyaç duyduğu yüzey. `AdapterRegistry` bunu karşılar; test ve
+ * Rule 8'in ihtiyaç duyduğu yüzey. `knownProviderSet` bunu karşılar; test ve
  * `flow check` gibi kullanımlar adaptör örneklemeden doğrulama yapabilsin
  * diye arayüz olarak duruyor.
  */

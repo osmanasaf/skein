@@ -7,7 +7,7 @@ yapıştırılabilsin diye yazıldı: aşağısı Skein'i tanımayan birine de y
 **Dal:** `claude/project-plan-brainstorm-pthvoc` — `claude/project-thread-sc56cs`
 ileri sarılıp üstüne devam edildi, yani iki dalın işi bu dalda birleşti.
 `sc56cs` olduğu yerde duruyor; yeni iş burada.
-**Durum:** 805 test yeşil, iki platformda da; kuyruk sahiplenmesinde üretilemeyen bir kırılma AÇIK, typecheck temiz, ağaç temiz.
+**Durum:** 807 test yeşil, iki platformda da; kuyruk sahiplenmesinde üretilemeyen bir kırılma AÇIK, typecheck temiz, ağaç temiz.
 **Durum raporu:** `DURUM.md` — ne inşa edildi, ne ölçüldü, bugün ne kullanılabilir.
 `watch selftest` bu konteynerde **koşmuyor**: `hub/flows/selftest.yaml`
 depoda izlenmiyor (yalnızca yazarın makinesinde duruyordu, konteyner
