@@ -91,6 +91,36 @@ export interface HookSets {
   herKosudaPlanli: string[];
 }
 
+/**
+ * Çapraz denetimin tek bir kabul edilmiş itiraz üzerindeki sonucu.
+ *
+ * `auditor` `plan.obligation` olayının `role` alanından geliyor (denetleyen
+ * rol); isim burada `auditor` çünkü dosyada `role` başka bağlamlarda
+ * üretici/model kurgusu rolünü de karşılıyor ve rapor katmanında
+ * karıştırılmamalı.
+ *
+ * `runId`, aynı görev×model grubunda `k>1` tekrar varsa, aynı `id`'yi
+ * taşıyan birden fazla kaydı ayırt eder — olmasa HANGİ koşunun maddeyi
+ * karşıladığı/karşılamadığı grup toplamında kaybolur.
+ */
+export interface ObligationRecord {
+  runId: string;
+  /** `rol#no` — kabul edilmiş itirazın kimliği. */
+  id: string;
+  /** İtirazı yazan rol. */
+  objector: string;
+  /** Denetleyen rol. */
+  auditor: string;
+  durum: "karsilandi" | "karsilanmadi";
+}
+
+export interface ObligationStats {
+  total: number;
+  met: number;
+  unmet: number;
+  records: ObligationRecord[];
+}
+
 export interface PlanGroup {
   taskId: string;
   /** Üretici model kurgusu; grubun anahtarının öteki yarısı. */
@@ -106,6 +136,8 @@ export interface PlanGroup {
   ceremony: Ceremony;
   /** Kanca kimlikleri; sayının göremediği kusur kayması buradan okunuyor. */
   hooks: HookSets;
+  /** Çapraz denetimin madde başına sonuçları: kaç karşılandı, kaç karşılanmadı. */
+  obligations: ObligationStats;
   verdict: { code: VerdictCode; reason: string };
 }
 
@@ -128,6 +160,7 @@ interface ArmRun {
   costUsd: number;
   rejects: number;
   planning?: { rounds: number; objections: number; accepted: number; invalid: number };
+  obligations: ObligationRecord[];
 }
 
 /** Günlükten kol koşularını çıkarır; kol bilgisi `ab.arm` olayından gelir. */
@@ -147,6 +180,7 @@ export function armRuns(events: SkeinEvent[]): ArmRun[] {
     out.set(runId, {
       runId, taskId: meta.taskId, model: meta.model, arm: meta.arm,
       ran: false, hooks: 0, red: 0, redNames: [], activations: 0, costUsd: 0, rejects: 0,
+      obligations: [],
     });
   }
 
@@ -162,6 +196,11 @@ export function armRuns(events: SkeinEvent[]): ArmRun[] {
       run.planning = {
         rounds: e.rounds, objections: e.objections, accepted: e.accepted, invalid: e.invalid,
       };
+    }
+    if (e.type === "plan.obligation") {
+      run.obligations.push({
+        runId: e.runId, id: e.id, objector: e.objector, auditor: e.role, durum: e.durum,
+      });
     }
     // Ölçüm kaydı SON yazılan olay; koşuda birden fazlaysa son geçerli.
     if (e.type === "hooks.measured") {
@@ -219,6 +258,18 @@ function side(runs: ArmRun[]): ArmSide | null {
     rejects: runs.reduce((s, r) => s + r.rejects, 0),
     unmeasured: runs.length - olculen.length,
   };
+}
+
+/**
+ * Çapraz denetimin günlükten toplu okunuşu: tüm koşuların `obligations`
+ * dizileri tek `records` dizisinde birleşir, dedup YOK — dosyadaki diğer
+ * tüm sayımlar (ceremony, hooks) da olay sayısını ham sayıyor.
+ */
+function obligationStats(runs: ArmRun[]): ObligationStats {
+  const records = runs.flatMap((r) => r.obligations);
+  const met = records.filter((o) => o.durum === "karsilandi").length;
+  const unmet = records.filter((o) => o.durum === "karsilanmadi").length;
+  return { total: met + unmet, met, unmet, records };
 }
 
 function reduction(plansiz: ArmSide | null, planli: ArmSide | null): number | null {
@@ -282,6 +333,7 @@ export function planEffect(events: SkeinEvent[]): PlanEffectReport {
     return {
       taskId, model, planli, plansiz, relativeReduction, perRun, repeats, ceremony,
       hooks: hookSets(plansizRuns, planliRuns),
+      obligations: obligationStats(planliRuns),
       verdict: decide(relativeReduction, repeats, perRun, plansiz, planli, ceremony),
     };
   });

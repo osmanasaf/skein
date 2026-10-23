@@ -16,6 +16,7 @@ interface KosuSpec {
   activations?: number;
   rejects?: number;
   planning?: { objections: number; accepted: number; invalid: number };
+  obligations?: { id: string; objector: string; auditor?: string; durum: "karsilandi" | "karsilanmadi" }[];
 }
 
 /** Bir kol koşusunun günlüğü. */
@@ -35,6 +36,12 @@ function kosu(runId: string, taskId: string, arm: "planli" | "plansiz", s: KosuS
       type: "plan.settled", card: "k", role: "planner", outcome: "anlasma", rounds: 1,
       objections: s.planning.objections, accepted: s.planning.accepted, invalid: s.planning.invalid,
       path: "docs/plan/k.md", planHash: "h",
+    }, runId));
+  }
+  for (const o of s.obligations ?? []) {
+    out.push(ev({
+      type: "plan.obligation", card: "k", role: o.auditor ?? "denetci",
+      id: o.id, objector: o.objector, durum: o.durum,
     }, runId));
   }
   out.push(ev({
@@ -71,6 +78,23 @@ describe("armRuns", () => {
     const runs = armRuns(kosu("r1", "g", "planli", { red: 1 }));
     expect(runs[0]?.arm).toBe("planli");
     expect(runs[0]?.planning).toBeUndefined();
+  });
+
+  // Birden çok `plan.obligation` olayı aynı sırayla birikmeli ve her kayıt
+  // kendi koşusunun `runId`'sini taşımalı — bu bilgi grup toplamında
+  // HANGİ koşunun maddeyi karşıladığını/karşılamadığını yerelleştirir.
+  it("birden çok yükümlülük olayını sırayla biriktirir, her biri kendi runId'sini taşır", () => {
+    const runs = armRuns(kosu("r1", "g", "planli", {
+      red: 1,
+      obligations: [
+        { id: "analyst#1", objector: "analyst", auditor: "reviewer", durum: "karsilandi" },
+        { id: "analyst#2", objector: "analyst", auditor: "reviewer", durum: "karsilanmadi" },
+      ],
+    }));
+    expect(runs[0]?.obligations).toEqual([
+      { runId: "r1", id: "analyst#1", objector: "analyst", auditor: "reviewer", durum: "karsilandi" },
+      { runId: "r1", id: "analyst#2", objector: "analyst", auditor: "reviewer", durum: "karsilanmadi" },
+    ]);
   });
 });
 
@@ -356,5 +380,83 @@ describe("planEffect — kanca KİMLİĞİ, sayı değil", () => {
     const h = tekGrup(r).hooks;
     expect(h.herKosudaPlanli).toEqual([]);
     expect(h.planli).toEqual([]);
+  });
+});
+
+// `plan.obligation` olayı çapraz denetimin madde başına sonucunu taşıyor
+// ama `planEffect()` bunu okumuyordu — bu kart raporun bu olayı da
+// `ab.arm`/`hooks.measured` gibi aynı görev×model grubu altında toplamasını
+// sağlıyor.
+describe("planEffect — yükümlülük sonuçları", () => {
+  it("iki planlı koşudaki yükümlülükleri grup toplamında birleştirir", () => {
+    const r = planEffect([
+      ...kosu("p1", "g", "planli", {
+        red: 1,
+        obligations: [{ id: "analyst#1", objector: "analyst", durum: "karsilandi" }],
+      }),
+      ...kosu("p2", "g", "planli", {
+        red: 1,
+        obligations: [
+          { id: "analyst#1", objector: "analyst", durum: "karsilandi" },
+          { id: "architect#1", objector: "architect", durum: "karsilanmadi" },
+        ],
+      }),
+      ...kosu("s1", "g", "plansiz", { red: 4 }),
+    ]);
+    expect(tekGrup(r).obligations).toEqual({
+      total: 3,
+      met: 2,
+      unmet: 1,
+      records: [
+        { runId: "p1", id: "analyst#1", objector: "analyst", auditor: "denetci", durum: "karsilandi" },
+        { runId: "p2", id: "analyst#1", objector: "analyst", auditor: "denetci", durum: "karsilandi" },
+        { runId: "p2", id: "architect#1", objector: "architect", auditor: "denetci", durum: "karsilanmadi" },
+      ],
+    });
+  });
+
+  it("kaydın alanlarını kaynak olaydan ve koşudan değiştirmeden taşır", () => {
+    const r = planEffect([
+      ...kosu("p1", "g", "planli", {
+        red: 1,
+        obligations: [{ id: "reviewer#1", objector: "reviewer", auditor: "verifier", durum: "karsilandi" }],
+      }),
+      ...kosu("s1", "g", "plansiz", { red: 4 }),
+    ]);
+    expect(tekGrup(r).obligations.records).toEqual([
+      { runId: "p1", id: "reviewer#1", objector: "reviewer", auditor: "verifier", durum: "karsilandi" },
+    ]);
+  });
+
+  // Aynı `id` iki farklı koşuda (k=2) üretilip biri karşılandı biri
+  // karşılanmadıysa, iki kayıt `runId` ile ayırt edilebilir kalmalı —
+  // aksi halde "1 karşılandı, 1 karşılanmadı" toplamı HANGİ koşudan
+  // geldiğini söylemez.
+  it("aynı id iki ayrı koşuda farklı sonuçla üretildiğinde runId ile ayırt edilir", () => {
+    const r = planEffect([
+      ...kosu("p1", "g", "planli", {
+        red: 1,
+        obligations: [{ id: "analyst#1", objector: "analyst", durum: "karsilandi" }],
+      }),
+      ...kosu("p2", "g", "planli", {
+        red: 1,
+        obligations: [{ id: "analyst#1", objector: "analyst", durum: "karsilanmadi" }],
+      }),
+      ...kosu("s1", "g", "plansiz", { red: 4 }),
+      ...kosu("s2", "g", "plansiz", { red: 4 }),
+    ]);
+    const kayitlar = tekGrup(r).obligations.records.filter((x) => x.id === "analyst#1");
+    expect(kayitlar).toHaveLength(2);
+    expect(kayitlar.map((x) => x.runId).sort()).toEqual(["p1", "p2"]);
+    expect(kayitlar.find((x) => x.runId === "p1")?.durum).toBe("karsilandi");
+    expect(kayitlar.find((x) => x.runId === "p2")?.durum).toBe("karsilanmadi");
+  });
+
+  it("hiçbir koşuda yükümlülük olayı yoksa sıfır değerlerle döner", () => {
+    const r = planEffect([
+      ...kosu("p1", "g", "planli", { red: 1 }),
+      ...kosu("s1", "g", "plansiz", { red: 4 }),
+    ]);
+    expect(tekGrup(r).obligations).toEqual({ total: 0, met: 0, unmet: 0, records: [] });
   });
 });
