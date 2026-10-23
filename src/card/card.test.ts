@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { knownProviderSet } from "../adapters/factory.js";
 import { loadFlow } from "../flow/load.js";
 import { snapshot, type TopologySnapshot } from "../flow/snapshot.js";
-import { newCard, parseCard, serializeCard, rejectCount, CardError } from "./card.js";
+import { newCard, parseCard, planLines, serializeCard, rejectCount, CardError } from "./card.js";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -51,6 +51,42 @@ describe("newCard", () => {
   it("boş görev metni reddedilir", async () => {
     const topology = await daily();
     expect(() => newCard({ title: "x", task: "   ", topology })).toThrow(CardError);
+  });
+});
+
+// `card show`'ın yükümlülük satırları. Mekanizmanın amacı kabul edilmiş
+// itirazı GÖRÜNÜR kılmak; operatör tarafında da görünmesi gerekiyor.
+describe("planLines", () => {
+  it("plan yoksa hiçbir şey basmaz", async () => {
+    const card = newCard({ title: "x", task: "y", topology: await daily() });
+    expect(planLines(card)).toEqual([]);
+  });
+
+  it("planı ve her yükümlülüğü kanıtıyla basar", async () => {
+    const taban = newCard({ title: "x", task: "y", topology: await daily() });
+    const card = {
+      ...taban,
+      plan: {
+        path: "docs/plan/k.md", hash: "abcdef0123456789".padEnd(64, "0"),
+        kabuller: [
+          { id: "analyst#1", role: "analyst", ne: "kart ayrımı yok", kanit: "`src/bench/planeffect.ts:62`" },
+        ],
+      },
+    };
+    const lines = planLines(card);
+    expect(lines[0]).toContain("docs/plan/k.md");
+    expect(lines[0]).toContain("abcdef012345");
+    expect(lines.join("\n")).toContain("yükümlülük analyst#1: kart ayrımı yok");
+    expect(lines.join("\n")).toContain("src/bench/planeffect.ts:62");
+  });
+
+  // Kabul edilmemiş alışveriş ile kabulsüz plan ayrı şeyler ama ikisi de
+  // yükümlülük satırı basmamalı — olmayan bir şeye başlık basmak onu
+  // varmış gibi okutur.
+  it("kabul yoksa yükümlülük satırı basmaz", async () => {
+    const taban = newCard({ title: "x", task: "y", topology: await daily() });
+    const card = { ...taban, plan: { path: "docs/plan/k.md", hash: "a".repeat(64) } };
+    expect(planLines(card)).toHaveLength(1);
   });
 });
 

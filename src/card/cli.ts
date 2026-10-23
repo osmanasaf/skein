@@ -3,7 +3,7 @@ import { join, resolve } from "node:path";
 import { knownProviderSet } from "../adapters/factory.js";
 import { loadFlow } from "../flow/load.js";
 import { snapshot } from "../flow/snapshot.js";
-import { newCard, type Card } from "./card.js";
+import { newCard, planLines, type Card } from "./card.js";
 import { CardQueue, QueueError, type ReleaseDecision } from "./queue.js";
 import { closeOrphan } from "./orphan.js";
 import { releaseCard } from "./release.js";
@@ -44,6 +44,7 @@ function printCard(card: Card): void {
   if (edges.length > 0) {
     console.log(`  ret:    ${edges.map(([e, n]) => `${e} ×${n}`).join(", ")}`);
   }
+  for (const line of planLines(card)) console.log(line);
   console.log("  geçmiş:");
   for (const entry of card.history) {
     const when = entry.at.slice(11, 19);

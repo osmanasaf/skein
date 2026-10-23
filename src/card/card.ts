@@ -164,6 +164,26 @@ export interface PlanKabul {
   kanit: string;
 }
 
+/**
+ * Kartın taşıdığı planın ve YÜKÜMLÜLÜKLERİN insan okunur satırları.
+ *
+ * `cli.ts`'te değil burada, çünkü o modül kendini koşturuyor ve sınamadan
+ * içe alınamıyor — `bench/cli.ts`'te bir kez ödenen bedelin aynısı.
+ *
+ * Niye var: yükümlülük mekanizmasının amacı kabul edilmiş itirazı GÖRÜNÜR
+ * kılmak. `card show` onu basmıyorsa operatör kartın ne taşıdığını
+ * göremiyor ve mekanizma insan tarafında yarım kalıyor.
+ */
+export function planLines(card: Card): string[] {
+  if (card.plan === undefined) return [];
+  const out = [`  plan:   ${card.plan.path} (${card.plan.hash.slice(0, 12)}…)`];
+  for (const k of card.plan.kabuller ?? []) {
+    out.push(`          yükümlülük ${k.id}: ${k.ne}`);
+    out.push(`            kanıt: ${k.kanit}`);
+  }
+  return out;
+}
+
 export class CardError extends Error {
   constructor(message: string) {
     super(message);
