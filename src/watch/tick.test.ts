@@ -565,6 +565,22 @@ describe("tick — sessiz başarısızlık yasağı", () => {
     expect((result as { reason: string }).reason).toContain("unknown option --foo");
   });
 
+  // Canlı koşuda ölçülen kusur: sağlayıcı CLI'ı 1 ile çıktı, stderr BOŞTU,
+  // sebep stdout'taydı. Operatörün gördüğü tek şey "hata kodu 1 ile bitti"
+  // oldu — teşhis edilemeyen bir arıza. Hatanın hangi akışa yazıldığı
+  // sağlayıcının kararı; ikisine de bakmak o kararı bizim sorunumuz
+  // olmaktan çıkarıyor.
+  it("stderr boşsa sebebi stdout'tan söyler", async () => {
+    await put();
+    claude.answer = async () => ({
+      exitCode: 1, stdout: "Error: Invalid model name: claude-sonnet-5", stderr: "", durationMs: 3,
+    });
+
+    const result = await tick("coder", options);
+    expect(result.status).toBe("escalated");
+    expect((result as { reason: string }).reason).toContain("Invalid model name");
+  });
+
   it("zaman aşımı kartı kapıya çıkarır", async () => {
     await put();
     claude.answer = async () => ({ exitCode: 124, stdout: "", stderr: "", durationMs: 1, timedOut: true });

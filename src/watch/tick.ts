@@ -218,10 +218,19 @@ async function runRole(card: Card, role: SnapshotRole, options: TickOptions): Pr
   const commit = await (options.headCommit ?? head)(workdir);
 
   if (result.exitCode !== 0) {
+    // stderr VE stdout. Bu dal eskiden yalnızca stderr'e bakıyordu ve canlı
+    // bir koşuda tam bu yüzden sessiz kaldı: sağlayıcı CLI'ı 1 ile çıktı,
+    // stderr boştu, operatörün gördüğü tek şey "hata kodu 1 ile bitti"ydi.
+    // Sebep stdout'taydı ve orada duruyordu — `agentSaid` zaten onu okuyor,
+    // ama yalnızca verdikt dallarında çağrılıyordu.
+    //
+    // Hatanın hangi akışa yazıldığı sağlayıcının kararı ve değişebilir;
+    // ikisine de bakmak o kararı bizim sorunumuz olmaktan çıkarıyor.
     const tail = result.stderr.trim().slice(-400);
     const reason =
       `Ajan ${result.timedOut === true ? "zaman aşımına uğradı" : `hata kodu ${result.exitCode} ile bitti`}` +
-      (tail === "" ? "" : `: ${tail}`);
+      (tail === "" ? "" : `: ${tail}`) +
+      agentSaid(result);
     return { status: "escalated", card: await queue.escalate(card, reason), reason };
   }
 
