@@ -47,6 +47,17 @@ describe("renderPage", () => {
   // Kart bir plana bağlıysa detay panelinde yol + sürümün ilk 12 karakteri
   // görünmeli; kısaltma ekranın kendi tüketicisinde yapılır (akış hash'iyle
   // aynı ilke), sunucudan tam hash gelir.
+  // Model `stale`'i hesaplıyordu, sayfa hiç basmıyordu: ekran kartın başka
+  // bir topolojiyle koştuğunu biliyor ve söylemiyordu. Panoda plan4'ün
+  // kartı plan-capraz'ın kolonunda işaretsiz göründü.
+  it("eski damgalı kartı işaretler, yetimi ayrı tutar", () => {
+    const html = renderPage("jeton");
+    expect(html).toContain("eski damga");
+    // Yetim ayrı bir şey: rolü akışta hiç bulunmayan kart, kapatılması
+    // gereken kart. Eski damga meşru.
+    expect(html).toContain("c.stale && !c.orphan");
+  });
+
   it("detay betiği plan varsa yol ve kısaltılmış hash'i çizer", () => {
     const src = betik(renderPage("x"));
     expect(src).toContain("d.card.plan");

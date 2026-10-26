@@ -323,6 +323,23 @@ function kartCiz(c) {
   kutu.append(el("h3", null, c.title));
   kutu.append(el("div", "cid", c.id + " · " + c.role));
 
+  // ESKİ DAMGA. Model "stale"i hesaplıyordu (kartın topoloji hash'i
+  // yaşayan akışın hash'inden farklı) ve sayfa onu HİÇ basmıyordu. Yani
+  // ekran, kartın başka bir topolojiyle koştuğunu biliyor ve söylemiyordu.
+  //
+  // Görünür olması gerekiyor çünkü kart, rol ADLARI çakıştığı sürece
+  // yaşayan akışın kolonlarında duruyor: panoda plan4'ün kartı
+  // plan-capraz'ın kolonunda hiçbir işaret olmadan göründü.
+  //
+  // Yetim DEĞİL: yetim, rolü akışta hiç bulunmayan kart ve kapatılması
+  // gerekiyor. Eski damga meşru — kart kendi topolojisiyle yürümeye devam
+  // ediyor, yalnızca o topoloji artık dosyada yazan değil.
+  if (c.stale && !c.orphan) {
+    const d = el("div", "cid", "eski damga — kart kendi topolojisiyle yürüyor");
+    d.style.color = "var(--ink-2)";
+    kutu.append(d);
+  }
+
   if (c.gateReason) kutu.append(el("div", "reason", c.gateReason));
   else if (c.lastReject && c.state !== "done") {
     const r = el("div", "reason", c.lastReject);
