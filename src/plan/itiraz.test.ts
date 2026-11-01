@@ -18,6 +18,116 @@ const varMi = (yol: string): boolean => yol === "src/selector.ts";
 // bir bölüm açtı. Başlık alan saymadığı için bütün bölüm `Durum` değerinin
 // içine aktı ve itiraz ELENDİ — elenen şey gerçek bir kusurun doğru
 // teşhisiydi. Biçimin sonlandırıcısı yoktu.
+/**
+ * BİÇİM TOLERANSI — ölçülmüş kusurlardan sonra.
+ *
+ * Biçim bu projede DÖRT kez gerçek bir itirazı yedi: kanıtta yol
+ * göstermemek, kanıtın kendi belgesini göstermesi, sonlandırıcı eksikliği,
+ * ve buradaki üç yazım. Biçim pazarlık konusu değil ama biçimin TUZAKLARI
+ * ölçümün kendi kusuru.
+ *
+ * Gevşetmenin sınırı da sınanıyor: `kabul edilemez` HÂLÂ elenmeli, yoksa
+ * ters yönde bir kusur üretmiş olurduk.
+ */
+describe("biçim toleransı", () => {
+  const govde = (durum: string, baslik = "## İtiraz 1 — architect", alan = "**Ne:** ") => `${baslik}
+${alan}Sürüm geriye düşüyor.
+**Neden:** Tüketici önbelleği bozulur.
+**Neyi yanlışlar:** \`src/a.ts:1\` — orada.
+**Durum:** ${durum}
+`;
+  const coz = (metin: string) => parseItirazlar(metin, { varMi: () => true });
+
+  // `**Durum:** kabul.` geçersiz sayılıyordu ve bedeli kaskad: kabul
+  // sayımdan düşüyor, "kabul etti ama planı değiştirmedi" kapısı
+  // ateşlenmiyor, tur "anlaşma" sayılıyor, yükümlülükler karta yazılmıyor.
+  it.each(["kabul", "kabul.", "kabul: tamam", "kabul (plan güncellendi)", "kabul — tamam"])(
+    "kabul kuyruğu okunur: %s",
+    (durum) => {
+      const d = coz(govde(durum));
+      expect(d.gecerli).toHaveLength(1);
+      expect(d.kabul).toHaveLength(1);
+    },
+  );
+
+  it.each(["açık", "açık.", "Açık", "açık — not"])("açık kuyruğu okunur: %s", (durum) => {
+    expect(coz(govde(durum)).acik).toHaveLength(1);
+  });
+
+  // GEVŞETMENİN SINIRI. Ayraç zorunluluğu `kabul edilemez`i elemek için
+  // vardı ve o gerekçe duruyor: harfle başlayan kuyruk belirsizdir.
+  it.each(["kabul edilemez", "açıkça yanlış", "retrospektif", "insanlar"])(
+    "harfle devam eden kuyruk hâlâ elenir: %s",
+    (durum) => {
+      const d = coz(govde(durum));
+      expect(d.gecerli).toHaveLength(0);
+      expect(d.itirazlar[0]?.gecersiz).toMatch(/Durum/);
+    },
+  );
+
+  it.each([
+    "## İtiraz 1 — architect",
+    "## İtiraz 1",
+    "## İtiraz 1: architect",
+    "### İtiraz 1 — architect",
+    "## İtiraz 1 architect",
+  ])("başlık yazımı okunur: %s", (baslik) => {
+    expect(coz(govde("açık", baslik)).gecerli).toHaveLength(1);
+  });
+
+  it.each(["- **Ne:** ", "* **Ne:** ", "**Ne**: "])("alan satırı yazımı okunur: %s", (alan) => {
+    expect(coz(govde("açık", "## İtiraz 1 — architect", alan)).gecerli).toHaveLength(1);
+  });
+
+  // İki nokta HÂLÂ zorunlu: olmasa düz bir kalın satır alan sanılırdı.
+  it("iki noktasız kalın satır alan sayılmaz", () => {
+    const d = coz(`## İtiraz 1 — architect
+**Ne** Sürüm geriye düşüyor.
+**Neden:** y
+**Neyi yanlışlar:** \`src/a.ts:1\` — z
+**Durum:** açık
+`);
+    expect(d.gecerli).toHaveLength(0);
+    expect(d.itirazlar[0]?.gecersiz).toMatch(/eksik alan/);
+  });
+
+  // EN KÖTÜ TÜR: sessiz kayıp. Okunamayan başlık önceki itirazın gövdesine
+  // akıyor ve ALANLARINI EZİYORDU — iki itiraz bire düşüyor, `invalid`
+  // sayacı 0 kalıyor, "yeni itiraz yok → anlaşma" dalı ateşlenebiliyor.
+  it("okunamayan başlık SESSİZ kaybolmuyor, geçersiz sayılıyor", () => {
+    const d = coz(`# İtirazlar — c-1
+
+## İtiraz 1 — architect
+**Ne:** birinci
+**Neden:** y
+**Neyi yanlışlar:** \`src/a.ts:1\` — z
+**Durum:** açık
+
+## İtiraz 2'nin devamı
+**Ne:** ikinci
+**Neden:** y
+**Neyi yanlışlar:** \`src/a.ts:2\` — z
+**Durum:** açık
+`);
+    // Birinci itiraz AYAKTA: ikinci başlık onun alanlarını ezmiyor.
+    expect(d.itirazlar.some((i) => i.ne === "birinci" && i.gecersiz === undefined)).toBe(true);
+    // Ve okunamayan başlık GÖRÜNÜR: geçersiz sayılıyor, yani `invalid` sayacı dolu.
+    const sayilmayan = d.itirazlar.filter((i) => i.gecersiz !== undefined);
+    expect(sayilmayan).toHaveLength(1);
+    expect(sayilmayan[0]?.gecersiz).toMatch(/başlığı okunamadı/);
+  });
+
+  // Dosyanın kendi başlığı itiraz başlığı DEĞİL. İlk yazımda bu daraltma
+  // yoktu ve `# İtirazlar — c-1` geçersiz itiraz sayılıyordu.
+  it("dosya başlığı geçersiz itiraz sayılmaz", () => {
+    const d = coz(`# İtirazlar — c-1
+
+Bu turda itirazım yok.
+`);
+    expect(d.itirazlar).toHaveLength(0);
+  });
+});
+
 describe("alanlar — başlık bloğu bitirir", () => {
   const GOVDE = `## İtiraz 1 — architect
 **Ne:** Üretimde \`karsilanmadi\` hiç yazılmıyor.

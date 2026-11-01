@@ -39,7 +39,40 @@ export interface ItirazDosyasi {
   insana: Itiraz[];
 }
 
-const BASLIK = /^##\s+İtiraz\s+(\d+)\s*[—–-]\s*(.+)$/u;
+/**
+ * İtiraz başlığı — ÖLÇÜLMÜŞ kusurdan sonra toleranslı.
+ *
+ * İlk hâli `##` + tire/em-dash + ROL ADI zorunlu kılıyordu. Ölçüldü: üç
+ * makul yazım (`## İtiraz 2`, `## İtiraz 2: reviewer`,
+ * `### İtiraz 2 — reviewer`) hiç başlık sayılmıyordu ve sonuç SESSİZ
+ * KAYIPTI — itiraz ne geçerli ne geçersiz, `invalid` sayacı 0 kalıyor,
+ * `describe`'ın "N sayılmadı" notu basılmıyor, ve `gecerli.length`
+ * düştüğü için "yeni itiraz yok → anlaşma" dalı ateşlenebiliyor. İki
+ * itirazlı bir dosyada biri sessizce ötekinin alanlarını eziyordu.
+ *
+ * Rol adı artık isteğe bağlı, çünkü bilgi değeri YOK: `options.owner`
+ * başlıkta yazanı zaten eziyor (rolün yer gerçeği dosyanın kendisi).
+ * Başlık seviyesi ve ayraç da serbest.
+ */
+// Sayıdan sonra ÜÇ meşru hâl var: ayraç+rol, boşluk+rol, ya da hiçbir şey.
+// İlk yazımda ayraç grubu isteğe bağlıydı ve ardından `(.*)` geliyordu, yani
+// sayıdan sonra NE OLURSA başlık sayılıyordu (`## İtiraz 2'nin devamı`
+// dahil) — o da `BASLIK_BENZERI` dalını ateşlenemez yapıyordu. Bu projede
+// ateşlenemeyen bir kural bir kez yazıldı ve silindi; ikincisi yazılmadı.
+const BASLIK = /^#{2,6}\s+İtiraz\s+(\d+)(?:\s*[—–:-]\s*|\s+|\s*$)(.*)$/u;
+
+/**
+ * İtiraz başlığına BENZEYEN ama ayrıştırılamayan satır.
+ *
+ * Biçim gevşetildi ama gevşetmek yetmez: bir gün başka bir yazım yine
+ * dışarıda kalırsa kayıp YİNE sessiz olurdu. Bu kalıp o satırı yakalayıp
+ * geçersiz itiraz olarak sayıyor — sayılmayan bir itirazın hiçbir yere
+ * yazılmaması, bu projede biçimin itirazı yediği dört vakanın ortak yanı.
+ */
+// `İtiraz` + SAYI şart: dosyanın kendi başlığı (`# İtirazlar — c-1`)
+// itiraz başlığı değil. İlk yazımda bu daraltma yoktu ve dosya başlığı
+// geçersiz itiraz sayılıyordu — gevşetmenin ters kusuru, sınamalar yakaladı.
+const BASLIK_BENZERI = /^#{1,6}\s+İtiraz\s+\d/u;
 
 /**
  * `**Alan:** değer` satırlarını, bir sonraki alana YA DA BAŞLIĞA kadar toplar.
@@ -65,7 +98,14 @@ function alanlar(govde: string[]): Map<string, string> {
   let aktif: string | null = null;
   for (const satir of govde) {
     const temiz = satir.trim();
-    const m = /^\*\*(.+?):\*\*\s*(.*)$/u.exec(temiz);
+    // `**Ad:**` VE `**Ad**:`, ayrıca madde imi / numara öneki.
+    //
+    // Ölçüldü: `- **Ne:** …` ve `**Ne**: …` yazımlarında DÖRT alan birden
+    // kayboluyor ve hata mesajı "eksik alan: Ne, Neden, Neyi yanlışlar"
+    // diyor — ajan alanları yazdığını bildiği için teşhis de yanıltıyor.
+    // İki nokta hâlâ zorunlu: yoksa düz bir `**kalın**` satırı alan sanılır.
+    const m = /^(?:[-*+]\s+|\d+[.)]\s+)?\*\*\s*([^*:]+?)\s*(?::\s*\*\*|\*\*\s*:)\s*(.*)$/u
+      .exec(temiz);
     if (m) {
       aktif = (m[1] as string).trim().toLocaleLowerCase("tr");
       out.set(aktif, (m[2] as string).trim());
@@ -119,8 +159,20 @@ function durumOf(raw: string): { durum: Durum; gerekce?: string } | null {
     if (dusuk === anahtar) return { durum };
     if (!dusuk.startsWith(anahtar)) continue;
     const kalan = text.slice(anahtar.length);
-    if (!/^[\s]*[:—–-]/u.test(kalan)) continue;
-    const gerekce = kalan.replace(/^[\s:—–-]+/u, "").trim();
+    // Ayraç sınıfı ÖLÇÜLMÜŞ kusurdan sonra genişletildi: `kabul.`,
+    // `kabul (plan güncellendi)` ve `açık.` geçersiz sayılıyordu. Bedeli
+    // kaskad: kabul edilmiş itiraz sayımdan düşüyor, "kabul etti ama planı
+    // değiştirmedi" kapısı `kabul.length > 0` olmadığı için ateşlenmiyor,
+    // tur "anlaşma" sayılıyor ve yükümlülükler karta hiç yazılmıyor.
+    //
+    // Ayraç zorunluluğu KALKMIYOR: `kabul edilemez` hâlâ elenmeli, o yüzden
+    // kalan ya boş olacak ya noktalama/parantez ile başlayacak — harfle
+    // başlayan kuyruk belirsizdir.
+    if (!/^[\s]*[:—–.(;,-]/u.test(kalan)) continue;
+    const gerekce = kalan
+      .replace(/^[\s:—–.(;,-]+/u, "")
+      .replace(/[)\s.]+$/u, "")
+      .trim();
     return gerekce === "" ? { durum } : { durum, gerekce };
   }
   return null;
@@ -231,7 +283,27 @@ export function parseItirazlar(text: string, options: ParseOptions = {}): Itiraz
     const m = BASLIK.exec(satir.trim());
     if (m) {
       bitir();
-      basliklar = { no: Number(m[1]), role: (m[2] as string).trim(), govde: [] };
+      // Rol adı artık isteğe bağlı; `options.owner` onu zaten eziyor.
+      basliklar = { no: Number(m[1]), role: (m[2] ?? "").trim(), govde: [] };
+      continue;
+    }
+    if (BASLIK_BENZERI.test(satir.trim())) {
+      // Başlığa BENZİYOR ama ayrıştırılamadı: görünür olsun diye geçersiz
+      // itiraz sayılıyor. Sessizce atlamak `invalid` sayacını 0 bırakıp
+      // kaybı hiçbir yere yazmamak demekti — ölçülen kusur tam buydu.
+      //
+      // Gövdenin İÇİNDE de denetleniyor: iki itirazlı bir dosyada ikinci
+      // başlık okunamadığında eski kod onu önceki itirazın gövdesine
+      // akıtıyor ve alanlarını EZİYORDU, yani iki itiraz bire düşüyordu.
+      // Serbest bölüm başlıkları (`## Kontrol ettiklerim`) bu kalıba
+      // girmiyor, çünkü "İtiraz" kelimesini taşımıyorlar.
+      bitir();
+      itirazlar.push({
+        no: itirazlar.length + 1, role: options.owner ?? "?",
+        ne: "", neden: "", kanit: "", durum: "acik",
+        gecersiz: `itiraz başlığı okunamadı: ${satir.trim().slice(0, 80)} ` +
+          "(beklenen: ## İtiraz <no> — <rol>)",
+      });
       continue;
     }
     basliklar?.govde.push(satir);
