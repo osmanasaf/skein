@@ -43,9 +43,32 @@ export async function currentBranch(dir: string): Promise<string | null> {
  * `.gitignore`'una güvenmek yerine adıyla eleniyor — orkestratörün kendi
  * bıraktığı iz, ajanın yarım bıraktığı iş sanılmamalı.
  */
+export class GitDurumHatasi extends Error {
+  constructor(dir: string, err: string) {
+    super(`ağacın durumu okunamadı (${dir}): ${err || "git status başarısız"}`);
+    this.name = "GitDurumHatasi";
+  }
+}
+
+/**
+ * Kirli yolları verir; `git status` BAŞARISIZ olursa FIRLATIR.
+ *
+ * Eskiden `if (!ok || out === "") return []` yazıyordu, yani git hatası
+ * "ağaç temiz" diye bildiriliyordu. "Bildirilmeyen sıfır değildir"
+ * kuralının tersten ihlali ve bedeli somut: rol kabul verdi, ağacında
+ * commit edilmemiş dosyalar var, `git status` o anda düştü (60 sn aşımı,
+ * bozuk indeks, eşzamanlı `gc`, taşınmış worktree) → "işlenmemiş iş
+ * devredilemez" kapısı AÇILIYOR ve commit'siz iş geride kalıyor. O kapının
+ * yazılma sebebi olan kusurun aynısı, artık görünmez hâlde.
+ *
+ * Fırlatmak doğru davranış çünkü üçüncü bir cevap yok: ağacın temiz olup
+ * olmadığını bilmiyoruz. Çağıranlar bunu "karar verilemedi" diye okuyup
+ * kartı insana çıkarıyor.
+ */
 export async function dirtyPaths(dir: string, ignore: string[] = []): Promise<string[]> {
-  const { ok, out } = await git(dir, ["status", "--porcelain"]);
-  if (!ok || out === "") return [];
+  const { ok, out, err } = await git(dir, ["status", "--porcelain"]);
+  if (!ok) throw new GitDurumHatasi(dir, err);
+  if (out === "") return [];
   const ignored = ignore.map((path) => path.replace(/\/+$/, ""));
   return out
     .split("\n")
@@ -85,7 +108,14 @@ export async function mergeForward(opts: {
   }
 
   const yoksay = opts.ignoreDirty ?? [];
-  const dirty = await dirtyPaths(opts.toDir, yoksay);
+  let dirty: string[];
+  try {
+    dirty = await dirtyPaths(opts.toDir, yoksay);
+  } catch (cause) {
+    // Bilmiyorsak birleştirmiyoruz: "temiz sandım" bu projede bir kez
+    // commit'siz işi geride bıraktı.
+    return { kind: "blocked", reason: (cause as Error).message };
+  }
   if (dirty.length > 0) {
     return {
       kind: "blocked",
@@ -111,6 +141,9 @@ export async function mergeForward(opts: {
     if (yol === "" || yol.endsWith("/")) continue;
     if (!(await isTracked(opts.toDir, yol))) continue;
     const kirli = await git(opts.toDir, ["status", "--porcelain", "--", yol]);
+    // `ok` de sorulmak zorunda: aynı dosyada iki satır yukarıda düzeltilen
+    // kusurun aynısı, git hatası "değişmemiş" diye okunurdu.
+    if (!kirli.ok) return { kind: "blocked", reason: new GitDurumHatasi(opts.toDir, kirli.err).message };
     if (kirli.out === "") continue;
     return {
       kind: "blocked",

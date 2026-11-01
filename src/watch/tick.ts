@@ -295,7 +295,18 @@ async function runRole(card: Card, role: SnapshotRole, options: TickOptions): Pr
   // yasak olan, ortada duran ve hiçbir yere gidemeyecek iş bırakmak.
   const summary = verdict.verdict.summary;
 
-  const dirty = await (options.dirtyPaths ?? dirtyPaths)(workdir, ORCHESTRATOR_PATHS);
+  // `dirtyPaths` git hatasında FIRLATIYOR (eskiden "temiz" diyordu ve bu
+  // kapıyı sessizce açıyordu). Bilmiyorsak devretmiyoruz: üçüncü bir cevap
+  // yok, o yüzden karar insana çıkıyor.
+  let dirty: string[];
+  try {
+    dirty = await (options.dirtyPaths ?? dirtyPaths)(workdir, ORCHESTRATOR_PATHS);
+  } catch (cause) {
+    const reason = `\`${role.id}\` kabul etti ama ağacının durumu okunamadı: ` +
+      `${(cause as Error).message}. Temiz sayıp devretmek, commit'siz işi geride ` +
+      `bırakmak olurdu.`;
+    return { status: "escalated", card: await queue.escalate(card, reason), reason };
+  }
   if (dirty.length > 0) {
     const reason =
       `\`${role.id}\` kabul etti ama ağacında işlenmemiş değişiklik var: ` +

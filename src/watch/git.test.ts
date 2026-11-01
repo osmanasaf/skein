@@ -1,9 +1,9 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { capture } from "../proc/process.js";
-import { addWorktree, currentBranch, dirtyPaths, head, isTracked, mergeForward, ORCHESTRATOR_PATHS } from "./git.js";
+import { addWorktree, currentBranch, dirtyPaths, GitDurumHatasi, head, isTracked, mergeForward, ORCHESTRATOR_PATHS } from "./git.js";
 
 let root: string;
 let main: string;
@@ -228,5 +228,37 @@ describe("addWorktree", () => {
   it("başarısızlığı sessizce yutmaz", async () => {
     const result = await addWorktree(root, join("yok", "olan"), "guard");
     expect(result.kind).toBe("failed");
+  });
+});
+
+/**
+ * GİT HATASI "TEMİZ" DEĞİLDİR — ölçülmüş kusur.
+ *
+ * `dirtyPaths` eskiden `if (!ok || out === "") return []` yazıyordu, yani
+ * `git status` düştüğünde "ağaç temiz" diye bildiriyordu. Bedeli: rol kabul
+ * verdi, ağacında commit edilmemiş dosyalar var, status o anda düştü →
+ * "işlenmemiş iş devredilemez" kapısı AÇILIYOR ve commit'siz iş geride
+ * kalıyor. O kapının yazılma sebebi olan kusurun aynısı, görünmez hâlde.
+ */
+describe("dirtyPaths — bilmiyorsak temiz demiyoruz", () => {
+  it("git deposu olmayan dizinde FIRLATIR", async () => {
+    const yok = join(root, "depo-degil");
+    await mkdir(yok, { recursive: true });
+    await expect(dirtyPaths(yok)).rejects.toThrow(GitDurumHatasi);
+    await expect(dirtyPaths(yok)).rejects.toThrow(/durumu okunamadı/);
+  });
+
+  it("gerçek depoda temiz ağaç boş liste verir", async () => {
+    // `.worktrees` fikstürde var ve orkestratörün izi: yok sayılan yollarla çağrılıyor.
+    expect(await dirtyPaths(main, ORCHESTRATOR_PATHS)).toEqual([]);
+  });
+
+  // `mergeForward` de aynı kapıdan geçiyor: bilmiyorsa birleştirmiyor.
+  it("hedef ağacın durumu okunamazsa birleştirme engellenir", async () => {
+    const yok = join(root, "hedef-degil");
+    await mkdir(yok, { recursive: true });
+    const result = await mergeForward({ fromDir: main, toDir: yok, message: "x" });
+    expect(result.kind).toBe("blocked");
+    expect(result.kind === "blocked" && result.reason).toMatch(/durumu okunamadı/);
   });
 });
