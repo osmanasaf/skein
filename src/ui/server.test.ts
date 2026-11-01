@@ -8,7 +8,9 @@ import { newCard, type Card } from "../card/card.js";
 import { CardQueue } from "../card/queue.js";
 import { loadFlow, type Flow } from "../flow/load.js";
 import { snapshot, type TopologySnapshot } from "../flow/snapshot.js";
-import { serveUi, type UiServer } from "./server.js";
+import { request } from "node:http";
+import { connect } from "node:net";
+import { bizeAit, izinliAdlar, jokerArayuz, serveUi, type UiServer } from "./server.js";
 
 const FLOW = `
 name: test
@@ -424,5 +426,150 @@ describe("serveUi — salt okunur ekran", () => {
     });
     expect(res.status).toBe(404);
     expect(((await (await fetch(`${server.url}akis`)).json()) as { draft: null }).draft).toBeNull();
+  });
+});
+
+/**
+ * ADRES KAPILARI. İki kusur birden düzeltildi ve ikisi de canlı kullanımda
+ * ısırıyordu.
+ */
+describe("adres kapıları", () => {
+  // KUSUR 1: kendi adresini DİNLENEN ARAYÜZDEN kuruyordu. Kullanıcı
+  // `http://localhost:<port>` açınca — belgelenmiş, olağan kullanım —
+  // tarayıcı `Origin: http://localhost:<port>` yolluyor, `127.0.0.1` ile
+  // eşleşmiyor, her yazma ucu 403'e düşüyor ve araç sessizce yalnızca-okur
+  // oluyordu. Sebep de kullanıcı için anlamsızdı.
+  it("localhost kaynağı kabul edilir", async () => {
+    const card = await queue.add(newCard({ title: "x", task: "iş", topology }));
+    const taken = (await queue.take("coder")) as Card;
+    await queue.escalate(taken, "sebep");
+    const res = await fetch(`${server.url}kart/${card.id}/birak`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-skein-token": server.token,
+        Origin: `http://localhost:${server.port}`,
+      },
+      body: JSON.stringify({ karar: "retry" }),
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it("IPv6 döngü kaynağı da kabul edilir", () => {
+    const adlar = izinliAdlar("127.0.0.1");
+    expect(bizeAit(`http://[::1]:7777`, adlar, 7777)).toBe(true);
+    expect(bizeAit(`http://localhost:7777`, adlar, 7777)).toBe(true);
+  });
+
+  it("yabancı kaynak hâlâ reddedilir", async () => {
+    const card = await queue.add(newCard({ title: "x", task: "iş", topology }));
+    const taken = (await queue.take("coder")) as Card;
+    await queue.escalate(taken, "sebep");
+    const res = await fetch(`${server.url}kart/${card.id}/birak`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-skein-token": server.token,
+        Origin: "http://kotu.example:" + server.port,
+      },
+      body: JSON.stringify({ karar: "retry" }),
+    });
+    expect(res.status).toBe(403);
+  });
+
+  // Port eşleşmesi zorunlu: aynı makinedeki BAŞKA bir yerel servis bizim
+  // kaynağımız değil.
+  it("döngü adı ama yanlış port bizim değil", () => {
+    const adlar = izinliAdlar("127.0.0.1");
+    expect(bizeAit("http://127.0.0.1:9999", adlar, 7777)).toBe(false);
+    // Portsuz `Host: 127.0.0.1` (port 80) de bizim değil.
+    expect(bizeAit("127.0.0.1", adlar, 7777)).toBe(false);
+  });
+
+  /**
+   * `Host` başlığını EZEN ham istek.
+   *
+   * `fetch()` bunu yapamıyor: `Host` yasaklı başlık, sessizce yok sayılıyor.
+   * İlk yazımda bu sınamalar `fetch` kullanıyordu ve HİÇBİR ŞEY
+   * sınamıyorlardı — tarayıcı başlığı 127.0.0.1 kalıyordu, yani "yabancı
+   * Host reddedilir" iddiası kendi kurduğu durumu hiç kurmuyordu.
+   */
+  const hamIstek = (yol: string, host: string): Promise<{ status: number; body: string }> =>
+    new Promise((resolve, reject) => {
+      const req = request(
+        { host: "127.0.0.1", port: server.port, path: yol, method: "GET", headers: { Host: host } },
+        (res) => {
+          let body = "";
+          res.setEncoding("utf8");
+          res.on("data", (c) => { body += c as string; });
+          res.on("end", () => resolve({ status: res.statusCode ?? 0, body }));
+        },
+      );
+      req.on("error", reject);
+      req.end();
+    });
+
+  // KUSUR 2: DNS rebinding. Sunucu 127.0.0.1'e bağlı ama bu TARAYICI
+  // ÜZERİNDEN erişimi engellemiyor; saldırganın alan adı 127.0.0.1'e
+  // yeniden bağlanırsa onun sayfası bizimle aynı kaynak sayılır. Jeton
+  // yalnızca YAZMAYI koruyordu — ve `GET /` jetonu veriyordu.
+  it("yabancı Host ile okuma uçları kapalı", async () => {
+    for (const yol of ["/", "/durum"]) {
+      const res = await hamIstek(yol, `kotu.example:${server.port}`);
+      expect(res.status).toBe(403);
+    }
+  });
+
+  // Asıl bedel bu: `GET /` sayfaya YAZMA JETONUNU gömüyor, yani rebinding
+  // ile okunan bir sayfa yazma hakkını da taşır.
+  it("yabancı Host sayfaya gömülü jetonu vermiyor", async () => {
+    const res = await hamIstek("/", `kotu.example:${server.port}`);
+    expect(res.status).toBe(403);
+    expect(res.body).not.toContain(server.token);
+  });
+
+  it("döngü adıyla gelen Host geçer", async () => {
+    const res = await hamIstek("/", `localhost:${server.port}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toContain(server.token);
+  });
+
+  // HTTP/1.1 `Host`u zorunlu kılıyor; "başlık yoksa geç" demek kapıyı
+  // başlığı atlayan her istemciye açmaktı.
+  //
+  // `http.request` ile sınanamıyor: boş `Host` verince node onu kendisi
+  // dolduruyor. Başlıksız istek ancak ham soketle kurulabiliyor.
+  it("Host başlığı olmayan istek reddedilir", async () => {
+    const cevap = await new Promise<string>((resolve, reject) => {
+      const s = connect(server.port, "127.0.0.1", () => {
+        s.write("GET /durum HTTP/1.1\r\n\r\n");
+      });
+      let out = "";
+      s.setEncoding("utf8");
+      s.on("data", (c) => { out += String(c); });
+      s.on("end", () => resolve(out));
+      s.on("error", reject);
+      setTimeout(() => { s.destroy(); resolve(out); }, 3000);
+    });
+    // 403 bizim kapımız, 400 node'un kendi `Host` zorunluluğu — ikisi de
+    // RET. Geçmemesi gereken şey 200.
+    expect(cevap).toMatch(/^HTTP\/1\.1 (400|403)/);
+  });
+
+  // Joker arayüzde hangi adla erişileceği bilinemez; basılan adres de
+  // `http://0.0.0.0:port` olmamalı — o geçerli bir tarayıcı adresi değil.
+  it("joker arayüz döngü adına çevrilir", async () => {
+    const s = await serveUi({
+      root, queue, topology, flowName: gercekFlow.name, flowHash: gercekFlow.hash,
+      host: "0.0.0.0",
+    });
+    try {
+      expect(jokerArayuz("0.0.0.0")).toBe(true);
+      expect(s.url).toContain("127.0.0.1");
+      expect(s.url).not.toContain("0.0.0.0");
+      expect(izinliAdlar("0.0.0.0").has("0.0.0.0")).toBe(false);
+    } finally {
+      await s.close();
+    }
   });
 });

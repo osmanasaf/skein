@@ -66,6 +66,74 @@ async function readBody(req: IncomingMessage): Promise<string> {
 }
 
 /**
+ * Bize ait sayılan ana bilgisayar adları.
+ *
+ * `127.0.0.1` ile `localhost` AYNI makinedir ama AYNI ad değildir, ve
+ * tarayıcı adres çubuğunda yazanı gönderir. Eski kod kendi adresini
+ * DİNLENEN ARAYÜZDEN kuruyordu (`http://127.0.0.1:7777`), yani kullanıcı
+ * `http://localhost:7777` açtığında — belgelenmiş, olağan kullanım — her
+ * yazma ucu 403'e düşüyordu ve araç sessizce yalnızca-okur oluyordu.
+ * Sebebi de kullanıcı için anlamsızdı: "beklenmeyen kaynak".
+ *
+ * Joker arayüzde (`0.0.0.0`) hangi adla erişileceği BİLİNEMEZ, o yüzden
+ * yalnızca döngü adları kabul ediliyor ve açılışta uyarı basılıyor. Bu bir
+ * gerileme değil: eski kod orada `http://0.0.0.0:port` arıyordu, yani
+ * yazma hiçbir koşulda çalışmıyordu — fark, artık sebebin yazılı olması.
+ */
+const DONGU_ADLARI = ["127.0.0.1", "localhost", "[::1]", "::1"] as const;
+
+export function jokerArayuz(host: string): boolean {
+  return host === "0.0.0.0" || host === "::" || host === "";
+}
+
+export function izinliAdlar(host: string): Set<string> {
+  const out = new Set<string>(DONGU_ADLARI);
+  // Açıkça yazılmış bir ad varsa o da bizim: `--host` ile ağa açmayı
+  // seçen kullanıcı yerel-araç varsayımından bilerek çıkıyor.
+  if (!jokerArayuz(host)) out.add(host);
+  return out;
+}
+
+/** `ad:port` ya da `http://ad:port` bize mi ait. */
+export function bizeAit(
+  raw: string | undefined, adlar: Set<string>, port: number,
+): boolean {
+  if (typeof raw !== "string" || raw === "") return false;
+  const metin = raw.includes("://") ? raw : `http://${raw}`;
+  let url: URL;
+  try {
+    url = new URL(metin);
+  } catch {
+    return false;
+  }
+  // Port BOŞ olamaz: `Host: 127.0.0.1` (port 80) bizim portumuz değil.
+  if (url.port !== String(port)) return false;
+  return adlar.has(url.hostname);
+}
+
+/**
+ * Bu istek gerçekten BİZE mi geldi — DNS rebinding kapısı.
+ *
+ * Sunucu 127.0.0.1'e bağlı ama bu, TARAYICI ÜZERİNDEN erişimi engellemiyor:
+ * saldırganın alan adı 127.0.0.1'e yeniden bağlanırsa (DNS rebinding)
+ * `http://kotu.example:<port>/` saldırganın sayfasıyla aynı kaynak sayılır
+ * ve `fetch("/durum")` cevabını OKUYABİLİR — kart başlıkları, ret
+ * gerekçeleri, commit hash'leri, ve `fetch("/")` ile sayfaya gömülü YAZMA
+ * JETONU.
+ *
+ * Tek yer gerçeği `Host` başlığı: rebinding'de tarayıcı saldırganın adını
+ * gönderir, bizim adımızı gönderemez. Bu yüzden denetim OKUMA uçlarında da
+ * uygulanıyor — jeton yazma uçlarını koruyor, okuma uçlarını hiçbir şey
+ * korumuyordu.
+ *
+ * Başlıksız istek reddediliyor: HTTP/1.1 `Host`u zorunlu kılıyor ve
+ * "başlık yoksa geç" demek kapıyı başlığı atlayan her istemciye açmaktı.
+ */
+function bizeMiGeldi(req: IncomingMessage, adlar: Set<string>, port: number): boolean {
+  return bizeAit(req.headers["host"], adlar, port);
+}
+
+/**
  * Bu istek gerçekten BİZİM sayfamızdan mı geliyor.
  *
  * Yerel bir sunucuya yazma eklemek, tarayıcıda açık HERHANGİ bir sitenin
@@ -79,10 +147,14 @@ async function readBody(req: IncomingMessage): Promise<string> {
  *
  * `Origin` varsa ayrıca kendi adresimizle eşleşmeli.
  */
-function yetkili(req: IncomingMessage, token: string, self: string): string | null {
+function yetkili(
+  req: IncomingMessage, token: string, adlar: Set<string>, port: number,
+): string | null {
   if (req.headers["x-skein-token"] !== token) return "jeton yok ya da yanlış";
   const origin = req.headers["origin"];
-  if (typeof origin === "string" && origin !== self) return `beklenmeyen kaynak: ${origin}`;
+  if (typeof origin === "string" && !bizeAit(origin, adlar, port)) {
+    return `beklenmeyen kaynak: ${origin}`;
+  }
   return null;
 }
 
@@ -108,7 +180,13 @@ function yetkili(req: IncomingMessage, token: string, self: string): string | nu
 export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
   const host = options.host ?? "127.0.0.1";
   const token = options.token ?? randomBytes(24).toString("hex");
-  let self = "";
+  const adlar = izinliAdlar(host);
+  // Port `listen`den SONRA biliniyor (0 = boş port seç), ama istek
+  // işleyicisi ondan önce kuruluyor. Kapanış üzerinden okumak, portu iki
+  // yerde tutmaktan iyi: bu projede aynı bilginin iki kopyası üç kez kusur
+  // doğurdu.
+  let dinlenenPort = 0;
+  const portu = (): number => dinlenenPort;
 
   /** Yaşayan akış varsa yoklar ve o anki topolojiyle seçenekleri kurar. */
   const guncel = async (): Promise<ServeUiOptions> => {
@@ -125,13 +203,25 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
   };
 
   const server: Server = createServer((req, res) => {
+    // DNS REBINDING KAPISI — okuma uçları da dahil, her istekte.
+    //
+    // Jeton yalnızca yazmayı koruyordu; okuma uçlarını hiçbir şey
+    // korumuyordu ve `GET /` sayfaya gömülü jetonu veriyordu. Yani
+    // rebinding ile bir saldırgan sayfası önce jetonu okuyup sonra
+    // yazabilirdi.
+    if (!bizeMiGeldi(req, adlar, portu())) {
+      res.writeHead(403, { "content-type": "text/plain; charset=utf-8" });
+      res.end("beklenmeyen ana bilgisayar adı\n");
+      return;
+    }
+
     const path = (req.url ?? "/").split("?")[0];
 
     const birak = path === undefined ? null : /^\/kart\/([^/]+)\/birak$/.exec(path);
     const kapat = path === undefined ? null : /^\/kart\/([^/]+)\/kapat$/.exec(path);
 
     if (req.method === "POST" && (path === "/akis/onizleme" || path === "/akis/yaz")) {
-      const hata = yetkili(req, token, self);
+      const hata = yetkili(req, token, adlar, portu());
       if (hata !== null) {
         res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
         res.end(JSON.stringify({ hata }));
@@ -176,7 +266,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
     }
 
     if (req.method === "POST" && kapat !== null) {
-      const hata = yetkili(req, token, self);
+      const hata = yetkili(req, token, adlar, portu());
       if (hata !== null) {
         res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
         res.end(JSON.stringify({ hata }));
@@ -201,7 +291,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
     }
 
     if (req.method === "POST" && birak !== null) {
-      const hata = yetkili(req, token, self);
+      const hata = yetkili(req, token, adlar, portu());
       if (hata !== null) {
         res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
         res.end(JSON.stringify({ hata }));
@@ -329,11 +419,14 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
   });
 
   const port = (server.address() as AddressInfo).port;
-  self = `http://${host}:${port}`;
+  dinlenenPort = port;
+  // Basılan adres joker arayüzde `http://0.0.0.0:port` olurdu ve o geçerli
+  // bir tarayıcı adresi değil; döngü adına çevriliyor.
+  const adres = `http://${jokerArayuz(host) ? "127.0.0.1" : host}:${port}`;
   return {
     port,
     token,
-    url: `${self}/`,
+    url: `${adres}/`,
     close: () =>
       new Promise<void>((resolve) => {
         server.closeAllConnections?.();
