@@ -1,5 +1,5 @@
 import type { Card } from "../card/card.js";
-import { planAuthor, planObjectors, type TopologySnapshot } from "../flow/snapshot.js";
+import { isPlanner, planAuthor, planObjectors, type TopologySnapshot } from "../flow/snapshot.js";
 
 /**
  * Planlama alışverişinde bir rolün turu ne anlama geliyor.
@@ -34,6 +34,35 @@ function lastPlanIndex(card: Card): number {
 export function lastPlanEntry(card: Card): PlanEntry | null {
   const i = lastPlanIndex(card);
   return i === -1 ? null : (card.history[i] as PlanEntry);
+}
+
+/**
+ * Son plan kaydından sonra kart alışverişin DIŞINA çıktı mı.
+ *
+ * Katılımcı olmayan bir rolün `taken`/`handoff`/`reject` kaydı aranıyor:
+ * alışveriş içindeki taşıma yalnızca `plan` kaydı bırakıyor, yani böyle
+ * bir kayıt kartın zinciri sürdürdüğünü söylüyor.
+ */
+function alisverisKapandi(card: Card, topology: TopologySnapshot): boolean {
+  const i = lastPlanIndex(card);
+  if (i === -1) return false;
+  const katilimci = (rol: string): boolean => isPlanner(topology, rol);
+  for (const entry of card.history.slice(i + 1)) {
+    switch (entry.event) {
+      case "taken":
+        if (!katilimci(entry.role)) return true;
+        break;
+      case "handoff":
+        if (!katilimci(entry.from) || !katilimci(entry.to)) return true;
+        break;
+      case "reject":
+        if (!katilimci(entry.from)) return true;
+        break;
+      default:
+        break;
+    }
+  }
+  return false;
 }
 
 /**
@@ -110,6 +139,29 @@ export function planPhase(card: Card, roleId: string, topology: TopologySnapshot
       case "cevap": return { kind: "cevap", round: last.round };
     }
   }
+
+  // ALIŞVERİŞ KAPANDI MI — ürün farkını okumadan önceki soru.
+  //
+  // Eski kod yalnızca SON PLAN KAYDINA bakıyordu, kartın alışverişten
+  // ÇIKIP çıkmadığını hiç sormuyordu. Ölçülmüş sonucu şu: alışveriş doğal
+  // sonla biter, kart `coder`'a gider, `coder` KODLA ilgili bir sebepten
+  // reddeder ve kart `reject: planner` kenarıyla yazara döner. `planPhase`
+  // o noktada hâlâ `{kind:"cevap", round: N}` diyor, iş metni
+  // "## İtirazları yanıtla" basıyor, ve `tick`'in cevap turu dalı koşuyor:
+  // plan dosyası değişmediği için kart "KABUL etti ama planı değiştirmedi"
+  // gerekçesiyle insan kapısına çıkıyor. Reddin gerçek sebebi hiç ele
+  // alınmıyor ve operatöre tamamen yanlış teşhis gidiyor.
+  //
+  // Yer gerçeği kartın kendi geçmişi: son plan kaydından SONRA
+  // alışverişin dışındaki bir rol kartı aldıysa ya da devrettiyse,
+  // alışveriş kapanmıştır. Alışveriş İÇİNDE taşıma `plan` kaydıyla
+  // yapılıyor (`planTurn`), `taken`/`handoff`/`reject` kayıtları
+  // bırakmıyor — o yüzden katılımcı olmayan bir rolün kaydı, kartın
+  // zinciri sürdürdüğünün kanıtı.
+  //
+  // İnsanın yeniden açtığı alışveriş bu kapıdan ÖNCE okunuyor
+  // (`reopenedFor`), çünkü planı yalnızca insan yeniden açar.
+  if (alisverisKapandi(card, topology)) return { kind: "yok" };
 
   const limit = topology.plan?.tur ?? 1;
 

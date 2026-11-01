@@ -40,6 +40,72 @@ const plan = (
   ...(objections === undefined ? {} : { objections }),
 });
 
+/**
+ * ALIŞVERİŞ KAPANDIKTAN SONRA — ölçülmüş kusur.
+ *
+ * Eski kod yalnızca son plan kaydına bakıyordu. Alışveriş doğal sonla
+ * biter, kart `coder`'a gider, `coder` KODLA ilgili bir sebepten reddeder
+ * ve `reject: planner` kenarıyla yazara döner — `planPhase` o noktada
+ * hâlâ "itirazları yanıtla" diyordu. `tick`'in cevap turu koşuyor, plan
+ * dosyası değişmediği için kart "KABUL etti ama planı değiştirmedi"
+ * gerekçesiyle insan kapısına çıkıyor ve reddin gerçek sebebi hiç ele
+ * alınmıyor: operatöre tamamen yanlış teşhis gidiyor.
+ */
+describe("planPhase — alışveriş kapandıktan sonra", () => {
+  const t = topology(2);
+  const taken = (role: string): HistoryEntry =>
+    ({ at: "2026-01-01T00:00:00.000Z", event: "taken", role });
+  const ret = (from: string, to: string): HistoryEntry =>
+    ({ at: "2026-01-01T00:00:00.000Z", event: "reject", from, to, round: 1, reason: "testler kırık" });
+
+  it("kod reti yazara dönünce cevap turu AÇILMAZ", () => {
+    const c = kart(t,
+      plan("planner", "yazdi", 0),
+      plan("architect", "itiraz", 1, 1),
+      plan("analyst", "itiraz", 1, 1),
+      plan("planner", "cevap", 1, 1),
+      plan("architect", "itiraz", 2, 1),
+      plan("analyst", "itiraz", 2, 1),
+      // Doğal son: kart `coder`'a gitti, `coder` aldı ve reddetti.
+      taken("coder"),
+      ret("coder", "planner"),
+    );
+    expect(planPhase(c, "planner", t)).toEqual({ kind: "yok" });
+  });
+
+  it("kod reti ilk itirazcıya dönünce itiraz turu AÇILMAZ", () => {
+    const c = kart(t,
+      plan("planner", "yazdi", 0),
+      plan("architect", "itiraz", 1, 1),
+      plan("analyst", "itiraz", 1, 1),
+      plan("planner", "cevap", 1, 1),
+      taken("coder"),
+      ret("coder", "architect"),
+    );
+    expect(planPhase(c, "architect", t)).toEqual({ kind: "yok" });
+  });
+
+  // Alışveriş İÇİNDE taşıma yalnızca `plan` kaydı bırakıyor, yani kapı
+  // yürüyen alışverişi kesmemeli.
+  it("alışveriş yürürken sıra bozulmuyor", () => {
+    const c = kart(t,
+      plan("planner", "yazdi", 0),
+      plan("architect", "itiraz", 1, 1),
+    );
+    expect(planPhase(c, "analyst", t)).toEqual({ kind: "itiraz", round: 1 });
+  });
+
+  // Katılımcının kendi `taken` kaydı alışverişi kapatmamalı: gözcü her
+  // turda kartı alıyor.
+  it("katılımcının taken kaydı alışverişi kapatmıyor", () => {
+    const c = kart(t,
+      plan("planner", "yazdi", 0),
+      taken("architect"),
+    );
+    expect(planPhase(c, "architect", t)).toEqual({ kind: "itiraz", round: 1 });
+  });
+});
+
 describe("planPhase — turun sırası", () => {
   const t = topology(2);
 

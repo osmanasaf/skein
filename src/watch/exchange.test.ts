@@ -516,6 +516,62 @@ reject:
     return (await queue.get(card.id)) as Card;
   }
 
+  /** İki itiraz: birincisi kabul, ikincisi insana. */
+  const ikiItiraz = (d1: string, d2: string) => `# İtirazlar
+
+## İtiraz 1 — architect
+**Ne:** Plan geçmişi baştan oynatıyor.
+**Neden:** Sürüm geriye düşer.
+**Neyi yanlışlar:** \`src/var.ts:3\` — orada sürüm önbellek anahtarı.
+**Durum:** ${d1}
+
+## İtiraz 2 — architect
+**Ne:** Kapsam sınırı yazılmamış.
+**Neden:** Sonraki rol kendi sınırını uydurur.
+**Neyi yanlışlar:** \`src/var.ts:5\` — tüketici burada.
+**Durum:** ${d2}
+`;
+
+  // ÖLÇÜLMÜŞ KUSUR: kabul edilmiş itirazlar yalnızca `planTurn` yolundan
+  // karta yazılıyordu. Alışveriş bir KAPIDAN çıktığında (`insana` ya da
+  // tavan doldu) `deadlock`'un plan parametresi yoktu, yani `kabuller`
+  // hiç yazılmıyordu. İnsan `forward` dediğinde kart `afterPlanning`'e
+  // gidiyor ve denetçinin yükümlülük listesi BOŞ oluyor — kabul edilmiş
+  // itiraz hiç denetlenmiyor, yani kapının kurulma gerekçesinin tersi.
+  //
+  // `tur: 1` akışlarında ilk cevap turu TEK cevap turu olduğu için
+  // yükümlülükler bu yoldan hiçbir zaman yazılamıyordu.
+  it("insana çıkan alışverişte kabul edilen itiraz karta YAZILIR", async () => {
+    const card = await queue.add(newCard({ title: "iş", task: "undo ekle", topology: topo }));
+    dosyalar.set(at("main", PLAN_YOLU(card.id)), "# Plan\nselector.ts sürüme bakıyor.\n");
+    dosyalar.set(at("main", "src/var.ts"), "export const x = 1;\n");
+    dosyalar.set(at("architect", "src/var.ts"), "export const x = 1;\n");
+    claude.answer = kabulEt("plan yazıldı");
+    await tick("planner", options);
+
+    dosyalar.set(at("architect", ITIRAZ_YOLU(card.id)), ikiItiraz("açık", "açık"));
+    claude.answer = kabulEt("iki itirazım var");
+    await tick("architect", options);
+
+    // Yazar birincisini kabul ediyor, ikincisini insana çıkarıyor.
+    dosyalar.set(at("main", ITIRAZ_YOLU(card.id)),
+      ikiItiraz("kabul: planı düzelttim", "insana: bu bir değer kararı"));
+    dosyalar.set(at("main", PLAN_YOLU(card.id)), "# Plan\nSürüm ileri gider.\n");
+    claude.answer = kabulEt("birini kabul ettim, birini insana çıkardım");
+    const result = await tick("planner", options);
+
+    expect(result.status).toBe("escalated");
+    const kilitli = (await queue.get(card.id)) as Card;
+    expect(kilitli.state).toBe("gate");
+    // Kabul edilen itiraz karta YÜKÜMLÜLÜK olarak yazılmış olmalı, yoksa
+    // insan `forward` dediğinde denetçi onu hiç görmez.
+    expect(kilitli.plan?.kabuller).toEqual([{
+      id: "architect#1", role: "architect",
+      ne: "Plan geçmişi baştan oynatıyor.",
+      kanit: "`src/var.ts:3` — orada sürüm önbellek anahtarı.",
+    }]);
+  });
+
   it("kabul edilen itirazı karta yazar — kimlik `rol#no`", async () => {
     const card = await kabulluAlisveris();
     expect(card.role).toBe("coder");

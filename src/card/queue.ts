@@ -410,9 +410,28 @@ export class CardQueue {
    * insan planı olduğu gibi kabul edip ilerletebilir. Planlama alışverişi
    * turu dolduğunda buraya çıkıyor (PLANLAMA.md).
    */
-  async deadlock(card: Card, reason: string, entry?: Extract<HistoryEntry, { event: "plan" }>): Promise<Card> {
+  /**
+   * `plan`: kilit kapısına çıkan kartın dondurulmuş planı ve YÜKÜMLÜLÜKLERİ.
+   *
+   * Eskiden bu parametre yoktu ve sonucu şuydu: kabul edilmiş itirazlar
+   * yalnızca `planTurn` yolundan karta yazılıyordu, yani alışveriş bir
+   * kapıdan çıktığında (`insana` ya da tavan doldu) hiç yazılmıyordu.
+   * İnsan `forward` dediğinde kart `afterPlanning`'e gidiyor, denetçinin
+   * yükümlülük listesi BOŞ oluyor ve kabul edilmiş itiraz hiç
+   * denetlenmiyordu — kapının kurulma gerekçesinin tam tersi.
+   *
+   * `tur: 1` olan akışlarda ilk cevap turu TEK cevap turu olduğu için
+   * yükümlülükler bu yoldan hiçbir zaman yazılamıyordu.
+   */
+  async deadlock(
+    card: Card,
+    reason: string,
+    entry?: Extract<HistoryEntry, { event: "plan" }>,
+    plan?: Card["plan"],
+  ): Promise<Card> {
     const { role, path } = this.#requireActive(card);
-    const kayitli = entry === undefined ? card : this.#push(card, entry);
+    const planli = plan === undefined ? card : { ...card, plan };
+    const kayitli = entry === undefined ? planli : this.#push(planli, entry);
     const gated = {
       ...this.#push(kayitli, { at: now(), event: "gate", role: role.id, reason, kind: "deadlock" }),
       state: "gate" as const,

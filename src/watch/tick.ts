@@ -693,6 +693,26 @@ async function planStep(
     ...(planHash === undefined ? {} : { planHash }),
   });
 
+  const oncekiHash = card.plan?.hash;
+  const yeniHash = planMetni === undefined ? undefined : sha(planMetni);
+
+  // Kabul edilmiş itirazlar YÜKÜMLÜLÜK olarak karta yazılıyor: denetçi
+  // başka bir turda, başka bir ağaçta koşuyor ve kapının kaç madde
+  // beklediğini orkestratörün bilmesi gerekiyor.
+  //
+  // Kimlik `rol#no`, çünkü `birlestirItirazlar` dosyaları uç uca ekliyor
+  // ve her dosya 1'den numaralanıyor — iki itirazcının 1 numaralı itirazı
+  // aynı `no`yu taşıyor.
+  const kabuller = kabul.map((i) => ({
+    id: `${i.role}#${i.no}`, role: i.role, ne: i.ne, kanit: i.kanit,
+  }));
+  const yeniPlan = yeniHash === undefined
+    ? undefined
+    : {
+      path: planPath, hash: yeniHash,
+      ...(kabuller.length === 0 ? {} : { kabuller }),
+    };
+
   // Değer kararı her turda alışverişi bitirir: tavanın dolmasını beklemek,
   // insana çıkmış bir soruyu makinede bir tur daha döndürmek olurdu.
   if (insana.length > 0) {
@@ -707,14 +727,12 @@ async function planStep(
       kind: "tasindi",
       result: {
         status: "escalated",
-        card: await options.queue.deadlock(card, reason, cevapKaydi()),
+        card: await options.queue.deadlock(card, reason, cevapKaydi(), yeniPlan),
         reason,
       },
     };
   }
 
-  const oncekiHash = card.plan?.hash;
-  const yeniHash = planMetni === undefined ? undefined : sha(planMetni);
   if (kabul.length > 0 && yeniHash !== undefined && yeniHash === oncekiHash) {
     // Nezaket çöküşünün kapısı: "haklısın" demek planı değiştirmek demektir.
     return {
@@ -759,28 +777,12 @@ async function planStep(
       kind: "tasindi",
       result: {
         status: "escalated",
-        card: await options.queue.deadlock(card, reason, cevapKaydi(yeniHash)),
+        card: await options.queue.deadlock(card, reason, cevapKaydi(yeniHash), yeniPlan),
         reason,
       },
     };
   }
 
-  // Kabul edilmiş itirazlar YÜKÜMLÜLÜK olarak karta yazılıyor: denetçi
-  // başka bir turda, başka bir ağaçta koşuyor ve kapının kaç madde
-  // beklediğini orkestratörün bilmesi gerekiyor.
-  //
-  // Kimlik `rol#no`, çünkü `birlestirItirazlar` dosyaları uç uca ekliyor
-  // ve her dosya 1'den numaralanıyor — iki itirazcının 1 numaralı itirazı
-  // aynı `no`yu taşıyor.
-  const kabuller = kabul.map((i) => ({
-    id: `${i.role}#${i.no}`, role: i.role, ne: i.ne, kanit: i.kanit,
-  }));
-  const yeniPlan = yeniHash === undefined
-    ? undefined
-    : {
-      path: planPath, hash: yeniHash,
-      ...(kabuller.length === 0 ? {} : { kabuller }),
-    };
 
   // Tavan dolmadı: yeni bir tur açılıyor ve söz ilk itirazcıya geçiyor.
   // İtirazcılar DÜZELTİLMİŞ planı okuyup yeni itiraz yazabilir; hiçbiri
