@@ -43,6 +43,17 @@ export interface ArmSide {
   rejects: number;
   /** Ölçülemeyen koşular: "kusur yok" DEĞİL, yer gerçeği yok. */
   unmeasured: number;
+  /**
+   * TESLİM EDİLMEYEN koşular — `done`'a varmamış kartlar.
+   *
+   * Üçüncü bir durum ve ölçülemedi ile "kusur yok"tan ayrı. Ölçülmüş
+   * kusur şu: bir kolun koşusu kabul/ret/kapı döngüsünde kilit kapısına
+   * çıkabiliyor, `finishArm` yine son rolün ağacından `src`'yi kopyalayıp
+   * süiti koşuyor ve yarım/reddedilmiş artefakt KOLUN ÜRÜNÜ sayılıyordu.
+   * Akışın kendisi "teslim edilemez" dediği bir artefakt kararı
+   * sürükleyebiliyordu.
+   */
+  undelivered: number;
 }
 
 /**
@@ -159,6 +170,12 @@ interface ArmRun {
   activations: number;
   costUsd: number;
   rejects: number;
+  /**
+   * Kartın SON durumu (`card.settled.state`); hiç kayıt yoksa `"yok"`.
+   *
+   * `done` dışındaki her değer "teslim edilmedi" demek.
+   */
+  state: string;
   planning?: { rounds: number; objections: number; accepted: number; invalid: number };
   obligations: ObligationRecord[];
 }
@@ -180,7 +197,7 @@ export function armRuns(events: SkeinEvent[]): ArmRun[] {
     out.set(runId, {
       runId, taskId: meta.taskId, model: meta.model, arm: meta.arm,
       ran: false, hooks: 0, red: 0, redNames: [], activations: 0, costUsd: 0, rejects: 0,
-      obligations: [],
+      state: "yok", obligations: [],
     });
   }
 
@@ -191,7 +208,13 @@ export function armRuns(events: SkeinEvent[]): ArmRun[] {
       run.activations += 1;
       run.costUsd += e.usage?.costUsd ?? 0;
     }
-    if (e.type === "card.settled" && e.outcome === "rejected") run.rejects += 1;
+    if (e.type === "card.settled") {
+      if (e.outcome === "rejected") run.rejects += 1;
+      // SON kayıt kazanır: kart kapıya çıkıp insan tarafından ileri
+      // bırakılmış olabilir, yani "bir ara kapıya çıktı" teslim
+      // edilmedi demek değil. Teslim ölçüsü kartın son durumu.
+      run.state = e.state;
+    }
     if (e.type === "plan.settled") {
       run.planning = {
         rounds: e.rounds, objections: e.objections, accepted: e.accepted, invalid: e.invalid,
@@ -215,6 +238,10 @@ export function armRuns(events: SkeinEvent[]): ArmRun[] {
 
 /** Kanca kimliklerini iki kol üzerinden karşılaştırır. */
 function hookSets(plansizRuns: ArmRun[], planliRuns: ArmRun[]): HookSets {
+  // Teslim edilmeyen koşunun kancaları kolun kusur KİMLİĞİ de değil.
+  const teslimli = (r: ArmRun): boolean => r.state === "done" || r.state === "yok";
+  plansizRuns = plansizRuns.filter(teslimli);
+  planliRuns = planliRuns.filter(teslimli);
   const birlesim = (runs: ArmRun[]): Set<string> => {
     const out = new Set<string>();
     for (const r of runs) if (r.ran) for (const ad of r.redNames) out.add(ad);
@@ -246,10 +273,21 @@ function hookSets(plansizRuns: ArmRun[], planliRuns: ArmRun[]): HookSets {
 function side(runs: ArmRun[]): ArmSide | null {
   if (runs.length === 0) return null;
   const olculen = runs.filter((r) => r.ran);
-  const hooks = olculen.reduce((s, r) => s + r.hooks, 0);
-  const red = olculen.reduce((s, r) => s + r.red, 0);
+  // TESLİM EDİLMEYEN koşu kolun ürünü değil, o yüzden `!ran` ile aynı
+  // muamele görüyor: paydadan düşüyor. Akışın kendisi "bu iş devredilemez"
+  // demişse, o artefaktın kanca sayısını kolun doğruluğu diye okumak
+  // ölçümü bozar.
+  // "Kayıt yok" TESLİM EDİLMEDİ DEĞİL. `bildirilmeyen sıfır değildir`
+  // kuralı iki yöne de kesiyor: `card.settled` hiç yazılmamışsa teslimin
+  // olmadığına dair kanıt da yok. Yalnızca durumu BİLİNEN ve `done`
+  // olmayan koşu dışlanıyor — aksi hâlde eski kampanya günlükleri (o
+  // olayları taşımayan arşivler) topluca "teslim edilmedi" okunurdu ve
+  // yeniden okunabilirliklerini kaybederlerdi.
+  const teslim = olculen.filter((r) => r.state === "done" || r.state === "yok");
+  const hooks = teslim.reduce((s, r) => s + r.hooks, 0);
+  const red = teslim.reduce((s, r) => s + r.red, 0);
   return {
-    runs: olculen.length,
+    runs: teslim.length,
     hooks,
     red,
     redRate: hooks === 0 ? 0 : red / hooks,
@@ -257,6 +295,7 @@ function side(runs: ArmRun[]): ArmSide | null {
     costUsd: runs.reduce((s, r) => s + r.costUsd, 0),
     rejects: runs.reduce((s, r) => s + r.rejects, 0),
     unmeasured: runs.length - olculen.length,
+    undelivered: olculen.length - teslim.length,
   };
 }
 
@@ -288,6 +327,27 @@ function obligationStats(runs: ArmRun[]): ObligationStats {
   const met = guncel.filter((o) => o.durum === "karsilandi").length;
   const unmet = guncel.filter((o) => o.durum === "karsilanmadi").length;
   return { total: met + unmet, met, unmet, records };
+}
+
+/**
+ * İLAN EDİLMİŞ BİRİNCİ METRİK: downstream ret sayısında göreli azalma.
+ *
+ * `PLANLAMA.md`'nin ölçüt tablosunun BİRİNCİ satırı ("Plan, aşağıdaki
+ * israfı önledi mi", eşik ≥%20 olumlu / <%10 olumsuz) hesaplanıyor ve
+ * raporda basılıyordu ama `decide()` onu HİÇ okumuyordu. Ölçüt prozada
+ * durup karar yolunda durmamasının ÜÇÜNCÜ örneği (öncekiler: 2x2'nin
+ * ölçüm gücü koşulu, tören/gürültü eşikleri).
+ *
+ * Kontrol kolunda hiç ret yoksa azalma tanımsız — sıfırdan azalma yok.
+ */
+function retReduction(plansiz: ArmSide | null, planli: ArmSide | null): number | null {
+  if (plansiz === null || planli === null) return null;
+  if (plansiz.runs === 0 || planli.runs === 0) return null;
+  if (plansiz.rejects === 0) return null;
+  // Koşu başına: kolların koşu sayısı farklı olabiliyor.
+  const a = plansiz.rejects / plansiz.runs;
+  const b = planli.rejects / planli.runs;
+  return (a - b) / a;
 }
 
 function reduction(plansiz: ArmSide | null, planli: ArmSide | null): number | null {
@@ -352,7 +412,8 @@ export function planEffect(events: SkeinEvent[]): PlanEffectReport {
       taskId, model, planli, plansiz, relativeReduction, perRun, repeats, ceremony,
       hooks: hookSets(plansizRuns, planliRuns),
       obligations: obligationStats(planliRuns),
-      verdict: decide(relativeReduction, repeats, perRun, plansiz, planli, ceremony),
+      verdict: decide(relativeReduction, repeats, perRun, plansiz, planli, ceremony,
+        retReduction(plansiz, planli)),
     };
   });
 
@@ -366,6 +427,7 @@ function decide(
   plansiz: ArmSide | null,
   planli: ArmSide | null,
   ceremony: Ceremony,
+  retAzalma: number | null,
 ): { code: VerdictCode; reason: string } {
   if (plansiz === null || plansiz.runs === 0) {
     return { code: "yetersiz", reason: "Kontrol kolu ölçülmedi; karşılaştırılacak bir şey yok." };
@@ -427,40 +489,77 @@ function decide(
         "değişmeyen plan da ürün farkına yazılamaz.",
     };
   }
+  // Teslim edilmeyen koşular paydadan düştü (bkz. `side`). Kalan koşu
+  // yoksa okunacak ürün de yok.
+  const teslimsiz = (plansiz.undelivered ?? 0) + (planli.undelivered ?? 0);
+  const teslimNotu = teslimsiz > 0
+    ? ` (${teslimsiz} koşu TESLİM EDİLMEDİ ve paydaya girmedi)`
+    : "";
+
   if (repeats < MIN_REPEATS) {
     return {
       code: "yetersiz",
       reason: `k=${repeats}; karar için iki kolda da en az ${MIN_REPEATS} ölçülmüş koşu gerekiyor. ` +
-        "Aşağıdaki sayı sinyaldir, sonuç değildir.",
+        "Aşağıdaki sayı sinyaldir, sonuç değildir." + teslimNotu,
     };
   }
   const signs = perRun.map((r) => r.relativeReduction).filter((r): r is number => r !== null);
   const consistent = signs.length > 0 && signs.every((r) => r > 0);
 
+  // İLAN EDİLMİŞ İKİ ÜRÜN METRİĞİ AYRIŞIYORSA harmanlanmaz, yazılır.
+  //
+  // Tabloda iki ürün metriği var ve aynı eşikleri paylaşıyor: kırmızı
+  // kanca oranı ve downstream ret sayısı. Birini okuyup ötekini atmak,
+  // ikisini bir ortalamaya eritmek kadar yanlış — bu projenin kurucu
+  // kuralı iki yer gerçeğini harmanlamamak. `overall()`'ın görev sınıfları
+  // çeliştiğinde yaptığının aynısı: ayrışmayı KARARA yazmak.
+  const retPct = retAzalma === null ? "—" : pct(retAzalma);
+  if (retAzalma !== null) {
+    const kancaOlumlu = relative >= POSITIVE_THRESHOLD;
+    const kancaOlumsuz = relative < NEGATIVE_THRESHOLD;
+    const retOlumlu = retAzalma >= POSITIVE_THRESHOLD;
+    const retOlumsuz = retAzalma < NEGATIVE_THRESHOLD;
+    if ((kancaOlumlu && retOlumsuz) || (kancaOlumsuz && retOlumlu)) {
+      return {
+        code: "belirsiz",
+        reason: "İlan edilmiş iki ürün metriği AYRIŞIYOR: kırmızı kanca " +
+          `${pct(relative)}, downstream ret ${retPct} (eşikler ` +
+          `${pct(POSITIVE_THRESHOLD)} / ${pct(NEGATIVE_THRESHOLD)}). ` +
+          "İkisini tek karara eritmek, iki ölçüyü harmanlamak olurdu; " +
+          "sonuç metrik başına okunmalı." + teslimNotu,
+      };
+    }
+  }
+  const retNotu = ` Downstream ret azalması: ${retPct}.`;
+
   if (relative >= POSITIVE_THRESHOLD && consistent) {
     return {
       code: "olumlu",
       reason: `Kırmızı kanca oranında ${pct(relative)} göreli azalma (eşik ` +
-        `${pct(POSITIVE_THRESHOLD)}) ve azalma ${signs.length} tekrarın hepsinde aynı yönde.`,
+        `${pct(POSITIVE_THRESHOLD)}) ve azalma ${signs.length} tekrarın hepsinde aynı yönde.` +
+        retNotu + teslimNotu,
     };
   }
   if (relative >= POSITIVE_THRESHOLD) {
     return {
       code: "belirsiz",
       reason: `Azalma eşiğin üstünde (${pct(relative)}) ama tekrarlar arasında işaret ` +
-        "tutarsız — en az bir tekrarda planlı kol daha ÇOK kusur üretti. k artırılmalı.",
+        "tutarsız — en az bir tekrarda planlı kol daha ÇOK kusur üretti. k artırılmalı." +
+        retNotu + teslimNotu,
     };
   }
   if (relative < NEGATIVE_THRESHOLD) {
     return {
       code: "olumsuz",
       reason: `Göreli azalma ${pct(relative)}, eşiğin (${pct(NEGATIVE_THRESHOLD)}) altında. ` +
-        "Planlama turu ürünü daha doğru yapmıyor; bedeli aktivasyon farkı kadar.",
+        "Planlama turu ürünü daha doğru yapmıyor; bedeli aktivasyon farkı kadar." +
+        retNotu + teslimNotu,
     };
   }
   return {
     code: "belirsiz",
-    reason: `Göreli azalma ${pct(relative)}: iki eşiğin arasında. k artırılmalı.`,
+    reason: `Göreli azalma ${pct(relative)}: iki eşiğin arasında. k artırılmalı.` +
+      retNotu + teslimNotu,
   };
 }
 

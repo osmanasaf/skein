@@ -103,6 +103,108 @@ describe("armRuns", () => {
 // olay düşüyordu. O dal sonradan düzeltildi (günlük kapıdan ÖNCE yazılıyor)
 // ve `retry` ile baştan koşan tur aynı maddeye ikinci bir olay yazıyor.
 // Rapor "N madde" diyip olay sayardı — bir etiket yalanı.
+/**
+ * TESLİM EDİLMEYEN KOŞU kolun ürünü değildir — ölçülmüş kusur.
+ *
+ * `armRuns` yalnızca `outcome === "rejected"` sayıyordu; kartın SON
+ * durumunu hiç okumuyordu. Kol kilit kapısına çıkabiliyor, `finishArm`
+ * yine son rolün ağacından `src`'yi kopyalayıp süiti koşuyor, ve
+ * yarım/reddedilmiş artefaktın kanca sayısı kolun DOĞRULUĞU diye
+ * okunuyordu — akışın kendisi "bu iş devredilemez" dediği hâlde.
+ */
+describe("teslim edilmeyen koşu", () => {
+  const settled = (runId: string, state: string): SkeinEvent =>
+    ev({ type: "card.settled", cell: "c", card: "k", role: "coder", outcome: "escalated", state }, runId);
+
+  it("kapıda kalan koşu paydaya girmiyor ve görünür sayılıyor", () => {
+    const r = planEffect([
+      // Üç planlı koşu: ikisi teslim, biri kapıda ve ÇOK kırmızı.
+      ...kosu("p1", "g", "planli", { red: 1, planning: { objections: 1, accepted: 1, invalid: 0 } }),
+      settled("p1", "done"),
+      ...kosu("p2", "g", "planli", { red: 1, planning: { objections: 1, accepted: 1, invalid: 0 } }),
+      settled("p2", "done"),
+      ...kosu("p3", "g", "planli", { red: 9, planning: { objections: 1, accepted: 1, invalid: 0 } }),
+      settled("p3", "gate"),
+      ...[1, 2, 3].flatMap((k) => [
+        ...kosu(`s${k}`, "g", "plansiz", { red: 4 }),
+        settled(`s${k}`, "done"),
+      ]),
+    ]);
+    const g = r.groups[0];
+    expect(g?.planli?.runs).toBe(2);
+    expect(g?.planli?.undelivered).toBe(1);
+    // 9 kırmızı kanca paydaya girmedi: oran 2/20, 11/30 değil.
+    expect(g?.planli?.red).toBe(2);
+    expect(g?.verdict.reason).toMatch(/TESLİM EDİLMEDİ/);
+  });
+
+  // "Kayıt yok" teslim edilmedi DEĞİL: `card.settled` taşımayan eski
+  // kampanya günlükleri topluca dışlanırsa yeniden okunabilirliklerini
+  // kaybederler.
+  it("settle kaydı olmayan koşu dışlanmıyor", () => {
+    const r = planEffect([
+      ...[1, 2, 3].flatMap((k) => kosu(`p${k}`, "g", "planli", {
+        red: 1, planning: { objections: 1, accepted: 1, invalid: 0 },
+      })),
+      ...[1, 2, 3].flatMap((k) => kosu(`s${k}`, "g", "plansiz", { red: 4 })),
+    ]);
+    expect(r.groups[0]?.planli?.runs).toBe(3);
+    expect(r.groups[0]?.planli?.undelivered).toBe(0);
+  });
+});
+
+/**
+ * İLAN EDİLMİŞ BİRİNCİ METRİK karar yoluna kondu.
+ *
+ * Tablonun birinci satırı "downstream ret sayısı" ve eşikleri de ilan
+ * edilmiş; hesaplanıyor ve basılıyordu ama `decide()` onu HİÇ okumuyordu.
+ * Ölçüt prozada durup karar yolunda durmamasının üçüncü örneği.
+ */
+describe("downstream ret metriği", () => {
+  // `kosu`'nun ret kayıtları `state: "queued"` yazıyor; gerçek koşuda ret
+  // sonrası kart devam edip `done`'a varır. Son settle kaydı kazandığı
+  // için fikstüre o da ekleniyor, yoksa koşu "teslim edilmedi" sayılır.
+  const kol = (runId: string, arm: "planli" | "plansiz", red: number, rejects: number) => [
+    ...kosu(runId, "g", arm, {
+      red, rejects,
+      ...(arm === "planli" ? { planning: { objections: 1, accepted: 1, invalid: 0 } } : {}),
+    }),
+    ev({ type: "card.settled", cell: "c", card: "k", role: "reviewer", outcome: "accepted", state: "done" }, runId),
+  ];
+
+  // İki metrik AYNI yöne işaret ediyor: ayrışma yok, ama ilan edilmiş
+  // metrik karar metninde görünmek zorunda.
+  it("ret azalması karar metnine giriyor", () => {
+    const r = planEffect([
+      ...[1, 2, 3].flatMap((k) => kol(`p${k}`, "planli", 1, 1)),
+      ...[1, 2, 3].flatMap((k) => kol(`s${k}`, "plansiz", 4, 4)),
+    ]);
+    expect(r.groups[0]?.verdict.code).toBe("olumlu");
+    expect(r.groups[0]?.verdict.reason).toMatch(/Downstream ret azalması: %75/);
+  });
+
+  // İki ilan edilmiş ürün metriği ZIT yöne işaret ederse harmanlanmaz:
+  // ayrışma karara yazılır (`overall`'ın görev sınıfları için yaptığının
+  // aynısı). Birini okuyup ötekini atmak, ikisini ortalamak kadar yanlış.
+  it("iki metrik ayrışırsa karar tek yöne eritilmiyor", () => {
+    const r = planEffect([
+      // Kanca oranı KÖTÜLEŞİYOR (4 → 8), ret sayısı İYİLEŞİYOR (4 → 1).
+      ...[1, 2, 3].flatMap((k) => kol(`p${k}`, "planli", 8, 1)),
+      ...[1, 2, 3].flatMap((k) => kol(`s${k}`, "plansiz", 4, 4)),
+    ]);
+    expect(r.groups[0]?.verdict.code).toBe("belirsiz");
+    expect(r.groups[0]?.verdict.reason).toMatch(/AYRIŞIYOR/);
+  });
+
+  it("kontrol kolunda hiç ret yoksa metrik tanımsız kalıyor", () => {
+    const r = planEffect([
+      ...[1, 2, 3].flatMap((k) => kol(`p${k}`, "planli", 1, 0)),
+      ...[1, 2, 3].flatMap((k) => kol(`s${k}`, "plansiz", 4, 0)),
+    ]);
+    expect(r.groups[0]?.verdict.reason).toMatch(/Downstream ret azalması: —/);
+  });
+});
+
 describe("obligationStats — madde başına son karar", () => {
   const olay = (runId: string, id: string, durum: string): SkeinEvent =>
     ev({ type: "plan.obligation", card: "k", role: "reviewer", id, objector: "analyst", durum }, runId);

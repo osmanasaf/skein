@@ -502,7 +502,11 @@ function printPlanEffect(r: PlanEffectReport): void {
       console.log(`  ${ad.padEnd(10)}${String(s.runs).padStart(4)}${String(s.hooks).padStart(7)}` +
         `${String(s.red).padStart(9)}${pct(s.redRate).padStart(7)}${String(s.activations).padStart(13)}` +
         `${("$" + s.costUsd.toFixed(2)).padStart(10)}${String(s.rejects).padStart(6)}` +
-        (s.unmeasured > 0 ? `   (${s.unmeasured} ÖLÇÜLEMEDİ)` : ""));
+        (s.unmeasured > 0 ? `   (${s.unmeasured} ÖLÇÜLEMEDİ)` : "") +
+        // TESLİM EDİLMEDİ üçüncü bir durum: süit koştu ama kart `done`'a
+        // varmadı, yani artefakt kolun ürünü değil. Paydadan düştü ve
+        // bunun görünür olması gerekiyor.
+        (s.undelivered > 0 ? `   (${s.undelivered} TESLİM EDİLMEDİ)` : ""));
     }
     if (g.relativeReduction !== null) {
       console.log(`  göreli azalma: ${pct(g.relativeReduction)}`);
