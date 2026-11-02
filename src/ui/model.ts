@@ -31,6 +31,14 @@ export interface UiModel {
   roles: UiRole[];
   cards: UiCard[];
   totals: { open: number; done: number; costUsd: number; activations: number; orphans: number };
+  /**
+   * Ayrıştırılamayan kart dosyalarının yolları.
+   *
+   * Bozuk dosya artık taramayı DURDURMUYOR (bir tanesi `done/` altında
+   * olduğunda gözcü hiç açılamıyordu), ama görünmez de olmamalı: izole
+   * etmek ile saklamak ayrı şeyler. Ekran bunu uyarı olarak basıyor.
+   */
+  bozuk: string[];
   at: string;
 }
 
@@ -160,6 +168,7 @@ export async function buildModel(options: BuildOptions): Promise<UiModel> {
       costUsd: ui.reduce((sum, c) => sum + c.costUsd, 0),
       activations: events.filter((e) => e.type === "agent.started").length,
     },
+    bozuk: await options.queue.bozuklar(),
     at: now().toISOString(),
   };
 }

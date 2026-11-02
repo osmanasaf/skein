@@ -104,15 +104,21 @@ describe("serveUi", () => {
   });
 
   // Bozuk bir kart dosyası ekranı çökertmemeli.
-  it("okuma hatasını 500 ve gerekçeyle bildirir", async () => {
-    // Rol dizinleri tembel oluşuyor; kartı elle koymak için önce dizin.
+  // Eskiden tek bozuk dosya `/durum`u 500'e düşürüyordu, yani bir kartın
+  // bozulması BÜTÜN ekranı kullanılamaz yapıyordu — gözcüyü öldüren
+  // kusurun ekran tarafındaki eşi. Artık tarama durmuyor ama bozukluk
+  // SAKLANMIYOR: model onu taşıyor ve sayfa uyarı olarak basıyor.
+  it("bozuk kart dosyası ekranı düşürmüyor ama görünür kalıyor", async () => {
     await mkdir(join(root, ".skein", "queue", "coder"), { recursive: true });
-    await writeFile(join(root, ".skein", "queue", "coder", "0-bozuk.json"), "{ yarım");
+    const yol = join(root, ".skein", "queue", "coder", "0-bozuk.json");
+    await writeFile(yol, "{ yarım");
 
     const res = await fetch(`${server.url}durum`);
 
-    expect(res.status).toBe(500);
-    expect((await res.json()) as { hata: string }).toHaveProperty("hata");
+    expect(res.status).toBe(200);
+    const m = (await res.json()) as { bozuk: string[] };
+    expect(m.bozuk).toHaveLength(1);
+    expect(m.bozuk[0]).toContain("0-bozuk.json");
   });
 
   it("varsayılan olarak yalnızca yerel arayüzü dinler", () => {

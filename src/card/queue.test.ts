@@ -375,11 +375,48 @@ describe("CardQueue — çökme ve yarış", () => {
 
   // Kaybolan dosya iyi huylu, BOZUK dosya değil: ikincisi veri kaybı ve
   // sessizce atlanırsa kart yok sayılır.
-  it("bozuk kart dosyasını atlamaz, hata verir", async () => {
-    const card = await put(daily);
-    const [bulunan] = await copiesOf(card.id);
-    await writeFile(bulunan as string, "{ bu json değil", "utf8");
-    await expect(queue.take("coder")).rejects.toThrow(/Bozuk kart dosyası/);
+  // İZOLE ET AMA SAKLAMA. Eskiden bozuk dosya `#scan`'den fırlıyordu ve
+  // `#scan` dört alanı da tarıyor: `done/` altındaki bitmiş bir kartın
+  // bozuk kaydı `recover()`'ı fırlatıyordu. `serve`'in süpürmesinde
+  // try/catch olmadığı için gözcü ÖLÜYOR, yeniden başlatmada kilitten
+  // sonraki ilk iş yine `recover()` olduğu için gözcü artık hiçbir akış
+  // için açılamıyordu.
+  it("bozuk dosya ilgisiz kartı engellemiyor", async () => {
+    const saglam = await put(daily);
+    await writeFile(join(root, ".skein", "queue", "coder", "0-000000000000000-c-bozuk.json"), "{ değil");
+
+    // Sağlam kart alınabiliyor: bir bozuk dosya kuyruğu tutmuyor.
+    const alinan = await queue.take("coder");
+    expect(alinan?.id).toBe(saglam.id);
+  });
+
+  it("bozuk dosya SESSİZ geçmiyor: yolu bildiriliyor", async () => {
+    await put(daily);
+    const yol = join(root, ".skein", "queue", "coder", "0-000000000000000-c-bozuk.json");
+    await writeFile(yol, "{ değil");
+
+    expect(await queue.bozuklar()).toEqual([yol]);
+  });
+
+  // Aranan kart bozuk olanlardan biri OLABİLİR: "böyle bir kart yok"
+  // demek veri kaybını yokluk gibi okutmak olurdu.
+  it("aranan kart yoksa ve bozuk dosya varsa hata veriyor", async () => {
+    const dizin = join(root, ".skein", "queue", "coder");
+    await mkdir(dizin, { recursive: true });
+    await writeFile(join(dizin, "0-000000000000000-c-bozuk.json"), "{ değil");
+    await expect(queue.get("c-20260101-aaaaaa")).rejects.toThrow(/okunamıyor/);
+  });
+
+  // `recover` artık bozuk dosyada durmuyor: kilitten sonraki ilk iş o ve
+  // fırlatması gözcüyü kalıcı olarak açılamaz hâle getiriyordu.
+  it("recover bozuk dosyaya rağmen koşuyor", async () => {
+    await put(daily);
+    const card = (await queue.take("coder")) as Card;
+    await mkdir(join(root, ".skein", "done"), { recursive: true });
+    await writeFile(join(root, ".skein", "done", "c-bozuk.json"), "{ değil");
+
+    const recovered = await queue.recover();
+    expect(recovered.map((c) => c.id)).toEqual([card.id]);
   });
 
   it("recover yarıda kalan aktif kartı kuyruğa geri koyar", async () => {
@@ -414,11 +451,7 @@ describe("CardQueue — çökme ve yarış", () => {
     expect(kept.history).toHaveLength(moved.history.length);
   });
 
-  it("bozuk kart dosyası kuyruğu durdurmaz ama sessizce de geçmez", async () => {
-    await put(daily);
-    await writeFile(join(root, ".skein", "queue", "coder", "0-000000000000000-c-bozuk.json"), "{ değil");
-    await expect(queue.take("coder")).rejects.toThrow(/bozuk/i);
-  });
+
 });
 
 describe("CardQueue — listeleme", () => {

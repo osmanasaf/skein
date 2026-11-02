@@ -583,6 +583,28 @@ function ciz(m) {
   // Hiçbir kart ekrandan düşmemeli. Rolü yaşayan akışta olmayan kart
   // hiçbir sütuna uymuyor; kendi şeridinde, sebebiyle birlikte duruyor.
   const uyari = document.getElementById("uyari");
+  const bantlar = [];
+
+  // BOZUK KART DOSYASI. Tarama artık bir bozuk dosyada durmuyor (biri
+  // done/ altında olduğunda gözcü hiç açılamıyordu), ama izole etmek ile
+  // SAKLAMAK ayrı şeyler: veri kaybı ekranda görünmek zorunda.
+  //
+  // NOT: bu bölge gömülü betiğin template literal'ının İÇİ — ters tırnak
+  // string'i kapatır. Aynı tuzağa bu dosyada iki kez düşüldü.
+  if (m.bozuk && m.bozuk.length) {
+    const band = el("div", "band");
+    band.append(el("h2", null, m.bozuk.length + " kart dosyası okunamıyor"));
+    band.append(el("p", null,
+      "Bu dosyalar ayrıştırılamadı, yani içerdikleri kartlar hiçbir yerde görünmüyor. " +
+      "Tarama onlarda durmuyor — bir bozuk dosya bütün kuyruğu tutmasın diye — ama " +
+      "bu bir veri kaybı: dosyayı elle onar ya da sil."));
+    const liste = el("div", "mono");
+    liste.style.cssText = "font-size:12px;line-height:1.7";
+    m.bozuk.forEach((yol) => liste.append(el("div", null, yol)));
+    band.append(liste);
+    bantlar.push(band);
+  }
+
   const yetimler = m.cards.filter((c) => c.orphan);
   if (yetimler.length) {
     const band = el("div", "band");
@@ -595,10 +617,9 @@ function ciz(m) {
     const kartlar = el("div", "kartlar");
     yetimler.forEach((c) => kartlar.append(kartCiz(c)));
     band.append(kartlar);
-    uyari.replaceChildren(band);
-  } else {
-    uyari.replaceChildren();
+    bantlar.push(band);
   }
+  uyari.replaceChildren(...bantlar);
 
   const board = document.getElementById("board");
   board.replaceChildren();

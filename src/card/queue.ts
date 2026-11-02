@@ -119,52 +119,101 @@ export class CardQueue {
     }
   }
 
-  /** Bir dizindeki (ve alt dizinlerindeki) tüm kart dosyalarını okur. */
-  async #scan(dir: string): Promise<Located[]> {
+  /**
+   * Bir dizindeki (ve alt dizinlerindeki) kart dosyalarını okur.
+   *
+   * BOZUK dosya artık FIRLATMIYOR, ayrı listeye düşüyor. Ölçülmüş kusur:
+   * `#scan` özyinelemeli ve dört alanı da tarıyor, yani `done/` altındaki
+   * bozuk bir dosya `recover()`'ı fırlatıyordu. `serve`'in süpürmesinde
+   * try/catch yok, dolayısıyla gözcü süreci ÖLÜYOR; yeniden başlatmada
+   * kilitten sonraki ilk iş yine `recover()` olduğu için gözcü artık
+   * HİÇBİR akış için açılamıyordu. Bitmiş bir kartın bozuk kaydı bütün
+   * sistemi tutuyordu.
+   *
+   * "Sessizce de geçmez" kuralı korunuyor: bozuk yollar `bozuklar()` ile
+   * dışa veriliyor, `get()` aranan kartı bulamazsa onları adıyla
+   * fırlatıyor, ve gözcü açılışta uyarı basıyor. Fark şu: artık İLGİSİZ
+   * her işlemi durdurmuyor.
+   */
+  async #scan(dir: string): Promise<{ kartlar: Located[]; bozuk: string[] }> {
     let entries;
     try {
       entries = await readdir(dir, { withFileTypes: true });
     } catch {
-      return [];
+      return { kartlar: [], bozuk: [] };
     }
-    const found: Located[] = [];
+    const kartlar: Located[] = [];
+    const bozuk: string[] = [];
     for (const entry of entries.sort((a, b) => (a.name < b.name ? -1 : 1))) {
       const path = join(dir, entry.name);
       if (entry.isDirectory()) {
-        found.push(...(await this.#scan(path)));
+        const alt = await this.#scan(path);
+        kartlar.push(...alt.kartlar);
+        bozuk.push(...alt.bozuk);
       } else if (entry.name.endsWith(".json") && !entry.name.startsWith(".tmp-")) {
         // Dosya tarandıktan sonra kaybolmuş olabilir: öteki koşucu aldı.
-        const card = await this.#readCardIfPresent(path);
-        if (card !== null) found.push({ card, path });
+        try {
+          const card = await this.#readCardIfPresent(path);
+          if (card !== null) kartlar.push({ card, path });
+        } catch {
+          bozuk.push(path);
+        }
       }
     }
-    return found;
+    return { kartlar, bozuk };
+  }
+
+  /** Dört alanın hepsini tarar; sağlam kartlar ve bozuk yollar. */
+  async #tara(): Promise<{ kartlar: Located[]; bozuk: string[] }> {
+    const kartlar: Located[] = [];
+    const bozuk: string[] = [];
+    for (const area of AREAS) {
+      const r = await this.#scan(join(this.#root, area));
+      kartlar.push(...r.kartlar);
+      bozuk.push(...r.bozuk);
+    }
+    return { kartlar, bozuk };
+  }
+
+  /**
+   * Ayrıştırılamayan kart dosyalarının yolları.
+   *
+   * Gözcü açılışta basıyor: bozukluk ölümcül değil ama SESSİZ de değil.
+   */
+  async bozuklar(): Promise<string[]> {
+    return (await this.#tara()).bozuk;
   }
 
   async #locate(id: string): Promise<Located[]> {
-    const all: Located[] = [];
-    for (const area of AREAS) {
-      all.push(...(await this.#scan(join(this.#root, area))));
-    }
-    return all.filter((entry) => entry.card.id === id);
+    return (await this.#tara()).kartlar.filter((entry) => entry.card.id === id);
   }
 
   async get(id: string): Promise<Card | null> {
-    const found = await this.#locate(id);
+    const { kartlar, bozuk } = await this.#tara();
+    const found = kartlar.filter((entry) => entry.card.id === id);
     // Kopya varsa geçmişi uzun olan kazanır; `recover()` ile aynı kural.
-    return found.sort((a, b) => b.card.history.length - a.card.history.length)[0]?.card ?? null;
+    const card = found.sort((a, b) => b.card.history.length - a.card.history.length)[0]?.card;
+    if (card !== undefined) return card;
+    // Aranan kart BOZUK olanlardan biri olabilir: "böyle bir kart yok"
+    // demek veri kaybını yokluk gibi okutmak olurdu.
+    if (bozuk.length > 0) {
+      throw new QueueError(
+        `\`${id}\` bulunamadı ve ${bozuk.length} kart dosyası okunamıyor: ${bozuk.join(", ")}`,
+      );
+    }
+    return null;
   }
 
   async list(): Promise<Card[]> {
     const all: Card[] = [];
     for (const area of AREAS) {
-      all.push(...(await this.#scan(join(this.#root, area))).map((e) => e.card));
+      all.push(...(await this.#scan(join(this.#root, area))).kartlar.map((e) => e.card));
     }
     return all;
   }
 
   async depth(role: string): Promise<number> {
-    return (await this.#scan(this.#queueDir(role))).length;
+    return (await this.#scan(this.#queueDir(role))).kartlar.length;
   }
 
   // ---- yazma ----
@@ -206,7 +255,7 @@ export class CardQueue {
     const dir = this.#activeDir(role);
     await mkdir(dir, { recursive: true });
 
-    for (const { card, path } of await this.#scan(this.#queueDir(role))) {
+    for (const { card, path } of (await this.#scan(this.#queueDir(role))).kartlar) {
       const dest = join(dir, `${card.id}.json`);
       try {
         // TALEP: tek bir rename. Başaran kartı alır, başaramayan ENOENT alıp
@@ -560,12 +609,10 @@ export class CardQueue {
    */
   async recover(): Promise<Card[]> {
     const byId = new Map<string, Located[]>();
-    for (const area of AREAS) {
-      for (const entry of await this.#scan(join(this.#root, area))) {
-        const list = byId.get(entry.card.id) ?? [];
-        list.push(entry);
-        byId.set(entry.card.id, list);
-      }
+    for (const entry of (await this.#tara()).kartlar) {
+      const list = byId.get(entry.card.id) ?? [];
+      list.push(entry);
+      byId.set(entry.card.id, list);
     }
 
     const requeued: Card[] = [];

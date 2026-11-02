@@ -50,6 +50,21 @@ describe("renderPage", () => {
   // Model `stale`'i hesaplıyordu, sayfa hiç basmıyordu: ekran kartın başka
   // bir topolojiyle koştuğunu biliyor ve söylemiyordu. Panoda plan4'ün
   // kartı plan-capraz'ın kolonunda işaretsiz göründü.
+  // İZOLE ET AMA SAKLAMA. Bozuk kart dosyası artık taramayı durdurmuyor
+  // (biri done/ altında olduğunda gözcü hiç açılamıyordu), ama veri kaybı
+  // ekranda görünmek zorunda — izole etmek ile saklamak ayrı şeyler.
+  //
+  // Bu dosyanın sınamaları sayfanın KAYNAK METNİNİ okuyor, davranışını
+  // değil — yani ölü bir dalı göremezler: metin ölü dalın içinde de
+  // duruyor. O yüzden KOŞULUN KENDİSİ iddia ediliyor; koşulu `false`
+  // yapan bir mutasyon böyle ısırıyor. Sınadığı şey BAĞLANTI, çizim
+  // değil, ve bu sınır burada yazılı olsun.
+  it("bozuk kart dosyası uyarı bandına bağlı", () => {
+    const html = renderPage("t");
+    expect(html).toContain("kart dosyası okunamıyor");
+    expect(html).toContain("m.bozuk && m.bozuk.length");
+  });
+
   it("eski damgalı kartı işaretler, yetimi ayrı tutar", () => {
     const html = renderPage("jeton");
     expect(html).toContain("eski damga");
