@@ -1,6 +1,6 @@
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, relative, sep } from "node:path";
-import { parse, stringify } from "yaml";
+import { parseDocument, stringify } from "yaml";
 import { estimateCost, type CostEstimate } from "./cost.js";
 import { loadFlow, type Flow, type LoadOptions } from "./load.js";
 
@@ -85,49 +85,59 @@ export type DraftCheck =
  * anlamını sulandırırdı.
  */
 /**
- * Ekranın MODELLEMEDİĞİ ama dosyada duran bloklar.
+ * Ekrandan kaydetmek dosyanın GERİ KALANINI bozmuyor.
  *
- * `planlama` buraya düşüyor. Ekranın akış düzenleyicisi planlama bloğunu
- * tanımıyor ve `toYaml` belgeyi SIFIRDAN kuruyordu: `plan4.yaml`'i
- * ekrandan düzenlemek, planlama bloğunu — `denetci` dahil — sessizce
- * siliyordu. Blok isteğe bağlı olduğu için akış hâlâ geçerli doğruluyordu,
- * yani kayıp hiçbir yere yazılmıyordu.
+ * İki ölçülmüş kayıp vardı ve ikisi de aynı kökten: `toYaml` belgeyi düz
+ * bir JS nesnesinden sıfırdan kuruyordu.
  *
- * Çare bloğu modellemek değil (o, ekranda alan açmak demek) — dosyada
- * bulduğunu AYNEN taşımak. Yan faydası: kullanıcı rolleri planlama
- * bloğuyla çelişecek şekilde değiştirirse kural 17/19/23 artık konuşuyor;
- * blok düşürüldüğünde hiç konuşmuyordu.
+ * 1. Ekranın modellemediği BLOKLAR düşüyordu — `planlama`, `denetci`
+ *    dahil. Blok isteğe bağlı olduğu için akış hâlâ geçerli doğruluyordu,
+ *    yani kayıp hiçbir yere yazılmıyordu.
+ * 2. Bütün YORUMLAR düşüyordu: `plan4.yaml` için ölçüldü, 96 satır / 34
+ *    yorum satırı → 55 satır / 0 yorum. Gerekçeler bu projede kodun
+ *    yarısı; "ilk-tur-kor: true  # ÖLÇÜMÜN KENDİSİ" satırının yorumu
+ *    silindiğinde kalan şey anlamını kaybediyor.
+ *
+ * Çare ikisini birden kapatıyor: dosya varsa `parseDocument` ile BELGE
+ * olarak okunuyor ve yalnızca ekranın modellediği anahtarlar yerinde
+ * değiştiriliyor. Dokunulmayan her şey — yorumlar, `planlama`, gelecekte
+ * eklenecek bloklar — aynen kalıyor.
+ *
+ * Kalan sınır yazılı: rol listesi bütün olarak değiştiği için ROL
+ * İÇİNDEKİ yorumlar korunmuyor. Belgenin başlığındaki ve dokunulmayan
+ * blokların içindeki yorumlar korunuyor.
  */
-const KORUNAN_BLOKLAR = ["planlama"] as const;
-
-async function korunanlar(path: string): Promise<Record<string, unknown>> {
-  const out: Record<string, unknown> = {};
-  let text: string;
-  try {
-    text = await readFile(path, "utf8");
-  } catch {
-    return out;
+export function toYaml(draft: FlowDraft, mevcut?: string): string {
+  const alanlar = draftAlanlari(draft);
+  if (mevcut !== undefined && mevcut.trim() !== "") {
+    try {
+      const belge = parseDocument(mevcut);
+      // Bozuk bir dosyadan düzenleme taşımak, bozukluğu yeni dosyaya
+      // taşımak olurdu: o hâlde sıfırdan kuruluyor.
+      if (belge.errors.length === 0 && belge.contents !== null) {
+        for (const [ad, deger] of Object.entries(alanlar)) {
+          if (deger === undefined) belge.delete(ad);
+          else belge.set(ad, deger);
+        }
+        return belge.toString({ lineWidth: 0 });
+      }
+    } catch {
+      // düşerse sıfırdan kur
+    }
   }
-  let doc: unknown;
-  try {
-    doc = parse(text);
-  } catch {
-    // Bozuk bir dosyadan blok taşımak, bozukluğu yeni dosyaya taşımak olur.
-    return out;
+  const doc: Record<string, unknown> = {};
+  for (const [ad, deger] of Object.entries(alanlar)) {
+    if (deger !== undefined) doc[ad] = deger;
   }
-  if (doc === null || typeof doc !== "object" || Array.isArray(doc)) return out;
-  for (const ad of KORUNAN_BLOKLAR) {
-    const deger = (doc as Record<string, unknown>)[ad];
-    if (deger !== undefined && deger !== null) out[ad] = deger;
-  }
-  return out;
+  return `${stringify(doc, { lineWidth: 0 })}`;
 }
 
-export function toYaml(draft: FlowDraft, korunan: Record<string, unknown> = {}): string {
+/** Ekranın MODELLEDİĞİ anahtarlar; `undefined` = dosyadan silinecek. */
+function draftAlanlari(draft: FlowDraft): Record<string, unknown> {
   const doc: Record<string, unknown> = { name: draft.name };
-  if (draft.description !== undefined && draft.description.trim() !== "") {
-    doc["description"] = draft.description;
-  }
+  doc["description"] = draft.description !== undefined && draft.description.trim() !== ""
+    ? draft.description
+    : undefined;
   doc["constitution"] = draft.constitution;
   doc["roles"] = draft.roles.map((role) => {
     const out: Record<string, unknown> = {
@@ -142,14 +152,10 @@ export function toYaml(draft: FlowDraft, korunan: Record<string, unknown> = {}):
     out["next"] = role.next;
     return out;
   });
-  if (draft.gates !== undefined && draft.gates.length > 0) doc["gates"] = draft.gates;
-  if (draft.reject !== undefined) doc["reject"] = draft.reject;
-  if (draft.audit !== undefined) doc["audit"] = draft.audit;
-  // Ekranın modellemediği bloklar dosyadan aynen geçiyor; taslağın kendi
-  // alanları onları EZMİYOR, çünkü taslak o blokları hiç taşımıyor.
-  for (const [ad, deger] of Object.entries(korunan)) doc[ad] = deger;
-
-  return `${stringify(doc, { lineWidth: 0 })}`;
+  doc["gates"] = draft.gates !== undefined && draft.gates.length > 0 ? draft.gates : undefined;
+  doc["reject"] = draft.reject;
+  doc["audit"] = draft.audit;
+  return doc;
 }
 
 /**
@@ -164,7 +170,8 @@ export async function checkDraft(
   draft: FlowDraft,
   options: LoadOptions,
 ): Promise<DraftCheck> {
-  const yaml = toYaml(draft, await korunanlar(path));
+  const mevcut = await readFile(path, "utf8").catch(() => undefined);
+  const yaml = toYaml(draft, mevcut);
   try {
     const flow = await loadFlow(path, { ...options, text: yaml });
     return { ok: true, yaml, hash: flow.hash, cost: estimateCost(flow) };

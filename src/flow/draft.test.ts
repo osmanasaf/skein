@@ -242,6 +242,37 @@ planlama:
     expect(sonuc.ok === false && sonuc.message).toMatch(/kural 17/);
   });
 
+  // YORUMLAR da korunuyor. Ölçüldü: plan4.yaml için 96 satır / 34 yorum
+  // satırı → 55 satır / 0 yorum. Gerekçeler bu projede kodun yarısı;
+  // "ilk-tur-kor: true  # ÖLÇÜMÜN KENDİSİ" satırının yorumu silindiğinde
+  // kalan şey anlamını kaybediyor.
+  it("yorumlar düzenlemeden sonra DURUYOR", async () => {
+    await writeFile(path, `# Üst başlık yorumu
+# İkinci satır
+
+${toYaml(taslak())}${PLANLAMA}`);
+
+    const yeni = taslak();
+    yeni.description = "ekrandan düzenlendi";
+    expect((await writeDraft(path, yeni, opts)).ok).toBe(true);
+
+    const yazilan = await readFile(path, "utf8");
+    expect(yazilan).toContain("# Üst başlık yorumu");
+    expect(yazilan).toContain("# İkinci satır");
+    expect(yazilan).toContain("denetci: reviewer");
+    expect(yazilan).toContain("ekrandan düzenlendi");
+  });
+
+  // Silinen isteğe bağlı alan dosyadan da düşmeli: belgeyi yerinde
+  // düzenlemek, kaldırılan bir alanın yerinde kalması riskini getiriyor.
+  it("taslaktan silinen açıklama dosyadan da düşüyor", async () => {
+    await writeFile(path, `${toYaml({ ...taslak(), description: "eski" })}${PLANLAMA}`);
+    const yeni = taslak();
+    delete yeni.description;
+    expect((await writeDraft(path, yeni, opts)).ok).toBe(true);
+    expect(await readFile(path, "utf8")).not.toContain("eski");
+  });
+
   it("planlama bloğu olmayan akışta hiçbir şey eklenmiyor", async () => {
     await writeFile(path, toYaml(taslak()));
     const sonuc = await writeDraft(path, taslak(), opts);
