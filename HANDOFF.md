@@ -7,7 +7,7 @@ yapıştırılabilsin diye yazıldı: aşağısı Skein'i tanımayan birine de y
 **Dal:** `claude/project-plan-brainstorm-pthvoc` — `claude/project-thread-sc56cs`
 ileri sarılıp üstüne devam edildi, yani iki dalın işi bu dalda birleşti.
 `sc56cs` olduğu yerde duruyor; yeni iş burada.
-**Durum:** 807 test yeşil, iki platformda da; kuyruk sahiplenmesinde üretilemeyen bir kırılma AÇIK, typecheck temiz, ağaç temiz.
+**Durum:** 877 test yeşil, iki platformda da; kuyruk sahiplenmesinde üretilemeyen bir kırılma AÇIK, typecheck temiz, ağaç temiz.
 **Durum raporu:** `DURUM.md` — ne inşa edildi, ne ölçüldü, bugün ne kullanılabilir.
 `watch selftest` bu konteynerde **koşmuyor**: `hub/flows/selftest.yaml`
 depoda izlenmiyor (yalnızca yazarın makinesinde duruyordu, konteyner
@@ -17,6 +17,96 @@ olduğu için kendiliğinden eklenmedi.
 **Kod:** ~13.9k satır ürün + ~10.2k satır test.
 
 ---
+
+---
+
+## QA KAMPANYASI — 32 bulgu, 13 düzeltildi (1-2 Kasım)
+
+Dört paralel tarama koştu (ekran · kart+git · tick+planlama · ölçüm takımı),
+32 bulgu çıktı. Her bulgu kabul edilmeden önce **kendim doğruladım**; her
+düzeltme **mutasyonla** sınandı. 820 → 877 test.
+
+### Düzeltilenler
+
+| # | kusur | neden ağır |
+|---|---|---|
+| 1 | Ekran yazma uçları `localhost`'ta tamamen 403 | araç sessizce yalnızca-okur oluyordu |
+| 2 | DNS rebinding: `Host` hiç okunmuyor, `GET /` yazma jetonunu veriyor | saldırgan sayfası jetonu okuyup yazabilirdi |
+| 3 | Biçim üç makul yazımda daha itirazı yiyor (`kabul.`, rolsüz başlık, `- **Ne:**`) | rolsüz başlık SESSİZCE önceki itirazın alanlarını eziyordu |
+| 4 | Kod reti yazara dönünce alışveriş yeniden açılıyor | "kabul etti ama planı değiştirmedi" diye tamamen yanlış teşhis |
+| 5 | Kapıdan çıkan alışverişte yükümlülükler karta hiç yazılmıyor | `tur: 1` akışlarında kapı ASLA kurulamıyordu |
+| 6 | `git status` düşerse "ağaç temiz" | "işlenmemiş iş devredilemez" kapısı sessizce açılıyor |
+| 7 | Teslim edilmeyen koşu kolun ürünü sayılıyor | tek kapıda kalan koşu kampanyayı OLUMSUZ'a sürükleyebilir |
+| 8 | İlan edilmiş birinci metrik (downstream ret) karar yolunda yok | bu sınıfın ÜÇÜNCÜ örneği |
+| 9 | Bozuk kart dosyası gözcüyü kalıcı olarak açılamaz yapıyor | `done/` altındaki bitmiş bir kart tüm sistemi tutuyordu |
+| 10 | `?? 0` ile maliyet toplama | abonelikle koşan sağlayıcı bedava görünüyor |
+| 11 | Ekran başka akışın SAĞLAM kartını yetim sayıp kapatıyor | yıkıcı, tek düğmeyle |
+| 12 | Planlama kilidi "ret limiti doldu" diye etiketlenip yanlış düğmeleri gösteriyor | insan yanlış etiketlerle karar veriyor |
+| 13 | Ekrandan kaydetmek YAML yorumlarını siliyor (96/34 → 55/0) | gerekçeler bu projede kodun yarısı |
+| 14 | Tek koşuda "kontrol kolu KARARLI" | yanlış güven, k=3 kampanyası parası harcatıyor |
+| 15 | Havuzlanmış blok şişmiş `k=` basıyor | grup ayrımının yasakladığı okumayı davet ediyor |
+| 16 | Grup anahtarı puanlanmış hücrelerden türetiliyor | puanlama kaybı tek kurguyu iki gruba bölüyor |
+| 17 | Yükümlülükler ekranda görünmüyor | insan kapısında kararın dayanağı yok |
+| 18 | İki ısırmayan sınama (onay kapısı · kural 5 döngü) | adları davranışlarını anlatmıyordu |
+
+### AÇIK kalanlar — önem sırası
+
+**Yüksek. Kuyruğa yazan CLI yolları kilidi atlıyor.** `lock.ts` "yazan HER
+koşu kilidi alır" diyor; kilidi yalnızca `watch/cli.ts` alıyor.
+`card -- recover` gözcü koşarken çağrılırsa `active/` altındaki kartı
+kuyruğa geri koyuyor; gözcünün elindeki kart nesnesi hâlâ `active`
+olduğu için `handoff` da geçiyor ve **aynı kart iki rolün kuyruğunda,
+geçmiş uzunlukları eşit** kalıyor — `recover`'ın "uzun geçmiş kazanır"
+kuralı eşitlikte ayırt etmiyor ve bir sonraki süpürme iki ajan turu
+parası harcıyor. `card -- take` de gözcü koşarken kartı insan elinde
+bırakıp sessizce dondurabiliyor.
+*Niye düzeltilmedi:* UI'nın kapı kararları gözcü koşarken normal
+durumdur, yani "her yazma kilit alsın" demek ekranı kullanılamaz yapar.
+Doğru çözüm dar: `active/` alanına dokunan yollar (`recover`, `take`)
+canlı kilit varken reddetmeli. Bu bir politika kararı, o yüzden
+operatöre bırakıldı.
+
+**Orta.**
+- `take` her rename hatasını yarış sanıyor: "kuyruk boş" diyor ve
+  `idle` hiçbir yere yazılmıyor — kart sonsuza kadar durur, tek satır
+  teşhis yok.
+- Kapıda `back`, geri dönecek rol yokken sessizce `retry` oluyor ve
+  günlüğe yine `back` yazılıyor; "insan kartı geri gönderdi mi" sorusu
+  günlükten yanlış cevaplanıyor.
+- `close()` kopya çözümünde `found[0]` alıyor, "uzun geçmiş kazanır"
+  kuralını uygulamıyor.
+- `acquireLock` kaydı atomik yazılmıyor (`wx` ile önce yaratıp sonra
+  yazıyor); eşzamanlı okuyucu boş dosya görüp CANLI kilidi bayat sanabilir.
+- `kalibre` ön kontrolü üretimin sağlığını (`cardState`/`escalation`)
+  sormadan "ÖLÇER" diyebiliyor; `matrixSkip`/`power2x2` o dersi öğrenmişti.
+- Rapor satırında iki payda: `koşu` ölçülmüş koşuyu,
+  `aktivasyon`/`ret` BÜTÜN koşuları sayıyor.
+- Planlama turunda `reject` verdikti gelirse ajanın `reason`'ı tamamen
+  atılıyor — üç paragraf itiraz hiçbir yere yazılmadan kayboluyor.
+
+**Düşük.** Modelin hesaplayıp sayfanın basmadığı alanlar (`action`,
+`planHash`, adımın zaman damgası); `layerGaps`'in kendi kör noktası
+(ŞÜPHELİ, kanıtlanamadı).
+
+### Bu kampanyanın kendi dersleri
+
+**Benim yazdığım iki sınama hiçbir şey sınamıyordu.** `fetch()` `Host`
+başlığını yok sayıyor (yasaklı başlık), yani "yabancı Host reddedilir"
+sınaması kendi kurduğu durumu hiç kurmuyordu. Ham `http.request`'e,
+başlıksız istek için ham sokete geçildi.
+
+**Gevşetmenin ters kusuru var.** İtiraz biçimini gevşetirken iki kez
+fazla kaçıldı: dosyanın kendi başlığı geçersiz itiraz sayıldı, sonra
+başlık kalıbı o kadar gevşedi ki sessiz-kayıp kapısı ATEŞLENEMEZ bir
+dala düştü. İkisini de sınamalar yakaladı.
+
+**`page.test.ts` sayfanın kaynak METNİNİ sınıyor, davranışını değil** —
+ölü bir dalı göremiyor, çünkü metin ölü dalın içinde de duruyor. O yüzden
+koşulun kendisi iddia ediliyor; sınadığı şey BAĞLANTI, çizim değil.
+
+**`src/ui/page.ts`'te ters tırnak kalıcı bir tuzak:** gömülü betik bir
+template literal ve yorumdaki ters tırnak string'i kapatıyor. Bu
+oturumda iki kez düşüldü, ikisini de `tsc` yakaladı.
 
 ## Skein nedir (tanımayan için üç paragraf)
 
