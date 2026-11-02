@@ -1,4 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
+import { al } from "../testing/queue.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -35,7 +36,7 @@ afterEach(async () => {
 
 async function kacisKapisinda(): Promise<Card> {
   await queue.add(newCard({ title: "jitter", task: "iş", topology: daily }));
-  const taken = (await queue.take("coder")) as Card;
+  const taken = await al(queue, "coder");
   return queue.escalate(taken, "ağaçta işlenmemiş değişiklik var");
 }
 
@@ -64,14 +65,14 @@ describe("releaseCard", () => {
   // `released` yapıyor ve o noktada kapı tipi artık okunamaz.
   it("kilit kapısının tipini ve varsayılanını doğru kaydeder", async () => {
     await queue.add(newCard({ title: "jitter", task: "iş", topology: daily }));
-    let card = (await queue.take("coder")) as Card;
+    let card = await al(queue, "coder");
     for (let i = 0; i < 2; i += 1) {
       await queue.handoff(card, {});
-      await queue.reject((await queue.take("reviewer")) as Card, { reason: `tur ${i + 1}` });
-      card = (await queue.take("coder")) as Card;
+      await queue.reject(await al(queue, "reviewer"), { reason: `tur ${i + 1}` });
+      card = await al(queue, "coder");
     }
     await queue.handoff(card, {});
-    const kilitli = await queue.reject((await queue.take("reviewer")) as Card, { reason: "yine olmadı" });
+    const kilitli = await queue.reject(await al(queue, "reviewer"), { reason: "yine olmadı" });
     expect(kilitli.state).toBe("gate");
 
     const sonuc = await releaseCard(root, queue, kilitli.id, undefined, logPath);

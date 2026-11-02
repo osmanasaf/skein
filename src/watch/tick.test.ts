@@ -123,6 +123,53 @@ describe("tick — boş kuyruk", () => {
   });
 });
 
+/**
+ * Alınamayan kart `idle` DEĞİL.
+ *
+ * `take` her `rename` hatasını yarış sanıp "kuyruk boş" diyordu; `tick`
+ * da `idle` dönüyordu ve `tick` `idle` sonucunu GÜNLÜĞE YAZMIYOR. Yani
+ * kart sonsuza kadar duruyor, ne ekranda ne günlükte tek satır teşhis
+ * yoktu. Üretilemeyen "Windows kuyruk arızası" bulgusunun adaylarından
+ * biri tam bu.
+ */
+describe("tick — kuyruk engeli", () => {
+  it("alınamayan kart idle değil, engelli", async () => {
+    const card = await put();
+    await mkdir(join(root, ".skein", "active", "coder", `${card.id}.json`), { recursive: true });
+
+    const result = await tick("coder", options);
+
+    expect(result.status).toBe("engelli");
+    expect(result.status === "engelli" && result.engeller).toHaveLength(1);
+    // Ajan ÇAĞRILMAMALI: elimizde kart yok.
+    expect(claude.calls).toHaveLength(0);
+  });
+
+  it("engel günlüğe dosya ve errno ile yazılıyor", async () => {
+    const card = await put();
+    await mkdir(join(root, ".skein", "active", "coder", `${card.id}.json`), { recursive: true });
+    const logPath = join(root, "olaylar.jsonl");
+
+    await tick("coder", { ...options, log: new EventLog(logPath, "kosu-1") });
+
+    const olaylar = (await readEvents(logPath)).events.filter((e) => e.type === "queue.blocked");
+    expect(olaylar).toHaveLength(1);
+    const olay = olaylar[0] as unknown as { role: string; path: string; code: string };
+    expect(olay.role).toBe("coder");
+    expect(olay.path).toContain(card.id);
+    expect(olay.code).not.toBe("ENOENT");
+  });
+
+  // Boş kuyruk engel DEĞİL: her sessiz turda kayıt yazmak günlüğü işe
+  // yaramaz hâle getirirdi.
+  it("boş kuyruk engel kaydı yazmıyor", async () => {
+    const logPath = join(root, "olaylar.jsonl");
+    await tick("coder", { ...options, log: new EventLog(logPath, "kosu-1") });
+    const olaylar = (await readEvents(logPath)).events.filter((e) => e.type === "queue.blocked");
+    expect(olaylar).toHaveLength(0);
+  });
+});
+
 describe("tick — kabul", () => {
   it("verdikt accept ise kart ileri gider", async () => {
     await put();

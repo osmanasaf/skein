@@ -2,7 +2,14 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { knownProviderSet } from "../adapters/factory.js";
+import { loadFlow } from "../flow/load.js";
+import { snapshot } from "../flow/snapshot.js";
 import { spawnPortable } from "../proc/process.js";
+import { newCard } from "./card.js";
+import { CardQueue } from "./queue.js";
 
 /**
  * CLI'yi GERÇEKTEN koşturur.
@@ -81,5 +88,41 @@ describe("card CLI — gözcü kilidi", () => {
     const { code, out } = await card(dir, "take", "kodlayici");
     expect(code).toBe(0);
     expect(out).toContain("kuyruğu boş");
+  });
+}, 60_000);
+
+/**
+ * "Kuyruk boş" ile "kart alamadım" aynı cümle olamaz.
+ *
+ * `take` her `rename` hatasını yarış sanıyordu: kart kuyrukta kalıyor,
+ * CLI "kuyruğu boş" diyor ve kullanıcı kartı bekliyordu. Çıkış kodu da
+ * 0'dı, yani betikler de arızayı başarı sayıyordu.
+ */
+describe("card CLI — kuyruk engeli", () => {
+  it("alınamayan kart 'kuyruk boş' demiyor", async () => {
+    // Kart üretim API'siyle konuluyor; dosya adlandırmasını testin taklit
+    // etmesi, taklidi sınamak olurdu.
+    const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+    const flow = await loadFlow(join(repoRoot, "hub", "flows", "daily.yaml"), {
+      root: repoRoot,
+      providers: knownProviderSet(),
+    });
+    const queue = new CardQueue(join(dir, ".skein"));
+    await queue.init();
+    const kart = await queue.add(
+      newCard({ title: "iş", task: "bir şey yap", topology: snapshot(flow, repoRoot) }),
+    );
+
+    // Hedef adı bir dizin: `rename` oraya taşıyamaz (Linux EISDIR,
+    // Windows EPERM/EACCES) — "yolda duran bir şey" senaryosu.
+    await mkdir(join(dir, ".skein", "active", kart.role, `${kart.id}.json`), { recursive: true });
+
+    const { code, out } = await card(dir, "take", kart.role);
+
+    expect(out).not.toContain("kuyruğu boş");
+    expect(out).toContain("alınamadı");
+    expect(out).toContain(kart.id);
+    // Betikler için de arıza: 0 dönerse "iş yok" sanılır.
+    expect(code).toBe(1);
   });
 }, 60_000);

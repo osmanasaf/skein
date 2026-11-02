@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Adapter, AgentStep, InvokeResult } from "../adapters/contract.js";
 import type { Card } from "../card/card.js";
-import type { CardQueue } from "../card/queue.js";
+import type { CardQueue, KuyrukEngeli } from "../card/queue.js";
 import type { EventLog } from "../events/log.js";
 import {
   DONE, afterPlanning, isPlanner, itirazPathsFor, planAuthor, planBlind, planObjectors,
@@ -21,6 +21,14 @@ import { resolveWorkspace } from "./workspace.js";
 /** Bir turun sonucu. `idle` dışında her biri kartı hareket ettirmiştir. */
 export type TickResult =
   | { status: "idle" }
+  /**
+   * Kuyrukta kart VAR ama alınamadı — ve bu yarış değil.
+   *
+   * `idle`'dan ayrı bir durum olması şart: `idle` "yapacak iş yok" demek
+   * ve gözcü ona bakıp duruyor. Engel "iş var ama elimi süremiyorum"
+   * demek; aynı kovaya konsa kart sonsuza kadar sessizce durur.
+   */
+  | { status: "engelli"; engeller: KuyrukEngeli[] }
   | { status: "accepted"; card: Card; summary?: string; warnings?: string[] }
   | { status: "rejected"; card: Card; reason: string }
   | { status: "escalated"; card: Card; reason: string };
@@ -63,11 +71,25 @@ const DEFAULT_TIMEOUT_MS = 20 * 60 * 1000;
  */
 export async function tick(roleId: string, options: TickOptions): Promise<TickResult> {
   const result = await settle(roleId, options);
-  if (result.status !== "idle") {
+  if (result.status === "engelli") {
+    // Engel başına bir kayıt: hangi dosya, hangi errno. Toplu bir
+    // "alınamadı" satırı nedeni söylemezdi.
+    for (const engel of result.engeller) {
+      await options.log?.append({
+        type: "queue.blocked",
+        role: roleId,
+        path: engel.path,
+        code: engel.code,
+        message: engel.message,
+      });
+    }
+  }
+  if (result.status !== "idle" && result.status !== "engelli") {
     // Tek yazım noktası: `settle()` bir sonuç DÖNDÜRDÜĞÜ her yol buradan
     // geçer, hiçbiri kaydı atlayamaz. İstisna, sonuç hiç oluşmadan fırlayan
-    // yol: bozuk bir kart dosyası `queue.take()` içinde fırlatır ve o durumda
-    // kaydedilecek bir sonuç yoktur.
+    // yol: `queue.take()` içinden fırlayan bir altyapı hatası; o durumda
+    // kaydedilecek bir sonuç yoktur. Kuyruktan kart ALINAMAMASI ise ayrı
+    // yoldan (`queue.blocked`) kaydediliyor, çünkü ortada kart yok.
     await options.log?.append({
       type: "card.settled",
       cell: `${result.card.id}:${roleId}`,
@@ -86,8 +108,21 @@ export async function tick(roleId: string, options: TickOptions): Promise<TickRe
 async function settle(roleId: string, options: TickOptions): Promise<TickResult> {
   const { queue } = options;
 
-  const card = await queue.take(roleId);
-  if (card === null) return { status: "idle" };
+  const alinan = await queue.take(roleId);
+  if (alinan.kind === "bos") return { status: "idle" };
+  if (alinan.kind === "engel") return { status: "engelli", engeller: alinan.engeller };
+  const card = alinan.card;
+  // Kart alındı ama BAŞKA kartlar alınamadıysa o da kaybolmamalı: turun
+  // sonucu "kabul" olsa bile kuyrukta elimizi süremediğimiz bir dosya var.
+  for (const engel of alinan.engeller) {
+    await options.log?.append({
+      type: "queue.blocked",
+      role: roleId,
+      path: engel.path,
+      code: engel.code,
+      message: engel.message,
+    });
+  }
 
   const role = roleOf(card.topology, roleId);
   if (role === null) {

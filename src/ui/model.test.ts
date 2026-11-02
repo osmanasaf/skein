@@ -1,4 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
+import { al } from "../testing/queue.js";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -137,7 +138,7 @@ describe("buildModel — pano", () => {
 
   it("kartın yeri DİZİNDEN okunur", async () => {
     const card = await put();
-    await queue.take("coder");
+    await al(queue, "coder");
 
     const model = await buildModel(base);
 
@@ -148,7 +149,7 @@ describe("buildModel — pano", () => {
 describe("buildModel — kapılar", () => {
   it("kaçış kapısını gerekçesiyle ayırt eder", async () => {
     await put();
-    const taken = (await queue.take("coder")) as Card;
+    const taken = await al(queue, "coder");
     await queue.escalate(taken, "ağaçta işlenmemiş değişiklik var: README.md");
 
     const model = await buildModel(base);
@@ -173,7 +174,7 @@ describe("buildModel — kapılar", () => {
     });
     const topo = snapshot(flow, root);
     await queue.add(newCard({ title: "iş", task: "i", topology: topo }));
-    const taken = (await queue.take("coder")) as Card;
+    const taken = await al(queue, "coder");
     await queue.handoff(taken, { commit: "abc1234" });
 
     const m = await buildModel({ ...base, topology: topo, flowHash: flow.hash });
@@ -195,12 +196,12 @@ describe("buildModel — kartın hikâyesi", () => {
   // "2 ret" ile "kabul, ret, kapı, ret, bitti" aynı şey değil.
   it("iz sırayla kurulur ve ret gerekçesi taşınır", async () => {
     await put();
-    const first = (await queue.take("coder")) as Card;
+    const first = await al(queue, "coder");
     await queue.handoff(first, { commit: "abc1234" });
-    await queue.reject((await queue.take("reviewer")) as Card, { reason: "senkron çağrıda RangeError" });
-    const again = (await queue.take("coder")) as Card;
+    await queue.reject(await al(queue, "reviewer"), { reason: "senkron çağrıda RangeError" });
+    const again = await al(queue, "coder");
     await queue.handoff(again, { commit: "def5678" });
-    await queue.handoff((await queue.take("reviewer")) as Card, {});
+    await queue.handoff(await al(queue, "reviewer"), {});
 
     const card = (await buildModel(base)).cards[0];
 
@@ -249,7 +250,7 @@ describe("buildModel — ölçüm", () => {
 describe("buildModel — canlı adım", () => {
   it("koşan kartın son adımını verir", async () => {
     const card = await put();
-    await queue.take("coder");
+    await al(queue, "coder");
     const log = new EventLog(logPath, "kosu-1");
     await log.append({
       type: "agent.started", cell: `${card.id}:coder`, role: "coder",
@@ -266,7 +267,7 @@ describe("buildModel — canlı adım", () => {
   // Bitmiş bir turun adımı "şu an" değildir.
   it("tur bittiyse canlı adım gösterilmez", async () => {
     const card = await put();
-    await queue.take("coder");
+    await al(queue, "coder");
     const log = new EventLog(logPath, "kosu-1");
     await log.append({
       type: "agent.started", cell: `${card.id}:coder`, role: "coder",
@@ -315,7 +316,7 @@ describe("buildModel — türetilmiş, durum değil", () => {
   // Model silinse bir sonraki okumada aynen geri gelmeli (değişmez 1).
   it("iki kez kurulan model aynı sonucu verir", async () => {
     await put();
-    await queue.take("coder");
+    await al(queue, "coder");
     const a = await buildModel({ ...base, now: () => new Date(0) });
     const b = await buildModel({ ...base, now: () => new Date(0) });
     expect(a).toEqual(b);
@@ -334,7 +335,7 @@ describe("buildDetail — plan", () => {
 
   it("devredilen kartın plan alanı tam {path, hash} olarak döner", async () => {
     await put();
-    await queue.handoff((await queue.take("coder")) as Card, {
+    await queue.handoff(await al(queue, "coder"), {
       commit: "abc1234",
       plan: { path: "docs/plan/c-yok.md", hash: "66ae27b7539abcdef0123456" },
     });
@@ -360,7 +361,7 @@ describe("buildDetail — planlama alışverişi", () => {
 
   it("action: yazdi, round 0 — objections/accepted/invalid hiç verilmemişse üçü de null", async () => {
     await put();
-    const taken = (await queue.take("coder")) as Card;
+    const taken = await al(queue, "coder");
     await queue.planTurn(taken, "coder", {
       at: new Date().toISOString(),
       event: "plan",
@@ -384,7 +385,7 @@ describe("buildDetail — planlama alışverişi", () => {
 
   it("action: itiraz — accepted verilmemişse null, objections/invalid sayı olarak döner", async () => {
     await put();
-    const taken = (await queue.take("coder")) as Card;
+    const taken = await al(queue, "coder");
     await queue.planTurn(taken, "coder", {
       at: new Date().toISOString(),
       event: "plan",
@@ -410,7 +411,7 @@ describe("buildDetail — planlama alışverişi", () => {
 
   it("action: cevap — invalid: 0 null'a düşmez (?? kullanımı, || değil)", async () => {
     await put();
-    const taken = (await queue.take("coder")) as Card;
+    const taken = await al(queue, "coder");
     await queue.planTurn(taken, "coder", {
       at: new Date().toISOString(),
       event: "plan",
@@ -438,7 +439,7 @@ describe("buildDetail — planlama alışverişi", () => {
 
   it("hiç plan olayı geçmemiş kartta HER kaydın plan alanı null'dur", async () => {
     await put();
-    await queue.handoff((await queue.take("coder")) as Card, { commit: "abc1234" });
+    await queue.handoff(await al(queue, "coder"), { commit: "abc1234" });
     const card = (await queue.list())[0] as Card;
 
     const detail = await buildDetail({ ...base, numstat }, card.id);
@@ -460,8 +461,8 @@ describe("buildDetail — iz ve diff", () => {
   // "En son neden reddedildi" sorusunun cevabı burada.
   it("ret gerekçesi izde tam metin olarak durur", async () => {
     await put();
-    await queue.handoff((await queue.take("coder")) as Card, { commit: "abc1234" });
-    await queue.reject((await queue.take("reviewer")) as Card, {
+    await queue.handoff(await al(queue, "coder"), { commit: "abc1234" });
+    await queue.reject(await al(queue, "reviewer"), {
       reason: "senkron çağrıda RangeError atıyor",
       commit: "abc1234",
     });
@@ -476,7 +477,7 @@ describe("buildDetail — iz ve diff", () => {
 
   it("devir özeti de izde görünür", async () => {
     await put();
-    await queue.handoff((await queue.take("coder")) as Card, {
+    await queue.handoff(await al(queue, "coder"), {
       commit: "abc1234",
       summary: "kabul kriterleri yazıldı",
     });
@@ -489,7 +490,7 @@ describe("buildDetail — iz ve diff", () => {
 
   it("son commit'in diff özetini verir", async () => {
     await put();
-    await queue.handoff((await queue.take("coder")) as Card, { commit: "abc1234" });
+    await queue.handoff(await al(queue, "coder"), { commit: "abc1234" });
     const card = (await queue.list())[0] as Card;
 
     const detail = await buildDetail({ ...base, numstat }, card.id);
@@ -513,7 +514,7 @@ describe("buildDetail — iz ve diff", () => {
   // yüzünden kapanmamalı.
   it("git okunamazsa detay diff'siz döner", async () => {
     await put();
-    await queue.handoff((await queue.take("coder")) as Card, { commit: "yok1234" });
+    await queue.handoff(await al(queue, "coder"), { commit: "yok1234" });
     const card = (await queue.list())[0] as Card;
 
     const detail = await buildDetail({

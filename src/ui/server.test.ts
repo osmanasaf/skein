@@ -1,4 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
+import { al } from "../testing/queue.js";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -136,7 +137,7 @@ describe("serveUi — kapıyı açmak", () => {
 
   async function kapida(): Promise<string> {
     const card = await queue.add(newCard({ title: "jitter", task: "iş", topology }));
-    const taken = (await queue.take("coder")) as Card;
+    const taken = await al(queue, "coder");
     await queue.escalate(taken, "ağaçta işlenmemiş değişiklik var: README.md");
     return card.id;
   }
@@ -447,7 +448,7 @@ describe("adres kapıları", () => {
   // oluyordu. Sebep de kullanıcı için anlamsızdı.
   it("localhost kaynağı kabul edilir", async () => {
     const card = await queue.add(newCard({ title: "x", task: "iş", topology }));
-    const taken = (await queue.take("coder")) as Card;
+    const taken = await al(queue, "coder");
     await queue.escalate(taken, "sebep");
     const res = await fetch(`${server.url}kart/${card.id}/birak`, {
       method: "POST",
@@ -469,7 +470,7 @@ describe("adres kapıları", () => {
 
   it("yabancı kaynak hâlâ reddedilir", async () => {
     const card = await queue.add(newCard({ title: "x", task: "iş", topology }));
-    const taken = (await queue.take("coder")) as Card;
+    const taken = await al(queue, "coder");
     await queue.escalate(taken, "sebep");
     const res = await fetch(`${server.url}kart/${card.id}/birak`, {
       method: "POST",

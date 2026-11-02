@@ -29,7 +29,12 @@ export async function sweep(topology: TopologySnapshot, options: TickOptions): P
     const result = await tick(role.id, options);
     results.push({ role: role.id, result });
   }
-  return { results, moved: results.some((r) => r.result.status !== "idle") };
+  // `engelli` HAREKET SAYILMAZ. Sayılsaydı `runUntilIdle` kart hiç
+  // ilerlemediği hâlde "bir şey oldu" deyip sonsuza kadar geçiş yapardı:
+  // alınamayan bir dosya, gözcüyü boşa döndüren bir çarka dönüşürdü.
+  // Teşhis `report()` ile yine basılıyor, yalnızca döngüyü beslemiyor.
+  const hareket = (r: TickResult): boolean => r.status !== "idle" && r.status !== "engelli";
+  return { results, moved: results.some((r) => hareket(r.result)) };
 }
 
 export interface LoopOptions extends TickOptions {

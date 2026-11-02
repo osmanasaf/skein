@@ -112,6 +112,25 @@ export type EventInput =
     }
   | {
       /**
+       * Kuyruktaki bir kart dosyası alınamadı ve bu yarış DEĞİL.
+       *
+       * Eski hâlinde `take` her `rename` hatasını yarış sayıp "kuyruk boş"
+       * diyordu: kart sonsuza kadar duruyor, günlükte tek satır teşhis
+       * yoktu. Günlüğe yazılan şey kodun KENDİSİ (`EPERM`, `EACCES`, …),
+       * çünkü "alınamadı" cümlesi tek başına nedeni söylemiyor.
+       *
+       * Engel başına bir kayıt: hangi dosya, hangi errno.
+       */
+      type: "queue.blocked";
+      role: string;
+      /** Alınamayan kart dosyasının yolu. */
+      path: string;
+      /** `errno` kodu; yoksa "?". */
+      code: string;
+      message: string;
+    }
+  | {
+      /**
        * Bir turun sonundaki artefaktın anlık görüntüsü.
        *
        * Bu olay olmadan "denetim turunda tam olarak ne değişti" sorusu
@@ -348,6 +367,7 @@ const REQUIRED: Record<EventInput["type"], { strings: string[]; numbers: string[
     strings: ["card", "role", "id", "objector", "durum"],
     numbers: [],
   },
+  "queue.blocked": { strings: ["role", "path", "code", "message"], numbers: [] },
   "artifact.snapshot": {
     strings: ["cell", "label", "path", "fingerprint"],
     numbers: ["turn", "files", "changed", "addedLines", "removedLines"],

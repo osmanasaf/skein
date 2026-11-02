@@ -142,7 +142,8 @@ describe("serve — uyanma", () => {
       signal: stop.signal,
       onSweep: (s) => {
         for (const { result } of s.results) {
-          if (result.status !== "idle" && result.card.state === "done") done.push(result.card.id);
+          if (result.status === "idle" || result.status === "engelli") continue;
+          if (result.card.state === "done") done.push(result.card.id);
         }
       },
     });

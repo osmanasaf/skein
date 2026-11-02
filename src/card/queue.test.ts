@@ -1,4 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
+import { al } from "../testing/queue.js";
 import { mkdtemp, readdir, readFile, rm, symlink, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -71,27 +72,27 @@ describe("CardQueue — temel hareket", () => {
 
   it("take kartı aktif hâle getirir", async () => {
     const card = await put(daily);
-    const taken = await queue.take("coder");
+    const taken = await al(queue, "coder");
 
-    expect(taken?.id).toBe(card.id);
-    expect(taken?.state).toBe("active");
-    expect(taken?.history.at(-1)).toMatchObject({ event: "taken", role: "coder" });
+    expect(taken.id).toBe(card.id);
+    expect(taken.state).toBe("active");
+    expect(taken.history.at(-1)).toMatchObject({ event: "taken", role: "coder" });
     expect(await queue.depth("coder")).toBe(0);
   });
 
   it("boş kuyrukta take null döner", async () => {
-    expect(await queue.take("coder")).toBeNull();
+    expect((await queue.take("coder")).kind).toBe("bos");
   });
 
   it("başka rolün kuyruğundan kart almaz", async () => {
     await put(daily);
-    expect(await queue.take("reviewer")).toBeNull();
+    expect((await queue.take("reviewer")).kind).toBe("bos");
   });
 
   it("kart her zaman tam olarak bir yerdedir", async () => {
     const card = await put(daily);
     expect(await copiesOf(card.id)).toHaveLength(1);
-    await queue.take("coder");
+    await al(queue, "coder");
     expect(await copiesOf(card.id)).toHaveLength(1);
   });
 
@@ -99,15 +100,15 @@ describe("CardQueue — temel hareket", () => {
     const eski = await put(daily, "eski", new Date("2026-09-01T10:00:00Z"));
     const yeni = await put(daily, "yeni", new Date("2026-09-02T10:00:00Z"));
 
-    expect((await queue.take("coder"))?.id).toBe(eski.id);
-    expect((await queue.take("coder"))?.id).toBe(yeni.id);
+    expect((await al(queue, "coder")).id).toBe(eski.id);
+    expect((await al(queue, "coder")).id).toBe(yeni.id);
   });
 });
 
 describe("CardQueue — ileri yön", () => {
   it("handoff kartı sonraki rolün kuyruğuna taşır", async () => {
     await put(daily);
-    const card = (await queue.take("coder")) as Card;
+    const card = await al(queue, "coder");
     const moved = await queue.handoff(card, { commit: "abc1234" });
 
     expect(moved.role).toBe("reviewer");
@@ -120,8 +121,8 @@ describe("CardQueue — ileri yön", () => {
 
   it("zincirin sonunda handoff kartı bitirir", async () => {
     await put(daily);
-    await queue.handoff((await queue.take("coder")) as Card, {});
-    const done = await queue.handoff((await queue.take("reviewer")) as Card, {});
+    await queue.handoff(await al(queue, "coder"), {});
+    const done = await queue.handoff(await al(queue, "reviewer"), {});
 
     expect(done.state).toBe("done");
     expect(done.history.at(-1)).toMatchObject({ event: "done", from: "reviewer" });
@@ -130,7 +131,7 @@ describe("CardQueue — ileri yön", () => {
 
   it("kapısı olan rolden sonra kart insan kapısında bekler", async () => {
     await put(spec);
-    const card = (await queue.take("analyst")) as Card;
+    const card = await al(queue, "analyst");
     const gated = await queue.handoff(card, {});
 
     expect(gated.state).toBe("gate");
@@ -141,7 +142,7 @@ describe("CardQueue — ileri yön", () => {
 
   it("kapıdan bırakılan kart sonraki rolün kuyruğuna geçer", async () => {
     await put(spec);
-    const gated = await queue.handoff((await queue.take("analyst")) as Card, {});
+    const gated = await queue.handoff(await al(queue, "analyst"), {});
     const released = await queue.release(gated.id);
 
     expect(released.role).toBe("coder");
@@ -151,7 +152,7 @@ describe("CardQueue — ileri yön", () => {
 
   it("kapıda reddeden insan işi geri gönderir", async () => {
     await put(spec);
-    const gated = await queue.handoff((await queue.take("analyst")) as Card, {});
+    const gated = await queue.handoff(await al(queue, "analyst"), {});
     const back = await queue.release(gated.id, { decision: "back" });
 
     // analyst zincirin başı: geri dönecek rol yok, işi kendi yeniden yapar.
@@ -168,8 +169,8 @@ describe("CardQueue — ileri yön", () => {
 describe("CardQueue — ret", () => {
   it("ret kartı hedef rolün kuyruğuna geri taşır", async () => {
     await put(daily);
-    await queue.handoff((await queue.take("coder")) as Card, {});
-    const card = (await queue.take("reviewer")) as Card;
+    await queue.handoff(await al(queue, "coder"), {});
+    const card = await al(queue, "reviewer");
     const sent = await queue.reject(card, { reason: "yarış koşulu var", commit: "abc1234" });
 
     expect(sent.role).toBe("coder");
@@ -184,43 +185,43 @@ describe("CardQueue — ret", () => {
     await put(daily, "reddedilen", new Date("2026-09-02T10:00:00Z"));
     await put(daily, "taze", new Date("2026-09-01T10:00:00Z"));
 
-    const first = (await queue.take("coder")) as Card; // taze, daha eski
+    const first = await al(queue, "coder"); // taze, daha eski
     await queue.handoff(first, {});
-    const reviewed = (await queue.take("reviewer")) as Card;
+    const reviewed = await al(queue, "reviewer");
     const rejected = await queue.reject(reviewed, { reason: "olmamış" });
 
     // Kuyrukta daha ESKİ bir kart beklemesine rağmen, geri dönen önce gelir:
     // yarım kalmış işi bitirmek, yenisine başlamaktan önemli.
-    expect((await queue.take("coder"))?.id).toBe(rejected.id);
+    expect((await al(queue, "coder")).id).toBe(rejected.id);
   });
 
   it("gerekçesiz ret reddedilir", async () => {
     await put(daily);
-    await queue.handoff((await queue.take("coder")) as Card, {});
-    const card = (await queue.take("reviewer")) as Card;
+    await queue.handoff(await al(queue, "coder"), {});
+    const card = await al(queue, "reviewer");
     await expect(queue.reject(card, { reason: "  " })).rejects.toThrow(/gerekçe/i);
   });
 
   it("zincirin başı reddedemez", async () => {
     await put(daily);
-    const card = (await queue.take("coder")) as Card;
+    const card = await al(queue, "coder");
     await expect(queue.reject(card, { reason: "olmadı" })).rejects.toThrow(/geri dönecek rol/i);
   });
 
   it("limit dolunca kart insan kapısına çıkar", async () => {
     await put(daily);
-    let card = (await queue.take("coder")) as Card;
+    let card = await al(queue, "coder");
 
     // limit 2: iki ret geçer, üçüncüsü kapıya çıkar.
     for (const round of [1, 2]) {
       await queue.handoff(card, {});
-      const sent = await queue.reject((await queue.take("reviewer")) as Card, { reason: `tur ${round}` });
+      const sent = await queue.reject(await al(queue, "reviewer"), { reason: `tur ${round}` });
       expect(sent.rejects["reviewer->coder"]).toBe(round);
-      card = (await queue.take("coder")) as Card;
+      card = await al(queue, "coder");
     }
 
     await queue.handoff(card, {});
-    const escalated = await queue.reject((await queue.take("reviewer")) as Card, { reason: "yine olmadı" });
+    const escalated = await queue.reject(await al(queue, "reviewer"), { reason: "yine olmadı" });
 
     expect(escalated.state).toBe("gate");
     expect(escalated.history.at(-1)).toMatchObject({ event: "gate", role: "reviewer" });
@@ -233,7 +234,7 @@ describe("CardQueue — ret", () => {
   describe("kaçış kapısı ≠ onay/kilit kapısı", () => {
     async function escalated(): Promise<Card> {
       await put(daily);
-      const card = (await queue.take("coder")) as Card;
+      const card = await al(queue, "coder");
       return queue.escalate(card, "ağaçta işlenmemiş değişiklik var: README.md");
     }
 
@@ -263,8 +264,8 @@ describe("CardQueue — ret", () => {
 
     it("kaçış kapısından geri göndermek serbest", async () => {
       await put(daily);
-      await queue.handoff((await queue.take("coder")) as Card, {});
-      const card = await queue.escalate((await queue.take("reviewer")) as Card, "verdikt yok");
+      await queue.handoff(await al(queue, "coder"), {});
+      const card = await queue.escalate(await al(queue, "reviewer"), "verdikt yok");
 
       const released = await queue.release(card.id, { decision: "back" });
 
@@ -273,7 +274,7 @@ describe("CardQueue — ret", () => {
 
     it("onay kapısında ileri bırakmak serbest — kod zaten taşındı", async () => {
       await put(spec);
-      const card = (await queue.take("analyst")) as Card;
+      const card = await al(queue, "analyst");
       const gated = await queue.handoff(card, { commit: "abc1234" });
       expect(gated.state).toBe("gate");
 
@@ -287,14 +288,14 @@ describe("CardQueue — ret", () => {
     /** daily akışında kartı ret limiti dolana kadar döndürür. */
     async function deadlock(): Promise<Card> {
       await put(daily);
-      let card = (await queue.take("coder")) as Card;
+      let card = await al(queue, "coder");
       for (let i = 0; i < 2; i++) {
         await queue.handoff(card, {});
-        await queue.reject((await queue.take("reviewer")) as Card, { reason: `tur ${i + 1}` });
-        card = (await queue.take("coder")) as Card;
+        await queue.reject(await al(queue, "reviewer"), { reason: `tur ${i + 1}` });
+        card = await al(queue, "coder");
       }
       await queue.handoff(card, {});
-      return queue.reject((await queue.take("reviewer")) as Card, { reason: "yine olmadı" });
+      return queue.reject(await al(queue, "reviewer"), { reason: "yine olmadı" });
     }
 
     // "Denetçi haklı" — iş üreticiye döner, sayaç sıfırlanmış olarak.
@@ -309,14 +310,14 @@ describe("CardQueue — ret", () => {
 
   it("reddeden rol kabul edince o kenarın sayacı sıfırlanır", async () => {
     await put(daily);
-    await queue.handoff((await queue.take("coder")) as Card, {});
-    await queue.reject((await queue.take("reviewer")) as Card, { reason: "olmadı" });
+    await queue.handoff(await al(queue, "coder"), {});
+    await queue.reject(await al(queue, "reviewer"), { reason: "olmadı" });
 
-    const fixed = (await queue.take("coder")) as Card;
+    const fixed = await al(queue, "coder");
     expect(rejectCount(fixed, "reviewer", "coder")).toBe(1);
 
     await queue.handoff(fixed, {});
-    const accepted = await queue.handoff((await queue.take("reviewer")) as Card, {});
+    const accepted = await queue.handoff(await al(queue, "reviewer"), {});
     // Sayaç sıfırlanmıyor, anahtar siliniyor: kart ölü sıfırlar biriktirmesin.
     expect(rejectCount(accepted, "reviewer", "coder")).toBe(0);
     expect(Object.keys(accepted.rejects)).toEqual([]);
@@ -335,11 +336,18 @@ describe("CardQueue — çökme ve yarış", () => {
     expect(await queue.depth("coder")).toBe(1);
 
     const [a, b] = await Promise.all([queue.take("coder"), queue.take("coder")]);
-    const alinan = [a, b].filter((c): c is Card => c !== null);
+    const alinan = [a, b].flatMap((r) => (r.kind === "alindi" ? [r.card] : []));
     // Tek bir kimlik beklenir. İki kez aynı kimlik çıkarsa yarış, iki ayrı
     // kimlik çıkarsa kuyruk kurgusu bozuk — mesaj ikisini de gösterir.
     expect(alinan.map((c) => c.id).join(" + ")).toBe(card.id);
     expect(await queue.depth("coder")).toBe(0);
+    // Yarışı KAYBEDEN taraf SESSİZ kalmalı: ENOENT engel değil, normaldir.
+    // Engel sayılsaydı her eşzamanlı tur yanlış alarm basardı — ve kusurun
+    // kendisi "bildiğinden az söyleyen rapor"un tersi, "bilmediğini söyleyen
+    // rapor" olurdu. (Bu satır olmadan "ENOENT'i de engel say" mutasyonu
+    // hayatta kalıyordu.)
+    expect([a, b].filter((r) => r.kind === "engel")).toEqual([]);
+    expect([a, b].filter((r) => r.kind === "bos")).toHaveLength(1);
   });
 
   // Yarışı KAYBEDEN taraf nazikçe `null` dönmek zorunda: `#scan` dizini
@@ -365,13 +373,64 @@ describe("CardQueue — çökme ve yarış", () => {
         join(dirname(gercek as string), "0-kopuk.json"));
 
       // Kopuk bağ atlanıyor, gerçek kart alınıyor.
-      const alinan = await queue.take("coder");
-      expect(alinan?.id).toBe(card.id);
+      expect((await al(queue, "coder")).id).toBe(card.id);
 
       // Kart kalmayınca da çökmüyor: null dönüyor.
-      expect(await queue.take("coder")).toBeNull();
+      expect((await queue.take("coder")).kind).toBe("bos");
     },
   );
+
+  /**
+   * `take` her `rename` hatasını yarış sanıyordu.
+   *
+   * Eski hâli `catch { continue; }` idi: ENOENT (yarışı kaybettik) ile
+   * EACCES/EPERM/EBUSY/EXDEV/ENOSPC arasında hiç ayrım yoktu. Kart
+   * kuyrukta kalıyor, `take` "kuyruk boş" diyor, hiçbir yere tek satır
+   * teşhis yazılmıyordu — kart sonsuza kadar duruyordu.
+   *
+   * Engel şöyle kuruluyor: hedef ADA sahip bir DİZİN yaratılıyor, yani
+   * `rename` dosyayı oraya taşıyamıyor (Linux'ta EISDIR, Windows'ta
+   * EPERM/EACCES). "Yolda duran bir şey" senaryosunun taşınabilir hâli —
+   * Windows'ta virüs tarayıcısının açık tuttuğu dosya da buraya düşüyor.
+   */
+  it("yarış OLMAYAN rename hatası engel olarak bildiriliyor", async () => {
+    const card = await put(daily);
+    // Hedef adı bir dizin: rename oraya taşıyamaz.
+    await mkdir(join(root, ".skein", "active", "coder", `${card.id}.json`), { recursive: true });
+
+    const sonuc = await queue.take("coder");
+
+    expect(sonuc.kind).toBe("engel");
+    if (sonuc.kind !== "engel") throw new Error("engel beklendi");
+    expect(sonuc.engeller).toHaveLength(1);
+    // Teşhis kodu ve dosyayı İÇERMELİ: "alınamadı" tek başına hiçbir yere
+    // götürmez.
+    expect(sonuc.engeller[0]?.code).not.toBe("ENOENT");
+    expect(sonuc.engeller[0]?.code).not.toBe("?");
+    expect(sonuc.engeller[0]?.path).toContain(card.id);
+    // Kart KUYRUKTA kalmış olmalı: kaybolmadı, yalnızca alınamadı.
+    expect(await queue.depth("coder")).toBe(1);
+  });
+
+  // "Boş" ile "alınamadı" yapısal olarak ayrı olmalı; eski imza (`Card |
+  // null`) ikisini aynı değere eziyordu.
+  it("boş kuyruk ile alınamayan kuyruk aynı sonuç değil", async () => {
+    expect((await queue.take("coder")).kind).toBe("bos");
+  });
+
+  // Bir kart alınırken BAŞKA kartın alınamaması da kaybolmamalı.
+  it("alınan kart engelleri gizlemiyor", async () => {
+    const engelli = await put(daily, "engelli", new Date("2026-01-01T00:00:00Z"));
+    const saglam = await put(daily, "sağlam", new Date("2026-01-02T00:00:00Z"));
+    await mkdir(join(root, ".skein", "active", "coder", `${engelli.id}.json`), { recursive: true });
+
+    const sonuc = await queue.take("coder");
+
+    expect(sonuc.kind).toBe("alindi");
+    if (sonuc.kind !== "alindi") throw new Error("alindi beklendi");
+    expect(sonuc.card.id).toBe(saglam.id);
+    expect(sonuc.engeller.map((e) => e.path.includes(engelli.id))).toEqual([true]);
+  });
 
   // Kaybolan dosya iyi huylu, BOZUK dosya değil: ikincisi veri kaybı ve
   // sessizce atlanırsa kart yok sayılır.
@@ -386,8 +445,7 @@ describe("CardQueue — çökme ve yarış", () => {
     await writeFile(join(root, ".skein", "queue", "coder", "0-000000000000000-c-bozuk.json"), "{ değil");
 
     // Sağlam kart alınabiliyor: bir bozuk dosya kuyruğu tutmuyor.
-    const alinan = await queue.take("coder");
-    expect(alinan?.id).toBe(saglam.id);
+    expect((await al(queue, "coder")).id).toBe(saglam.id);
   });
 
   it("bozuk dosya SESSİZ geçmiyor: yolu bildiriliyor", async () => {
@@ -411,7 +469,7 @@ describe("CardQueue — çökme ve yarış", () => {
   // fırlatması gözcüyü kalıcı olarak açılamaz hâle getiriyordu.
   it("recover bozuk dosyaya rağmen koşuyor", async () => {
     await put(daily);
-    const card = (await queue.take("coder")) as Card;
+    const card = await al(queue, "coder");
     await mkdir(join(root, ".skein", "done"), { recursive: true });
     await writeFile(join(root, ".skein", "done", "c-bozuk.json"), "{ değil");
 
@@ -421,7 +479,7 @@ describe("CardQueue — çökme ve yarış", () => {
 
   it("recover yarıda kalan aktif kartı kuyruğa geri koyar", async () => {
     await put(daily);
-    const card = (await queue.take("coder")) as Card;
+    const card = await al(queue, "coder");
 
     const recovered = await queue.recover();
     expect(recovered.map((c) => c.id)).toEqual([card.id]);
@@ -431,7 +489,7 @@ describe("CardQueue — çökme ve yarış", () => {
 
   it("recover kopyayı uzun geçmişli olanı tutarak çözer", async () => {
     await put(daily);
-    const card = (await queue.take("coder")) as Card;
+    const card = await al(queue, "coder");
     const moved = await queue.handoff(card, { commit: "abc" });
 
     // Taşıma tamamlandıktan SONRA kaynak dosyanın silinemediği hâli kur:
@@ -458,7 +516,7 @@ describe("CardQueue — listeleme", () => {
   it("list tüm kartları durumlarıyla döner", async () => {
     const a = await put(daily, "a", new Date("2026-09-01T10:00:00Z"));
     const b = await put(daily, "b", new Date("2026-09-02T10:00:00Z"));
-    await queue.take("coder");
+    await al(queue, "coder");
 
     const all = await queue.list();
     expect(all.map((c) => c.id).sort()).toEqual([a.id, b.id].sort());

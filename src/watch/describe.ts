@@ -4,6 +4,7 @@ import type { TickResult } from "./tick.js";
 
 export const MARK: Record<TickResult["status"], string> = {
   idle: " ",
+  engelli: "✗",
   accepted: "→",
   rejected: "←",
   escalated: "⏸",
@@ -71,6 +72,15 @@ export function describeTick(role: string, result: TickResult): string {
   switch (result.status) {
     case "idle":
       return `${head} —`;
+    case "engelli":
+      // Teşhis TEK SATIR değil, engel başına bir satır: dosya ve errno
+      // olmadan "alınamadı" cümlesi kullanıcıyı hiçbir yere götürmez.
+      return (
+        `${head} ✗ kuyrukta kart var ama ALINAMADI (yarış değil)` +
+        result.engeller
+          .map((e) => `\n             ${e.code}  ${e.path}\n             ${e.message}`)
+          .join("")
+      );
     case "accepted":
       return `${head} kabul → ${result.card.state === "done" ? "bitti" : result.card.role}` +
         planNote(result.card) +

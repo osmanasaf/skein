@@ -1,4 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
+import { al } from "../testing/queue.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -121,7 +122,7 @@ describe("closeOrphan", () => {
   // Altından kartı çekmek, parası ödenmiş bir turu ortada bırakmak olurdu.
   it("koşan kart kapatılamaz", async () => {
     await specKart();
-    await queue.take("analyst");
+    await al(queue, "analyst");
     const aktif = (await queue.list())[0] as Card;
     expect(aktif.state).toBe("active");
 
@@ -130,7 +131,7 @@ describe("closeOrphan", () => {
 
   it("kapıdaki yetim kart kapatılabilir", async () => {
     await specKart();
-    const taken = (await queue.take("analyst")) as Card;
+    const taken = await al(queue, "analyst");
     const gated = await queue.escalate(taken, "verdikt yok");
     expect(gated.state).toBe("gate");
 

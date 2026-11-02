@@ -15,6 +15,28 @@ import {
  */
 export type ReleaseDecision = "forward" | "back" | "retry";
 
+/**
+ * Kuyruktaki bir kart dosyası alınamadı ve bu YARIŞ DEĞİL.
+ *
+ * Yarışı kaybetmek (ENOENT) normaldir ve sessizdir; gerisi gerçek bir
+ * engeldir ve kart kuyrukta kalır.
+ */
+export interface KuyrukEngeli {
+  /** Alınamayan kart dosyasının yolu. */
+  path: string;
+  /** `errno` kodu; yoksa "?". */
+  code: string;
+  message: string;
+}
+
+export type TakeResult =
+  /** Kart alındı. `engeller` boş olmayabilir: başka kartlar alınamamış olabilir. */
+  | { kind: "alindi"; card: Card; engeller: KuyrukEngeli[] }
+  /** Kuyrukta kart yok. Engel de yok — alan bilerek bulunmuyor. */
+  | { kind: "bos" }
+  /** Kuyrukta kart VAR ama hiçbiri alınamadı. */
+  | { kind: "engel"; engeller: KuyrukEngeli[] };
+
 export class QueueError extends Error {
   constructor(message: string) {
     super(message);
@@ -251,9 +273,10 @@ export class CardQueue {
    * taşıyabilir, diğeri ENOENT alır ve sıradakine geçer. Kilit dosyasına
    * gerek yok.
    */
-  async take(role: string): Promise<Card | null> {
+  async take(role: string): Promise<TakeResult> {
     const dir = this.#activeDir(role);
     await mkdir(dir, { recursive: true });
+    const engeller: KuyrukEngeli[] = [];
 
     for (const { card, path } of (await this.#scan(this.#queueDir(role))).kartlar) {
       const dest = join(dir, `${card.id}.json`);
@@ -262,7 +285,26 @@ export class CardQueue {
         // sıradakine bakar. Ara dosya yok — aradaki çökme kartı ortada
         // bırakamaz, çünkü ara yok.
         await rename(path, dest);
-      } catch {
+      } catch (cause) {
+        const code = (cause as NodeJS.ErrnoException).code ?? "?";
+        // ENOENT: yarışı KAYBETTİK, kartı başka bir süreç aldı. Eşzamanlılığın
+        // normali, sessizce sıradakine.
+        //
+        // Her şey DEĞİL. Eski hâli `catch { continue; }` idi, yani EACCES,
+        // EPERM, EBUSY, EXDEV, ENOSPC, EROFS — hepsi "yarış" sayılıyordu:
+        // kart kuyrukta kalıyor, `take` "kuyruk boş" diyor ve hiçbir yere
+        // tek satır teşhis yazılmıyordu. Kart sonsuza kadar duruyordu.
+        //
+        // Windows'ta virüs tarayıcısı ya da dosya dizinleyicisi açık tuttuğu
+        // bir dosyanın `rename`'ine EPERM/EBUSY verir. Üretilemeyen "Windows
+        // kuyruk arızası" bulgusunun adaylarından biri tam bu ve sessizce
+        // yutuluyordu; artık en azından KONUŞUYOR.
+        //
+        // Yeniden deneme YOK, çünkü gereksiz: gözcü zaten döngüde, sonraki
+        // geçiş denemenin kendisidir. Tek seferlik CLI'de ise kullanıcı
+        // teşhisi görüp kendi karar verir.
+        if (code === "ENOENT") continue;
+        engeller.push({ path, code, message: (cause as Error).message });
         continue;
       }
       // İçerik talepten SONRA güncellenir. Buradaki çökme kartı `active/`
@@ -273,9 +315,13 @@ export class CardQueue {
         state: "active" as const,
       };
       await this.#rewrite(dest, claimed);
-      return claimed;
+      return { kind: "alindi", card: claimed, engeller };
     }
-    return null;
+    // "Boş" ile "alınamadı" yapısal olarak ayrı: `bos` varyantının `engeller`
+    // alanı YOK, yani engel varken "kuyruk boş" demek tip düzeyinde
+    // temsil edilemiyor. Bu projede en sık tekrarlayan kusur sınıfı
+    // "bildiğinden az söyleyen rapor yolu"; burada o yol kapatıldı.
+    return engeller.length === 0 ? { kind: "bos" } : { kind: "engel", engeller };
   }
 
   /** Bir kart dosyasını yerinde, atomik olarak günceller. */

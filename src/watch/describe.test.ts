@@ -139,3 +139,45 @@ describe("describeTick", () => {
     expect(describeTick("reviewer", result)).not.toMatch(/planlama/);
   });
 });
+
+/**
+ * Teşhis satırı dosyayı ve errno'yu YAZMALI.
+ *
+ * Kusur "kart sonsuza kadar durur, tek satır teşhis yok" idi. Yalnızca
+ * "alınamadı" yazan bir satır o kusuru kapatmaz: kullanıcı hangi dosya ve
+ * neden sorusuna cevap alamazsa gözcüyü yine yeniden başlatmaktan başka
+ * bir şey yapamaz.
+ */
+describe("describeTick — kuyruk engeli", () => {
+  it("dosyayı ve errno'yu basıyor", async () => {
+    const result: TickResult = {
+      status: "engelli",
+      engeller: [
+        { path: "/d/.skein/queue/coder/0-x-c-1.json", code: "EPERM", message: "operation not permitted" },
+      ],
+    };
+
+    const satir = describeTick("coder", result);
+
+    expect(satir).toContain("ALINAMADI");
+    expect(satir).toContain("EPERM");
+    expect(satir).toContain("0-x-c-1.json");
+    expect(satir).toContain("operation not permitted");
+  });
+
+  it("her engel için ayrı satır", async () => {
+    const result: TickResult = {
+      status: "engelli",
+      engeller: [
+        { path: "/a.json", code: "EPERM", message: "m1" },
+        { path: "/b.json", code: "EBUSY", message: "m2" },
+      ],
+    };
+
+    const satir = describeTick("coder", result);
+
+    expect(satir).toContain("/a.json");
+    expect(satir).toContain("/b.json");
+    expect(satir).toContain("EBUSY");
+  });
+});

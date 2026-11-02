@@ -192,11 +192,20 @@ async function run(argv: string[], root: string): Promise<number> {
         console.error(`✗ ${engel}`);
         return 1;
       }
-      const card = await queue.take(role);
-      if (card === null) {
+      const alinan = await queue.take(role);
+      // "Kuyruk boş" ile "alamadım" aynı cümle OLAMAZ: ikincisinde kart
+      // kuyrukta duruyor ve kullanıcı bunu bilmeden bekler.
+      for (const engel of alinan.kind === "bos" ? [] : alinan.engeller) {
+        console.error(`✗ kart alınamadı (yarış değil): ${engel.code}`);
+        console.error(`  ${engel.path}`);
+        console.error(`  ${engel.message}`);
+      }
+      if (alinan.kind === "engel") return 1;
+      if (alinan.kind === "bos") {
         console.log(`${role} kuyruğu boş.`);
         return 0;
       }
+      const card = alinan.card;
       console.log(`▶ ${card.id} alındı — ${role} üzerinde aktif\n`);
       console.log(card.task);
       return 0;
