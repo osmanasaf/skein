@@ -69,7 +69,8 @@ describe("armRuns", () => {
       arm: "planli", taskId: "g", ran: true, hooks: 10, red: 2,
       activations: 4, rejects: 1, planning: { rounds: 1, objections: 2, accepted: 1, invalid: 3 },
     });
-    expect(runs[0]?.costUsd).toBeCloseTo(0.4);
+    // `?? 0` YOK: ölçü `UsageTotal` ve bildirilmeyen alan BOŞ kalıyor.
+    expect(runs[0]?.usage.costUsd).toBeCloseTo(0.4);
   });
 
   // Kol, "plan olayı var mı" diye çıkarsanmıyor: planlayıcısı hiç koşmamış
@@ -112,6 +113,46 @@ describe("armRuns", () => {
  * yarım/reddedilmiş artefaktın kanca sayısı kolun DOĞRULUĞU diye
  * okunuyordu — akışın kendisi "bu iş devredilemez" dediği hâlde.
  */
+/**
+ * BİLDİRİLMEYEN SIFIR DEĞİLDİR — projenin kurucu kuralı, 6d kolunda
+ * ihlal ediliyordu.
+ *
+ * `costUsd` `?? 0` ile toplanıyordu. ChatGPT aboneliğiyle koşan codex
+ * `total_cost_usd` üretmiyor, yani rapor `$0.00` basıyordu ve karar metni
+ * "bedeli aktivasyon farkı kadar" derken maliyet sütunu bunu "bedava"
+ * diye ONAYLIYORDU. `usage.ts` tam bunun için yazılmıştı ve
+ * `matrix`/`summary` onu kullanıyordu; bu kol kullanmıyordu.
+ */
+describe("ölçü — bildirilmeyen boş kalıyor", () => {
+  const kosuOlcu = (runId: string, usage?: Record<string, number>): SkeinEvent[] => [
+    ev({ type: "ab.arm", taskId: "g", arm: "planli", flow: "f", model: "m1" }, runId),
+    ev({ type: "agent.finished", cell: "c", exitCode: 0, durationMs: 1,
+      ...(usage === undefined ? {} : { usage }) }, runId),
+    ev({ type: "hooks.measured", cell: "o", ran: true, total: 10, red: [] }, runId),
+  ];
+
+  it("dolar bildirilmediyse costUsd BOŞ, sıfır değil", () => {
+    const [run] = armRuns(kosuOlcu("r1", { inputTokens: 100, outputTokens: 5 }));
+    expect(run?.usage.costUsd).toBeUndefined();
+    expect(run?.usage.inputTokens).toBe(100);
+  });
+
+  it("hiç ölçü bildirilmediyse hepsi boş", () => {
+    const [run] = armRuns(kosuOlcu("r1"));
+    expect(run?.usage).toEqual({});
+  });
+
+  it("dolar bildiren ve bildirmeyen çağrılar karışırsa dolar toplanıyor", () => {
+    const [run] = armRuns([
+      ...kosuOlcu("r1", { costUsd: 0.25, inputTokens: 10 }),
+      ev({ type: "agent.finished", cell: "d", exitCode: 0, durationMs: 1,
+        usage: { inputTokens: 90 } }, "r1"),
+    ]);
+    expect(run?.usage.costUsd).toBeCloseTo(0.25);
+    expect(run?.usage.inputTokens).toBe(100);
+  });
+});
+
 describe("teslim edilmeyen koşu", () => {
   const settled = (runId: string, state: string): SkeinEvent =>
     ev({ type: "card.settled", cell: "c", card: "k", role: "coder", outcome: "escalated", state }, runId);

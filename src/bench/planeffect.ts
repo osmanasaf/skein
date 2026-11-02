@@ -1,6 +1,7 @@
 import type { SkeinEvent } from "../events/log.js";
 import { MIN_REPEATS, NEGATIVE_THRESHOLD, POSITIVE_THRESHOLD, type VerdictCode } from "./effect.js";
 import type { Arm } from "./ab.js";
+import { sumUsage, totalUsage, type UsageTotal } from "./usage.js";
 
 /**
  * Mekanizma eşikleri — `PLANLAMA.md`'nin "Nasıl bileceğiz işe yaradığını"
@@ -39,7 +40,18 @@ export interface ArmSide {
   /** Kırmızı kanca oranı. */
   redRate: number;
   activations: number;
-  costUsd: number;
+  /**
+   * Kolun ölçüsü — ORTAK BİRİM TOKEN, dolar bildiren sağlayıcı için ek alan.
+   *
+   * Eskiden `costUsd: number` idi ve `?? 0` ile toplanıyordu: ChatGPT
+   * aboneliğiyle koşan codex `total_cost_usd` üretmiyor, yani rapor
+   * `$0.00` basıyordu ve karar metni "bedeli aktivasyon farkı kadar"
+   * derken maliyet sütunu bunu "bedava" diye onaylıyordu. Projenin kurucu
+   * kuralının ihlali: BİLDİRİLMEYEN SIFIR DEĞİLDİR. `usage.ts` tam bunun
+   * için yazıldı ve `matrix`/`summary` onu kullanıyordu; 6d kolu
+   * kullanmıyordu.
+   */
+  usage: UsageTotal;
   rejects: number;
   /** Ölçülemeyen koşular: "kusur yok" DEĞİL, yer gerçeği yok. */
   unmeasured: number;
@@ -168,7 +180,7 @@ interface ArmRun {
   /** Kırmızı kancaların ADLARI; kimlik karşılaştırması buna dayanıyor. */
   redNames: string[];
   activations: number;
-  costUsd: number;
+  usage: UsageTotal;
   rejects: number;
   /**
    * Kartın SON durumu (`card.settled.state`); hiç kayıt yoksa `"yok"`.
@@ -196,7 +208,7 @@ export function armRuns(events: SkeinEvent[]): ArmRun[] {
   for (const [runId, meta] of arms) {
     out.set(runId, {
       runId, taskId: meta.taskId, model: meta.model, arm: meta.arm,
-      ran: false, hooks: 0, red: 0, redNames: [], activations: 0, costUsd: 0, rejects: 0,
+      ran: false, hooks: 0, red: 0, redNames: [], activations: 0, usage: {}, rejects: 0,
       state: "yok", obligations: [],
     });
   }
@@ -206,7 +218,8 @@ export function armRuns(events: SkeinEvent[]): ArmRun[] {
     if (run === undefined) continue;
     if (e.type === "agent.finished") {
       run.activations += 1;
-      run.costUsd += e.usage?.costUsd ?? 0;
+      // `?? 0` YOK: bildirilmeyen ölçü boş kalıyor, sıfıra düşmüyor.
+      run.usage = sumUsage(run.usage, totalUsage([e.usage]));
     }
     if (e.type === "card.settled") {
       if (e.outcome === "rejected") run.rejects += 1;
@@ -292,7 +305,7 @@ function side(runs: ArmRun[]): ArmSide | null {
     red,
     redRate: hooks === 0 ? 0 : red / hooks,
     activations: runs.reduce((s, r) => s + r.activations, 0),
-    costUsd: runs.reduce((s, r) => s + r.costUsd, 0),
+    usage: runs.reduce<UsageTotal>((u, r) => sumUsage(u, r.usage), {}),
     rejects: runs.reduce((s, r) => s + r.rejects, 0),
     unmeasured: runs.length - olculen.length,
     undelivered: olculen.length - teslim.length,

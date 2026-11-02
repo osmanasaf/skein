@@ -496,12 +496,12 @@ function printPlanEffect(r: PlanEffectReport): void {
   const pct = (n: number | null): string => (n === null ? "—" : `%${(n * 100).toFixed(0)}`);
   for (const g of r.groups) {
     console.log(`\n=== ${g.taskId} × ${g.model}  ·  k=${g.repeats} ===`);
-    console.log("  kol        koşu  kanca  kırmızı   oran   aktivasyon   maliyet   ret");
+    console.log("  kol        koşu  kanca  kırmızı   oran   aktivasyon   ret   ölçü");
     for (const [ad, s] of [["plansız", g.plansiz], ["planlı", g.planli]] as const) {
       if (s === null) continue;
       console.log(`  ${ad.padEnd(10)}${String(s.runs).padStart(4)}${String(s.hooks).padStart(7)}` +
         `${String(s.red).padStart(9)}${pct(s.redRate).padStart(7)}${String(s.activations).padStart(13)}` +
-        `${("$" + s.costUsd.toFixed(2)).padStart(10)}${String(s.rejects).padStart(6)}` +
+        `${String(s.rejects).padStart(6)}   ${formatUsage(s.usage)}` +
         (s.unmeasured > 0 ? `   (${s.unmeasured} ÖLÇÜLEMEDİ)` : "") +
         // TESLİM EDİLMEDİ üçüncü bir durum: süit koştu ama kart `done`'a
         // varmadı, yani artefakt kolun ürünü değil. Paydadan düştü ve
