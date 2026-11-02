@@ -20,11 +20,14 @@ olduğu için kendiliğinden eklenmedi.
 
 ---
 
-## QA KAMPANYASI — 32 bulgu, 13 düzeltildi (1-2 Kasım)
+## QA KAMPANYASI — 33 bulgu, 21 düzeltildi (1-2 Kasım)
 
 Dört paralel tarama koştu (ekran · kart+git · tick+planlama · ölçüm takımı),
 32 bulgu çıktı. Her bulgu kabul edilmeden önce **kendim doğruladım**; her
-düzeltme **mutasyonla** sınandı. 820 → 877 test.
+düzeltme **mutasyonla** sınandı. 820 → 889 test.
+
+33. bulgu kampanyanın değil, **kilidi düzeltirken benim** bulgumdur: 19.
+satır. Kampanyanın dört taraması da onu kaçırdı.
 
 ### Düzeltilenler
 
@@ -48,23 +51,11 @@ düzeltme **mutasyonla** sınandı. 820 → 877 test.
 | 16 | Grup anahtarı puanlanmış hücrelerden türetiliyor | puanlama kaybı tek kurguyu iki gruba bölüyor |
 | 17 | Yükümlülükler ekranda görünmüyor | insan kapısında kararın dayanağı yok |
 | 18 | İki ısırmayan sınama (onay kapısı · kural 5 döngü) | adları davranışlarını anlatmıyordu |
+| 19 | **Kilit yarım yazılmış hâlde görünüyor** (`wx` yaratıp SONRA yazıyor) | okuyan boş dosya görüp CANLI kilidi siliyordu: iki gözcü, uyarı bile basılmadan |
+| 20 | `card -- take` / `recover` gözcü kilidine hiç bakmıyor | gözcünün elindeki kartı kuyruğa geri atıp aynı iş için ikinci kez para harcatıyor |
+| 21 | "12 çağrıyı yarıştır" sınaması 19. kusuru GÖRMÜYOR | ısırmayan sınamanın yerine doğrudan değişmez ölçüldü |
 
 ### AÇIK kalanlar — önem sırası
-
-**Yüksek. Kuyruğa yazan CLI yolları kilidi atlıyor.** `lock.ts` "yazan HER
-koşu kilidi alır" diyor; kilidi yalnızca `watch/cli.ts` alıyor.
-`card -- recover` gözcü koşarken çağrılırsa `active/` altındaki kartı
-kuyruğa geri koyuyor; gözcünün elindeki kart nesnesi hâlâ `active`
-olduğu için `handoff` da geçiyor ve **aynı kart iki rolün kuyruğunda,
-geçmiş uzunlukları eşit** kalıyor — `recover`'ın "uzun geçmiş kazanır"
-kuralı eşitlikte ayırt etmiyor ve bir sonraki süpürme iki ajan turu
-parası harcıyor. `card -- take` de gözcü koşarken kartı insan elinde
-bırakıp sessizce dondurabiliyor.
-*Niye düzeltilmedi:* UI'nın kapı kararları gözcü koşarken normal
-durumdur, yani "her yazma kilit alsın" demek ekranı kullanılamaz yapar.
-Doğru çözüm dar: `active/` alanına dokunan yollar (`recover`, `take`)
-canlı kilit varken reddetmeli. Bu bir politika kararı, o yüzden
-operatöre bırakıldı.
 
 **Orta.**
 - `take` her rename hatasını yarış sanıyor: "kuyruk boş" diyor ve

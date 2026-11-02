@@ -1,4 +1,5 @@
-import { readFile, rm, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { link, readFile, rm, unlink, writeFile } from "node:fs/promises";
 
 /**
  * Kilit dosyasının içeriği. Ekran ve `card ls` gibi okuyucular buradan
@@ -49,8 +50,21 @@ export function pidAlive(pid: number): boolean {
  * Kuyruğa yazan iki süreç, atomik `rename`'in çözemeyeceği tek şeydir.
  * Asıl tehlike `take()` değil `recover()`: ikinci koşu, birincinin ELİNDEKİ
  * kartı (`active/` dizininde duran) çökmüş sanıp kuyruğa geri atar — ve aynı
- * iş ikinci kez, para harcayarak yapılır. Bu yüzden yazan HER koşu (gözcü de,
- * toplu koşu da) kilidi alır; `--plan` almaz, çünkü yazmaz.
+ * iş ikinci kez, para harcayarak yapılır.
+ *
+ * Politika ÜÇ katmanlı; "yazan her koşu kilidi alır" demek yetmiyordu, çünkü
+ * o cümle doğru olmadığı hâlde yazılıydı (kilidi yalnızca `watch/cli.ts`
+ * alıyordu):
+ *
+ * - Kilidi ALANLAR: gözcü ve toplu koşu (`watch/cli.ts`). `--plan` almaz,
+ *   çünkü yazmaz.
+ * - Kilide UYANLAR: `card -- take` ve `card -- recover`. Kilidi almıyorlar
+ *   ama canlı kilit varken reddediyorlar (`liveLock`) — `active/` alanı
+ *   gözcünün elindedir.
+ * - Kilide BAKMAYANLAR: ekranın kapı kararları (`release`, `kapat`). Gözcü
+ *   koşarken kapıdaki bir kartı ileri bırakmak NORMAL durumdur; gözcü o
+ *   kartlara dokunmuyor. "Her yazma kilit alsın" demek ekranı
+ *   kullanılamaz yapardı.
  *
  * Tekliğin kanıtı bir dosyanın VARLIĞI — süreç ölünce dosya kalır, ama
  * içindeki pid ölüyü belli eder.
@@ -67,14 +81,48 @@ export async function acquireLock(
   const alive = options.alive ?? pidAlive;
   const body = `${JSON.stringify(info, null, 2)}\n`;
 
+  /**
+   * Kilidi İÇERİĞİYLE BİRLİKTE, tek adımda sahiplenir.
+   *
+   * Eski hâli `writeFile(path, body, { flag: "wx" })` idi ve yorumu
+   * "sahiplenme tek sistem çağrısında olur" diyordu — ama değildi: `wx`
+   * dosyayı O_CREAT|O_EXCL ile YARATIYOR, içeriği SONRA yazıyor. Aradaki
+   * pencerede okuyan boş dosya görüyor, `readLock` `null` dönüyor,
+   * "okunamayan kilit bayat sayılır" dalına giriliyor ve CANLI kilit
+   * siliniyor. İki gözcü de kilidi kendinde sanıyor — kilidin önlemek için
+   * var olduğu şeyin tam kendisi, bu kez farkında olmadan. `took` da boş
+   * olduğu için "bayat kilit devralındı" uyarısı basılmıyor.
+   *
+   * Çare `link`: geçici dosya TAM yazılıyor, sonra hedefe bağlanıyor.
+   * `link` hedef varsa `EEXIST` veriyor, yani teklik garantisi duruyor ve
+   * görünür olan dosya daima tam. Kuyruğun tmp+rename disiplininin
+   * kilitteki karşılığı — orada `rename` ezer, burada ezmemesi gerekiyor.
+   *
+   * `link` desteklenmeyen bir dosya sisteminde (bazı ağ/konteyner
+   * bağlamaları) eski yola düşüyoruz: pencere küçük ama sıfır değil, ve
+   * bunu gizlemek yerine yazıyoruz.
+   */
   const claim = async (): Promise<boolean> => {
+    // Pid tek başına yetmiyor: aynı süreçte iki `acquireLock` (testler, ya da
+    // iki akışı aynı kökte koşan bir araç) aynı geçici adı paylaşırdı.
+    const tmp = `${path}.${process.pid}.${randomUUID()}.tmp`;
+    await writeFile(tmp, body, "utf8");
     try {
-      // `wx`: dosya varsa yazma. Sahiplenme tek sistem çağrısında olur.
-      await writeFile(path, body, { encoding: "utf8", flag: "wx" });
+      await link(tmp, path);
       return true;
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;
-      throw error;
+      const kod = (error as NodeJS.ErrnoException).code;
+      if (kod === "EEXIST") return false;
+      // `link` yok/yasak: eski yol, dar pencereyle.
+      try {
+        await writeFile(path, body, { encoding: "utf8", flag: "wx" });
+        return true;
+      } catch (ikinci) {
+        if ((ikinci as NodeJS.ErrnoException).code === "EEXIST") return false;
+        throw ikinci;
+      }
+    } finally {
+      await unlink(tmp).catch(() => undefined);
     }
   };
 
@@ -99,6 +147,28 @@ export async function acquireLock(
   return winner === null
     ? { kind: "busy", holder: { pid: 0, startedAt: "", flow: "?", hash: "?", mode: "batch" } }
     : { kind: "busy", holder: winner };
+}
+
+/**
+ * CANLI bir kilit tutan var mı — yazmayan okuyucular için.
+ *
+ * Kuyruğa yazan her yol kilidi ALMAK zorunda değil; `active/` alanına
+ * dokunan yollar ona UYMAK zorunda. Ayrım şu: gözcü koşarken kapıdaki bir
+ * kartı ekrandan ileri bırakmak NORMAL durumdur (gözcü kapıdaki karta
+ * dokunmuyor), ama `recover` gözcünün ELİNDEKİ kartı kuyruğa geri
+ * atabiliyor ve aynı iş ikinci kez, para harcayarak yapılıyor.
+ *
+ * `bizimPid` verilirse kendi kilidimiz canlı sayılmıyor: kendi kilidini
+ * engel sanan bir süreç hiçbir iş yapamazdı.
+ */
+export async function liveLock(
+  path: string, options: LockOptions & { bizimPid?: number } = {},
+): Promise<LockInfo | null> {
+  const alive = options.alive ?? pidAlive;
+  const holder = await readLock(path);
+  if (holder === null) return null;
+  if (options.bizimPid !== undefined && holder.pid === options.bizimPid) return null;
+  return alive(holder.pid) ? holder : null;
 }
 
 /** Kilidi okur. Yoksa ya da bozuksa `null`. */

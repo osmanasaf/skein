@@ -8,6 +8,7 @@ import { CardQueue, QueueError, type ReleaseDecision } from "./queue.js";
 import { closeOrphan } from "./orphan.js";
 import { releaseCard } from "./release.js";
 import { FlowError } from "../flow/load.js";
+import { liveLock, type LockInfo } from "../watch/lock.js";
 
 const USAGE = `Kullanım:
   npm run card -- new <akış> <başlık> <görev metni>   yeni kart açar
@@ -22,6 +23,8 @@ const USAGE = `Kullanım:
        back     önceki role dönsün
        retry    aynı rol baştan koşsun (kaçış kapısının varsayılanı)
   npm run card -- recover                             yarıda kalanları toplar
+
+take ve recover aktif kartlara dokunur: gözcü açıkken reddedilirler.
 
 Kuyruk .skein/ altında. Akış adı hub/flows/<ad>.yaml'a karşılık gelir.`;
 
@@ -99,6 +102,33 @@ function printCard(card: Card): void {
   }
 }
 
+/**
+ * Gözcü koşarken `active/` alanına dokunan komutları reddeder.
+ *
+ * Kilidi ALMIYOR, yalnızca UYUYOR. Ayrımın sebebi: ekrandan kapı kararı
+ * vermek (`release`, `kapat`) gözcü açıkken NORMAL durumdur — o kartlara
+ * gözcü dokunmuyor. Ama `recover` gözcünün ELİNDEKİ kartı çökmüş sanıp
+ * kuyruğa geri atar, `take` ise aynı kartı insanın eline verir; ikisi de
+ * aynı işi ikinci kez, para harcayarak yaptırır. Gözcünün kilidi tam bunu
+ * önlemek için var ve bu iki yol ona bakmıyordu.
+ */
+async function gozcuVarsaDur(root: string, komut: string): Promise<string | null> {
+  const lockPath = join(root, ".skein", "daemon.json");
+  const holder: LockInfo | null = await liveLock(lockPath);
+  if (holder === null) return null;
+  const kim =
+    holder.mode === "serve"
+      ? `Bu depoda bir gözcü açık: pid ${holder.pid}, akış ${holder.flow}.`
+      : `Bu depoda bir toplu koşu sürüyor: pid ${holder.pid}, akış ${holder.flow}.`;
+  return (
+    `${kim}\n\n` +
+    `  \`card -- ${komut}\` kuyruğun AKTİF kartlarına dokunuyor; o kartlar şu an\n` +
+    `  gözcünün elinde. Aynı iş ikinci kez, para harcayarak yapılır.\n\n` +
+    `  Gözcüyü durdur; gerçekten yoksa kilidi sil:\n` +
+    `    ${lockPath}\n`
+  );
+}
+
 async function run(argv: string[], root: string): Promise<number> {
   const queue = new CardQueue(join(root, ".skein"));
   await queue.init();
@@ -155,6 +185,11 @@ async function run(argv: string[], root: string): Promise<number> {
       const role = rest[0];
       if (role === undefined) {
         console.log(USAGE);
+        return 1;
+      }
+      const engel = await gozcuVarsaDur(root, "take");
+      if (engel !== null) {
+        console.error(`✗ ${engel}`);
         return 1;
       }
       const card = await queue.take(role);
@@ -238,6 +273,11 @@ async function run(argv: string[], root: string): Promise<number> {
     }
 
     case "recover": {
+      const engel = await gozcuVarsaDur(root, "recover");
+      if (engel !== null) {
+        console.error(`✗ ${engel}`);
+        return 1;
+      }
       const cards = await queue.recover();
       console.log(
         cards.length === 0
