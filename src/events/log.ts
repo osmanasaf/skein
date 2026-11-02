@@ -92,7 +92,22 @@ export type EventInput =
       card: string;
       /** Kartın gittiği rol. */
       role: string;
+      /**
+       * GERÇEKTEN uygulanan karar.
+       *
+       * Eskiden burada İSTENEN karar yazılıydı. Zincirin başında `back`'in
+       * hedefi yok ve kart aynı role dönüyor, yani olan şey bir `retry`;
+       * günlük yine `back` diyordu ve "insan kartı geri gönderdi mi"
+       * sorusu günlükten YANLIŞ cevaplanıyordu.
+       */
       decision: "forward" | "back" | "retry";
+      /**
+       * İnsanın İSTEDİĞİ karar — yalnızca uygulanandan farklıysa var.
+       *
+       * İstenen şey yapılamadığında niyet de kaybolmamalı: "kaç kez geri
+       * göndermek istenip gönderilemedi" ayrı ve ölçülebilir bir olgu.
+       */
+      requested?: "forward" | "back" | "retry";
       /** Hangi kapıydı — çıkış kümesini bu belirliyordu. */
       kind: "approval" | "deadlock" | "escalation";
     }

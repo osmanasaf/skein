@@ -248,12 +248,21 @@ async function run(argv: string[], root: string): Promise<number> {
         console.error(`✗ Bilinmeyen karar: ${asked}. Beklenen: forward, back, retry`);
         return 1;
       }
-      const { card: released, decision: taken } = await releaseCard(
+      const { card: released, decision: taken, requested } = await releaseCard(
         root,
         queue,
         card.id,
         decision,
       );
+      // İstenen yapılamadıysa SÖYLE. Zincirin başında `back`'in hedefi yok
+      // ve kart aynı role dönüyor; sessiz kalmak insana kartı geri
+      // gönderdiğini sandırır.
+      if (requested !== taken) {
+        console.log(
+          `! "${requested}" uygulanamadı: ${card.role} zincirin başında, ` +
+            `geri dönecek rol yok — "${taken}" uygulandı.`,
+        );
+      }
       console.log(
         released.state === "done"
           ? `✓ ${released.id} bitti`

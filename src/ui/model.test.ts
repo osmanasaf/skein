@@ -526,3 +526,35 @@ describe("buildDetail — iz ve diff", () => {
     expect(detail?.diff).toBeNull();
   });
 });
+
+/**
+ * `geriHedef` TOPOLOJİDEN gelmeli, sabit olmamalı.
+ *
+ * Ekranın "Geri gönder" düğmesi bu alana bakıyor. Alan her zaman `null`
+ * olsaydı düğme hiç çıkmaz ve insan GERÇEKTEN var olan bir çıkışı
+ * kaybederdi — hedefsiz `back`'i sessizce `retry`'ye çevirmenin ters
+ * yönden aynası. (Bu sınama olmadan "hep null ver" mutasyonu hayatta
+ * kalıyordu.)
+ */
+describe("buildModel — geri hedefi", () => {
+  it("ret hedefi olan rolde hedefi veriyor", async () => {
+    await put();
+    const ilk = await queue.take("coder");
+    if (ilk.kind !== "alindi") throw new Error("kart alınamadı");
+    const kart = await queue.handoff(ilk.card, {});
+
+    const m = await buildModel(base);
+
+    // reviewer'ın ret hedefi coder.
+    expect(m.cards.find((c) => c.id === kart.id)?.geriHedef).toBe("coder");
+  });
+
+  it("zincirin başındaki rolde null", async () => {
+    const kart = await put();
+
+    const m = await buildModel(base);
+
+    // coder'ın ret hedefi yok.
+    expect(m.cards.find((c) => c.id === kart.id)?.geriHedef).toBeNull();
+  });
+});

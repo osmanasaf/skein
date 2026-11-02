@@ -44,6 +44,62 @@ export class QueueError extends Error {
   }
 }
 
+/** Kapı kararının GERÇEKTEN ne yaptığı. */
+export interface KapiKarari {
+  kind: "approval" | "deadlock" | "escalation";
+  /** İnsanın istediği karar; verilmediyse kapının varsayılanı. */
+  istenen: ReleaseDecision;
+  /**
+   * UYGULANAN karar — istenenden farklı olabilir.
+   *
+   * Zincirin başında `back`'in hedefi yok (`role.reject === null`) ve rol
+   * işi kendisi yeniden yapıyor, yani olan şey bir `retry`. Eskiden bu
+   * ayrım hiçbir yere yazılmıyordu: `releaseCard` günlüğe İSTENENİ
+   * basıyordu, dolayısıyla "insan kartı geri gönderdi mi" sorusu
+   * günlükten YANLIŞ cevaplanıyordu — hiç geri gitmemiş kartlar `back`
+   * olarak sayılıyordu.
+   */
+  uygulanan: ReleaseDecision;
+  /** Kartın gittiği rol (ya da `DONE`). */
+  hedef: string;
+}
+
+/**
+ * Kapı kararını TEK yerden hesaplar.
+ *
+ * Eskiden iki yerde hesaplanıyordu: `queue.release` hedefi, `releaseCard`
+ * ise günlüğe yazdığı kararı — aynı varsayılan ifadesi (`escalation ?
+ * retry : forward`) iki dosyada ayrı ayrı yazılıydı. "Aynı bilgi iki
+ * yerde" bu depoda tekrarlayan kusur sınıfı; ikisi de buradan okuyor.
+ */
+export function kapiKarari(card: Card, istenenGiris?: ReleaseDecision): KapiKarari {
+  const role = roleOf(card.topology, card.role);
+  if (role === null) {
+    throw new QueueError(`Kartın rolü topolojisinde yok: ${card.role} (kart ${card.id})`);
+  }
+  const kind = gateKind(card) ?? "approval";
+  const istenen = istenenGiris ?? (kind === "escalation" ? "retry" : "forward");
+
+  // Planlama kilidinden ileri bırakmak, alışverişten SONRAKİ role gider:
+  // zincirdeki ardıl itiraz eden roldür ve oraya dönmek, insanın "planı
+  // olduğu gibi kabul ediyorum" kararını bir tur daha alışverişe çevirir.
+  const ileri = planGateEntry(card) === null
+    ? role.next
+    : (afterPlanning(card.topology) ?? role.next);
+
+  // `back` hedefi: rolün ret hedefi. Zincirin başında geri dönecek rol
+  // olmadığı için rol işi kendisi yeniden yapar — ve bu bir `retry`'dir,
+  // öyle de kaydedilir.
+  const geriHedefi = role.reject;
+  const uygulanan: ReleaseDecision =
+    istenen === "back" && geriHedefi === null ? "retry" : istenen;
+
+  const hedef =
+    uygulanan === "retry" ? role.id : uygulanan === "forward" ? ileri : (geriHedefi ?? role.id);
+
+  return { kind, istenen, uygulanan, hedef };
+}
+
 /**
  * Kuyruk önceliği. Dosya adının ilk karakteri; sıralama sözlük sırasıyla
  * yapıldığı için indeks dosyasına gerek kalmıyor.
@@ -566,11 +622,12 @@ export class CardQueue {
       throw new QueueError(`Kartın rolü topolojisinde yok: ${card.role} (kart ${id})`);
     }
 
-    const kind = gateKind(card);
+    const karar = kapiKarari(card, opts.decision);
+    const kind = karar.kind;
+    const decision = karar.istenen;
     // Kaçış kapısında tur TAMAMLANMADI: kod bir sonraki worktree'ye hiç
     // birleştirilmedi. İleri bırakmak, sonraki role bayat bir ağaçta
     // çalıştırmak olurdu — ve hiçbir yerde görünmezdi.
-    const decision = opts.decision ?? (kind === "escalation" ? "retry" : "forward");
     if (kind === "escalation" && decision === "forward") {
       const reason = lastGateReason(card);
       throw new QueueError(
@@ -583,16 +640,7 @@ export class CardQueue {
       );
     }
 
-    // `back` hedefi: rolün ret hedefi. Zincirin başında geri dönecek rol
-    // olmadığı için rol işi kendisi yeniden yapar.
-    // Planlama kilidinden ileri bırakmak, alışverişten SONRAKİ role gider:
-    // zincirdeki ardıl itiraz eden roldür ve oraya dönmek, insanın "planı
-    // olduğu gibi kabul ediyorum" kararını bir tur daha alışverişe çevirir.
-    const ileri = planGateEntry(card) === null
-      ? role.next
-      : (afterPlanning(card.topology) ?? role.next);
-    const target =
-      decision === "retry" ? role.id : decision === "forward" ? ileri : (role.reject ?? role.id);
+    const target = karar.hedef;
 
     const rejects = { ...card.rejects };
     if (role.reject !== null) delete rejects[edgeKey(role.id, role.reject)];

@@ -1,12 +1,19 @@
 import { join } from "node:path";
 import { EventLog } from "../events/log.js";
-import { gateKind, type Card } from "./card.js";
-import type { CardQueue, ReleaseDecision } from "./queue.js";
+import type { Card } from "./card.js";
+import { kapiKarari, type CardQueue, type ReleaseDecision } from "./queue.js";
 
 export interface ReleaseResult {
   card: Card;
-  /** Hangi karar uygulandı — verilmediyse kapının varsayılanı. */
+  /** GERÇEKTEN uygulanan karar — istenenden farklı olabilir. */
   decision: ReleaseDecision;
+  /**
+   * İnsanın istediği karar. `decision`'dan farklıysa, istenen şey
+   * yapılamamıştır: zincirin başında `back`'in hedefi yok ve olan şey bir
+   * `retry`'dir. Çağıran bunu kullanıcıya söylemek zorunda, yoksa insan
+   * kartı geri gönderdiğini sanır.
+   */
+  requested: ReleaseDecision;
   kind: "approval" | "deadlock" | "escalation";
 }
 
@@ -29,12 +36,14 @@ export async function releaseCard(
   logPath?: string,
 ): Promise<ReleaseResult> {
   const before = await queue.get(id);
-  // Kapı tipi bırakmadan ÖNCE okunur: bırakma kartın son kaydını değiştirir.
-  const kind = before === null ? null : gateKind(before);
+  // Kapı kararı bırakmadan ÖNCE hesaplanır: bırakma kartın son kaydını
+  // değiştirir, yani sonra hesaplanan `gateKind` artık o kapıyı görmez.
+  // Hesabı `kapiKarari` yapıyor — `queue.release` de aynı yerden okuyor,
+  // böylece günlüğe yazılan karar ile kartın gittiği yer AYNI kaynaktan
+  // geliyor. Eskiden ikisi ayrı ayrı hesaplanıyordu ve ayrışıyorlardı.
+  const karar = before === null ? null : kapiKarari(before, decision);
 
   const card = await queue.release(id, decision === undefined ? {} : { decision });
-  const uygulanan: ReleaseDecision =
-    decision ?? (kind === "escalation" ? "retry" : "forward");
 
   const log = new EventLog(logPath ?? join(root, ".skein", "olaylar.jsonl"), `insan-${Date.now()}`);
   try {
@@ -42,13 +51,27 @@ export async function releaseCard(
       type: "gate.released",
       card: card.id,
       role: card.role,
-      decision: uygulanan,
-      kind: kind ?? "approval",
+      // UYGULANAN karar. Eskiden İSTENEN yazılıyordu: zincirin başında
+      // `back` sessizce `retry` oluyor ama günlüğe `back` giriyordu, yani
+      // "insan kartı geri gönderdi mi" sorusu günlükten yanlış
+      // cevaplanıyordu — hiç geri gitmemiş kartlar `back` sayılıyordu.
+      decision: karar?.uygulanan ?? "forward",
+      // İstenen şey yapılamadıysa o da kaybolmamalı: insanın niyeti de
+      // ölçülebilir bir olgu.
+      ...(karar !== null && karar.istenen !== karar.uygulanan
+        ? { requested: karar.istenen }
+        : {}),
+      kind: karar?.kind ?? "approval",
     });
   } catch {
     // Kayıt gözlem; kart zaten taşındı ve geçmişinde yazıyor. Diski dolmuş
     // bir makinede insanın kararını geri almak, kaydı kaybetmekten kötüdür.
   }
 
-  return { card, decision: uygulanan, kind: kind ?? "approval" };
+  return {
+    card,
+    decision: karar?.uygulanan ?? "forward",
+    requested: karar?.istenen ?? "forward",
+    kind: karar?.kind ?? "approval",
+  };
 }

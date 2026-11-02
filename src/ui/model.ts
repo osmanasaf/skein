@@ -3,7 +3,7 @@ import { gateKind, planGateEntry, type Card, type CardState, type PlanKabul } fr
 import { isOrphan, isStale } from "../card/orphan.js";
 import type { CardQueue } from "../card/queue.js";
 import { readEvents, type SkeinEvent } from "../events/log.js";
-import type { TopologySnapshot } from "../flow/snapshot.js";
+import { roleOf, type TopologySnapshot } from "../flow/snapshot.js";
 import { pidAlive, readLock, type LockInfo } from "../watch/lock.js";
 
 /**
@@ -75,6 +75,16 @@ export interface UiCard {
    * çelişerek duruyordu.
    */
   planKilidi: boolean;
+  /**
+   * `back` kararının gideceği rol — yoksa `null`.
+   *
+   * Ekran "Geri gönder" düğmesini her kapıda basıyordu. Zincirin başında
+   * `back`'in hedefi yok: çekirdek kartı aynı role döndürüyor, yani olan
+   * şey bir `retry`. Düğme yapmayacağı şeyi vaat ediyordu ve insan kartı
+   * geri gönderdiğini sanıyordu. Model bu alanı taşımadığı için ekran
+   * ayırt edemiyordu.
+   */
+  geriHedef: string | null;
   gateReason: string | null;
   /** Bu kart için yapılan tur sayısı. */
   turns: number;
@@ -271,6 +281,9 @@ function toUiCard(
     state: card.state,
     gate: gateKind(card),
     planKilidi: planGateEntry(card) !== null,
+    // Kartın KENDİ topolojisinden: kapı kararını da `kapiKarari` oradan
+    // okuyor, yani düğme ile çekirdek aynı kaynağa bakıyor.
+    geriHedef: roleOf(card.topology, card.role)?.reject ?? null,
     gateReason: lastGateReason(card),
     turns,
     rejects,

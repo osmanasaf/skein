@@ -83,13 +83,47 @@ describe("releaseCard", () => {
     expect(events[0]).toMatchObject({ kind: "deadlock", decision: "forward" });
   });
 
-  it("açık verilen karar günlüğe aynen geçer", async () => {
+  /**
+   * Günlüğe UYGULANAN karar geçer, istenen değil.
+   *
+   * Bu sınama eskiden `decision: "back"` bekliyordu ve kusuru KİLİTLİYORDU:
+   * `coder` zincirin başı, `back`'in hedefi yok, çekirdek kartı aynı role
+   * döndürüyor — yani olan şey bir `retry`. Günlük yine `back` diyordu, yani
+   * "insan kartı geri gönderdi mi" sorusu günlükten YANLIŞ cevaplanıyordu:
+   * hiç geri gitmemiş kartlar `back` olarak sayılıyordu.
+   */
+  it("hedefi olmayan back, retry olarak kaydedilir", async () => {
     const card = await kacisKapisinda();
 
-    await releaseCard(root, queue, card.id, "back", logPath);
+    const sonuc = await releaseCard(root, queue, card.id, "back", logPath);
 
+    expect(sonuc.decision).toBe("retry");
+    // İnsanın NİYETİ de kaybolmamalı: ayrı ve ölçülebilir bir olgu.
+    expect(sonuc.requested).toBe("back");
     const { events } = await readEvents(logPath);
+    expect(events[0]).toMatchObject({ decision: "retry", requested: "back" });
+    // Kart gerçekten aynı rolde: kayıt ile kartın yeri AYNI şeyi söylüyor.
+    expect(sonuc.card.role).toBe("coder");
+  });
+
+  // Hedefi OLAN `back` aynen geçmeli, yoksa düzeltme ters yöne kaçar ve
+  // gerçek geri göndermeler de `retry` sayılırdı.
+  it("hedefi olan back aynen kaydedilir", async () => {
+    await queue.add(newCard({ title: "jitter", task: "iş", topology: daily }));
+    await queue.handoff(await al(queue, "coder"), {});
+    // reviewer'ın ret hedefi coder: geri dönecek rol VAR.
+    const kapida = await queue.escalate(await al(queue, "reviewer"), "verdikt yok");
+
+    const sonuc = await releaseCard(root, queue, kapida.id, "back", logPath);
+
+    expect(sonuc.decision).toBe("back");
+    expect(sonuc.requested).toBe("back");
+    expect(sonuc.card.role).toBe("coder");
+    const { events } = await readEvents(logPath);
+    // İstenen ile uygulanan aynıysa `requested` HİÇ yazılmamalı: her kayda
+    // eklemek, ayrımı okunamaz hâle getirirdi.
     expect(events[0]).toMatchObject({ decision: "back" });
+    expect(events[0]).not.toHaveProperty("requested");
   });
 
   // Çekirdeğin reddi yardımcıdan da geçmeli: reddedilen komut kayıt bırakmaz.

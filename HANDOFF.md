@@ -20,14 +20,16 @@ olduğu için kendiliğinden eklenmedi.
 
 ---
 
-## QA KAMPANYASI — 33 bulgu, 22 düzeltildi (1-2 Kasım)
+## QA KAMPANYASI — 34 bulgu, 23 düzeltildi (1-2 Kasım)
 
 Dört paralel tarama koştu (ekran · kart+git · tick+planlama · ölçüm takımı),
 32 bulgu çıktı. Her bulgu kabul edilmeden önce **kendim doğruladım**; her
-düzeltme **mutasyonla** sınandı. 820 → 901 test.
+düzeltme **mutasyonla** sınandı. 820 → 915 test.
 
-33. bulgu kampanyanın değil, **kilidi düzeltirken benim** bulgumdur: 19.
-satır. Kampanyanın dört taraması da onu kaçırdı.
+33-34. bulgular kampanyanın değil, **düzeltmeleri yaparken benim**
+bulgularımdır: 19. satır (yarım yazılan kilit) ve 25. satır (kapı
+kararının iki yerde hesaplanması). Kampanyanın dört taraması da ikisini
+kaçırdı.
 
 ### Düzeltilenler
 
@@ -55,6 +57,9 @@ satır. Kampanyanın dört taraması da onu kaçırdı.
 | 20 | `card -- take` / `recover` gözcü kilidine hiç bakmıyor | gözcünün elindeki kartı kuyruğa geri atıp aynı iş için ikinci kez para harcatıyor |
 | 21 | "12 çağrıyı yarıştır" sınaması 19. kusuru GÖRMÜYOR | ısırmayan sınamanın yerine doğrudan değişmez ölçüldü |
 | 22 | `take` her `rename` hatasını yarış sanıyor | kart sonsuza kadar duruyor, "kuyruk boş" deniyor, tek satır teşhis yok |
+| 23 | Hedefsiz `back` sessizce `retry` oluyor, günlüğe `back` yazılıyor | "insan kartı geri gönderdi mi" günlükten YANLIŞ cevaplanıyor |
+| 24 | Ekran her kapıda "Geri gönder" basıyor | düğme yapmayacağı şeyi vaat ediyor; insan geri gönderdiğini sanıyor |
+| 25 | Kapı kararı İKİ yerde hesaplanıyor (`release` · `releaseCard`) | aynı varsayılan iki dosyada; 23. kusurun kök sebebi |
 
 ### AÇIK kalanlar — önem sırası
 
@@ -63,9 +68,6 @@ satır. Kampanyanın dört taraması da onu kaçırdı.
   terminalinde ve olay günlüğünde var, ama `ui/model.ts` kuyruğu
   `take` etmediği için engeli göremiyor. `bozuklar()` gibi kalıcı bir
   kayıt gerekiyor; şimdilik bilinen ve YAZILI bir boşluk.
-- Kapıda `back`, geri dönecek rol yokken sessizce `retry` oluyor ve
-  günlüğe yine `back` yazılıyor; "insan kartı geri gönderdi mi" sorusu
-  günlükten yanlış cevaplanıyor.
 - `close()` kopya çözümünde `found[0]` alıyor, "uzun geçmiş kazanır"
   kuralını uygulamıyor.
 - `acquireLock` kaydı atomik yazılmıyor (`wx` ile önce yaratıp sonra

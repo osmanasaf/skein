@@ -8,6 +8,85 @@ function betik(html: string): string {
   return html.slice(at + "<script>".length, son);
 }
 
+/**
+ * Gömülü betikten TEK bir fonksiyonu çıkarıp çalıştırılabilir hâle getirir.
+ *
+ * Bu dosyanın geri kalanı betiğin KAYNAK METNİNİ sınıyor; o yöntem ölü bir
+ * dalı göremiyor (bir kez bu yüzden yanlış geçen sınama yazıldı). Düğme
+ * kümesi bir KARAR, yani davranışı ölçülmeli. Betiğin bütününü
+ * çalıştırmak mümkün değil (`document`, `fetch` yok), o yüzden yalnızca bu
+ * kapanışsız fonksiyon kesilip değerlendiriliyor — ölçülen şey gerçekten
+ * sayfaya giden metin.
+ */
+function fonksiyon<T>(html: string, ad: string): T {
+  const src = betik(html);
+  const bas = src.indexOf(`function ${ad}(`);
+  if (bas < 0) throw new Error(`betikte ${ad} yok`);
+  const son = src.indexOf("\n}\n", bas);
+  if (son < 0) throw new Error(`${ad} kapanışı bulunamadı`);
+  const metin = src.slice(bas, son + 3);
+  return new Function(`${metin}; return ${ad};`)() as T;
+}
+
+type Cikis = { etiket: string; not: string; dugmeler: [string, string][] };
+
+/**
+ * Zincirin başında "Geri gönder" düğmesi OLMAMALI.
+ *
+ * `back` kararının hedefi rolün ret hedefi; yoksa çekirdek kartı aynı role
+ * döndürüyor, yani olan şey bir retry. Düğme yapmayacağı şeyi vaat
+ * ediyordu: insan "geri gönderdim" sanıyor, kart aynı rolde baştan
+ * koşuyordu — ve günlük de ona `back` diyordu.
+ */
+describe("kapiCikislari — geri hedefi", () => {
+  const cikis = (kind: string, planKilidi: boolean, geriHedef: string | null): Cikis =>
+    fonksiyon<(k: string, p: boolean, g: string | null) => Cikis>(
+      renderPage("x"),
+      "kapiCikislari",
+    )(kind, planKilidi, geriHedef);
+
+  it("onay kapısı: hedef varsa geri gönder, yoksa baştan koştur", () => {
+    expect(cikis("approval", false, "coder").dugmeler).toEqual([
+      ["Geçir", "forward"],
+      ["Geri gönder", "back"],
+    ]);
+    expect(cikis("approval", false, null).dugmeler).toEqual([
+      ["Geçir", "forward"],
+      ["Baştan koştur", "retry"],
+    ]);
+  });
+
+  it("kaçış kapısı: hedef yoksa tek çıkış kalır", () => {
+    expect(cikis("escalation", false, "coder").dugmeler).toEqual([
+      ["Yeniden koş", "retry"],
+      ["Geri gönder", "back"],
+    ]);
+    // "Yeniden koş" zaten retry: ikinci bir retry düğmesi aynı şeyi iki kez
+    // sunmak olurdu.
+    expect(cikis("escalation", false, null).dugmeler).toEqual([["Yeniden koş", "retry"]]);
+  });
+
+  it("kilit kapısı: 'Denetçi haklı' hedefsizse retry oluyor", () => {
+    expect(cikis("deadlock", false, "coder").dugmeler).toEqual([
+      ["Üretici haklı", "forward"],
+      ["Denetçi haklı", "back"],
+    ]);
+    expect(cikis("deadlock", false, null).dugmeler).toEqual([
+      ["Üretici haklı", "forward"],
+      ["Baştan koştur", "retry"],
+    ]);
+  });
+
+  // Planlama kilidinin çıkışlarında `back` HİÇ yok: hedef alanı onu
+  // etkilememeli.
+  it("planlama kilidi geri hedefinden etkilenmiyor", () => {
+    const a = cikis("deadlock", true, "coder");
+    const b = cikis("deadlock", true, null);
+    expect(a.dugmeler).toEqual(b.dugmeler);
+    expect(a.etiket).toBe("planlama kilidi");
+  });
+});
+
 describe("renderPage", () => {
   // Bu test bir kusurun bedeliyle yazıldı: şablon içinde `\n` yazınca
   // TypeScript onu GERÇEK satır sonuna çeviriyor ve JS dizesi ortasından
@@ -84,7 +163,7 @@ describe("renderPage", () => {
     expect(html).toContain("Alışverişi yeniden aç");
     // Bağlantı: ayrım modelden geliyor, çıkarsanmıyor.
     expect(html).toContain("if (planKilidi)");
-    expect(html).toContain("kapiCikislari(c.gate, c.planKilidi)");
+    expect(html).toContain("kapiCikislari(c.gate, c.planKilidi, c.geriHedef)");
   });
 
   it("bozuk kart dosyası uyarı bandına bağlı", () => {

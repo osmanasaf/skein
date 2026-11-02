@@ -241,12 +241,25 @@ const sure = (ms) => {
 };
 const para = (n) => "$" + (n || 0).toFixed(2);
 
-function kapiCikislari(kind, planKilidi) {
+function kapiCikislari(kind, planKilidi, geriHedef) {
+  // ZİNCİRİN BAŞINDA "Geri gönder" YOK. back kararının hedefi rolün ret
+  // hedefi; yoksa çekirdek kartı aynı role döndürüyor, yani olan şey bir
+  // retry. Eski düğme yapmayacağı şeyi vaat ediyordu: insan "geri
+  // gönderdim" sanıyor, kart aynı rolde baştan koşuyordu. Burada düğme ya
+  // doğru şeyi söylüyor ya hiç çıkmıyor.
+  // (Not: bu dosya istemci betiğini bir şablon dizesi içinde taşıyor —
+  // yorumda ters tik derlemeyi bozar.)
+  const geri = (etiket) => (geriHedef ? [etiket, "back"] : ["Baştan koştur", "retry"]);
+
   // Üç kapı, üç ayrı çıkış kümesi. Kaçışta "Geçir" YOK: tur tamamlanmadı,
   // kod sonraki worktree'ye hiç taşınmadı ve çekirdek zaten reddeder.
   if (kind === "escalation") {
+    // Kaçışta "Yeniden koş" ZATEN var: hedef yoksa ikinci bir retry
+    // düğmesi aynı şeyi iki kez sunmak olurdu.
     return { etiket: "kaçış kapısı", not: "kod taşınmadı",
-      dugmeler: [["Yeniden koş", "retry"], ["Geri gönder", "back"]] };
+      dugmeler: geriHedef
+        ? [["Yeniden koş", "retry"], ["Geri gönder", "back"]]
+        : [["Yeniden koş", "retry"]] };
   }
   if (kind === "deadlock") {
     // İKİ AYRI KİLİT. Çekirdek ikisini ayırıyor (planGateEntry) ve
@@ -259,10 +272,10 @@ function kapiCikislari(kind, planKilidi) {
         dugmeler: [["Planı olduğu gibi ilerlet", "forward"], ["Alışverişi yeniden aç", "retry"]] };
     }
     return { etiket: "kilit kapısı", not: "ret limiti doldu",
-      dugmeler: [["Üretici haklı", "forward"], ["Denetçi haklı", "back"]] };
+      dugmeler: [["Üretici haklı", "forward"], geri("Denetçi haklı")] };
   }
   return { etiket: "onay kapısı", not: "kod taşındı",
-    dugmeler: [["Geçir", "forward"], ["Geri gönder", "back"]] };
+    dugmeler: [["Geçir", "forward"], geri("Geri gönder")] };
 }
 
 /** Yetim kartı kapatır — tek meşru çıkış. */
@@ -317,7 +330,7 @@ function kartCiz(c) {
 
   const ust = el("div", "tag " + (c.gate ? "gate" : c.state === "active" ? "run" : "queued"));
   if (c.state === "active") ust.append(el("span", "dot"));
-  const kapi = c.gate ? kapiCikislari(c.gate, c.planKilidi) : null;
+  const kapi = c.gate ? kapiCikislari(c.gate, c.planKilidi, c.geriHedef) : null;
   ust.append(document.createTextNode(
     c.gate ? kapi.etiket : c.state === "active" ? "çalışıyor" : c.state === "done" ? "bitti" : "kuyrukta"
   ));

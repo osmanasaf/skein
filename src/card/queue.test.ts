@@ -8,7 +8,7 @@ import { knownProviderSet } from "../adapters/factory.js";
 import { loadFlow } from "../flow/load.js";
 import { snapshot, type TopologySnapshot } from "../flow/snapshot.js";
 import { newCard, rejectCount, serializeCard, type Card } from "./card.js";
-import { CardQueue, QueueError } from "./queue.js";
+import { CardQueue, kapiKarari, QueueError } from "./queue.js";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -156,6 +156,8 @@ describe("CardQueue — ileri yön", () => {
     const back = await queue.release(gated.id, { decision: "back" });
 
     // analyst zincirin başı: geri dönecek rol yok, işi kendi yeniden yapar.
+    // Olan şeyin ADI `retry`; `kapiKarari` bunu böyle bildiriyor ve günlüğe
+    // de öyle geçiyor (bkz. release.test.ts). Eskiden `back` yazılıyordu.
     expect(back.role).toBe("analyst");
     expect(back.state).toBe("queued");
   });
@@ -539,5 +541,75 @@ describe("CardQueue — listeleme", () => {
     expect(files).toHaveLength(1);
     expect(await readFile(join(root, ".skein", "queue", "coder", files[0] as string), "utf8"))
       .toContain(card.id);
+  });
+});
+
+/**
+ * Kapı kararı TEK yerden hesaplanmalı.
+ *
+ * Eskiden iki yerde hesaplanıyordu: `queue.release` hedefi, `releaseCard`
+ * ise günlüğe yazdığı kararı — aynı varsayılan ifadesi iki dosyada ayrı
+ * yazılıydı ve `back` hedefi olmadığında ayrışıyorlardı. Bu birlik
+ * (`kapiKarari`) hem hedefi hem kararın ADINI veriyor, yani ikisi
+ * ayrışamıyor.
+ */
+describe("kapiKarari", () => {
+  /** Kartı `role` üzerinde kaçış kapısına koyar. */
+  async function kapida(topology: TopologySnapshot, zincir: string[]): Promise<Card> {
+    await put(topology);
+    let card = await al(queue, zincir[0] as string);
+    for (const sonraki of zincir.slice(1)) {
+      await queue.handoff(card, {});
+      card = await al(queue, sonraki);
+    }
+    return queue.escalate(card, "verdikt yok");
+  }
+
+  it("hedefi olmayan back retry olur ve ADI da retry'dir", async () => {
+    const card = await kapida(daily, ["coder"]);
+
+    const karar = kapiKarari(card, "back");
+
+    expect(karar).toMatchObject({
+      kind: "escalation",
+      istenen: "back",
+      uygulanan: "retry",
+      hedef: "coder",
+    });
+  });
+
+  it("hedefi olan back aynen uygulanır", async () => {
+    const card = await kapida(daily, ["coder", "reviewer"]);
+
+    const karar = kapiKarari(card, "back");
+
+    expect(karar).toMatchObject({ istenen: "back", uygulanan: "back", hedef: "coder" });
+  });
+
+  // Varsayılan artık tek yerde: kaçışta `retry`, diğerlerinde `forward`.
+  it("karar verilmezse kapının varsayılanı kullanılır", async () => {
+    const card = await kapida(daily, ["coder"]);
+    expect(kapiKarari(card)).toMatchObject({ istenen: "retry", uygulanan: "retry" });
+  });
+
+  // `release` ile AYNI kaynaktan okunduğunun kanıtı: hedef gerçekten
+  // kartın gittiği yer olmalı.
+  it("hedef, kartın gerçekten gittiği rol", async () => {
+    const card = await kapida(daily, ["coder", "reviewer"]);
+    const karar = kapiKarari(card, "back");
+
+    const released = await queue.release(card.id, { decision: "back" });
+
+    expect(released.role).toBe(karar.hedef);
+  });
+
+  it("hedefsiz back'te de hedef kartın gittiği rol", async () => {
+    const card = await kapida(daily, ["coder"]);
+    const karar = kapiKarari(card, "back");
+
+    const released = await queue.release(card.id, { decision: "back" });
+
+    expect(released.role).toBe(karar.hedef);
+    expect(released.role).toBe("coder");
   });
 });

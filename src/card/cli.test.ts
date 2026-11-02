@@ -126,3 +126,63 @@ describe("card CLI — kuyruk engeli", () => {
     expect(code).toBe(1);
   });
 }, 60_000);
+
+/**
+ * İnsan "geri gönder" dediğinde, gönderilemediyse SÖYLENMELİ.
+ *
+ * Zincirin başında `back`'in hedefi yok ve kart aynı role dönüyor. CLI
+ * sessizce `(retry)` basarsa insan kartı geri gönderdiğini sanır; ekranda
+ * düğme artık çıkmıyor ama CLI hâlâ komutu kabul ediyor.
+ */
+describe("card CLI — hedefsiz back", () => {
+  it("uygulanamayan kararı yazıyor", async () => {
+    const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+    const flow = await loadFlow(join(repoRoot, "hub", "flows", "daily.yaml"), {
+      root: repoRoot,
+      providers: knownProviderSet(),
+    });
+    const topology = snapshot(flow, repoRoot);
+    const queue = new CardQueue(join(dir, ".skein"));
+    await queue.init();
+    await queue.add(newCard({ title: "iş", task: "bir şey yap", topology }));
+    // coder zincirin başı: ret hedefi yok.
+    const sonuc = await queue.take("coder");
+    if (sonuc.kind !== "alindi") throw new Error("kart alınamadı");
+    const kapida = await queue.escalate(sonuc.card, "verdikt yok");
+
+    const { code, out } = await card(dir, "release", kapida.id, "back");
+
+    expect(code).toBe(0);
+    expect(out).toContain("uygulanamadı");
+    expect(out).toContain("zincirin başında");
+    // Uygulanan karar da doğru adla basılmalı.
+    expect(out).toContain("(retry)");
+    expect(out).not.toContain("(back)");
+  });
+
+  // Hedefi OLAN back'te uyarı ÇIKMAMALI: her bırakmada basılan bir uyarı
+  // okunmaz hâle gelir.
+  it("hedefi olan back'te uyarı yok", async () => {
+    const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+    const flow = await loadFlow(join(repoRoot, "hub", "flows", "daily.yaml"), {
+      root: repoRoot,
+      providers: knownProviderSet(),
+    });
+    const topology = snapshot(flow, repoRoot);
+    const queue = new CardQueue(join(dir, ".skein"));
+    await queue.init();
+    await queue.add(newCard({ title: "iş", task: "bir şey yap", topology }));
+    const ilk = await queue.take("coder");
+    if (ilk.kind !== "alindi") throw new Error("kart alınamadı");
+    await queue.handoff(ilk.card, {});
+    const ikinci = await queue.take("reviewer");
+    if (ikinci.kind !== "alindi") throw new Error("kart alınamadı");
+    const kapida = await queue.escalate(ikinci.card, "verdikt yok");
+
+    const { code, out } = await card(dir, "release", kapida.id, "back");
+
+    expect(code).toBe(0);
+    expect(out).not.toContain("uygulanamadı");
+    expect(out).toContain("(back)");
+  });
+}, 60_000);
