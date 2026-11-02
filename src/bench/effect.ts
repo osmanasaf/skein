@@ -140,6 +140,36 @@ export function filterByTask(events: SkeinEvent[], taskId: string): SkeinEvent[]
 }
 
 /** Bir koşuda geçen modeller (üretici ∪ denetçi), sıralı. */
+/**
+ * Koşu başına MODEL KURGUSU — `review.done` olaylarından.
+ *
+ * Grup anahtarı eskiden o koşunun PUANLANMIŞ hücrelerinden türetiliyordu
+ * ve bu, gruplama hatasının ÜÇÜNCÜ örneğiydi (ilk ikisi: yalnızca göreve
+ * göre gruplamak, `effect.ts` ve `planeffect.ts`'te ayrı ayrı).
+ *
+ * Ölçülmüş sonucu: aynı 2x2 kurgusu k=3 koşulur; 3. koşuda puanlayıcının
+ * JSON ayrıştırması üç hücrede patlar (`scoreAll` hatayı yakalayıp devam
+ * ediyor) ve yalnızca bir hücre puanlanır. `modelsOf` o koşu için TEK
+ * model döner, grup anahtarı değişir ve rapor iki ayrı grup basar:
+ * `k=2` ve `k=1`, ikisi de "yetersiz". Üç tekrar gerçekten koşulmuş
+ * olduğu hâlde karar YETERSİZ çıkar ve ikinci grubun `models` sütunu iki
+ * modelle koşulmuş bir koşuyu "tek modelli kurgu" diye ETİKETLER.
+ *
+ * `review.done` denetim hücresi başına yazılıyor ve puanlamadan önce
+ * geliyor: puanlama başarısız olsa bile kurgu orada duruyor.
+ */
+export function runModels(events: SkeinEvent[]): Map<string, string[]> {
+  const out = new Map<string, Set<string>>();
+  for (const e of events) {
+    if (e.type !== "review.done") continue;
+    const set = out.get(e.runId) ?? new Set<string>();
+    set.add(e.producer);
+    set.add(e.reviewer);
+    out.set(e.runId, set);
+  }
+  return new Map([...out].map(([k, v]) => [k, [...v].sort()]));
+}
+
 function modelsOf(cells: { producer: string; reviewer: string }[]): string[] {
   const set = new Set<string>();
   for (const c of cells) {
@@ -253,6 +283,12 @@ export interface Grouped<T> {
 /** Gruplamanın kendisi — iki katman da aynı bölmeyi kullanıyor. */
 export function groupRuns<T extends { runId: string; taskId: string; producer: string; reviewer: string }>(
   cells: T[],
+  /**
+   * Koşu başına model kurgusu (`runModels`). Verilmezse kurgu o koşunun
+   * ELDE KALAN hücrelerinden türetiliyor ve puanlama kayıpları grup
+   * kimliğini değiştiriyor — bkz. `runModels`.
+   */
+  kurgu?: Map<string, string[]>,
 ): Grouped<T>[] {
   const byRun = new Map<string, T[]>();
   for (const c of cells) {
@@ -262,9 +298,9 @@ export function groupRuns<T extends { runId: string; taskId: string; producer: s
   }
 
   const byGroup = new Map<string, Grouped<T>>();
-  for (const [, own] of byRun) {
+  for (const [runId, own] of byRun) {
     const first = own[0] as T;
-    const models = modelsOf(own);
+    const models = kurgu?.get(runId) ?? modelsOf(own);
     const k = key(first.taskId, ...models);
     const g = byGroup.get(k);
     if (g) g.cells.push(...own);
@@ -273,8 +309,8 @@ export function groupRuns<T extends { runId: string; taskId: string; producer: s
   return [...byGroup.values()];
 }
 
-export function groupCells(cells: ScoredCell[]): GroupReport[] {
-  return groupRuns(cells).map((g) => {
+export function groupCells(cells: ScoredCell[], kurgu?: Map<string, string[]>): GroupReport[] {
+  return groupRuns(cells, kurgu).map((g) => {
     const a = analyse(g.cells);
     return {
       taskId: g.taskId, models: g.models, ...a,
@@ -285,7 +321,9 @@ export function groupCells(cells: ScoredCell[]): GroupReport[] {
 
 export function effectReport(events: SkeinEvent[]): EffectReport {
   const cells = scoredCells(events);
-  const groups = groupCells(cells);
+  // Grup kurgusu `review.done`dan: puanlama kayıpları grup kimliğini
+  // değiştirmemeli (bkz. `runModels`).
+  const groups = groupCells(cells, runModels(events));
   const pooled = analyse(cells);
   return {
     groups, ...pooled,

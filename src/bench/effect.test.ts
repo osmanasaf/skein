@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SkeinEvent } from "../events/log.js";
-import { effectReport, UNKNOWN_TASK } from "./effect.js";
+import { effectReport, UNKNOWN_TASK , runModels } from "./effect.js";
 
 const ev = (e: Partial<SkeinEvent> & { type: string }, runId: string): SkeinEvent =>
   ({ v: 1, at: "2026-01-01T00:00:00.000Z", runId, ...e }) as SkeinEvent;
@@ -47,6 +47,65 @@ const square = (runId: string, a: string, b: string, hooks: number, sameMissed: 
   ...cell(runId, a, b, hooks, crossedMissed),
   ...cell(runId, b, a, hooks, crossedMissed),
 ];
+
+/**
+ * GRUP ANAHTARI puanlamanın başarısına göre değişmemeli — gruplama
+ * hatasının ÜÇÜNCÜ örneği (ilk ikisi: yalnızca göreve göre gruplamak,
+ * `effect.ts` ve `planeffect.ts`'te ayrı ayrı).
+ *
+ * Eskiden kurgu o koşunun PUANLANMIŞ hücrelerinden türetiliyordu.
+ * Puanlayıcı bazı hücrelerde patlarsa (`scoreAll` hatayı yakalayıp devam
+ * ediyor) o koşu için daha az model görünüyor, grup anahtarı değişiyor ve
+ * rapor tek kurguyu iki gruba bölüyor: üç tekrar koşulmuş olduğu hâlde
+ * karar YETERSİZ çıkıyor ve ikinci grubun `models` sütunu iki modelle
+ * koşulmuş bir koşuyu "tek modelli kurgu" diye ETİKETLİYOR.
+ */
+describe("runModels — kurgu review.done'dan okunuyor", () => {
+  const rd = (runId: string, producer: string, reviewer: string): SkeinEvent =>
+    ev({ type: "review.done", cell: `${producer}-${reviewer}`, producer, reviewer,
+      crossed: producer !== reviewer, promptHash: "h", path: "p" }, runId);
+
+  it("puanlanmamış hücrelerin modelleri de kurguya giriyor", () => {
+    const m = runModels([
+      rd("r1", "opus", "opus"), rd("r1", "opus", "gpt"),
+      rd("r1", "gpt", "opus"), rd("r1", "gpt", "gpt"),
+    ]);
+    expect(m.get("r1")).toEqual(["gpt", "opus"]);
+  });
+
+  it("koşular ayrı tutuluyor", () => {
+    const m = runModels([rd("r1", "a", "a"), rd("r2", "b", "b")]);
+    expect(m.get("r1")).toEqual(["a"]);
+    expect(m.get("r2")).toEqual(["b"]);
+  });
+
+  it("review.done yoksa koşu haritada yok", () => {
+    expect(runModels([]).size).toBe(0);
+  });
+
+  /** Denetim koştu ama puanlama patladı: `review.done` var, `judge.scored` yok. */
+  const puansiz = (runId: string, producer: string, reviewer: string): SkeinEvent =>
+    ev({ type: "review.done", cell: `${runId}/${producer}-by-${reviewer}`,
+      producer, reviewer, crossed: producer !== reviewer, promptHash: "h", path: "p" }, runId);
+
+  // ASIL SENARYO: puanlama kaybı grup kimliğini değiştirmemeli. Üç tekrar
+  // koşulur, 3. koşuda üç hücrenin puanlaması patlar — rapor eskiden tek
+  // kurguyu iki gruba bölüyor (k=2 ve k=1) ve ikisi de "yetersiz" çıkıyordu.
+  it("puanlama kaybı tek kurguyu iki gruba BÖLMÜYOR", () => {
+    const e = effectReport([
+      run("r1", "g"), run("r2", "g"), run("r3", "g"),
+      ...square("r1", "A", "B", 10, 4, 2),
+      ...square("r2", "A", "B", 10, 4, 2),
+      // 3. koşu: yalnızca A→A puanlandı, öteki üç hücre puansız.
+      run("r3", "g"),
+      ...cell("r3", "A", "A", 10, 4),
+      puansiz("r3", "B", "B"), puansiz("r3", "A", "B"), puansiz("r3", "B", "A"),
+    ]);
+    expect(e.groups).toHaveLength(1);
+    expect(e.groups[0]?.models).toEqual(["A", "B"]);
+    expect(e.groups[0]?.repeats).toBe(3);
+  });
+});
 
 describe("effectReport", () => {
   it("çiftleri, iki tarafı ve göreli azalmayı hesaplar", () => {

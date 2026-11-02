@@ -1,5 +1,5 @@
 import type { SkeinEvent } from "../events/log.js";
-import { groupRuns, tasksByRun, UNKNOWN_TASK } from "./effect.js";
+import { groupRuns, runModels, tasksByRun, UNKNOWN_TASK } from "./effect.js";
 
 /**
  * 2. KATMANIN RAPORU — gürültü, karar değil.
@@ -117,7 +117,8 @@ function side(cells: ClassifiedCell[]): NoiseSide | null {
 
 export function noiseReport(events: SkeinEvent[]): NoiseReport {
   const cells = classifiedCells(events);
-  const groups: NoiseGroup[] = groupRuns(cells).map((g) => ({
+  // Aynı kök: grup kurgusu sınıflamanın başarısına göre değişmemeli.
+  const groups: NoiseGroup[] = groupRuns(cells, runModels(events)).map((g) => ({
     taskId: g.taskId,
     models: g.models,
     same: side(g.cells.filter((c) => !c.crossed)),
