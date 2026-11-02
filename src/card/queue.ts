@@ -120,6 +120,28 @@ interface Located {
 }
 
 /**
+ * Kopya kartlarda TEK kural: geçmişi UZUN olan kazanır.
+ *
+ * Geçmiş yalnızca büyüyor, yani uzunluk "hangisi daha ileri" sorusunun
+ * güvenilir cevabı. Kural üç yerde gerekiyor (`get`, `recover`, `close`)
+ * ve üçüncüsünde YAZILI DEĞİLDİ: `close` `found[0]` alıyordu, yani tarama
+ * sırasının verdiği rastgele kopyayı. Sonucu iki yönlü: bayat kopya
+ * arşivlenip güncel olan kuyrukta kalıyor, ve insan "Kartı kapat" dedikten
+ * sonra kart panoda DURMAYA devam ediyor — kapatma kapatmıyor.
+ *
+ * "Aynı bilgi iki (üç) yerde" bu depoda tekrarlayan kusur sınıfı; kural
+ * artık tek yerde.
+ */
+function kopyaSirasi(copies: Located[]): Located[] {
+  // `sort` yerinde çalışır, o yüzden kopya alınıyor. İHTİYAT, ölçülmüş bir
+  // kusur DEĞİL: bugünkü üç çağıranın hiçbiri listesini sonra kullanmıyor
+  // ve "yerinde sırala" mutasyonu sınamaların hiçbirini düşürmüyor. Böyle
+  // yazılı, çünkü ısırmayan bir satırı ısırıyormuş gibi anlatmak bu depoda
+  // ayrı bir kusur sayılıyor.
+  return [...copies].sort((a, b) => b.card.history.length - a.card.history.length);
+}
+
+/**
  * Dosya tabanlı kart kuyruğu.
  *
  * Kartın nerede olduğu dosya sistemindeki YERİ ile belirlenir; her geçiş bir
@@ -269,8 +291,7 @@ export class CardQueue {
   async get(id: string): Promise<Card | null> {
     const { kartlar, bozuk } = await this.#tara();
     const found = kartlar.filter((entry) => entry.card.id === id);
-    // Kopya varsa geçmişi uzun olan kazanır; `recover()` ile aynı kural.
-    const card = found.sort((a, b) => b.card.history.length - a.card.history.length)[0]?.card;
+    const card = kopyaSirasi(found)[0]?.card;
     if (card !== undefined) return card;
     // Aranan kart BOZUK olanlardan biri olabilir: "böyle bir kart yok"
     // demek veri kaybını yokluk gibi okutmak olurdu.
@@ -676,14 +697,28 @@ export class CardQueue {
     const trimmed = reason.trim();
     if (trimmed === "") throw new QueueError("Kapatma gerekçesi boş olamaz");
 
-    const found = await this.#locate(id);
-    const here = found[0];
+    const kopyalar = kopyaSirasi(await this.#locate(id));
+    const here = kopyalar[0];
     if (here === undefined) throw new QueueError(`Böyle bir kart yok: ${id}`);
     if (here.card.state === "done") throw new QueueError(`Kart zaten bitmiş: ${id}`);
+    // Karar KAZANANIN durumuna göre, kopyaların herhangi birine göre
+    // değil. İlk yazımda "herhangi bir kopya aktifse reddet" yapmıştım ve
+    // yanlıştı: `active/` altında kalmış bayat bir kopya tam olarak ÇÖPTÜR
+    // (yeniden adlandırma ile unlink arasında çökmüş bir süreç bırakır) ve
+    // ona bakmak, çökme sonrası yetim kartı kapatmayı — bu düğmenin tek
+    // işini — imkânsız kılardı. Kazanan ileri gitmişse tur tamamlanmıştır.
     if (here.card.state === "active") {
       throw new QueueError(
         `\`${id}\` şu an bir rolde koşuyor; kapatmadan önce turun bitmesini bekle.`,
       );
+    }
+
+    // Kaybeden kopyalar SİLİNİR, yoksa kapatma kapatmaz: kart `done`'a
+    // gider ama kopyası kuyrukta kaldığı için panoda durmaya devam eder.
+    // `recover()` aynı kuralla aynı şeyi yapıyor; burada yapılmaması
+    // kuralın üçüncü yerde eksik yazılmasının sonucuydu.
+    for (const bayat of kopyalar.slice(1)) {
+      await rm(bayat.path, { force: true });
     }
 
     const closed = {
@@ -711,7 +746,7 @@ export class CardQueue {
 
     const requeued: Card[] = [];
     for (const copies of byId.values()) {
-      const sorted = copies.sort((a, b) => b.card.history.length - a.card.history.length);
+      const sorted = kopyaSirasi(copies);
       const keep = sorted[0] as Located;
       for (const stale of sorted.slice(1)) {
         await rm(stale.path, { force: true });

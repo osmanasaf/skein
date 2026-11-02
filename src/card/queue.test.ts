@@ -613,3 +613,96 @@ describe("kapiKarari", () => {
     expect(released.role).toBe("coder");
   });
 });
+
+/**
+ * `close` kopyaları ÇÖZMÜYORDU.
+ *
+ * Kural üç yerde gerekiyor ve üçüncüsünde yazılı değildi: `close`
+ * `found[0]` alıyordu, yani tarama sırasının verdiği rastgele kopyayı.
+ * İki yönlü bedel: bayat kopya arşivlenip güncel olan kuyrukta kalıyor,
+ * ve insan "Kartı kapat" dedikten sonra kart panoda DURMAYA devam ediyor
+ * — kapatma kapatmıyor.
+ */
+describe("close — kopya kartlar", () => {
+  /**
+   * Kartın BAYAT bir kopyasını `active/` ya da kuyrukta bırakır.
+   *
+   * Gerçekte bu, yeniden adlandırma ile unlink arasında çöken bir sürecin
+   * bıraktığı hâl (bkz. recover sınaması).
+   */
+  async function bayatKopya(card: Card, alan: string, rol: string): Promise<string> {
+    const yol = join(root, ".skein", alan, rol, `${card.id}.json`);
+    await mkdir(dirname(yol), { recursive: true });
+    await writeFile(yol, serializeCard(card));
+    return yol;
+  }
+
+  it("geçmişi uzun olanı kapatıyor, bayatı kapatmıyor", async () => {
+    await put(daily);
+    const taze = await al(queue, "coder");
+    const ilerlemis = await queue.handoff(taze, { commit: "abc" });
+    // `taze` geçmişi KISA olan kopya; `ilerlemis` uzun olan.
+    await bayatKopya(taze, "active", "coder");
+    expect(await copiesOf(taze.id)).toHaveLength(2);
+
+    const kapali = await queue.close(taze.id, "akışta karşılığı yok");
+
+    // Kapatılan şey İLERLEMİŞ kart olmalı: bayat kopya arşivlenirse
+    // kartın gerçek geçmişi çöpe gider.
+    expect(kapali.history.length).toBeGreaterThan(taze.history.length);
+    expect(kapali.history.at(-1)).toMatchObject({ event: "done", reason: "akışta karşılığı yok" });
+  });
+
+  it("kapatma gerçekten kapatıyor: kopya kuyrukta kalmıyor", async () => {
+    await put(daily);
+    const taze = await al(queue, "coder");
+    await queue.handoff(taze, { commit: "abc" });
+    await bayatKopya(taze, "active", "coder");
+
+    await queue.close(taze.id, "akışta karşılığı yok");
+
+    // Tek kopya kalmalı ve o da `done/` altında. Eskiden bayat kopya
+    // kuyrukta kalıyor, kart panoda durmaya devam ediyordu.
+    const kalanlar = await copiesOf(taze.id);
+    expect(kalanlar).toHaveLength(1);
+    expect(kalanlar[0]).toContain(join(".skein", "done"));
+    expect((await queue.list()).filter((c) => c.id === taze.id && c.state !== "done")).toEqual([]);
+  });
+
+  /**
+   * Bayat AKTİF kopya kapatmayı engellememeli.
+   *
+   * İlk yazımda "herhangi bir kopya aktifse reddet" yaptım ve bu sınama
+   * onu düşürdü: `active/` altında kalmış kopya tam olarak ÇÖPTÜR —
+   * yeniden adlandırma ile unlink arasında çökmüş bir süreç bırakır.
+   * Ona bakmak, çökme sonrası yetim kartı kapatmayı, yani bu düğmenin tek
+   * işini imkânsız kılardı. Kazanan ileri gitmişse tur tamamlanmıştır.
+   */
+  it("bayat aktif kopya kapatmayı engellemiyor", async () => {
+    await put(daily);
+    const taze = await al(queue, "coder");
+    const ilerlemis = await queue.handoff(taze, { commit: "abc" });
+    expect(ilerlemis.state).toBe("queued");
+    // `taze` zaten `state: "active"`: gerçek çökme kalıntısı böyle görünür.
+    await bayatKopya(taze, "active", "coder");
+
+    const kapali = await queue.close(taze.id, "akışta karşılığı yok");
+
+    expect(kapali.state).toBe("done");
+    expect(await copiesOf(taze.id)).toHaveLength(1);
+  });
+
+  // KAZANAN aktifse kapatma yok: o turun parası ödeniyor olabilir.
+  it("kazanan aktifse kapatmıyor", async () => {
+    await put(daily);
+    const aktif = await al(queue, "coder");
+    // Kazanan `active/` altında ve geçmişi en uzun; kuyrukta kısa geçmişli
+    // bir kopya var.
+    await bayatKopya({ ...aktif, history: aktif.history.slice(0, 1), state: "queued" },
+      "queue", "coder");
+
+    await expect(queue.close(aktif.id, "gerekçe")).rejects.toThrow(/koşuyor/);
+    // Reddedilen kapatma hiçbir kopyayı silmemeli.
+    expect(await copiesOf(aktif.id)).toHaveLength(2);
+  });
+});
