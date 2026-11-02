@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { gateKind, type Card, type CardState } from "../card/card.js";
+import { gateKind, planGateEntry, type Card, type CardState } from "../card/card.js";
 import { isOrphan, isStale } from "../card/orphan.js";
 import type { CardQueue } from "../card/queue.js";
 import { readEvents, type SkeinEvent } from "../events/log.js";
@@ -58,6 +58,23 @@ export interface UiCard {
   state: CardState;
   /** Kapıda duruyorsa hangi kapıda — çıkış kümesini bu belirler. */
   gate: "approval" | "deadlock" | "escalation" | null;
+  /**
+   * Kilit kapısı PLANLAMA alışverişinden mi çıktı.
+   *
+   * `kind: "deadlock"` iki ayrı yerden geliyor: ret limitinin dolması ve
+   * planlama alışverişinin tükenmesi. Çekirdek ikisini AYIRIYOR —
+   * `planGateEntry` ve `queue.release`: planlama kilidinde `forward`,
+   * `role.next`'e değil `afterPlanning`'e gidiyor. Model bu ayrımı
+   * taşımıyordu, ekran da ayırt edemiyordu.
+   *
+   * Sonucu üç yanlış ifade birden: üst etiket "ret limiti doldu" diyor
+   * (hiç ret olmamış olabilir), ret rozeti hiç çıkmıyor, ve düğmeler
+   * "Üretici haklı / Denetçi haklı" diyor — oysa anlaşmazlık plan
+   * üzerinde ve "Üretici haklı"ya basmak kartı alışverişten SONRAKİ role
+   * götürüyor. Gerçek sebep yalnızca gerekçe satırında, rozet metniyle
+   * çelişerek duruyordu.
+   */
+  planKilidi: boolean;
   gateReason: string | null;
   /** Bu kart için yapılan tur sayısı. */
   turns: number;
@@ -240,6 +257,7 @@ function toUiCard(
     role: card.role,
     state: card.state,
     gate: gateKind(card),
+    planKilidi: planGateEntry(card) !== null,
     gateReason: lastGateReason(card),
     turns,
     rejects,

@@ -59,6 +59,22 @@ describe("renderPage", () => {
   // duruyor. O yüzden KOŞULUN KENDİSİ iddia ediliyor; koşulu `false`
   // yapan bir mutasyon böyle ısırıyor. Sınadığı şey BAĞLANTI, çizim
   // değil, ve bu sınır burada yazılı olsun.
+  // İKİ AYRI KİLİT. kind: "deadlock" ret limitinden de planlama
+  // alışverişinin tükenmesinden de geliyor; çekirdek ikisini ayırıyor ve
+  // forward'ın HEDEFİ bile farklı. Eski kod ikisine de "ret limiti doldu"
+  // ve "Üretici haklı / Denetçi haklı" basıyordu: planlama kilidinde üç
+  // ifade de yanlıştı ve insan o etiketlerle karar veriyordu.
+  it("planlama kilidi ret limitinden ayrı etiketleniyor", () => {
+    const html = renderPage("t");
+    expect(html).toContain("planlama kilidi");
+    expect(html).toContain("itirazlar kapanmadı");
+    expect(html).toContain("Planı olduğu gibi ilerlet");
+    expect(html).toContain("Alışverişi yeniden aç");
+    // Bağlantı: ayrım modelden geliyor, çıkarsanmıyor.
+    expect(html).toContain("if (planKilidi)");
+    expect(html).toContain("kapiCikislari(c.gate, c.planKilidi)");
+  });
+
   it("bozuk kart dosyası uyarı bandına bağlı", () => {
     const html = renderPage("t");
     expect(html).toContain("kart dosyası okunamıyor");

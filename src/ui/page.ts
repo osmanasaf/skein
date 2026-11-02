@@ -241,7 +241,7 @@ const sure = (ms) => {
 };
 const para = (n) => "$" + (n || 0).toFixed(2);
 
-function kapiCikislari(kind) {
+function kapiCikislari(kind, planKilidi) {
   // Üç kapı, üç ayrı çıkış kümesi. Kaçışta "Geçir" YOK: tur tamamlanmadı,
   // kod sonraki worktree'ye hiç taşınmadı ve çekirdek zaten reddeder.
   if (kind === "escalation") {
@@ -249,6 +249,15 @@ function kapiCikislari(kind) {
       dugmeler: [["Yeniden koş", "retry"], ["Geri gönder", "back"]] };
   }
   if (kind === "deadlock") {
+    // İKİ AYRI KİLİT. Çekirdek ikisini ayırıyor (planGateEntry) ve
+    // forward'ın hedefi de farklı: planlama kilidinde kart role.next'e
+    // değil alışverişten SONRAKİ role gidiyor. Eski kod ikisine de
+    // "ret limiti doldu" + "Üretici haklı / Denetçi haklı" basıyordu;
+    // planlama kilidinde üç ifade de yanlıştı.
+    if (planKilidi) {
+      return { etiket: "planlama kilidi", not: "itirazlar kapanmadı",
+        dugmeler: [["Planı olduğu gibi ilerlet", "forward"], ["Alışverişi yeniden aç", "retry"]] };
+    }
     return { etiket: "kilit kapısı", not: "ret limiti doldu",
       dugmeler: [["Üretici haklı", "forward"], ["Denetçi haklı", "back"]] };
   }
@@ -308,7 +317,7 @@ function kartCiz(c) {
 
   const ust = el("div", "tag " + (c.gate ? "gate" : c.state === "active" ? "run" : "queued"));
   if (c.state === "active") ust.append(el("span", "dot"));
-  const kapi = c.gate ? kapiCikislari(c.gate) : null;
+  const kapi = c.gate ? kapiCikislari(c.gate, c.planKilidi) : null;
   ust.append(document.createTextNode(
     c.gate ? kapi.etiket : c.state === "active" ? "çalışıyor" : c.state === "done" ? "bitti" : "kuyrukta"
   ));
