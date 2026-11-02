@@ -649,6 +649,35 @@ function ciz(m) {
     bantlar.push(band);
   }
 
+  // KUYRUK ENGELİ. Kart kuyrukta duruyor ama alınamıyor — ve bu yarış
+  // değil. Teşhis gözcünün terminalinde ve günlükte vardı; operatörün
+  // baktığı yer burası ve burada kart sessizce bekliyordu. Model yalnızca
+  // HÂLÂ süren engelleri veriyor, yani bu bant çözülmüş bir arıza
+  // göstermiyor.
+  //
+  // NOT: bu bölge gömülü betiğin template literal'ının İÇİ — ters tırnak
+  // string'i kapatır.
+  if (m.engeller && m.engeller.length) {
+    const band = el("div", "band");
+    band.append(el("h2", null, m.engeller.length + " kart kuyrukta ALINAMIYOR"));
+    band.append(el("p", null,
+      "Bu kartlar kuyrukta duruyor ama role verilemiyor ve bu bir yarış değil: " +
+      "dosya kilitli, izin yok ya da yolda bir şey var. Kart kendiliğinden " +
+      "ilerlemeyecek — aşağıdaki kodu ve yolu kullanarak engeli kaldır."));
+    const liste = el("div", "mono");
+    liste.style.cssText = "font-size:12px;line-height:1.7";
+    m.engeller.forEach((e) => {
+      liste.append(el("div", null, e.code + "  " + e.role + "  " + e.path));
+      if (e.message) {
+        const alt = el("div", null, e.message);
+        alt.style.cssText = "color:var(--ink-3)";
+        liste.append(alt);
+      }
+    });
+    band.append(liste);
+    bantlar.push(band);
+  }
+
   // Rolü bu akışta bulunmayan BAŞKA AKIŞ kartları hiçbir sütuna düşmez ve
   // yetim de sayılmadıkları için eskiden ekrandan tamamen kaybolurlardı.
   // Bir kartın ekrandan yok olması en kötü görünüm hatası.

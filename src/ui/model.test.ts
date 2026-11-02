@@ -2,7 +2,7 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import { al } from "../testing/queue.js";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { knownProviderSet } from "../adapters/factory.js";
 import { newCard, type Card } from "../card/card.js";
 import { CardQueue } from "../card/queue.js";
@@ -10,6 +10,7 @@ import { EventLog } from "../events/log.js";
 import { loadFlow } from "../flow/load.js";
 import { snapshot, type TopologySnapshot } from "../flow/snapshot.js";
 import { acquireLock } from "../watch/lock.js";
+import { tick } from "../watch/tick.js";
 import { buildDetail, buildModel, type BuildOptions } from "./model.js";
 
 const FLOW = `
@@ -556,5 +557,110 @@ describe("buildModel — geri hedefi", () => {
 
     // coder'ın ret hedefi yok.
     expect(m.cards.find((c) => c.id === kart.id)?.geriHedef).toBeNull();
+  });
+});
+
+/**
+ * Kuyruk engeli EKRANDA görünmeli.
+ *
+ * `take` yarışı kaybetmeyi gerçek engelden ayırıyor ve engeli
+ * `queue.blocked` olayına yazıyor — ama teşhis yalnızca gözcünün
+ * terminalinde ve günlükte duruyordu. Operatörün baktığı yer ekran ve
+ * orada kart sessizce kuyrukta bekliyordu.
+ *
+ * Olay GEÇMİŞ, engel ise bir DURUM: çözülmüş engeli basmak operatöre
+ * olmayan bir arıza göstermek olurdu. Ayrım dosyanın hâlâ yerinde olup
+ * olmaması — `rename` başardığı an o yol kaybolur.
+ */
+describe("buildModel — kuyruk engeli", () => {
+  async function engelKaydi(yol: string): Promise<void> {
+    const log = new EventLog(logPath, "kosu-1");
+    await log.append({
+      type: "queue.blocked",
+      role: "coder",
+      path: yol,
+      code: "EPERM",
+      message: "operation not permitted",
+    });
+  }
+
+  it("dosya yerindeyse engel bildiriliyor", async () => {
+    const yol = join(root, ".skein", "queue", "coder", "0-x-c-1.json");
+    await mkdir(dirname(yol), { recursive: true });
+    await writeFile(yol, "{}");
+    await engelKaydi(yol);
+
+    const m = await buildModel(base);
+
+    expect(m.engeller).toHaveLength(1);
+    // Kod ve yol olmadan "alınamadı" kullanıcıyı hiçbir yere götürmez.
+    expect(m.engeller[0]).toMatchObject({ code: "EPERM", role: "coder", path: yol });
+    expect(m.engeller[0]?.message).toBe("operation not permitted");
+  });
+
+  it("dosya gitmişse engel bildirilmiyor", async () => {
+    // Kayıt var ama dosya yok: kart alındı ya da taşındı, engel çözüldü.
+    await engelKaydi(join(root, ".skein", "queue", "coder", "0-x-c-yok.json"));
+
+    const m = await buildModel(base);
+
+    expect(m.engeller).toEqual([]);
+  });
+
+  // Gözcü her geçişte bir kayıt yazıyor: aynı engel onlarca kez basılmamalı.
+  it("aynı yol için tek satır, en yeni kayıt", async () => {
+    const yol = join(root, ".skein", "queue", "coder", "0-x-c-2.json");
+    await mkdir(dirname(yol), { recursive: true });
+    await writeFile(yol, "{}");
+    const log = new EventLog(logPath, "kosu-1");
+    await log.append({ type: "queue.blocked", role: "coder", path: yol, code: "EPERM", message: "ilk" });
+    await log.append({ type: "queue.blocked", role: "coder", path: yol, code: "EBUSY", message: "son" });
+
+    const m = await buildModel(base);
+
+    expect(m.engeller).toHaveLength(1);
+    expect(m.engeller[0]?.code).toBe("EBUSY");
+  });
+
+  it("hiç engel kaydı yoksa boş", async () => {
+    await put();
+    expect((await buildModel(base)).engeller).toEqual([]);
+  });
+});
+
+/**
+ * Yazan ile okuyan arasındaki SÖZLEŞME.
+ *
+ * `tick` olayı `path`/`code`/`role`/`message` alanlarıyla yazıyor, model
+ * aynı adlarla okuyor. İki taraf kendi sınamalarında kendi düz
+ * metinlerini kullandığı için adlar ayrışsa İKİ sınama takımı da yeşil
+ * kalırdı — bu depoda "aynı bilgi iki yerde" diye adlandırılan kusur
+ * sınıfı. Bu sınama gerçek bir engeli gerçek `tick` ile yazdırıp ekranın
+ * modelinden okuyor.
+ */
+describe("tick → model — engel sözleşmesi", () => {
+  it("tick'in yazdığı engeli ekranın modeli görüyor", async () => {
+    const kart = await put();
+    // Hedef adı bir dizin: `rename` oraya taşıyamaz.
+    await mkdir(join(root, ".skein", "active", "coder", `${kart.id}.json`), { recursive: true });
+
+    const sonuc = await tick("coder", {
+      root,
+      queue,
+      adapters: new Map(),
+      log: new EventLog(logPath, "kosu-1"),
+    });
+    expect(sonuc.status).toBe("engelli");
+
+    const m = await buildModel(base);
+
+    expect(m.engeller).toHaveLength(1);
+    expect(m.engeller[0]?.role).toBe("coder");
+    expect(m.engeller[0]?.path).toContain(kart.id);
+    // Kod gerçek bir errno olmalı: "?" demek alanın adının ayrıştığı
+    // ya da hiç yazılmadığı anlamına gelir.
+    expect(m.engeller[0]?.code).not.toBe("?");
+    expect(m.engeller[0]?.code).not.toBe("ENOENT");
+    expect(m.engeller[0]?.message).not.toBe("");
   });
 });

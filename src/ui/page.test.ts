@@ -197,3 +197,26 @@ describe("renderPage", () => {
     expect(src).toContain("h.plan.invalid");
   });
 });
+
+/**
+ * Kuyruk engeli bandı — BAĞLANTI sınaması.
+ *
+ * Bu dosya sayfanın kaynak METNİNİ sınıyor, çizimini değil: ölü bir dalı
+ * göremez, çünkü metin ölü dalın içinde de durur. O yüzden iddia edilen
+ * şey koşulun KENDİSİ — bandın modelin alanına bakıyor olması ve kodu,
+ * rolü, yolu basıyor olması.
+ */
+describe("renderPage — kuyruk engeli bandı", () => {
+  it("bant modelin engeller alanına bağlı", () => {
+    const src = betik(renderPage("x"));
+    expect(src).toContain("m.engeller && m.engeller.length");
+    expect(src).toContain("kart kuyrukta ALINAMIYOR");
+  });
+
+  // Kod ve yol olmadan "alınamadı" kullanıcıyı hiçbir yere götürmez.
+  it("kod, rol ve yol basılıyor", () => {
+    const src = betik(renderPage("x"));
+    expect(src).toContain('e.code + "  " + e.role + "  " + e.path');
+    expect(src).toContain("e.message");
+  });
+});

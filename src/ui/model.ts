@@ -1,3 +1,4 @@
+import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { gateKind, planGateEntry, type Card, type CardState, type PlanKabul } from "../card/card.js";
 import { isOrphan, isStale } from "../card/orphan.js";
@@ -39,6 +40,32 @@ export interface UiModel {
    * etmek ile saklamak ayrı şeyler. Ekran bunu uyarı olarak basıyor.
    */
   bozuk: string[];
+  /**
+   * Kuyrukta duran ama ALINAMAYAN kartlar — hâlâ engelli olanlar.
+   *
+   * `take` artık yarışı kaybetmeyi (ENOENT) gerçek engelden ayırıyor ve
+   * engeli `queue.blocked` olayına yazıyor. Ama teşhis yalnızca gözcünün
+   * terminalinde ve günlükte duruyordu; operatörün baktığı yer EKRAN ve
+   * orada kart sessizce kuyrukta bekliyordu.
+   *
+   * Olay GEÇMİŞ, engel ise bir DURUM: on dakika önceki engel çözülmüş
+   * olabilir. O yüzden her olay için dosyanın hâlâ yerinde olup olmadığı
+   * soruluyor — `rename` başardığı an o yol kaybolur, yani varlık testi
+   * "hâlâ sıkışık mı" sorusunun tam cevabı. Kalıcı bir engel dosyası
+   * tutmak gerekmiyor; durum diskte zaten yazılı.
+   */
+  engeller: UiEngel[];
+  at: string;
+}
+
+/** Alınamayan bir kart dosyası, ekranın göreceği hâli. */
+export interface UiEngel {
+  path: string;
+  /** `errno` kodu — "alınamadı" tek başına nedeni söylemiyor. */
+  code: string;
+  message: string;
+  role: string;
+  /** Engelin son görüldüğü an. */
   at: string;
 }
 
@@ -228,8 +255,46 @@ export async function buildModel(options: BuildOptions): Promise<UiModel> {
       activations: events.filter((e) => e.type === "agent.started").length,
     },
     bozuk: await options.queue.bozuklar(),
+    engeller: await surenEngeller(events),
     at: now().toISOString(),
   };
+}
+
+/**
+ * `queue.blocked` olaylarından HÂLÂ süren engelleri çıkarır.
+ *
+ * Aynı yol için birden çok kayıt olabilir (her geçişte bir tane); en
+ * yenisi tutuluyor, yoksa ekran aynı engeli onlarca kez basardı.
+ */
+async function surenEngeller(events: SkeinEvent[]): Promise<UiEngel[]> {
+  const sonKayit = new Map<string, UiEngel>();
+  for (const event of events) {
+    if (event.type !== "queue.blocked") continue;
+    const e = event as unknown as { path: string; code: string; message: string; role: string; at: string };
+    if (typeof e.path !== "string" || e.path === "") continue;
+    // Son kayıt kazanır: olaylar sırayla okunuyor.
+    sonKayit.set(e.path, {
+      path: e.path,
+      code: typeof e.code === "string" ? e.code : "?",
+      message: typeof e.message === "string" ? e.message : "",
+      role: typeof e.role === "string" ? e.role : "?",
+      at: typeof e.at === "string" ? e.at : "",
+    });
+  }
+
+  const suren: UiEngel[] = [];
+  for (const engel of sonKayit.values()) {
+    // Dosya yerinde değilse engel çözülmüş: kart alındı ya da taşındı.
+    // Çözülmüş engeli basmak, operatöre olmayan bir arıza göstermek olurdu.
+    try {
+      await stat(engel.path);
+    } catch {
+      continue;
+    }
+    suren.push(engel);
+  }
+  // En yeni önce: ekranda ilk göreceği şey en son olan olmalı.
+  return suren.sort((a, b) => b.at.localeCompare(a.at));
 }
 
 function groupEvents(events: SkeinEvent[]): Map<string, SkeinEvent[]> {

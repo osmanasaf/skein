@@ -20,7 +20,7 @@ olduğu için kendiliğinden eklenmedi.
 
 ---
 
-## QA KAMPANYASI — 35 bulgu, 25 düzeltildi (1-2 Kasım)
+## QA KAMPANYASI — 35 bulgu, 26 düzeltildi (1-2 Kasım)
 
 Dört paralel tarama koştu (ekran · kart+git · tick+planlama · ölçüm takımı),
 32 bulgu çıktı. Her bulgu kabul edilmeden önce **kendim doğruladım**; her
@@ -62,16 +62,11 @@ kaçırdı.
 | 25 | Kapı kararı İKİ yerde hesaplanıyor (`release` · `releaseCard`) | aynı varsayılan iki dosyada; 23. kusurun kök sebebi |
 | 26 | `close()` kopyada `found[0]` alıyor, "uzun geçmiş kazanır"ı uygulamıyor | bayat kopya arşivlenip güncel olan kuyrukta kalıyor |
 | 27 | `close()` kaybeden kopyayı silmiyor | kapatma KAPATMIYOR: kart `done`'a gidiyor, kopyası panoda duruyor |
+| 28 | Kuyruk engeli EKRANDA görünmüyor | teşhis gözcünün terminalinde kalıyor; operatör panoya bakıyor ve kart sessizce bekliyor |
 
 ### AÇIK kalanlar — önem sırası
 
 **Orta.**
-- Kuyruk engeli (`queue.blocked`) EKRANDA görünmüyor: gözcünün
-  terminalinde ve olay günlüğünde var, ama `ui/model.ts` kuyruğu
-  `take` etmediği için engeli göremiyor. `bozuklar()` gibi kalıcı bir
-  kayıt gerekiyor; şimdilik bilinen ve YAZILI bir boşluk.
-- `acquireLock` kaydı atomik yazılmıyor (`wx` ile önce yaratıp sonra
-  yazıyor); eşzamanlı okuyucu boş dosya görüp CANLI kilidi bayat sanabilir.
 - `kalibre` ön kontrolü üretimin sağlığını (`cardState`/`escalation`)
   sormadan "ÖLÇER" diyebiliyor; `matrixSkip`/`power2x2` o dersi öğrenmişti.
 - Rapor satırında iki payda: `koşu` ölçülmüş koşuyu,
