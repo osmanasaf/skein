@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { gateKind, planGateEntry, type Card, type CardState } from "../card/card.js";
+import { gateKind, planGateEntry, type Card, type CardState, type PlanKabul } from "../card/card.js";
 import { isOrphan, isStale } from "../card/orphan.js";
 import type { CardQueue } from "../card/queue.js";
 import { readEvents, type SkeinEvent } from "../events/log.js";
@@ -121,7 +121,20 @@ export interface UiCard {
    * Tam hash burada taşınır; 12 karaktere kısaltma ekranın kendi
    * tüketicisinde (`page.ts`) yapılır, akış hash'iyle aynı ilkeyle.
    */
-  plan: { path: string; hash: string } | null;
+  /**
+   * Kartın dondurduğu plan ve YÜKÜMLÜLÜKLERİ.
+   *
+   * `kabuller` eskiden tipte ilan EDİLMİYORDU: `toUiCard` nesneyi
+   * referansla geçirdiği için veri JSON'la tarayıcıya gidiyordu ama
+   * sayfada kullanılamıyordu, ve yalnızca `path · hash` basılıyordu.
+   *
+   * Aynı eksik `card show`'da bir kusur olarak yaşandı ve düzeltildi
+   * (`planLines`): mekanizmanın amacı kabul edilmiş itirazı GÖRÜNÜR
+   * kılmak, ve ekran onu basmıyorsa insan tarafında yarım kalıyor.
+   * İnsan kapısında "üretici haklı / denetçi haklı" kararını verirken
+   * kararın dayanağı ekranda görünmek zorunda.
+   */
+  plan: { path: string; hash: string; kabuller?: PlanKabul[] } | null;
 }
 
 export interface UiStep {

@@ -468,6 +468,18 @@ function detayCiz(d) {
   // değilse (plan yoksa) satır hiç görünmez.
   if (d.card.plan) {
     p.append(el("div", "cid", d.card.plan.path + " · " + d.card.plan.hash.slice(0, 12)));
+    // YÜKÜMLÜLÜKLER. Kabul edilmiş itirazlar kartta duruyordu ve ekranda
+    // görünmüyordu; insan kapısında kararın dayanağı ekranda olmak
+    // zorunda. card show bunu basıyor (planLines), ekran basmıyordu.
+    const kabuller = d.card.plan.kabuller || [];
+    kabuller.forEach((k) => {
+      const satir = el("div", "reason");
+      satir.append(el("b", null, "yükümlülük " + k.id + ": "));
+      satir.append(document.createTextNode(k.ne));
+      const kanit = el("div", "cid", "kanıt: " + k.kanit);
+      satir.append(kanit);
+      p.append(satir);
+    });
   }
 
   const m = el("div", "meta");

@@ -164,7 +164,25 @@ describe("loadFlow — topoloji kuralları", () => {
     await expect(load(await write(patch("next: done", "next: coder")))).rejects.toThrow(/kural 4|kural 5/);
   });
 
-  it("[5] döngü reddedilir", async () => {
+  /**
+   * ADI DÜZELTİLDİ. Eski adı "[5] döngü reddedilir" idi ve ADI YALAN
+   * SÖYLÜYORDU: bu fikstürde `heads = [c]`, yürüyüş `c → done` ile bitiyor
+   * ve hata DÖNGÜ dalından değil "zincire bağlı olmayan rol" dalından
+   * geliyor (ölçüldü: "zincire bağlı olmayan rol(ler) var — `done`'a
+   * ulaşamıyorlar: a, b"). Sınama `/kural 5/` ile eşleştiği için geçiyordu
+   * ama adının anlattığı dalı hiç koşturmuyordu.
+   *
+   * Kural 5'in döngü ve "baş yok" dalları muhtemelen YAPISAL olarak
+   * ateşlenemez: kural 4 tam bir `next: done` garanti ediyor, yani en çok
+   * N-1 kenar var ve `incoming` en çok N-1 ayrı id taşıyabiliyor →
+   * `heads.length >= 1`; tek başlı bir yürüyüşün bir düğümü iki kez
+   * görmesi için iki rolün aynı role işaret etmesi gerekir ve o da
+   * çok-baş hatasına düşüyor. Bu akıl yürütmeyi kanıtlayamadığım için
+   * savunma kodunu SİLMİYORUM — ateşlenemeyen bir kuralı silme kararı,
+   * tamamen akıl erdirebildiğim bir kural için verilmişti (kural 23'ün
+   * ret kenarı dişi). Burada yalnızca sınamanın adı gerçeği söylüyor.
+   */
+  it("[5] `done`'a ulaşamayan rol reddedilir", async () => {
     const cyclic = `
 name: test
 constitution: [../prompts/base.md]
@@ -185,7 +203,9 @@ roles:
     prompt: ../../roles/guard.prompt
     next: done
 `;
+    // Hangi DAL olduğu da iddia ediliyor: mesaj değişirse haber gelsin.
     await expect(load(await write(cyclic))).rejects.toThrow(/kural 5/);
+    await expect(load(await write(cyclic))).rejects.toThrow(/zincire bağlı olmayan/);
   });
 
   it("[5] zincire bağlı olmayan rol reddedilir", async () => {

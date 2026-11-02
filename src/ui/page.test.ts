@@ -64,6 +64,18 @@ describe("renderPage", () => {
   // forward'ın HEDEFİ bile farklı. Eski kod ikisine de "ret limiti doldu"
   // ve "Üretici haklı / Denetçi haklı" basıyordu: planlama kilidinde üç
   // ifade de yanlıştı ve insan o etiketlerle karar veriyordu.
+  // Yükümlülükler kartta duruyordu ve ekranda görünmüyordu: `toUiCard`
+  // veriyi referansla geçiriyor, yani JSON'la tarayıcıya gidiyor ama
+  // tipte ilan edilmediği için kullanılamıyordu ve yalnızca path·hash
+  // basılıyordu. İnsan kapısında kararın DAYANAĞI ekranda olmak zorunda;
+  // `card show` bunu basıyordu (planLines), ekran basmıyordu.
+  it("kart detayı yükümlülükleri kanıtıyla çiziyor", () => {
+    const html = renderPage("t");
+    expect(html).toContain("yükümlülük ");
+    expect(html).toContain("d.card.plan.kabuller");
+    expect(html).toContain("kanıt: ");
+  });
+
   it("planlama kilidi ret limitinden ayrı etiketleniyor", () => {
     const html = renderPage("t");
     expect(html).toContain("planlama kilidi");

@@ -33,6 +33,14 @@ reject:
   onExhausted: gate
 `;
 
+/** Onay kapısı taşıyan akış: `coder` devrettikten SONRA insan onayı. */
+const FLOW_KAPILI = FLOW.replace("reject:\n  limit: 2", `gates:
+  - after: coder
+    type: approval
+    message: insan onayı
+reject:
+  limit: 2`);
+
 let root: string;
 let queue: CardQueue;
 let topology: TopologySnapshot;
@@ -150,13 +158,29 @@ describe("buildModel — kapılar", () => {
   });
 
   // Ekranın "Geçir" düğmesini göstermesi bu ayrıma bağlı.
+  //
+  // ISIRMAYAN SINAMA DÜZELTİLDİ: eski hâli yalnızca `queue.escalate`
+  // çağırıp `"escalation"` bekliyordu — yani bir üstteki sınamanın
+  // aynısıydı ve HİÇBİR YERDE onay kapısı kurmuyordu. `gateKind`'ın
+  // `handoff` → `"approval"` satırı silinse bu sınama yeşil kalır,
+  // akış kapısında bekleyen her kart panoda "kaçış kapısı · kod
+  // taşınmadı" diye çizilir ve "Geçir" düğmesi hiç görünmez.
   it("onay kapısı kaçıştan ayrılır", async () => {
-    await put();
+    // Onay kapılı akışı kur: `coder` devredince kart kapıda bekler.
+    await writeFile(join(root, "hub", "flows", "test.yaml"), FLOW_KAPILI);
+    const flow = await loadFlow(join(root, "hub", "flows", "test.yaml"), {
+      root, providers: knownProviderSet(),
+    });
+    const topo = snapshot(flow, root);
+    await queue.add(newCard({ title: "iş", task: "i", topology: topo }));
     const taken = (await queue.take("coder")) as Card;
-    await queue.escalate(taken, "sebep");
-    const escalation = (await buildModel(base)).cards[0]?.gate;
+    await queue.handoff(taken, { commit: "abc1234" });
 
-    expect(escalation).toBe("escalation");
+    const m = await buildModel({ ...base, topology: topo, flowHash: flow.hash });
+    const kart = m.cards[0];
+
+    expect(kart?.gate).toBe("approval");
+    expect(kart?.planKilidi).toBe(false);
   });
 
   it("kapıda olmayan kartın kapısı yoktur", async () => {
