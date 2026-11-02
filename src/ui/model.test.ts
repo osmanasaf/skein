@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { knownProviderSet } from "../adapters/factory.js";
@@ -65,6 +65,51 @@ afterEach(async () => {
 
 const put = (title = "iş"): Promise<Card> =>
   queue.add(newCard({ title, task: "retry'a jitter ekle", topology }));
+
+
+/**
+ * BAŞKA AKIŞIN KARTI — ölçülmüş kusur, ve yıkıcı olanı.
+ *
+ * Kuyruk kök başına, akış başına değil: depoda iki akış varsa ikisinin
+ * kartları aynı `.skein/` altında duruyor. Eski kod her kartı EKRANIN
+ * akışıyla yargılıyordu, yani `spec` akışının SAĞLAM bir kartı `daily`
+ * panosunda yetim görünüyor, "Kartı kapat" düğmesi çıkıyor ve POST
+ * geçiyordu: kart "akışta rolü yok" gerekçesiyle kapanıyor. Gerekçe
+ * yanlış (rol kendi akışında duruyor) ve sürtünmesi olması gereken bir
+ * karar tek düğmeyle veriliyordu.
+ */
+describe("buildModel — başka akışın kartı", () => {
+  /** Kartın diskteki kaydını başka bir akışa çevirir. */
+  async function baskaAkisaCevir(id: string): Promise<void> {
+    const dizin = join(root, ".skein", "queue", "coder");
+    for (const ad of await readdir(dizin)) {
+      if (!ad.includes(id)) continue;
+      const yol = join(dizin, ad);
+      const ham = JSON.parse(await readFile(yol, "utf8")) as Record<string, unknown>;
+      const topo = ham["topology"] as Record<string, unknown>;
+      topo["flow"] = "baska-akis";
+      topo["hash"] = "f".repeat(64);
+      await writeFile(yol, JSON.stringify(ham));
+    }
+  }
+
+  it("yetim de bayat da sayılmıyor, ayrı işaretleniyor", async () => {
+    const card = await put();
+    await baskaAkisaCevir(card.id);
+
+    const m = await buildModel(base);
+    const c = m.cards.find((x) => x.id === card.id);
+    expect(c?.digerAkis).toBe(true);
+    expect(c?.orphan).toBe(false);
+    expect(c?.stale).toBe(false);
+  });
+
+  it("kendi akışının kartı diğer akış sayılmıyor", async () => {
+    const card = await put();
+    const m = await buildModel(base);
+    expect(m.cards.find((x) => x.id === card.id)?.digerAkis).toBe(false);
+  });
+});
 
 describe("buildModel — pano", () => {
   it("boş kuyrukta rolleri ve sıfır kartı verir", async () => {

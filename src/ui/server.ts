@@ -1,12 +1,14 @@
+import { join } from "node:path";
+import { knownProviderSet } from "../adapters/factory.js";
 import { randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { QueueError, type ReleaseDecision } from "../card/queue.js";
 import { checkDraft, fromFlow, writeDraft, type FlowDraft } from "../flow/draft.js";
-import type { Flow, LoadOptions } from "../flow/load.js";
+import { loadFlow, type Flow, type LoadOptions } from "../flow/load.js";
 import { closeOrphan } from "../card/orphan.js";
 import { releaseCard } from "../card/release.js";
-import type { TopologySnapshot } from "../flow/snapshot.js";
+import { snapshot, type TopologySnapshot } from "../flow/snapshot.js";
 import { buildDetail, buildModel, type DetailOptions, type UiModel } from "./model.js";
 import { renderPage } from "./page.js";
 
@@ -275,7 +277,17 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
       const id = decodeURIComponent(kapat[1] as string);
       guncel()
         .then(async (o) => {
-          const { card, reason } = await closeOrphan(o.root, o.queue, o.topology, id, o.logPath);
+          // Hangi akışa bakılacağı KARTIN KENDİSİNDEN okunuyor, ekranın
+          // açıldığı akıştan değil. `card -- kapat` bunu zaten böyle
+          // yapıyordu; ekran kendi tek akışını geçiriyor ve başka akışın
+          // SAĞLAM kartını "akışta rolü yok" diye kapatabiliyordu.
+          const mevcut = await o.queue.get(id);
+          const kendiAkisi = mevcut === null
+            ? o.topology
+            : await loadFlow(join(o.root, "hub", "flows", `${mevcut.topology.flow}.yaml`), {
+              root: o.root, providers: knownProviderSet(),
+            }).then((flow) => snapshot(flow, o.root)).catch(() => null);
+          const { card, reason } = await closeOrphan(o.root, o.queue, kendiAkisi, id, o.logPath);
           return { card, reason, model: await buildModel(o) };
         })
         .then(({ card, reason, model }) => {

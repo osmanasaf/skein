@@ -76,6 +76,21 @@ export interface UiCard {
    * ekrandan yok olması, en kötü görünüm hatası.
    */
   orphan: boolean;
+  /**
+   * Kart BAŞKA bir akışa ait.
+   *
+   * Kuyruk kök başına, akış başına değil: depoda iki akış varsa ikisinin
+   * kartları aynı `.skein/` altında duruyor. Eski kod her kartı EKRANIN
+   * akışıyla yargılıyordu, yani `spec` akışının sağlam bir kartı `daily`
+   * panosunda YETİM görünüyor, "Kartı kapat" düğmesi çıkıyor ve POST
+   * geçiyordu: kart `akışta rolü yok` gerekçesiyle kapanıyor — gerekçe
+   * yanlış (rol kendi akışında duruyor) ve sürtünmesi olması gereken bir
+   * karar tek düğmeyle veriliyordu.
+   *
+   * Başka akışın kartı bu panonun yargılayacağı şey değil: yetim de bayat
+   * da sayılmıyor ve kapatma düğmesi çıkmıyor.
+   */
+  digerAkis: boolean;
   /** Kart farklı bir akış damgasıyla başladı — bilgi amaçlı. */
   stale: boolean;
   /**
@@ -143,10 +158,14 @@ export async function buildModel(options: BuildOptions): Promise<UiModel> {
   }
 
   const byCard = groupEvents(events);
+  const bizimMi = (card: Card): boolean => card.topology.flow === topology.flow;
   const ui = cards.map((card) =>
     toUiCard(card, byCard.get(card.id) ?? [], {
-      orphan: isOrphan(card, topology),
-      stale: isStale(card, options.flowHash),
+      // Başka akışın kartı bu panonun yargısına girmiyor: yetimlik ve
+      // bayatlık ikisi de EKRANIN akışına göre tanımlı.
+      orphan: bizimMi(card) && isOrphan(card, topology),
+      stale: bizimMi(card) && isStale(card, options.flowHash),
+      digerAkis: !bizimMi(card),
     }),
   );
 
@@ -189,7 +208,7 @@ function groupEvents(events: SkeinEvent[]): Map<string, SkeinEvent[]> {
 function toUiCard(
   card: Card,
   events: SkeinEvent[],
-  hiza: { orphan: boolean; stale: boolean },
+  hiza: { orphan: boolean; stale: boolean; digerAkis: boolean },
 ): UiCard {
   let costUsd = 0;
   let durationMs = 0;
@@ -230,6 +249,7 @@ function toUiCard(
     live: card.state === "active" ? lastStep(events) : null,
     orphan: hiza.orphan,
     stale: hiza.stale,
+    digerAkis: hiza.digerAkis,
     trail,
     plan: card.plan ?? null,
   };
@@ -368,10 +388,15 @@ export async function buildDetail(options: DetailOptions, id: string): Promise<U
     }
   }
 
+  const bizim = card.topology.flow === options.topology.flow;
+
   return {
     card: toUiCard(card, mine, {
-      orphan: isOrphan(card, options.topology),
-      stale: isStale(card, options.flowHash),
+      // Kart detayında da aynı kural: başka akışın kartı bu panonun
+      // yargısına girmiyor.
+      orphan: bizim && isOrphan(card, options.topology),
+      stale: bizim && isStale(card, options.flowHash),
+      digerAkis: !bizim,
     }),
     history,
     diff: commit === null ? null : await readDiff(options, commit),

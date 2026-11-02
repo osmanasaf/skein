@@ -334,7 +334,17 @@ function kartCiz(c) {
   // Yetim DEĞİL: yetim, rolü akışta hiç bulunmayan kart ve kapatılması
   // gerekiyor. Eski damga meşru — kart kendi topolojisiyle yürümeye devam
   // ediyor, yalnızca o topoloji artık dosyada yazan değil.
-  if (c.stale && !c.orphan) {
+  // BAŞKA AKIŞIN KARTI. Kuyruk kök başına, akış başına değil: depoda iki
+  // akış varsa ikisinin kartları aynı .skein/ altında duruyor. Bu pano
+  // onları yargılamıyor (yetim de bayat da saymıyor, kapatma düğmesi de
+  // çıkmıyor) ama GÖRÜNMEZ de olmamalı.
+  if (c.digerAkis) {
+    const d = el("div", "cid", "başka akışın kartı — bu pano onu yargılamıyor");
+    d.style.color = "var(--ink-2)";
+    kutu.append(d);
+  }
+
+  if (c.stale && !c.orphan && !c.digerAkis) {
     const d = el("div", "cid", "eski damga — kart kendi topolojisiyle yürüyor");
     d.style.color = "var(--ink-2)";
     kutu.append(d);
@@ -602,6 +612,24 @@ function ciz(m) {
     liste.style.cssText = "font-size:12px;line-height:1.7";
     m.bozuk.forEach((yol) => liste.append(el("div", null, yol)));
     band.append(liste);
+    bantlar.push(band);
+  }
+
+  // Rolü bu akışta bulunmayan BAŞKA AKIŞ kartları hiçbir sütuna düşmez ve
+  // yetim de sayılmadıkları için eskiden ekrandan tamamen kaybolurlardı.
+  // Bir kartın ekrandan yok olması en kötü görünüm hatası.
+  const roller = new Set(m.roles.map((r) => r.id));
+  const digerler = m.cards.filter((c) => c.digerAkis && !roller.has(c.role) && c.state !== "done");
+  if (digerler.length) {
+    const band = el("div", "band");
+    band.append(el("h2", null, digerler.length + " kart başka bir akışta"));
+    band.append(el("p", null,
+      "Bu kartlar bu akışa ait değil: kuyruk kök başına, akış başına değil. " +
+      "Rolleri bu akışta bulunmadığı için hiçbir sütuna düşmüyorlar. " +
+      "Kendi akışının ekranını aç ya da npm run card -- ls ile bak."));
+    const kartlar = el("div", "kartlar");
+    digerler.forEach((c) => kartlar.append(kartCiz(c)));
+    band.append(kartlar);
     bantlar.push(band);
   }
 
