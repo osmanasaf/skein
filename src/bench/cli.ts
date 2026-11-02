@@ -17,7 +17,7 @@ import { TurnRecorder, diffLines, diffSnapshots, loadSnapshot,
 import { selfTest } from "./selftest.js";
 import { networkFailure } from "./failure.js";
 import { armAdapters, runArm, ARM_FLOW, type Arm } from "./ab.js";
-import { planEffect, type PlanEffectReport, type PlanGroup } from "./planeffect.js";
+import { kararlilikDamgasi, planEffect, type PlanEffectReport, type PlanGroup } from "./planeffect.js";
 import { scoreTargets, scoreAll, classifyTargets, classifyAll } from "./score.js";
 import { effectReport, filterByTask, type EffectReport, type PairScore, type Side } from "./effect.js";
 import { noiseReport, type NoiseReport, type NoiseSide } from "./noise.js";
@@ -548,9 +548,19 @@ function printPlanEffect(r: PlanEffectReport): void {
         console.log(`    ⚠ planlamanın getirdiği: ${h.yalnizPlanli.join("; ")}`);
       }
       // Kontrol kolu her koşuda aynı kancaları düşürüyorsa hücre kararlı.
-      const kararli = h.herKosudaPlansiz.length === h.plansiz.length && h.plansiz.length > 0;
-      console.log(`    kontrol kolu ${kararli ? "KARARLI" : "değişken"}: ` +
-        `${h.herKosudaPlansiz.length}/${h.plansiz.length} kanca her koşuda`);
+      //
+      // AMA bu iddia en az İKİ ölçülmüş koşu istiyor: `herKosuda` kırmızı
+      // kanca kümelerinin KESİŞİMİ ve tek koşuda kesişim = birleşim, yani
+      // koşul daima doğru çıkıyordu. Bayrak "sayıdan kimliğe geçtik" diye
+      // okunuyor ama hiçbir şey karşılaştırmıyordu, ve operatör ona bakıp
+      // k=3 kampanyası parası harcıyor.
+      const olculenKosu = g.plansiz?.runs ?? 0;
+      const { damga } = kararlilikDamgasi(
+        olculenKosu, h.herKosudaPlansiz.length, h.plansiz.length,
+      );
+      console.log(`    kontrol kolu ${damga}: ` +
+        `${h.herKosudaPlansiz.length}/${h.plansiz.length} kanca ` +
+        `${olculenKosu < 2 ? "tek koşuda" : "her koşuda"}`);
     }
     console.log(`  karar: ${g.verdict.code.toUpperCase()} — ${g.verdict.reason}`);
   }
@@ -932,7 +942,8 @@ async function siniflandir(judgeSpec: string, reclassify: boolean, dry: boolean)
 
 function printSide(e: { pairs: PairScore[]; same: Side | null; crossed: Side | null;
   relativeReduction: number | null; interaction: number | null;
-  perRun: { relativeReduction: number | null }[]; repeats: number }, indent: string): void {
+  perRun: { relativeReduction: number | null }[]; repeats: number },
+  indent: string, havuz = false): void {
   const pct = (n: number): string => `%${(n * 100).toFixed(0)}`;
   console.log(`${indent}üretici → denetçi                         hücre  kanca  kaçan   oran`);
   for (const p of [...e.pairs].sort((a, b) => Number(a.crossed) - Number(b.crossed))) {
@@ -956,7 +967,12 @@ function printSide(e: { pairs: PairScore[]; same: Side | null; crossed: Side | n
     const each = e.perRun
       .map((r) => (r.relativeReduction === null ? "—" : pct(r.relativeReduction)))
       .join(", ");
-    console.log(`${indent}koşu başına azalma (k=${e.repeats}): ${each}`);
+    // `k=` ETİKETİ YALNIZCA GRUP BLOĞUNDA. Havuzda `repeats` bütün
+    // grupların ayrı koşu sayısıdır — tam olarak 18 Eylül'de hükümsüz
+    // karara yol açan "farklı görevleri birer kez koşmak k=3 görünüyor"
+    // sayısı. Blok "karar buradan çıkmaz" diyor ama basılan ETİKET grup
+    // ayrımının yasakladığı okumayı davet ediyordu.
+    console.log(`${indent}koşu başına azalma${havuz ? "" : ` (k=${e.repeats})`}: ${each}`);
   }
 }
 
@@ -999,7 +1015,7 @@ function printEffect(e: EffectReport): void {
   }
   if (e.groups.length > 1) {
     console.log("\n=== havuzlanmış (yalnızca bilgi; karar buradan çıkmaz) ===");
-    printSide(e, "  ");
+    printSide(e, "  ", true);
   }
   if (e.unverified > 0) {
     console.log(`\n  ! ${e.unverified} alıntı raporda bulunamadı — puanlayıcının kendi sağlığına bak`);

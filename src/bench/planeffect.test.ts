@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SkeinEvent } from "../events/log.js";
-import { armRuns, planEffect } from "./planeffect.js";
+import { armRuns, kararlilikDamgasi, planEffect } from "./planeffect.js";
 import type { PlanEffectReport, PlanGroup } from "./planeffect.js";
 
 const ev = (e: Record<string, unknown>, runId: string): SkeinEvent =>
@@ -123,6 +123,34 @@ describe("armRuns", () => {
  * diye ONAYLIYORDU. `usage.ts` tam bunun için yazılmıştı ve
  * `matrix`/`summary` onu kullanıyordu; bu kol kullanmıyordu.
  */
+/**
+ * KARARLILIK İDDİASI tek koşuda kurulamaz — ölçülmüş kusur.
+ *
+ * `herKosuda` kesişim; tek ölçülmüş koşuda kesişim = birleşim, yani
+ * koşul daima doğru çıkıyordu. Bayrak "hücre ölçüme elverişli" diye
+ * okunuyor ve operatör ona bakıp k=3 kampanyası parası harcıyor.
+ */
+describe("kararlilikDamgasi", () => {
+  it("tek koşuda kararlılık İDDİA EDİLMİYOR", () => {
+    // 3/3 kanca "her koşuda" — ama koşu bir tane, yani kesişim = birleşim.
+    expect(kararlilikDamgasi(1, 3, 3)).toEqual({
+      damga: "TEK KOŞU — kararlılık ölçülmedi", kararli: false,
+    });
+  });
+
+  it("iki koşuda tam kesişim kararlıdır", () => {
+    expect(kararlilikDamgasi(2, 3, 3)).toEqual({ damga: "KARARLI", kararli: true });
+  });
+
+  it("iki koşuda eksik kesişim değişkendir", () => {
+    expect(kararlilikDamgasi(3, 1, 3)).toEqual({ damga: "değişken", kararli: false });
+  });
+
+  it("hiç kanca yoksa kararlı denmiyor", () => {
+    expect(kararlilikDamgasi(3, 0, 0).kararli).toBe(false);
+  });
+});
+
 describe("ölçü — bildirilmeyen boş kalıyor", () => {
   const kosuOlcu = (runId: string, usage?: Record<string, number>): SkeinEvent[] => [
     ev({ type: "ab.arm", taskId: "g", arm: "planli", flow: "f", model: "m1" }, runId),

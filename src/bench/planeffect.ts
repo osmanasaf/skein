@@ -283,6 +283,27 @@ function hookSets(plansizRuns: ArmRun[], planliRuns: ArmRun[]): HookSets {
   };
 }
 
+/**
+ * Kontrol kolunun kararlılık damgası — SAF, çünkü sınanmak zorunda.
+ *
+ * `cli.ts`'te değil burada: o modül kendini koşturuyor ve sınamadan içe
+ * alınamıyor (`modelturns.ts` ve `safe-name.ts` aynı sebeple çıkarıldı).
+ *
+ * Ölçülmüş kusur: `herKosuda` kırmızı kanca kümelerinin KESİŞİMİ ve tek
+ * ölçülmüş koşuda kesişim = birleşim, yani `herKosuda.length === hepsi.length`
+ * DAİMA doğru çıkıyordu. Bayrak "sayıdan kimliğe geçtik, hücre ölçüme
+ * elverişli" diye okunuyor ama hiçbir şey karşılaştırmamış oluyordu — ve
+ * operatör ona bakıp k=3 kampanyası parası harcıyor. Belirlenimlilik
+ * iddiası en az İKİ ölçülmüş koşu istiyor.
+ */
+export function kararlilikDamgasi(
+  olculenKosu: number, herKosuda: number, hepsi: number,
+): { damga: string; kararli: boolean } {
+  if (olculenKosu < 2) return { damga: "TEK KOŞU — kararlılık ölçülmedi", kararli: false };
+  const kararli = hepsi > 0 && herKosuda === hepsi;
+  return { damga: kararli ? "KARARLI" : "değişken", kararli };
+}
+
 function side(runs: ArmRun[]): ArmSide | null {
   if (runs.length === 0) return null;
   const olculen = runs.filter((r) => r.ran);
