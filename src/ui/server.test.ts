@@ -2,7 +2,7 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import { al } from "../testing/queue.js";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative, sep } from "node:path";
 import { knownProviderSet } from "../adapters/factory.js";
 import { readFile } from "node:fs/promises";
 import { acquireLock } from "../watch/lock.js";
@@ -534,6 +534,60 @@ describe("serveUi — rol promptları", () => {
     expect(res.status).toBe(400);
     expect(((await res.json()) as { hata: string }).hata).toContain("Bilinmeyen prompt yolu");
     expect(await readFile(join(root, "roles", "coder.prompt"), "utf8")).toBe(once);
+  });
+
+  /**
+   * BEYAZ LİSTE "ÜYELİK" SORAR, "İLE BİTİYOR MU" SORMAZ.
+   *
+   * Yukarıdaki sınamalar kapıyı tamamen KALDIRAN mutasyonu düşürüyor ama
+   * onu GEVŞETEN mutasyonu düşürmüyordu: eşitlik yerine "istenen yol
+   * listedeki bir yolla bitiyor mu" yazılsa hepsi yeşil kalırdı. Oysa
+   * yollar köke göreli ve uç yolu kökle birleştiriyor — listedeki bir
+   * yolla BİTEN ama başka bir dizine çıkan bir istek o zaman kapıyı geçer,
+   * ve bu gerçek bir dizin aşımıdır. Aşağıdaki iki sınama tam o mutasyonu
+   * öldürmek için var; istenen yol listedeki rol promptuyla BİTİYOR.
+   *
+   * Sınamanın ısırması, kusurun kendisinden önce gelir: ısırmayan bir
+   * sınama kuralı yazmış gibi yapar, yazmaz.
+   */
+  const disKurban = async () => {
+    const dizin = await mkdtemp(join(tmpdir(), "skein-kurban-"));
+    await mkdir(join(dizin, "roles"), { recursive: true });
+    const dosya = join(dizin, "roles", "coder.prompt");
+    await writeFile(dosya, "KURBAN\n");
+    // Köke göreli ama kökün DIŞINA çıkan yol; listedeki "roles/coder.prompt"
+    // ile bitiyor, dolayısıyla gevşek bir kapıyı geçerdi.
+    return { dizin, dosya, yol: relative(root, dosya).split(sep).join("/") };
+  };
+
+  it("GET /prompt listedeki yolla BİTEN ama kök dışına çıkan yolu reddeder", async () => {
+    const k = await disKurban();
+    try {
+      const res = await fetch(`${s.url}prompt?yol=${encodeURIComponent(k.yol)}`);
+      const v = (await res.json()) as { hata?: string; metin?: string };
+
+      expect(res.status).toBe(400);
+      expect(v.hata).toContain("Bilinmeyen prompt yolu");
+      // Sızıntı olmadığını AYRICA iddia ediyoruz: 400 dönüp metni de
+      // göndermek mümkün olurdu.
+      expect(v.metin).toBeUndefined();
+    } finally {
+      await rm(k.dizin, { recursive: true, force: true });
+    }
+  });
+
+  it("POST /prompt/yaz listedeki yolla BİTEN dış yolu reddeder, DIŞ DOSYA DEĞİŞMEZ", async () => {
+    const k = await disKurban();
+    try {
+      const res = await promptGonder({ yol: k.yol, metin: "ele geçirildi\n" });
+
+      expect(res.status).toBe(400);
+      expect(((await res.json()) as { hata: string }).hata).toContain("Bilinmeyen prompt yolu");
+      // İDDİA sunucunun söylediği değil, DİSKTE ne olduğu.
+      expect(await readFile(k.dosya, "utf8")).toBe("KURBAN\n");
+    } finally {
+      await rm(k.dizin, { recursive: true, force: true });
+    }
   });
 
   // Sessizce etkisiz kalan bir katman olmayandan kötü (bkz. flow/load.ts
