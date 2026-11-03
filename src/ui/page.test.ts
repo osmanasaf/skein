@@ -220,3 +220,30 @@ describe("renderPage — kuyruk engeli bandı", () => {
     expect(src).toContain("e.message");
   });
 });
+
+/**
+ * YENİ KART yolu — BAĞLANTI sınaması.
+ *
+ * Bu dosya kaynak METNİ sınıyor, çizimi değil (paneli çalıştırmak
+ * `document` ister). O yüzden iddia edilen şey bağlantının kendisi:
+ * düğme var, hash yolu var, ve gönderim doğru uca jetonla gidiyor.
+ * "Sayfadaki yolu kaldır" mutasyonu bu satırlar olmadan hayatta kalıyordu.
+ */
+describe("renderPage — ekrandan kart açmak", () => {
+  it("düğme, hash yolu ve uç bağlı", () => {
+    const src = betik(renderPage("x"));
+    expect(src).toContain('"Yeni kart"');
+    expect(src).toContain('h === "yeni"');
+    expect(src).toContain("yeniKartAc");
+    expect(src).toContain('fetch("/kart/yeni"');
+  });
+
+  // Yazma ucu JETONSUZ çağrılamaz: sayfanın kendi isteği de aynı kapıdan
+  // geçmek zorunda, yoksa uç ya kırık ya korumasızdır.
+  it("gönderim jetonu taşıyor", () => {
+    const src = betik(renderPage("x"));
+    const at = src.indexOf('fetch("/kart/yeni"');
+    expect(at).toBeGreaterThan(-1);
+    expect(src.slice(at, at + 400)).toContain("x-skein-token");
+  });
+});

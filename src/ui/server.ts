@@ -3,6 +3,7 @@ import { knownProviderSet } from "../adapters/factory.js";
 import { randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { newCard } from "../card/card.js";
 import { QueueError, type ReleaseDecision } from "../card/queue.js";
 import { checkDraft, fromFlow, writeDraft, type FlowDraft } from "../flow/draft.js";
 import { loadFlow, type Flow, type LoadOptions } from "../flow/load.js";
@@ -221,6 +222,63 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
 
     const birak = path === undefined ? null : /^\/kart\/([^/]+)\/birak$/.exec(path);
     const kapat = path === undefined ? null : /^\/kart\/([^/]+)\/kapat$/.exec(path);
+
+    if (req.method === "POST" && path === "/kart/yeni") {
+      const hata = yetkili(req, token, adlar, portu());
+      if (hata !== null) {
+        res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ hata }));
+        return;
+      }
+      readBody(req)
+        .then(async (body) => {
+          const istek = JSON.parse(body === "" ? "{}" : body) as Record<string, unknown>;
+          // Boşluk denetimi BURADA YOK ve bu bilinçli: `newCard` zaten
+          // reddediyor ve mesajı daha iyi ("role verilecek iş bu"). Buraya
+          // ikinci bir kontrol yazmıştım; mutasyon sınaması onun hiçbir şeyi
+          // değiştirmediğini gösterdi — aynı kural iki yerde, bu deponun en
+          // sık tekrarlayan kusur sınıfı. Çekirdeğin hatası 400 ile aynen
+          // kullanıcıya gidiyor.
+          const baslik = typeof istek["baslik"] === "string" ? istek["baslik"] : "";
+          const gorev = typeof istek["gorev"] === "string" ? istek["gorev"] : "";
+
+          // Topoloji YAŞAYAN dosyadan: kart açılırken donan hash budur.
+          const o = await guncel();
+
+          // AKIŞ GEÇERSİZSE KART AÇILMAZ.
+          //
+          // Ekran, akış dosyası bozulduğunda ESKİ topolojiyle çizmeye devam
+          // ediyor ve gerekçeyi gösteriyor — okumak için doğru davranış. Ama
+          // kart açmak YAZMAK: o eski topoloji karta DONAR ve kart,
+          // operatörün ekranda düzeltmekte olduğu akışın artık var olmayan
+          // bir hâlini taşır. Sessizce açmak, "bayat topoloji" kusurunu
+          // ekrandan tek tıkla üretilebilir yapardı.
+          if (o.flowError !== undefined && o.flowError !== null) {
+            throw new Error(
+              `Ak\u0131\u015f \u015fu an ge\u00e7ersiz, kart a\u00e7\u0131lmad\u0131: ${o.flowError}\n\n` +
+                `  Kart a\u00e7\u0131lsayd\u0131 ESK\u0130 topoloji ona donard\u0131. \u00d6nce ak\u0131\u015f\u0131 d\u00fczelt.`,
+            );
+          }
+
+          const card = await o.queue.add(
+            newCard({ title: baslik, task: gorev, topology: o.topology }),
+          );
+          return { card, model: await buildModel(o) };
+        })
+        .then(({ card, model }) => {
+          res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({
+            kart: { id: card.id, title: card.title, role: card.role, state: card.state },
+            model,
+          }));
+        })
+        .catch((error: unknown) => {
+          const kod = error instanceof QueueError ? 409 : 400;
+          res.writeHead(kod, { "content-type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ hata: (error as Error).message }));
+        });
+      return;
+    }
 
     if (req.method === "POST" && (path === "/akis/onizleme" || path === "/akis/yaz")) {
       const hata = yetkili(req, token, adlar, portu());

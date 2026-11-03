@@ -581,6 +581,7 @@ function hashOku() {
   const h = decodeURIComponent(location.hash.replace(/^#/, ""));
   if (h.startsWith("kart/")) detayAc(h.slice("kart/".length));
   else if (h === "akis") void akisAc();
+  else if (h === "yeni") yeniKartAc();
   else document.getElementById("panel").replaceChildren();
 }
 window.addEventListener("hashchange", hashOku);
@@ -612,6 +613,13 @@ function ciz(m) {
   bar.append(pill);
 
   bar.append(el("div", "spacer"));
+  // Kart açmak, ekranın EN ÇOK kullanılan eylemi ve tek yolu terminaldi:
+  // "ekrandan yönet" diyen bir araçta işe başlamanın kendisi ekranda
+  // olmayan bir adımdı. İlk sırada duruyor.
+  const yeni = el("button", "mini birincil", "Yeni kart");
+  yeni.type = "button";
+  yeni.addEventListener("click", () => { location.hash = "yeni"; });
+  bar.append(yeni);
   const duzenle = el("button", "mini", "Akışı düzenle");
   duzenle.type = "button";
   duzenle.addEventListener("click", () => { location.hash = "akis"; });
@@ -771,6 +779,85 @@ async function yokla() {
 // biçimi" olsaydı, iki temsil arasında sürüklenme kaçınılmazdı.
 let TASLAK = null;
 let SAGLAYICILAR = [];
+
+/**
+ * YENİ KART paneli.
+ *
+ * Kart açmak ekrandan yapılamıyordu ve tek yol card -- new komutuydu. "Her
+ * şeyi önyüzden" hedefinde eksik olan en büyük parça buydu: işe
+ * BAŞLAMAK ekranda yoktu.
+ *
+ * Rol seçimi YOK ve bu kasıtlı: kart her zaman zincirin başından girer.
+ * Ortadan başlatmak, önceki rollerin üreteceği girdiyi atlamak olurdu ve
+ * o atlama hiçbir yerde görünmezdi.
+ */
+function yeniKartAc() {
+  const kap = document.getElementById("panel");
+  const kutu = el("div", "ust");
+  const ic = el("div", "panel");
+  ic.append(el("h2", null, "Yeni kart"));
+  ic.append(el("p", "ipucu",
+    "Kart zincirin ilk rolünden başlar. Gözcü açıksa kendiliğinden uyanır; " +
+    "kapalıysa kart kuyrukta bekler."));
+
+  const bl = el("label", null);
+  bl.append(document.createTextNode("Başlık"));
+  const bi = el("input");
+  bi.type = "text";
+  bi.placeholder = "kısa ve ayırt edici";
+  bl.append(bi);
+  ic.append(bl);
+
+  const gl = el("label", null);
+  gl.append(document.createTextNode("İş metni"));
+  const gi = el("textarea");
+  gi.rows = 14;
+  gi.placeholder = "Ne yapılacak, neden, ve bittiğini nasıl anlayacağız. " +
+    "Ajanın göreceği tek metin bu.";
+  gl.append(gi);
+  ic.append(gl);
+
+  const satir = el("div", "exits");
+  const ac = el("button", "primary", "Kartı aç");
+  ac.type = "button";
+  const vazgec = el("button", null, "Vazgeç");
+  vazgec.type = "button";
+  vazgec.addEventListener("click", () => { location.hash = ""; });
+  satir.append(ac);
+  satir.append(vazgec);
+  ic.append(satir);
+
+  const hataKutu = el("div", "err");
+  hataKutu.style.cssText = "display:none";
+  ic.append(hataKutu);
+
+  ac.addEventListener("click", async () => {
+    ac.disabled = true;
+    hataKutu.style.cssText = "display:none";
+    try {
+      const cevap = await fetch("/kart/yeni", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-skein-token": JETON },
+        body: JSON.stringify({ baslik: bi.value, gorev: gi.value }),
+      });
+      const veri = await cevap.json();
+      if (!cevap.ok) throw new Error(veri.hata || cevap.status);
+      // Çekirdeğin döndürdüğü model çiziliyor: ekran kendi kopyasını
+      // uydurmuyor, kartın gerçekten nereye düştüğünü çekirdek söylüyor.
+      ciz(veri.model);
+      location.hash = "";
+    } catch (e) {
+      ac.disabled = false;
+      hataKutu.textContent = e.message;
+      hataKutu.style.cssText = "display:block;white-space:pre-wrap";
+    }
+  });
+
+  kutu.addEventListener("click", (e) => { if (e.target === kutu) location.hash = ""; });
+  kutu.append(ic);
+  kap.replaceChildren(kutu);
+  bi.focus();
+}
 
 async function akisAc() {
   const kap = document.getElementById("panel");

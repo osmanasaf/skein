@@ -580,3 +580,68 @@ describe("adres kapıları", () => {
     }
   });
 });
+
+/**
+ * EKRANDAN KART AÇMAK.
+ *
+ * "Her şeyi önyüzden yönet" hedefinde eksik olan en büyük parça buydu:
+ * işe BAŞLAMAK ekranda yoktu, tek yol `card -- new` komutuydu. Pano
+ * okunuyor, kapı kararı veriliyor, akış düzenleniyordu — ama iş
+ * terminalden giriyordu.
+ */
+describe("serveUi — ekrandan kart açmak", () => {
+  const ac = (govde: unknown, baslik?: Record<string, string>) =>
+    fetch(`${server.url}kart/yeni`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...(baslik ?? { "x-skein-token": server.token }) },
+      body: JSON.stringify(govde),
+    });
+
+  it("kart açılıyor ve zincirin ilk rolünün kuyruğuna düşüyor", async () => {
+    const res = await ac({ baslik: "jitter", gorev: "retry'a jitter ekle" });
+
+    expect(res.status).toBe(200);
+    const veri = await res.json() as { kart: { id: string; role: string; state: string } };
+    expect(veri.kart.role).toBe("coder");
+    expect(veri.kart.state).toBe("queued");
+    // Çekirdek gerçekten yazdı mı — cevabın kendi iddiasına değil kuyruğa bak.
+    const kart = await queue.get(veri.kart.id);
+    expect(kart?.title).toBe("jitter");
+    expect(kart?.task).toBe("retry'a jitter ekle");
+    expect(kart?.role).toBe("coder");
+  });
+
+  it("cevaptaki model yeni kartı içeriyor", async () => {
+    const res = await ac({ baslik: "jitter", gorev: "iş" });
+    const veri = await res.json() as { kart: { id: string }; model: { cards: { id: string }[] } };
+    // Ekran kendi kopyasını uydurmuyor: çizdiği model çekirdekten geliyor.
+    expect(veri.model.cards.map((c) => c.id)).toContain(veri.kart.id);
+  });
+
+  // Boş kart, ajana verilecek metni olmayan bir karttır: tur koşar ve
+  // hiçbir şey üretmez. `card -- new` de bunu reddediyor.
+  it("başlık ya da iş metni boşsa reddediyor", async () => {
+    expect((await ac({ baslik: "", gorev: "iş" })).status).toBe(400);
+    expect((await ac({ baslik: "başlık", gorev: "   " })).status).toBe(400);
+    expect((await ac({})).status).toBe(400);
+    // Hiçbiri kuyruğa düşmemeli.
+    expect(await queue.list()).toEqual([]);
+  });
+
+  it("jetonsuz istek reddedilir ve kart AÇILMAZ", async () => {
+    const res = await ac({ baslik: "b", gorev: "g" }, {});
+    expect(res.status).toBe(403);
+    // Reddedilen bir komut hiçbir şey yazmamalı.
+    expect(await queue.list()).toEqual([]);
+  });
+
+  it("başka kaynaktan gelen istek reddedilir", async () => {
+    const res = await ac({ baslik: "b", gorev: "g" }, {
+      "x-skein-token": server.token,
+      origin: "https://kotu-site.example",
+    });
+    expect(res.status).toBe(403);
+    expect(await queue.list()).toEqual([]);
+  });
+});
+
