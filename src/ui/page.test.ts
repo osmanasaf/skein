@@ -306,3 +306,80 @@ describe("renderPage — gözcü düğmesi", () => {
     expect(src.slice(at, at + 300)).toContain("x-skein-token");
   });
 });
+
+/**
+ * ZİNCİR OKU — bir sütun kabul edilen kartı hangi sütuna yollar.
+ *
+ * 'sonrakiSutun' saf bir fonksiyon (DOM'a dokunmuyor), o yüzden gerçek
+ * tarayıcıya çıkmadan burada davranışıyla sınanabiliyor — yönün gerçekten
+ * DÖNDÜĞÜ (dar ekranda) ise yalnızca CSS'in işi, bkz. tarayici.test.ts.
+ */
+describe("sonrakiSutun — zincir okunun hedefi", () => {
+  it("rolün 'next' kenarı varsa hedefi döner", () => {
+    const sonrakiSutun = fonksiyon<(m: unknown, rolId: string) => string>(
+      renderPage("t"), "sonrakiSutun",
+    );
+    const m = { edges: [
+      { from: "coder", to: "reviewer", kind: "next" },
+      { from: "coder", to: "coder", kind: "reject" },
+    ] };
+    expect(sonrakiSutun(m, "coder")).toBe("reviewer");
+  });
+
+  // model.ts zincirin SONUNA ('done'a) kenar hiç üretmiyor (boş bir kenarı
+  // çizmek olmayan bir ilişkiyi varmış gibi göstermek olurdu) — yani
+  // sütunun kendi "next" kenarı yoksa hedef zaten "bitti" sütunudur.
+  it("'next' kenarı yoksa 'bitti' döner", () => {
+    const sonrakiSutun = fonksiyon<(m: unknown, rolId: string) => string>(
+      renderPage("t"), "sonrakiSutun",
+    );
+    expect(sonrakiSutun({ edges: [] }, "coder")).toBe("bitti");
+  });
+});
+
+/**
+ * KAPI GEREKÇESİ OKUNUR OLMA — ayrıştırma ve sınıflandırma kararları.
+ *
+ * Bu iki fonksiyon SAF (DOM yok), gerçek çizim (katlanan <details>, tam
+ * metnin DOM'da kalması) tarayici.test.ts'te sınanıyor. Burada sınanan,
+ * o çizimin GİRDİSİNİ belirleyen kararlar: bir metin JSON'a mı benziyor,
+ * ve katlı özet gerçek metni KIRPMADAN mı üretiliyor.
+ */
+describe("jsonGibiMi — ajan mesajı mono/kaydırmalı mı, paragraf mı", () => {
+  it("süslü parantezle başlayan metin JSON sayılır", () => {
+    const jsonGibiMi = fonksiyon<(s: string) => boolean>(renderPage("t"), "jsonGibiMi");
+    expect(jsonGibiMi('{"a":1}')).toBe(true);
+  });
+
+  // GERÇEK bir kesilmiş kuyruk '{' ile değil '…' ile başlar (agentSaid son
+  // 600 karakteri alıyor) — heuristik bu yüzden başlangıca değil, en az üç
+  // "anahtar": kalıbına da bakıyor. Bu dal olmasa ÖLÇÜLEN bugün karttaki
+  // kusur yine JSON sayılmazdı.
+  it("'{' ile BAŞLAMAYAN ama 'anahtar': kalıbı üç kez geçen kırpılmış kuyruk da JSON sayılır", () => {
+    const jsonGibiMi = fonksiyon<(s: string) => boolean>(renderPage("t"), "jsonGibiMi");
+    expect(jsonGibiMi('…"a":1,"b":2,"c":3}')).toBe(true);
+  });
+
+  it("düz bir cümle JSON sayılmaz", () => {
+    const jsonGibiMi = fonksiyon<(s: string) => boolean>(renderPage("t"), "jsonGibiMi");
+    expect(jsonGibiMi("Ajan zaman aşımına uğradı, yeniden deneniyor.")).toBe(false);
+  });
+});
+
+describe("ozetle — katlı özetin kısaltması TAM METNİ etkilemiyor", () => {
+  it("kısa metin DEĞİŞMEDEN döner", () => {
+    const ozetle = fonksiyon<(s: string) => string>(renderPage("t"), "ozetle");
+    expect(ozetle("kısa metin")).toBe("kısa metin");
+  });
+
+  // Kırpma burada SADECE özet etiketini ilgilendiriyor — gerekceKur
+  // govdeye ayraçtan sonraki metnin TAMAMINI yazıyor, ozetle onu
+  // ETKİLEMİYOR (bkz. tarayici.test.ts'teki "tamamı DOM'da" sınaması).
+  it("uzun metin yalnızca ÖZET için kısaltılır", () => {
+    const ozetle = fonksiyon<(s: string) => string>(renderPage("t"), "ozetle");
+    const uzun = "a".repeat(300);
+    const sonuc = ozetle(uzun);
+    expect(sonuc.length).toBeLessThan(300);
+    expect(sonuc.endsWith("…")).toBe(true);
+  });
+});

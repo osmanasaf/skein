@@ -132,6 +132,30 @@ const PAGE = `<!doctype html>
   }
   .colhead.muted { border-bottom-color: var(--line); color: var(--ink-2); }
   .colhead h2 { margin: 0; font-size: var(--fs-heading); font-weight: 700; }
+  /*
+   * ZİNCİR OKU. 'skein' bir kaz sürüsünün V dizilişi ve sütunlar bugüne
+   * kadar yan yana duran BAĞIMSIZ kutular gibi görünüyordu, oysa her
+   * sütun zincirde ÖNCEKİNİN ardında duruyor. Başlık artık sıradaki
+   * sütunu da söylüyor; yön ipucu salt tipografi, ağır bir çizim değil.
+   */
+  .colhead .zincir {
+    display: inline-flex; align-items: center; gap: 3px;
+    font-family: var(--mono); font-size: var(--fs-label); color: var(--ink-3);
+  }
+  .colhead .zincir .ok { display: inline-block; }
+  /*
+   * DAR EKRANDA YÖN DEĞİŞİR. '.board' grid-template-columns:
+   * repeat(auto-fit, minmax(252px, 1fr)) kullanıyor, yani sütun sayısı
+   * JS'siz, konteyner genişliğine göre kendiliğinden düşüyor — iki sütun
+   * en az 2*252 + aralarındaki boşluk (12px) + kenar dolgusu (2*16px)
+   * = 548px istiyor. Bu eşiğin altında sütunlar ALT ALTA dizilir ve ok
+   * SAĞI göstermeyi sürdürürse sıradaki sütun artık altta dururken ok
+   * yanlış yönü söyler. 600px'lik bir pay bırakılıyor; JS'le ÖLÇÜLEN bir
+   * eşik değil, grid'in KENDİ kuralıyla aynı yönde kaba bir yaklaşıklık.
+   */
+  @media (max-width: 600px) {
+    .colhead .zincir .ok { display: inline-block; transform: rotate(90deg); }
+  }
   .card {
     background: var(--surface); border: 1px solid var(--line);
     border-radius: 4px; padding: var(--sp-6) var(--sp-6);
@@ -170,6 +194,33 @@ const PAGE = `<!doctype html>
   .reason {
     margin-top: var(--sp-4); font-size: var(--fs-body); line-height: 1.45; color: var(--gate-ink);
     overflow-wrap: anywhere;
+  }
+  /*
+   * AJANIN SON MESAJI — KATLANIR, KIRPILMAZ. 'tick.ts' içindeki
+   * 'agentSaid' ajanın ham çıktısını (bazen yarım bir JSON) gerekçeye
+   * ekliyor; eskiden bu ekranın '.reason'unda ÇEKİRDEĞİN cümlesiyle AYNI
+   * paragrafta basılıyordu — operatörün karar vermesi gereken ilk cümle
+   * ham API JSON'unun içinde kayboluyordu. '<details>' kapalıyken de
+   * çocuklarını DOM'dan SİLMEZ, yalnızca görünmez kılar: gizlemek
+   * kırpmak değil, metnin tamamı her an erişilebilir kalıyor.
+   */
+  .ajanDetay { margin-top: var(--sp-4); }
+  .ajanDetay summary { cursor: pointer; font-size: var(--fs-body); color: var(--ink-2); }
+  .ajanDetay summary:hover { color: var(--ink); }
+  .ajanTam {
+    margin-top: var(--sp-3); font-size: var(--fs-body); line-height: 1.45;
+    color: var(--gate-ink); white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+  /*
+   * JSON'A BENZEYEN metin paragraf gibi SARILIP okutulmuyor: mono yazı ve
+   * yatay kaydırma — ham bir veri yapısını düzyazı gibi göstermek onu
+   * okunur yapmaz, yalnızca YANLIŞ okunur yapar.
+   */
+  .ajanTam.mono {
+    font-family: var(--mono); font-size: var(--fs-tight); line-height: 1.5;
+    white-space: pre; overflow-x: auto; max-height: 240px; overflow-y: auto;
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 3px;
+    padding: var(--sp-4) var(--sp-5); color: var(--ink);
   }
   .step {
     margin-top: var(--sp-5); padding-top: var(--sp-4); border-top: 1px dashed var(--line);
@@ -425,6 +476,79 @@ function maliyetMetni(tutar, olculmeyen, tokens) {
                 : "maliyet \u00f6l\u00e7\u00fclmedi";
 }
 
+// AYNI DİZGE 'tick.ts' içindeki agentSaid'le — ayraç ikisinin TEK
+// senkron noktası. Biri değişirse öteki de değişmeli; tutmazsa gerekçe
+// hiç bölünmez ve tek paragraf olarak kalır (SESSİZ bozulma değil:
+// çekirdek cümle bu durumda da yine TAM metni taşır, bkz. gerekceKur).
+// ÇİFT TERS BÖLÜ YAZILIYOR, TEK DEĞİL: bu dosya kendisi bir şablon dizesi
+// (bkz. page.test.ts'teki "gömülü betik sözdizimi geçerli" testinin
+// öyküsü) — tek ters bölülü kaçış yazılsaydı TypeScript onu GERÇEK satır
+// sonuna çevirirdi ve aşağıdaki dizge gerçek bir satır sonuyla ORTADAN
+// kırılırdı. Tarayıcıya giden metinde tek ters bölü KALMALI, o yüzden
+// kaynakta ÇİFT yazılıyor (TypeScript'in kendi kaçış kuralı bir tekine
+// indiriyor).
+const AJAN_AYRAC = "\\n\\nAjan şunu söyledi:\\n";
+
+/**
+ * Bir metin ham JSON'a mı benziyor — kaydırmalı mono blokla mı, paragraf
+ * gibi mi gösterileceğine burada karar veriliyor.
+ *
+ * Heuristik YANLIŞ çıkabilir: tick.ts kuyruktan son 600 karakteri alıyor
+ * (bkz. agentSaid) ve kırpıldıysa "…" ile başlıyor — yani çoğu zaman bir
+ * JSON nesnesinin ORTASINDAN kesilmiş, geçersiz bir dizge. JSON.parse
+ * burada işe yaramaz: geçerlilik aranmıyor, GÖRÜNÜM aranıyor — en az üç
+ * "anahtar": kalıbı ya da süslü/köşeli parantezle başlamak yeterli
+ * sayılıyor. Heuristik tutmazsa metin KAYBOLMUYOR, yalnızca yanlış
+ * biçimde (paragraf yerine mono ya da tersi) duruyor — gerekceKur govde
+ * alanına her durumda TAM metni yazıyor, sınıf seçimi görünümden ibaret.
+ */
+function jsonGibiMi(metin) {
+  const kirpik = metin.trim();
+  if (kirpik.startsWith("{") || kirpik.startsWith("[")) return true;
+  const eslesen = kirpik.match(/"[^"\\n]+"\\s*:/g);
+  return eslesen !== null && eslesen.length >= 3;
+}
+
+/**
+ * Katlı özetin kısa önizlemesi — bu kırpma TAM metni ETKİLEMİYOR: yalnızca
+ * <summary> etiketinin kendisi kısalıyor, gerekceKur govdeye her zaman
+ * ayraçtan sonraki metnin BÜTÜNÜNÜ yazıyor.
+ */
+function ozetle(metin) {
+  const duz = metin.replace(/\\s+/g, " ").trim();
+  return duz.length > 140 ? duz.slice(0, 140) + "…" : duz;
+}
+
+/**
+ * Kapı gerekçesini kutuya kurar.
+ *
+ * Çekirdeğin cümlesi (ayraçtan ÖNCESİ) HER ZAMAN tam görünür, hiçbir
+ * koşulda katlanmıyor. Ajanın son mesajı (varsa) katlanabilir bir
+ * <details>'a gidiyor — varsayılan KAPALI, ama kapalıyken de içerik
+ * DOM'dan silinmiyor, yalnızca görünmez (tarayıcının kendi davranışı).
+ * "İlk 200 karakter, gerisi yok" burada YOK: govde ayraçtan sonraki
+ * metnin TAMAMINI taşıyor, özet yalnızca <summary> etiketinde kısalıyor.
+ */
+function gerekceKur(kutu, gerekce) {
+  const ayrac = gerekce.indexOf(AJAN_AYRAC);
+  const cekirdek = ayrac === -1 ? gerekce : gerekce.slice(0, ayrac);
+  kutu.append(el("div", "reason", cekirdek));
+  if (ayrac === -1) return;
+
+  const ajanMetni = gerekce.slice(ayrac + AJAN_AYRAC.length);
+  const detay = el("details", "ajanDetay");
+  const ozet = el("summary", null, "Ajan şunu söyledi — " + ozetle(ajanMetni));
+  // Kart kendisi de tıklanabilir (detay panelini açar, bkz. kartDugumBaslat)
+  // — katlıyı açmak o paneli de tetiklemesin, "Geçir/Geri gönder"
+  // düğmelerindeki aynı önlem.
+  ozet.addEventListener("click", (e) => e.stopPropagation());
+  detay.append(ozet);
+  const govde = el("div", jsonGibiMi(ajanMetni) ? "ajanTam mono" : "ajanTam");
+  govde.textContent = ajanMetni;
+  detay.append(govde);
+  kutu.append(detay);
+}
+
 /**
  * BOS ROL SUTUNU NE ANLATMALI.
  *
@@ -460,6 +584,21 @@ function bosBittiMetni(m) {
   if (m.cards.some((c) => c.state === "active")) return "bir rol su an kosuyor, henuz biten kart yok";
   if (m.totals.open > 0) return "kart kuyrukta ya da kapida bekliyor, henuz biten yok";
   return "henuz kart acilmadi";
+}
+
+/**
+ * Bir sütundan sonra kart hangi sütuna gidiyor — ZİNCİR OKU'nun
+ * cevapladığı soru.
+ *
+ * 'm.edges'ten okunuyor, rol.next sunucudan hiç gelmiyor: model.ts
+ * edges'i zaten SUNUCUDA türetiyor (bkz. model.ts — "diyagramın veri
+ * kaynağı" yorumu) ve zincirin SONUNA ('done'a) kenar hiç ÜRETMİYOR —
+ * boş bir kenar çizmek olmayan bir ilişkiyi varmış gibi göstermek olurdu.
+ * Yani bulunamazsa hedef zaten "bitti" sütunudur.
+ */
+function sonrakiSutun(m, rolId) {
+  const kenar = m.edges.find((e) => e.from === rolId && e.kind === "next");
+  return kenar ? kenar.to : "bitti";
 }
 
 function kapiCikislari(kind, planKilidi, geriHedef) {
@@ -675,7 +814,7 @@ function kartIcerik(kutu, c) {
     kutu.append(d);
   }
 
-  if (c.gateReason) kutu.append(el("div", "reason", c.gateReason));
+  if (c.gateReason) gerekceKur(kutu, c.gateReason);
   else if (c.lastReject && c.state !== "done") {
     const r = el("div", "reason", c.lastReject);
     r.style.color = "var(--ink-2)";
@@ -1167,6 +1306,13 @@ function ciz(m) {
     const col = el("div", "col");
     const head = el("div", "colhead");
     head.append(el("h2", null, rol.id));
+    // ZİNCİR OKU: bu sütunun kartı kabul edilince hangi sütuna gidiyor —
+    // yön dar ekranda CSS medya sorgusuyla aşağı döner (bkz. .colhead
+    // .zincir .ok kuralı), ölçerek değil.
+    const zincir = el("span", "zincir");
+    zincir.append(el("span", "ok", "→"));
+    zincir.append(document.createTextNode(" " + sonrakiSutun(m, rol.id)));
+    head.append(zincir);
     head.append(el("span", "mono", rol.provider + " · " + rol.workspace));
     head.append(el("div", "spacer"));
     const kartlar = m.cards.filter((c) => c.role === rol.id && c.state !== "done" && !c.orphan);
