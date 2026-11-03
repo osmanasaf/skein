@@ -639,6 +639,90 @@ describe("buildModel — geri hedefi", () => {
 });
 
 /**
+ * DİYAGRAMIN OKUDUĞU KENARLAR VE KAPILAR.
+ *
+ * Sayfa artık akışı bir diyagram olarak çiziyor ama YAML'ı KENDİSİ
+ * AYRIŞTIRMIYOR — `src/flow/load.ts` akışın ne anlama geldiğine karar veren
+ * TEK yer kalmalı. Bu yüzden kenarlar ve kapılar burada, `buildModel`
+ * içinde türetiliyor; sayfa yalnızca bu listeyi okuyor.
+ */
+describe("buildModel — akış diyagramı", () => {
+  it("next ve reject kenarları doğru yönde giriyor", async () => {
+    const m = await buildModel(base);
+
+    expect(m.edges).toEqual(
+      expect.arrayContaining([
+        { from: "coder", to: "reviewer", kind: "next" },
+        { from: "reviewer", to: "coder", kind: "reject" },
+      ]),
+    );
+  });
+
+  /**
+   * BOŞ KENAR ÇİZİLMİYOR.
+   *
+   * `coder` zincirin başı: ret hedefi yok (`load.ts` kural 14). Model her
+   * rol için "gönderene dön" kenarı üretseydi, zincirin başında olmayan bir
+   * ilişki varmış gibi görünürdü — en kötü sessiz arıza türü, çünkü
+   * diyagram YANLIŞ bir okla ama hatasız çizilir.
+   */
+  it("reject hedefi olmayan rol için kenar üretilmiyor", async () => {
+    const m = await buildModel(base);
+
+    expect(m.edges.some((e) => e.kind === "reject" && e.from === "coder")).toBe(false);
+  });
+
+  it("syncBack kendi türünde, ayrı bir kenar olarak giriyor", async () => {
+    const syncBackFlow = FLOW.replace("reject: coder", "syncBack: [coder]\n    reject: coder");
+    await writeFile(join(root, "hub", "flows", "test.yaml"), syncBackFlow);
+    const flow = await loadFlow(join(root, "hub", "flows", "test.yaml"), {
+      root, providers: knownProviderSet(),
+    });
+    const topo = snapshot(flow, root);
+
+    const m = await buildModel({ ...base, topology: topo, flowHash: flow.hash });
+
+    expect(m.edges).toEqual(
+      expect.arrayContaining([{ from: "reviewer", to: "coder", kind: "syncBack" }]),
+    );
+    // Aynı hedefe giden reject ile syncBack İKİ AYRI kenar — biri birini
+    // ezmemeli, yoksa diyagram iki ilişkiden birini kaybeder.
+    expect(m.edges.filter((e) => e.from === "reviewer" && e.to === "coder")).toHaveLength(2);
+  });
+
+  it("kapılar modele giriyor", async () => {
+    await writeFile(join(root, "hub", "flows", "test.yaml"), FLOW_KAPILI);
+    const flow = await loadFlow(join(root, "hub", "flows", "test.yaml"), {
+      root, providers: knownProviderSet(),
+    });
+    const topo = snapshot(flow, root);
+
+    const m = await buildModel({ ...base, topology: topo, flowHash: flow.hash });
+
+    expect(m.gates).toEqual([{ after: "coder", type: "approval" }]);
+  });
+
+  // `type: none` sessizce elenmemeli: filtreleme kararı SAYFADA verilir
+  // (hangi kapı türü görsel olarak işaretleniyor), modelde değil.
+  it("kapı tipi filtrelenmeden olduğu gibi taşınıyor", async () => {
+    const flowText = FLOW.replace("reject:\n  limit: 2", `gates:
+  - after: coder
+    type: none
+reject:
+  limit: 2`);
+    await writeFile(join(root, "hub", "flows", "test.yaml"), flowText);
+    const flow = await loadFlow(join(root, "hub", "flows", "test.yaml"), {
+      root, providers: knownProviderSet(),
+    });
+    const topo = snapshot(flow, root);
+
+    const m = await buildModel({ ...base, topology: topo, flowHash: flow.hash });
+
+    expect(m.gates).toEqual([{ after: "coder", type: "none" }]);
+  });
+});
+
+/**
  * Kuyruk engeli EKRANDA görünmeli.
  *
  * `take` yarışı kaybetmeyi gerçek engelden ayırıyor ve engeli

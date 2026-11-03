@@ -4,7 +4,8 @@ import { gateKind, planGateEntry, type Card, type CardState, type PlanKabul } fr
 import { isOrphan, isStale } from "../card/orphan.js";
 import type { CardQueue } from "../card/queue.js";
 import { readEvents, type SkeinEvent } from "../events/log.js";
-import { roleOf, type TopologySnapshot } from "../flow/snapshot.js";
+import type { GateType } from "../flow/load.js";
+import { DONE, roleOf, type TopologySnapshot } from "../flow/snapshot.js";
 import { pidAlive, readLock, type LockInfo } from "../watch/lock.js";
 
 /**
@@ -30,6 +31,17 @@ export interface UiModel {
   /** Gözcü açık mı. `null` ise hiç kilit yok. */
   daemon: { alive: boolean; info: LockInfo } | null;
   roles: UiRole[];
+  /**
+   * Zincirin kenarları — diyagramın çizdiği şey.
+   *
+   * SUNUCUDA türetiliyor, akış YAML'ından DEĞİL: `src/flow/load.ts` akışın
+   * ne anlama geldiğine karar veren TEK yer olmalı (bkz. `topologyHash`
+   * yorumu). Sayfa bu listeyi okur, kendi başına bir ayrıştırıcı taşımaz —
+   * aksi hâlde iki yerde iki ayrı "akış ne diyor" yorumu olurdu.
+   */
+  edges: UiEdge[];
+  /** İnsan kapıları — diyagramda zincirin üstünde durağan bir işaret. */
+  gates: UiGate[];
   cards: UiCard[];
   totals: {
     open: number;
@@ -91,6 +103,27 @@ export interface UiRole {
   workspace: string;
   /** Kuyrukta bekleyen kart sayısı. */
   depth: number;
+}
+
+/**
+ * Diyagramın tek bir oku.
+ *
+ * `next` zincirin ileri yönü; `reject` ve `syncBack` HER ZAMAN geriye
+ * (zincirde daha önceki bir role) işaret eder — kurallar bunu şart koşuyor
+ * (bkz. `load.ts` kural 6, 13). Üç tür de ayrı çizilir: sayfa rengin tek
+ * taşıyıcı olmasını yasaklıyor (erişilebilirlik), o yüzden `kind` çizgi
+ * biçimini de seçiyor.
+ */
+export interface UiEdge {
+  from: string;
+  to: string;
+  kind: "next" | "reject" | "syncBack";
+}
+
+/** Bir rolün ÇIKIŞINDA duran insan kapısı. */
+export interface UiGate {
+  after: string;
+  type: GateType;
 }
 
 /** Kartın panoda ve detayda gösterilen hâli. */
@@ -256,6 +289,19 @@ export async function buildModel(options: BuildOptions): Promise<UiModel> {
     });
   }
 
+  // Kenarlar TOPOLOJİDEN çıkarılıyor, akış YAML'ından değil — topoloji
+  // zaten SUNUCUDA doğrulanmış (bkz. load.ts kural 3-6, 12-14). `reject`
+  // `null` olan rol (zincirin başı ya da planlama katılımcısı) için kenar
+  // ÜRETİLMİYOR: boş bir kenar çizmek, olmayan bir ilişkiyi varmış gibi
+  // göstermek olurdu.
+  const edges: UiEdge[] = [];
+  for (const role of topology.roles) {
+    if (role.next !== DONE) edges.push({ from: role.id, to: role.next, kind: "next" });
+    if (role.reject !== null) edges.push({ from: role.id, to: role.reject, kind: "reject" });
+    for (const target of role.syncBack) edges.push({ from: role.id, to: target, kind: "syncBack" });
+  }
+  const gates: UiGate[] = topology.gates.map((gate) => ({ after: gate.after, type: gate.type }));
+
   const byCard = groupEvents(events);
   const bizimMi = (card: Card): boolean => card.topology.flow === topology.flow;
   const ui = cards.map((card) =>
@@ -278,6 +324,8 @@ export async function buildModel(options: BuildOptions): Promise<UiModel> {
     },
     daemon: info === null ? null : { alive: isAlive(info.pid), info },
     roles,
+    edges,
+    gates,
     cards: ui,
     totals: {
       orphans: ui.filter((c) => c.orphan).length,
