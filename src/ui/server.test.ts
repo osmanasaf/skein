@@ -661,6 +661,163 @@ describe("serveUi — rol promptları, salt okunur ekran", () => {
   });
 });
 
+/**
+ * YENİ ROL + PROMPTU, ATOMİK.
+ *
+ * Kilitlenme: akışa yeni rolü eklemek için prompt dosyası var ve dolu
+ * olmalı (kural 9), ama prompt dosyasını yazmak için yol akışın bildirdiği
+ * listede olmalı (`/prompt/yaz`ın ÜYELİK kapısı) — rolü dosyasız
+ * ekleyemiyorsun, dosyayı rolsüz yaratamıyorsun. `POST /rol/yeni` ikisini
+ * TEK işlemde yapıyor; asıl sınanan şey ATOMİKLİK (doğrulama başarısızsa
+ * İKİSİ DE geri alınır) ve AYNI ID'nin dosya yazılmadan reddedildiği.
+ */
+describe("serveUi — yeni rol", () => {
+  let s: UiServer;
+  const opts = () => ({ root, providers: knownProviderSet() });
+
+  beforeEach(async () => {
+    // GERÇEK `LiveFlow` — sahte (no-op) `refresh` burada YETMEZ: bu
+    // sınamaların asıl iddiası modelin YAZILAN YENİ rolü GERÇEKTEN
+    // göstermesi, yoklama gerçekten dosyayı okumalı.
+    const live = await LiveFlow.open(gercekFlow.path, opts());
+    s = await serveUi({
+      root, queue, topology, flowName: "test", flowHash: gercekFlow.hash,
+      live, flowPath: gercekFlow.path, loadOptions: opts(),
+    });
+  });
+  afterEach(async () => {
+    await s.close();
+  });
+
+  const gonder = (govde: unknown, jeton?: string) =>
+    fetch(`${s.url}rol/yeni`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-skein-token": jeton ?? s.token },
+      body: JSON.stringify(govde),
+    });
+
+  // test.yaml'ın tek rolü "coder" (workspace: main), prompt'u
+  // roles/coder.prompt — yeni rolün promptu AYNI dizinde (roles/) kuruluyor.
+  // Fonksiyon: `root` yalnızca `beforeEach` koştuktan SONRA biliniyor, bu
+  // yüzden burada (describe gövdesinde, testlerden ÖNCE) sabitlenemez.
+  const yeniRolYolu = () => join(root, "roles", "reviewer.md");
+
+  it("rol VE promptu BİRLİKTE yaratılır, zincire 'sonra'nın ARDINA bağlanır", async () => {
+    const res = await gonder({
+      id: "reviewer", provider: "claude", workspace: "reviewer", sonra: "coder",
+    });
+    const v = (await res.json()) as { model: { roles: { id: string }[] } };
+
+    expect(res.status).toBe(200);
+    expect(v.model.roles.map((r) => r.id)).toEqual(["coder", "reviewer"]);
+
+    // Prompt BOŞ değil — ŞABLONDAN yazıldı (gövde prompt vermedi).
+    const promptMetni = await readFile(yeniRolYolu(), "utf8");
+    expect(promptMetni).toContain("Rolün: reviewer");
+    expect(promptMetni.trim()).not.toBe("");
+
+    // YAML da GERÇEKTEN değişti — yeni rol, eski rolün next'i, ikisi de.
+    const yaml = await readFile(gercekFlow.path, "utf8");
+    expect(yaml).toContain("id: reviewer");
+    expect(yaml).toContain("next: reviewer"); // coder.next artık reviewer
+  });
+
+  it("gövdede verilen prompt metni ŞABLON YERİNE yazılır", async () => {
+    const res = await gonder({
+      id: "reviewer", provider: "claude", workspace: "reviewer", sonra: "coder",
+      prompt: "# özel prompt\nbaştan yazıldı\n",
+    });
+    expect(res.status).toBe(200);
+    expect(await readFile(yeniRolYolu(), "utf8")).toBe("# özel prompt\nbaştan yazıldı\n");
+  });
+
+  /**
+   * ATOMİKLİK — asıl sınanan şey bu. `workspace: main` zaten "coder"da
+   * var (kural 2: tam olarak bir rol main olabilir), yani bu istek
+   * GEÇERSİZ bir topoloji üretir. İKİSİ DE geri alınmalı: dosya diskte
+   * YOK, YAML DEĞİŞMEMİŞ.
+   */
+  it("geçersiz akış üretirse rol VE prompt dosyası İKİSİ DE GERİ ALINIR", async () => {
+    const onceYaml = await readFile(gercekFlow.path, "utf8");
+
+    const res = await gonder({
+      id: "reviewer", provider: "claude", workspace: "main", sonra: "coder",
+    });
+    const v = (await res.json()) as { hata: string };
+
+    expect(res.status).toBe(409);
+    expect(v.hata).toContain("kural 2");
+
+    // YAML DEĞİŞMEMİŞ.
+    expect(await readFile(gercekFlow.path, "utf8")).toBe(onceYaml);
+    // Dosya diskte YOK — GERİ ALINDI, kalıcı bırakılmadı.
+    await expect(readFile(yeniRolYolu(), "utf8")).rejects.toThrow();
+  });
+
+  it("AYNI ID reddedilir, dosya YAZILMADAN", async () => {
+    const res = await gonder({ id: "coder", provider: "claude", workspace: "x", sonra: "coder" });
+    const v = (await res.json()) as { hata: string };
+
+    expect(res.status).toBe(400);
+    expect(v.hata).toContain("Rol zaten var");
+    // "coder" id'si için olası prompt yolu bile hiç yazılmamış olmalı.
+    await expect(readFile(join(root, "roles", "coder.md"), "utf8")).rejects.toThrow();
+  });
+
+  it("bilinmeyen 'sonra' reddedilir, hiçbir şey değişmez", async () => {
+    const onceYaml = await readFile(gercekFlow.path, "utf8");
+    const res = await gonder({
+      id: "reviewer", provider: "claude", workspace: "reviewer", sonra: "boyle-bir-rol-yok",
+    });
+    const v = (await res.json()) as { hata: string };
+
+    expect(res.status).toBe(400);
+    expect(v.hata).toContain("Bilinmeyen rol");
+    expect(await readFile(gercekFlow.path, "utf8")).toBe(onceYaml);
+    await expect(readFile(yeniRolYolu(), "utf8")).rejects.toThrow();
+  });
+
+  it("jetonsuz istek 403, hiçbir şey değişmez", async () => {
+    const onceYaml = await readFile(gercekFlow.path, "utf8");
+    const res = await fetch(`${s.url}rol/yeni`, {
+      method: "POST",
+      body: JSON.stringify({ id: "reviewer", provider: "claude", workspace: "reviewer", sonra: "coder" }),
+    });
+    expect(res.status).toBe(403);
+    expect(await readFile(gercekFlow.path, "utf8")).toBe(onceYaml);
+    await expect(readFile(yeniRolYolu(), "utf8")).rejects.toThrow();
+  });
+
+  it("başka kaynaktan gelen istek reddedilir, hiçbir şey değişmez", async () => {
+    const onceYaml = await readFile(gercekFlow.path, "utf8");
+    const res = await fetch(`${s.url}rol/yeni`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json", "x-skein-token": s.token,
+        origin: "https://kotu-site.example",
+      },
+      body: JSON.stringify({ id: "reviewer", provider: "claude", workspace: "reviewer", sonra: "coder" }),
+    });
+    expect(res.status).toBe(403);
+    expect(await readFile(gercekFlow.path, "utf8")).toBe(onceYaml);
+    await expect(readFile(yeniRolYolu(), "utf8")).rejects.toThrow();
+  });
+});
+
+describe("serveUi — yeni rol, salt okunur ekran", () => {
+  it("düzenleme kapalıysa POST /rol/yeni 404, hiçbir şey değişmez", async () => {
+    const onceYaml = await readFile(join(root, "hub", "flows", "test.yaml"), "utf8");
+    const res = await fetch(`${server.url}rol/yeni`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-skein-token": server.token },
+      body: JSON.stringify({ id: "reviewer", provider: "claude", workspace: "reviewer", sonra: "coder" }),
+    });
+    expect(res.status).toBe(404);
+    expect(await readFile(join(root, "hub", "flows", "test.yaml"), "utf8")).toBe(onceYaml);
+    await expect(readFile(join(root, "roles", "reviewer.md"), "utf8")).rejects.toThrow();
+  });
+});
+
 describe("serveUi — salt okunur ekran", () => {
   it("düzenleme kapalıysa uçlar 404", async () => {
     const res = await fetch(`${server.url}akis/yaz`, {

@@ -1,13 +1,13 @@
-import { join } from "node:path";
+import { dirname, join, relative, sep } from "node:path";
 import { knownProviderSet } from "../adapters/factory.js";
 import { randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { createWriteStream } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, unlink, writeFile } from "node:fs/promises";
 import { newCard } from "../card/card.js";
 import { QueueError, type ReleaseDecision } from "../card/queue.js";
-import { checkDraft, fromFlow, writeDraft, type FlowDraft } from "../flow/draft.js";
+import { checkDraft, fromFlow, writeDraft, type DraftRole, type FlowDraft } from "../flow/draft.js";
 import { loadFlow, type Flow, type LoadOptions } from "../flow/load.js";
 import { closeOrphan } from "../card/orphan.js";
 import { releaseCard } from "../card/release.js";
@@ -189,6 +189,38 @@ function promptIcerigiSorunu(metin: string): string | null {
 }
 
 /**
+ * Yeni rol için ŞABLON prompt metni — `POST /rol/yeni` gövdesi `prompt`
+ * VERMEDİĞİNDE yazılan budur.
+ *
+ * BOŞ OLAMAZ: kural 9 boş bir prompt dosyasını reddediyor (bkz.
+ * `checkPromptFile`, flow/load.ts), yani boş bir şablon bu ucu kendi
+ * kendine kilitlerdi — "sessizce etkisiz kalan bir katman, olmayandan
+ * kötüdür" kuralının aynısı burada da geçerli. Üç başlık rolün SORUMLULUĞUNU
+ * SORUYOR; operatör doldurmasa da akış geçerli kalır, ama ne doldurması
+ * gerektiği açık.
+ */
+function rolPromptSablonu(id: string): string {
+  return `# Rolün: ${id}\n\n` +
+    `## Sahiplendiğin\n\n- (bu rol hangi davranışı/işi üstleniyor?)\n\n` +
+    `## Nasıl çalışırsın\n\n- (bu rol işini nasıl yapıyor, hangi sırayla?)\n\n` +
+    `## Sahiplenmediğin\n\n- (bu rolün kapsamı dışında kalan ve başka bir role bırakılan şey?)\n`;
+}
+
+/**
+ * `abs` yolunu `flowDir`e göre göreli, POSIX ayracıyla yazar.
+ *
+ * `flow/draft.ts`'teki `fromFlow`'un özel (dışa açılmamış) `goreli`
+ * yardımcısının BİREBİR AYNISI — akış dosyasının taslak karşılığı hep bu
+ * biçimi bekliyor (`./` ile başlamayan bir yol YAML'da farklı yorumlanırdı).
+ * `flow/draft.ts`e taşınıp dışa açılmadı: tek kullanıcısı burası, ikinci bir
+ * yer açılırsa o zaman paylaşılan bir yere taşınır.
+ */
+function goreliYol(flowDir: string, abs: string): string {
+  const r = relative(flowDir, abs).split(sep).join("/");
+  return r.startsWith(".") ? r : `./${r}`;
+}
+
+/**
  * Bize ait sayılan ana bilgisayar adları.
  *
  * `127.0.0.1` ile `localhost` AYNI makinedir ama AYNI ad değildir, ve
@@ -299,6 +331,7 @@ function yetkili(
  *   GET  /promptlar           akışın bildirdiği düzenlenebilir prompt dosyaları
  *   GET  /prompt?yol=...      bir prompt dosyasının metni
  *   POST /prompt/yaz          prompt dosyasını YENİDEN YAZAR
+ *   POST /rol/yeni            YENİ bir rolü promptuyla BİRLİKTE, ATOMİK ekler
  *
  * Yazan uç noktalar KOMUT gönderiyor: yüzey kendi kopyasını
  * güncellemiyor, `queue.release()` çağırıyor ve cevabı çekirdeğin ürettiği
@@ -690,6 +723,139 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
         .then((model) => {
           res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
           res.end(JSON.stringify({ model }));
+        })
+        .catch((error: unknown) => {
+          res.writeHead(400, { "content-type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ hata: (error as Error).message }));
+        });
+      return;
+    }
+
+    /**
+     * YENİ ROL + PROMPTU, ATOMİK.
+     *
+     * Kilitlenme şuydu: kural 9 (`flow/load.ts`, `checkPromptFile`) rolün
+     * prompt dosyasının VAR ve DOLU olmasını şart koşuyor, yani akışa yeni
+     * rolü eklemeden prompt dosyasını yazamıyorsun (akış geçersiz kalıyor,
+     * `/akis/yaz` reddediyor) — ama `/prompt/yaz`ın YOL BEYAZ LİSTESİ
+     * topolojiden türüyor, yani dosya akışta olmadan `/prompt/yaz` da onu
+     * yazdırmıyor. Rolü dosyasız ekleyemiyorsun, dosyayı rolsüz
+     * yaratamıyorsun.
+     *
+     * Çözüm İKİSİNİ TEK İŞLEMDE yapmak: önce prompt dosyasını (gövdede
+     * verilmediyse şablondan) yaz, sonra yeni rolü taslağa ekleyip
+     * `writeDraft` ile doğrula. Doğrulama BAŞARISIZSA (`!sonuc.ok`) prompt
+     * dosyası da GERİ ALINIYOR — `LiveFlow`'un kendi kuralının aynısı
+     * (flow/live.ts, "yarı yüklenmiş akış diye bir durum yok"): yarı
+     * yaratılmış bir rol, dosyası var ama akışta yok ya da tersi, depoyu
+     * operatörün elle temizlemesi gereken bir hâle sokardı.
+     */
+    if (req.method === "POST" && path === "/rol/yeni") {
+      const hata = yetkili(req, token, adlar, portu());
+      if (hata !== null) {
+        res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ hata }));
+        return;
+      }
+      // Aynı kapı akış/prompt düzenlemeyle: "ekranın yetkisi, onu açan
+      // komutun verdiği kadar" kuralının aynısı.
+      const flowPath = aktif.flowPath;
+      const loadOptions = options.loadOptions;
+      const canliAkis = aktif.live;
+      if (flowPath === undefined || loadOptions === undefined || canliAkis === undefined) {
+        res.writeHead(404, { "content-type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ hata: "Bu ekran rol eklemeye açık değil." }));
+        return;
+      }
+      readBody(req)
+        .then(async (body) => {
+          const istek = JSON.parse(body === "" ? "{}" : body) as Record<string, unknown>;
+          const id = typeof istek["id"] === "string" ? istek["id"].trim() : "";
+          const provider = typeof istek["provider"] === "string" ? istek["provider"] : "";
+          const workspace = typeof istek["workspace"] === "string" ? istek["workspace"] : "";
+          // ÇAĞIRAN nereye ekleneceğini söylüyor — uç bunu KENDİ KAFASINA
+          // GÖRE TAHMİN ETMİYOR. `sonra`, yeni rolün hangi rolün ARDINA
+          // gireceği: o rolün `next`i yeni role, yeni rolünki eskisine
+          // bağlanıyor (yeniden kablolama).
+          const sonra = typeof istek["sonra"] === "string" ? istek["sonra"] : "";
+          const receiveRaw = istek["receive"];
+          const receive = typeof receiveRaw === "string" && receiveRaw !== "" ? receiveRaw : undefined;
+          const rejectRaw = istek["reject"];
+          const reject = typeof rejectRaw === "string" && rejectRaw !== "" ? rejectRaw : undefined;
+          const promptRaw = istek["prompt"];
+          // Gövdede `prompt` VERİLMEDİYSE şablondan yazılıyor — BOŞ değil,
+          // çünkü boş dosya kural 9'a takılır (bkz. yukarıdaki yorum).
+          const promptMetni = typeof promptRaw === "string" && promptRaw.trim() !== ""
+            ? promptRaw
+            : rolPromptSablonu(id || "yeni-rol");
+
+          if (id === "") throw new Error("`id` boş olamaz.");
+          if (sonra === "") {
+            throw new Error(
+              "`sonra` boş olamaz — yeni rolün hangi rolün ARDINA ekleneceği belirtilmeli.",
+            );
+          }
+
+          await guncel(); // akışı yokla — en güncel `canliAkis.flow` üstünden çalışıyoruz.
+          const taslak = fromFlow(canliAkis.flow);
+
+          // AYNI ID REDDEDİLİR — ve DOSYA YAZILMADAN: bu denetim her türlü
+          // dosya yazmadan ÖNCE.
+          if (taslak.roles.some((r) => r.id === id)) {
+            throw new Error(`Rol zaten var: ${id}`);
+          }
+          const sonraIdx = taslak.roles.findIndex((r) => r.id === sonra);
+          if (sonraIdx === -1) {
+            throw new Error(`Bilinmeyen rol: ${sonra}`);
+          }
+
+          // Yeni rolün prompt dosyası, `sonra`nın promptuyla AYNI dizinde —
+          // akışların bugünkü kuralı (bütün rol promptları aynı dizinde)
+          // bu akışta da geçerli kalıyor, uç bunu uydurmuyor.
+          const sonraRolTam = canliAkis.flow.roles.find((r) => r.id === sonra);
+          if (sonraRolTam === undefined) {
+            throw new Error(`Bilinmeyen rol: ${sonra}`);
+          }
+          const promptAbs = join(dirname(sonraRolTam.promptPath), `${id}.md`);
+          const promptGoreli = goreliYol(dirname(flowPath), promptAbs);
+
+          const sorun = promptIcerigiSorunu(promptMetni);
+          if (sorun !== null) throw new Error(sorun);
+
+          // ATOMİKLİK, adım 1: prompt dosyasını YAZ. Eski içerik (varsa)
+          // GERİ ALMA için saklanıyor — bu yol normalde yeni bir dosya ama
+          // aynı ada rastlayan yetim bir dosya varsa onu da korumalıyız.
+          const eskiMetin = await readFile(promptAbs, "utf8").catch(() => undefined);
+          await writeFile(promptAbs, promptMetni, "utf8");
+
+          const yeniRol: DraftRole = {
+            id, provider, workspace, prompt: promptGoreli,
+            next: (taslak.roles[sonraIdx] as DraftRole).next,
+            ...(receive === undefined ? {} : { receive }),
+            ...(reject === undefined ? {} : { reject }),
+          };
+          const yeniRoller = taslak.roles.map((r, i) =>
+            i === sonraIdx ? { ...r, next: id } : r);
+          yeniRoller.splice(sonraIdx + 1, 0, yeniRol);
+          const yeniTaslak: FlowDraft = { ...taslak, roles: yeniRoller };
+
+          // ATOMİKLİK, adım 2: akışı DOĞRULA ve YAZ.
+          const sonuc = await writeDraft(flowPath, yeniTaslak, loadOptions);
+          if (!sonuc.ok) {
+            // DOĞRULAMA BAŞARISIZ — adım 1 GERİ ALINIYOR: yarı yaratılmış
+            // bir rol (dosyası var, akışta yok) bırakmıyoruz.
+            if (eskiMetin === undefined) await unlink(promptAbs).catch(() => {});
+            else await writeFile(promptAbs, eskiMetin, "utf8");
+            return { kod: 409 as const, hata: sonuc.message };
+          }
+          const model = await buildModel(await guncel());
+          return { kod: 200 as const, model };
+        })
+        .then((sonuc) => {
+          res.writeHead(sonuc.kod, { "content-type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify(
+            sonuc.kod === 200 ? { model: sonuc.model } : { hata: sonuc.hata },
+          ));
         })
         .catch((error: unknown) => {
           res.writeHead(400, { "content-type": "application/json; charset=utf-8" });
