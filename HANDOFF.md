@@ -20,7 +20,7 @@ olduğu için kendiliğinden eklenmedi.
 
 ---
 
-## QA KAMPANYASI — 39 bulgu, 32 düzeltildi (1-3 Kasım)
+## QA KAMPANYASI — 42 bulgu, 36 düzeltildi (1-3 Kasım)
 
 Dört paralel tarama koştu (ekran · kart+git · tick+planlama · ölçüm takımı),
 32 bulgu çıktı. Her bulgu kabul edilmeden önce **kendim doğruladım**; her
@@ -72,6 +72,9 @@ sınama). Kampanyanın dört taraması da beşini kaçırdı.
 | 34 | Rapor satırında iki payda: `koşu` ölçülmüş-ve-teslim-edilmiş koşuyu, `aktivasyon`/`ret` BÜTÜN koşuları sayıyor, aynı satıra basılıyordu | okuyan "aktivasyon/koşu" diye bölüp yanlış sayıya çıkıyordu — pay bütün koşuları, payda yalnızca teslim edileni saydığı için |
 | 38 | `retReduction()` AYNI payda kusurunu KARAR YOLUNDA taşıyor (`rejects / runs`) | basılan bir satır değil, `decide()`'ın metriği — kampanya verdikti yanlış çıkabilir |
 | 39 | `coder`'ın sınaması `rejects` paydaısını pinlemiyordu | yorum "aynı payda" diyordu, karar yolunda yoktu; denetçi de kaçırdı |
+| 40 | Ekrandan kart açılamıyordu | "her şeyi önyüzden" hedefinde eksik olan en büyük parça: işe BAŞLAMAK ekranda yoktu |
+| 41 | Ekrandan gözcü başlatılamıyordu | kart açılabiliyor ama hiçbir şey koşmuyordu; terminal zorunluydu |
+| 42 | Gözcü düğmesi bayat kilitte "durdur" diyordu | yapamayacağı şeyi vaat eden düğme — "Geri gönder" kusurunun aynası |
 
 Kart `c-20261103-9ba80e`: 34. kusur düzeltildi. `ArmSide.totalRuns` eklendi
 (`activations`/`rejects`/`usage`'ın gerçek paydası — BÜTÜN koşular; teslim
@@ -79,6 +82,41 @@ edilmeyeni toplamdan düşmek HARCANAN GİZLENMEZ kuralını ihlal ederdi).
 `cli.ts` artık `tümü (N koşu üzerinden): ...` satırını AYRI basıyor, kendi
 paydasını kendi sayısıyla söylüyor — üstteki satırın paydası (`koşu`) ile
 sessizce karışmıyor.
+
+### ÖNYÜZ — "her şeyi ekrandan" (3 Kasım)
+
+Ekran bugüne kadar OKUYUCU + üç karar düğmesiydi; işe başlamak ve
+gözcüyü koşturmak terminaldeydi. İkisi de önyüze taşındı:
+
+- **`POST /kart/yeni`** — kart ekrandan açılıyor. Rol seçimi YOK (kart
+  zincirin başından girer). Akış geçersizse kart AÇILMIYOR: eski
+  topoloji karta donar ve "bayat topoloji" kusuru ekrandan tek tıkla
+  üretilebilir olurdu.
+- **`POST /gozcu/baslat` · `/gozcu/durdur`** — gözcü ekrandan yönetiliyor.
+  **Düğme PARAMETRE SEÇMİYOR:** model ve araç listesi ekranı açan
+  komutta kuruldu, düğme yalnızca onu çalıştırıyor. Para harcatan
+  parametreleri bir düğmenin seçmesi, ekranın yetkisini sessizce
+  büyütmek olurdu. Bayrak verilmeden açılan ekranda uç 404 — akış
+  düzenlemeyle aynı kural.
+
+**GERÇEK TARAYICI ÜÇ KUSUR BULDURDU** ve üçü de birim sınamadan
+geçiyordu:
+
+1. **Durdur çalışmıyordu.** `tsx` asıl gözcüyü TORUN süreç olarak
+   koşturuyor ve kilidi torun tutuyor; çocuğa sinyal göndermek yetmiyor.
+   Sinyal artık SÜREÇ GRUBUNA gidiyor (POSIX'te `detached`, negatif pid).
+2. **Durdurma ANLIK DEĞİL ve ekran yalan söylüyordu.** Gözcü sinyali
+   alınca süren ajan turunu bitirip çıkıyor — doğru davranış, yarıda
+   kesmek parası ödenmiş turu çöpe atardı. Çekirdek bunu zaten
+   söylüyordu ("koşan tur bitince çıkılacak"); ekran "durdurdum" deyip
+   çocuğu UNUTUYORDU, yani ikinci basış ("hemen çık") ulaşmıyordu.
+3. **Bayat kilitte düğme "durdur" diyordu.** Kilidin VARLIĞINA bakıyordu,
+   CANLI olmasına değil — basınca "bu gözcüyü bu ekran başlatmadı"
+   cevabı geliyordu. Aynı gün düzeltilen "Geri gönder" kusurunun aynası.
+
+Ders: `page.test.ts` kaynağın METNİNİ sınıyor ve bu üçünü de
+göremezdi. **Önyüzü gerçek tarayıcıda koşturmak artık gerekli** —
+Playwright kurulu ve çalışıyor.
 
 ### Kart `c-20261103-9ba80e` — ORKESTRATÖRÜN KENDİ KOŞUSU
 

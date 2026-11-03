@@ -247,3 +247,28 @@ describe("renderPage — ekrandan kart açmak", () => {
     expect(src.slice(at, at + 400)).toContain("x-skein-token");
   });
 });
+
+/**
+ * GÖZCÜ DÜĞMESİ bayat kilitte "başlat" demeli.
+ *
+ * İlk yazımda düğme kilidin VARLIĞINA bakıyordu: gözcü çökmüş, dosya
+ * kalmışken düğme "Gözcüyü durdur" diyor ve basınca "bu gözcüyü bu ekran
+ * başlatmadı" cevabı geliyordu. Yapamayacağı şeyi vaat eden düğme — bugün
+ * "Geri gönder"de düzeltilen kusurun aynısı, ve yine gerçek tarayıcıda
+ * koşturunca çıktı.
+ */
+describe("renderPage — gözcü düğmesi", () => {
+  it("düğme kilidin VARLIĞINA değil CANLI olmasına bakıyor", () => {
+    const src = betik(renderPage("x"));
+    expect(src).toContain("const canli = Boolean(g && g.alive)");
+    expect(src).toContain('canli ? "Gözcüyü durdur" : "Gözcüyü başlat"');
+    expect(src).toContain('gozcuKomut(canli ? "durdur" : "baslat"');
+  });
+
+  it("komut jetonla ve doğru uca gidiyor", () => {
+    const src = betik(renderPage("x"));
+    const at = src.indexOf('fetch("/gozcu/"');
+    expect(at).toBeGreaterThan(-1);
+    expect(src.slice(at, at + 300)).toContain("x-skein-token");
+  });
+});

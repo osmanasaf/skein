@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { knownProviderSet } from "../adapters/factory.js";
 import { readFile } from "node:fs/promises";
+import { acquireLock } from "../watch/lock.js";
 import { newCard, type Card } from "../card/card.js";
 import { CardQueue } from "../card/queue.js";
 import { loadFlow, type Flow } from "../flow/load.js";
@@ -642,6 +643,232 @@ describe("serveUi — ekrandan kart açmak", () => {
     });
     expect(res.status).toBe(403);
     expect(await queue.list()).toEqual([]);
+  });
+});
+
+/**
+ * EKRANDAN GÖZCÜ YÖNETİMİ.
+ *
+ * Kart ekrandan açılabiliyordu ama hiçbir şey koşmuyordu: gözcü ayrı bir
+ * kabukta elle başlatılıyordu. Düğme PARAMETRE SEÇMİYOR — model ve araç
+ * listesi ekranı açan komutta kuruldu; bu sınamaların asıl işi o sınırı
+ * pinlemek.
+ */
+describe("serveUi — ekrandan gözcü", () => {
+  const ARGV = ["node", "tsx", "watch/cli.ts", "test", "--serve", "--model", "claude:m"];
+
+  /** Başlatılan sahte süreçleri kaydeder. */
+  function sahte() {
+    const cagrilar: string[][] = [];
+    const oldurulen: (string | undefined)[] = [];
+    const bitirenler: (() => void)[] = [];
+    return {
+      cagrilar,
+      oldurulen,
+      /** Sürecin gerçekten bittiğini bildirir. */
+      bitir: () => bitirenler.forEach((cb) => cb()),
+      spawn: (argv: string[]) => {
+        cagrilar.push(argv);
+        return {
+          pid: 4242,
+          kill: (sig?: string) => oldurulen.push(sig),
+          // Sahte süreç KENDİLİĞİNDEN bitmiyor: gerçeğinde de durdurma
+          // anlık değil, gözcü süren turu bitirince çıkıyor.
+          onExit: (cb: () => void) => bitirenler.push(cb),
+        };
+      },
+    };
+  }
+
+  async function gozculu(): Promise<{ srv: UiServer; s: ReturnType<typeof sahte> }> {
+    const s = sahte();
+    const srv = await serveUi({
+      root, queue, topology, flowName: "test", flowHash: gercekFlow.hash,
+      gozcu: { argv: ARGV, spawn: s.spawn as never },
+    });
+    return { srv, s };
+  }
+
+  it("başlat, EKRANI AÇAN KOMUTUN bayraklarıyla koşuyor", async () => {
+    const { srv, s } = await gozculu();
+    try {
+      const res = await fetch(`${srv.url}gozcu/baslat`, {
+        method: "POST",
+        headers: { "x-skein-token": srv.token },
+      });
+      expect(res.status).toBe(200);
+      // Tam olarak verilen argv — ekran ona bir şey EKLEMİYOR, çıkarmıyor.
+      // Düğmenin model seçebilmesi, ekranın yetkisini sessizce büyütmek olurdu.
+      expect(s.cagrilar).toEqual([ARGV]);
+    } finally {
+      await srv.close();
+    }
+  });
+
+  it("jetonsuz başlatma reddedilir ve SÜREÇ BAŞLAMAZ", async () => {
+    const { srv, s } = await gozculu();
+    try {
+      const res = await fetch(`${srv.url}gozcu/baslat`, { method: "POST" });
+      expect(res.status).toBe(403);
+      expect(s.cagrilar).toEqual([]);
+    } finally {
+      await srv.close();
+    }
+  });
+
+  it("başka kaynaktan gelen istek reddedilir", async () => {
+    const { srv, s } = await gozculu();
+    try {
+      const res = await fetch(`${srv.url}gozcu/baslat`, {
+        method: "POST",
+        headers: { "x-skein-token": srv.token, origin: "https://kotu-site.example" },
+      });
+      expect(res.status).toBe(403);
+      expect(s.cagrilar).toEqual([]);
+    } finally {
+      await srv.close();
+    }
+  });
+
+  // Tek yazıcı kuralı ekrandan da atlanamıyor: ikinci gözcü, birincinin
+  // elindeki kartı çökmüş sanıp kuyruğa geri atar ve aynı iş ikinci kez,
+  // para harcayarak yapılır.
+  it("zaten açık bir gözcü varsa reddediyor", async () => {
+    const { srv, s } = await gozculu();
+    try {
+      const ilk = await fetch(`${srv.url}gozcu/baslat`, {
+        method: "POST", headers: { "x-skein-token": srv.token },
+      });
+      expect(ilk.status).toBe(200);
+      // İlk çağrı sahte süreci başlattı ama kilit YAZILMADI (sahte süreç
+      // gerçek gözcü değil), o yüzden kilidi elle kuruyoruz: ölçülen şey
+      // "kilit varsa reddet" kuralının kendisi.
+      await acquireLock(join(root, ".skein", "daemon.json"), {
+        pid: process.pid, startedAt: new Date().toISOString(),
+        flow: "test", hash: "abc", mode: "serve",
+      });
+      const ikinci = await fetch(`${srv.url}gozcu/baslat`, {
+        method: "POST", headers: { "x-skein-token": srv.token },
+      });
+      expect(ikinci.status).toBe(409);
+      expect((await ikinci.json() as { hata: string }).hata).toMatch(/Zaten bir gözcü açık/);
+      // İkinci süreç BAŞLAMADI.
+      expect(s.cagrilar).toHaveLength(1);
+    } finally {
+      await srv.close();
+    }
+  });
+
+  it("durdur, başlattığı sürece sinyal gönderiyor", async () => {
+    const { srv, s } = await gozculu();
+    try {
+      await fetch(`${srv.url}gozcu/baslat`, { method: "POST", headers: { "x-skein-token": srv.token } });
+      const res = await fetch(`${srv.url}gozcu/durdur`, {
+        method: "POST", headers: { "x-skein-token": srv.token },
+      });
+      expect(res.status).toBe(200);
+      expect(s.oldurulen).toEqual(["SIGTERM"]);
+      // Durdurma ANLIK DEĞİL ve cevap bunu SÖYLEMEK zorunda: gözcü süren
+      // turu bitirip çıkıyor. Söylemezsek kullanıcı hapta hâlâ "açık"
+      // görüp düğmenin çalışmadığını sanar — gerçek tarayıcıda tam olarak
+      // bu oldu.
+      const veri = await res.json() as { mesaj?: string };
+      expect(veri.mesaj).toMatch(/KOŞAN TURU bitirip/);
+    } finally {
+      await srv.close();
+    }
+  });
+
+  /**
+   * İKİNCİ BASIŞ çalışmak zorunda.
+   *
+   * Eskiden `durdur` referansı hemen bırakıyordu (`cocuk = null`) ve
+   * ikinci basış "bu gözcüyü bu ekran başlatmadı" diyordu — ekran kendi
+   * başlattığı süreci unutuyordu. Çekirdek ikinci sinyali "hemen çık"
+   * sayıyor, yani ikinci basışın ULAŞMASI gerekiyor.
+   */
+  it("ikinci durdurma da sürece ulaşıyor", async () => {
+    const { srv, s } = await gozculu();
+    try {
+      await fetch(`${srv.url}gozcu/baslat`, { method: "POST", headers: { "x-skein-token": srv.token } });
+      await fetch(`${srv.url}gozcu/durdur`, { method: "POST", headers: { "x-skein-token": srv.token } });
+      const ikinci = await fetch(`${srv.url}gozcu/durdur`, {
+        method: "POST", headers: { "x-skein-token": srv.token },
+      });
+      expect(ikinci.status).toBe(200);
+      expect(s.oldurulen).toEqual(["SIGTERM", "SIGTERM"]);
+    } finally {
+      await srv.close();
+    }
+  });
+
+  // Süreç GERÇEKTEN bitince referans bırakılıyor; ondan sonraki durdurma
+  // "durdurulacak gözcü yok" demeli.
+  it("süreç bitince referans bırakılıyor", async () => {
+    const { srv, s } = await gozculu();
+    try {
+      await fetch(`${srv.url}gozcu/baslat`, { method: "POST", headers: { "x-skein-token": srv.token } });
+      s.bitir();
+      const res = await fetch(`${srv.url}gozcu/durdur`, {
+        method: "POST", headers: { "x-skein-token": srv.token },
+      });
+      expect(res.status).toBe(409);
+      expect((await res.json() as { hata: string }).hata).toMatch(/Durdurulacak gözcü yok/);
+    } finally {
+      await srv.close();
+    }
+  });
+
+  /**
+   * BAŞKASININ gözcüsü durdurulmuyor.
+   *
+   * Kilitteki pid'e sinyal göndermek kolay olurdu ama "canlı" olmak "bizim
+   * gözcümüz olmak" demek değil: bayat bir kilitte pid geri dönüşmüş,
+   * ilgisiz bir sürece ait olabilir. O süreci öldürmek ekranın
+   * yapabileceği en kötü şey olurdu.
+   */
+  it("başlatmadığı gözcüyü durdurmuyor, nereden durduracağını söylüyor", async () => {
+    const { srv } = await gozculu();
+    try {
+      await acquireLock(join(root, ".skein", "daemon.json"), {
+        pid: process.pid, startedAt: new Date().toISOString(),
+        flow: "test", hash: "abc", mode: "serve",
+      });
+      const res = await fetch(`${srv.url}gozcu/durdur`, {
+        method: "POST", headers: { "x-skein-token": srv.token },
+      });
+      expect(res.status).toBe(409);
+      const veri = await res.json() as { hata: string };
+      expect(veri.hata).toMatch(/bu ekran başlatmadı/);
+      expect(veri.hata).toMatch(/Ctrl-C/);
+    } finally {
+      await srv.close();
+    }
+  });
+
+  // Bayrak verilmeden açılan ekran bugünkü hâlinde kalıyor: akış
+  // düzenlemeyle aynı kural — ekranın yetkisi onu açan komutun verdiği kadar.
+  it("gözcü bayrağı verilmeden açılan ekranda uç 404", async () => {
+    const srv = await serveUi({
+      root, queue, topology, flowName: "test", flowHash: gercekFlow.hash,
+    });
+    try {
+      const res = await fetch(`${srv.url}gozcu/baslat`, {
+        method: "POST", headers: { "x-skein-token": srv.token },
+      });
+      expect(res.status).toBe(404);
+    } finally {
+      await srv.close();
+    }
+  });
+
+  // Ekran kapanırken kendi başlattığı gözcüyü de kapatıyor: Ctrl-C'den
+  // sonra arkada para harcayan bir süreç kalmamalı.
+  it("ekran kapanınca gözcü de kapanıyor", async () => {
+    const { srv, s } = await gozculu();
+    await fetch(`${srv.url}gozcu/baslat`, { method: "POST", headers: { "x-skein-token": srv.token } });
+    await srv.close();
+    expect(s.oldurulen).toEqual(["SIGTERM"]);
   });
 });
 

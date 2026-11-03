@@ -3,12 +3,15 @@ import { knownProviderSet } from "../adapters/factory.js";
 import { randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { createWriteStream } from "node:fs";
 import { newCard } from "../card/card.js";
 import { QueueError, type ReleaseDecision } from "../card/queue.js";
 import { checkDraft, fromFlow, writeDraft, type FlowDraft } from "../flow/draft.js";
 import { loadFlow, type Flow, type LoadOptions } from "../flow/load.js";
 import { closeOrphan } from "../card/orphan.js";
 import { releaseCard } from "../card/release.js";
+import { spawnPortable } from "../proc/process.js";
+import { liveLock } from "../watch/lock.js";
 import { snapshot, type TopologySnapshot } from "../flow/snapshot.js";
 import { buildDetail, buildModel, type DetailOptions, type UiModel } from "./model.js";
 import { renderPage } from "./page.js";
@@ -51,6 +54,40 @@ export interface ServeUiOptions extends DetailOptions {
   host?: string;
   /** Test edilebilirlik için sabitlenebilir; varsayılan rastgele. */
   token?: string;
+  /**
+   * Gözcüyü EKRANDAN başlatmak/durdurmak.
+   *
+   * Verilmezse ilgili uçlar 404 döner — akış düzenlemeyle aynı kural:
+   * ekranın yetkisi, onu açan komutun verdiği kadardır.
+   *
+   * `argv` UI BAŞLATILIRKEN terminalde kuruldu ve düğme onu SEÇEMİYOR,
+   * yalnızca çalıştırıyor. Bu kasıtlı: model seçimi ve araç listesi para
+   * harcatan parametreler. Bir düğmenin onları seçmesi, ekranın yetkisini
+   * sessizce büyütmek olurdu — ekran bugün ne okuyup ne yazabiliyorsa,
+   * gözcü düğmesi de o sınırın içinde kalmalı.
+   */
+  gozcu?: {
+    /** Çalıştırılacak tam komut: `[komut, ...argümanlar]`. */
+    argv: string[];
+    /** Test edilebilirlik için; varsayılan gerçek süreç başlatma. */
+    spawn?: (argv: string[]) => GozcuSurec;
+  };
+}
+
+/** Başlatılan gözcü sürecinin ekranın ihtiyaç duyduğu kadarı. */
+export interface GozcuSurec {
+  pid: number | undefined;
+  kill: (signal?: NodeJS.Signals) => void;
+  /**
+   * Süreç GERÇEKTEN bittiğinde çağrılır.
+   *
+   * Durdurma anlık değil: gözcü sinyali alınca süren ajan turunu bitirip
+   * çıkıyor (kendi çıktısı da bunu söylüyor). Bu yüzden "öldürdüm" deyip
+   * referansı atmak yanlıştı — ekran gözcüyü unutuyor, ikinci basış
+   * "bu gözcüyü bu ekran başlatmadı" diyordu. Referans, süreç gerçekten
+   * bitince bırakılıyor.
+   */
+  onExit: (cb: () => void) => void;
 }
 
 const DECISIONS: readonly ReleaseDecision[] = ["forward", "back", "retry"];
@@ -205,6 +242,60 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
     };
   };
 
+  /**
+   * Bu ekranın BAŞLATTIĞI gözcü süreci — yoksa `null`.
+   *
+   * Yalnızca bunu durduruyoruz (sebebi `/gozcu/durdur` dalında yazılı) ve
+   * ekran kapanırken bunu da kapatıyoruz: ekranı kapatıp arkada para
+   * harcayan bir süreç bırakmak, "ekrandan yönet" sözünün tersi olurdu.
+   */
+  let cocuk: GozcuSurec | null = null;
+
+  /**
+   * Gerçek süreç başlatma — gözcünün çıktısı `.skein/gozcu.log`'a gidiyor.
+   *
+   * Ekranın kendi stdout'una karıştırmak iki akışı birbirine örerdi;
+   * dosya hem kalıcı hem de ayrı bir kabukta `tail -f` ile izlenebilir.
+   */
+  const gercekSpawn = (root: string) => (argv: string[]): GozcuSurec => {
+    const [komut, ...args] = argv;
+    const child = spawnPortable(komut as string, args, { cwd: root });
+    const log = createWriteStream(join(root, ".skein", "gozcu.log"), { flags: "a" });
+    child.stdout?.pipe(log);
+    child.stderr?.pipe(log);
+    return {
+      pid: child.pid,
+      onExit: (cb) => {
+        child.on("exit", cb);
+      },
+      /**
+       * Sinyal SÜREÇ GRUBUNA gidiyor, yalnızca çocuğa değil.
+       *
+       * Ölçülmüş kusur: `tsx` asıl gözcüyü TORUN süreç olarak koşturuyor
+       * (wrapper → gerçek süreç) ve kilidi tutan torun. "Gözcüyü durdur"
+       * düğmesi hata vermeden dönüyor, iki süreç de ayakta kalıyor ve
+       * ekran "gözcü açık" demeye devam ediyordu — düğme yapmadığı şeyi
+       * yapmış gibi görünüyordu. Gerçek tarayıcıda koşturunca çıktı.
+       *
+       * `spawnPortable` POSIX'te `detached` kuruyor, yani çocuk bir süreç
+       * grubu LİDERİ: negatif pid bütün gruba sinyal gönderir. Windows'ta
+       * süreç grubu yok, orada çocuğun kendisi kalıyor.
+       */
+      kill: (signal) => {
+        const sig = signal ?? "SIGTERM";
+        if (child.pid !== undefined && process.platform !== "win32") {
+          try {
+            process.kill(-child.pid, sig);
+            return;
+          } catch {
+            // Grup yoksa (çocuk çoktan öldü) tekil sinyale düş.
+          }
+        }
+        child.kill(sig);
+      },
+    };
+  };
+
   const server: Server = createServer((req, res) => {
     // DNS REBINDING KAPISI — okuma uçları da dahil, her istekte.
     //
@@ -222,6 +313,87 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
 
     const birak = path === undefined ? null : /^\/kart\/([^/]+)\/birak$/.exec(path);
     const kapat = path === undefined ? null : /^\/kart\/([^/]+)\/kapat$/.exec(path);
+
+    if (req.method === "POST" && (path === "/gozcu/baslat" || path === "/gozcu/durdur")) {
+      const hata = yetkili(req, token, adlar, portu());
+      if (hata !== null) {
+        res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ hata }));
+        return;
+      }
+      const ayar = options.gozcu;
+      if (ayar === undefined) {
+        res.writeHead(404, { "content-type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({
+          hata: "Bu ekran gözcü yönetimine açık değil — ekranı gözcü bayraklarıyla aç.",
+        }));
+        return;
+      }
+      const basla = path === "/gozcu/baslat";
+      let mesaj: string | null = null;
+      (async () => {
+        const o = await guncel();
+        const kilitYolu = join(o.root, ".skein", "daemon.json");
+        const tutan = await liveLock(kilitYolu);
+
+        if (basla) {
+          // Kilit TEK yazıcı kuralının kendisi: ikinci gözcü, birincinin
+          // elindeki kartı çökmüş sanıp kuyruğa geri atar ve aynı iş ikinci
+          // kez, para harcayarak yapılır. Ekran o kuralı atlamıyor.
+          if (tutan !== null) {
+            throw new QueueError(
+              `Zaten bir gözcü açık: pid ${tutan.pid}, akış ${tutan.flow}.`,
+            );
+          }
+          const spawn = ayar.spawn ?? gercekSpawn(o.root);
+          const baslayan = spawn(ayar.argv);
+          cocuk = baslayan;
+          // Referans, süreç GERÇEKTEN bitince bırakılıyor — "durdur"
+          // dediğimizde değil. İkisi aynı an değil.
+          baslayan.onExit(() => {
+            if (cocuk === baslayan) cocuk = null;
+          });
+        } else {
+          // YALNIZCA kendi başlattığımızı durduruyoruz.
+          //
+          // Kilitteki pid'e sinyal göndermek kolay olurdu ama tehlikeli:
+          // "canlı" olmak "bizim gözcümüz olmak" demek değil — bayat bir
+          // kilitte pid geri dönüşmüş, ilgisiz bir sürece ait olabilir. O
+          // süreci öldürmek, ekranın yapabileceği en kötü şey olurdu.
+          if (cocuk === null) {
+            throw new QueueError(
+              tutan === null
+                ? "Durdurulacak gözcü yok."
+                : `Bu gözcüyü bu ekran başlatmadı (pid ${tutan.pid}); ` +
+                  `onu başlattığın kabukta Ctrl-C ile durdur.`,
+            );
+          }
+          // Referans BIRAKILMIYOR: gözcü sinyali alınca süren turu
+          // bitirip çıkıyor ve o ana kadar hâlâ bizim sürecimiz. Eskiden
+          // burada `cocuk = null` vardı ve ikinci basış "bu gözcüyü bu
+          // ekran başlatmadı" diyordu — ekran kendi başlattığı süreci
+          // unutuyordu. Çekirdek ikinci sinyali "hemen çık" sayıyor, yani
+          // ikinci basışın ÇALIŞMASI gerekiyor.
+          cocuk.kill("SIGTERM");
+          mesaj = "Durdurma sinyali gönderildi — gözcü KOŞAN TURU bitirip " +
+            "çıkacak. Yarıda kesmek, parası ödenmiş bir turu çöpe atardı. " +
+            "Tekrar basmak hemen durdurur.";
+        }
+        // Model kilitten okunuyor; gözcünün gerçekten açıldığını dosya
+        // söylüyor, bizim iddiamız değil.
+        return buildModel(await guncel());
+      })()
+        .then((model) => {
+          res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ model, ...(mesaj === null ? {} : { mesaj }) }));
+        })
+        .catch((error: unknown) => {
+          const kod = error instanceof QueueError ? 409 : 400;
+          res.writeHead(kod, { "content-type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ hata: (error as Error).message }));
+        });
+      return;
+    }
 
     if (req.method === "POST" && path === "/kart/yeni") {
       const hata = yetkili(req, token, adlar, portu());
@@ -499,6 +671,11 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
     url: `${adres}/`,
     close: () =>
       new Promise<void>((resolve) => {
+        // Ekran kapanırken KENDİ başlattığı gözcüyü de kapatıyor. Aksi
+        // hâlde Ctrl-C'den sonra arkada para harcayan bir süreç kalırdı ve
+        // kilidi tuttuğu için bir sonraki gözcü de açılamazdı.
+        cocuk?.kill("SIGTERM");
+        cocuk = null;
         server.closeAllConnections?.();
         server.close(() => resolve());
       }),

@@ -325,6 +325,41 @@ async function karar(id, secim, dugme, kart) {
   }
 }
 
+/**
+ * Gözcüyü başlatır ya da durdurur.
+ *
+ * Ekran kendi kopyasını güncellemiyor: çekirdek kilidi okuyup yeni modeli
+ * döndürüyor. "Başlattı mı" sorusunun cevabı dosyada, bizim iddiamızda
+ * değil.
+ */
+async function gozcuKomut(ne, dugme) {
+  dugme.disabled = true;
+  const eski = document.querySelector("#bar .redd");
+  if (eski) eski.remove();
+  try {
+    const cevap = await fetch("/gozcu/" + ne, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-skein-token": JETON },
+    });
+    const veri = await cevap.json();
+    if (!cevap.ok) throw new Error(veri.hata || cevap.status);
+    ciz(veri.model);
+    // Durdurma ANLIK DEĞİL: gözcü süren turu bitirip çıkıyor. Bunu
+    // söylemezsek kullanıcı hapta hâlâ "gözcü açık" görüp düğmenin
+    // çalışmadığını sanar — ölçüldü, tam olarak bu oldu.
+    if (veri.mesaj) {
+      const not = el("div", "ipucu", veri.mesaj);
+      not.style.cssText = "flex-basis:100%";
+      document.getElementById("bar").append(not);
+    }
+  } catch (e) {
+    dugme.disabled = false;
+    const kutu = el("div", "redd", e.message);
+    kutu.style.cssText = "flex-basis:100%";
+    document.getElementById("bar").append(kutu);
+  }
+}
+
 function kartCiz(c) {
   const kutu = el("div", "card" + (c.state === "active" ? " live" : "") + (c.gate ? " gate" : "") + (c.orphan ? " orphan" : ""));
 
@@ -611,6 +646,24 @@ function ciz(m) {
   pill.append(document.createTextNode(g ? (g.alive ? "gözcü açık" : "gözcü kapalı (bayat kilit)") : "gözcü yok"));
   if (g) pill.append(el("span", "mono", "pid " + g.info.pid));
   bar.append(pill);
+
+  // GÖZCÜ DÜĞMESİ. Ekrandan kart açılabiliyordu ama hiçbir şey koşmuyordu:
+  // gözcü ayrı bir kabukta elle başlatılıyordu. Düğme PARAMETRE SEÇMİYOR —
+  // model ve araç listesi ekranı açan komutta kuruldu; bu düğme yalnızca
+  // onu çalıştırıp durduruyor.
+  //
+  // Düğme kilidin VARLIĞINA değil CANLI olmasına bakıyor. İlk yazımda
+  // g degiskenini kullanmıştım ve gerçek tarayıcıda çıktı: bayat kilitte (gözcü
+  // çökmüş, dosya kalmış) düğme "Gözcüyü durdur" diyordu ve basınca
+  // "bu gözcüyü bu ekran başlatmadı" cevabı geliyordu. Yapamayacağı şeyi
+  // vaat eden düğme — bugün "Geri gönder"de düzeltilen kusurun aynısı.
+  // Hap zaten "gözcü kapalı (bayat kilit)" diyor; düğme onunla aynı
+  // gerçeği okumak zorunda.
+  const canli = Boolean(g && g.alive);
+  const gozcuDugme = el("button", "mini", canli ? "Gözcüyü durdur" : "Gözcüyü başlat");
+  gozcuDugme.type = "button";
+  gozcuDugme.addEventListener("click", () => void gozcuKomut(canli ? "durdur" : "baslat", gozcuDugme));
+  bar.append(gozcuDugme);
 
   bar.append(el("div", "spacer"));
   // Kart açmak, ekranın EN ÇOK kullanılan eylemi ve tek yolu terminaldi:
