@@ -73,12 +73,19 @@ type El = {
   querySelector: (s: string) => El | null;
   /** Yalnızca zincir okunun sütunları GERÇEKTEN alt alta mı sınaması için. */
   getBoundingClientRect: () => { top: number; left: number };
+  /** Yalnızca akış düzenleyicisinin 'change' dinleyicisini elle tetiklemek
+   * için — bkz. "Ham YAML" sınaması: 'fill' yalnızca 'input' yayıyor. */
+  dispatchEvent: (e: unknown) => void;
 };
 declare const document: {
   querySelector: (s: string) => El | null;
   querySelectorAll: (s: string) => ArrayLike<El>;
   body: unknown;
 };
+/** Yalnızca 'change' olayını elle kurup yaymak için — bkz. yukarıdaki not. */
+declare class Event {
+  constructor(type: string, init?: { bubbles?: boolean });
+}
 /**
  * Zemin rengi, dönüş, kuş işaretinin GERÇEK rengi (currentColor'ın çözüldüğü
  * `color`) ve devir animasyonunun adı için — gökyüzü paleti, zincir okunun
@@ -86,7 +93,12 @@ declare const document: {
  */
 declare function getComputedStyle(
   el: unknown,
-): { backgroundColor: string; transform: string; color: string; animationName: string };
+): {
+  backgroundColor: string; transform: string; color: string; animationName: string;
+  /** Yalnızca diyagramın dar/geniş ekranda hangi kopyasının göründüğü
+   * sınaması için — bkz. akış diyagramı describe'ı. */
+  display: string;
+};
 
 type Tarayici = { newPage: (o?: unknown) => Promise<Sayfa>; close: () => Promise<void> };
 type Sayfa = {
@@ -873,4 +885,339 @@ roles:
       await page.close();
     }
   }, 60_000);
+
+  /**
+   * AKIŞ DİYAGRAMI — gerçek tarayıcıda.
+   *
+   * Akış bugüne kadar ekranda bir YAML metin kutusuydu; bu akış artık bir
+   * DİYAGRAM: roller düğüm, next/reject/syncBack kenar (bkz. page.ts
+   * "Akış diyagramı" bölümü). `model.test.ts` kenarların MODELE doğru
+   * girdiğini sınıyor ama "tarayıcı GERÇEKTEN düğüm ve okları çiziyor mu"
+   * sorusu yalnızca sayfayı açınca görünür — bu dosyadaki her kusurun
+   * ortak noktası.
+   */
+  describe("akış diyagramı", () => {
+    const GUNLUK_TEK_FLOW = `
+name: gunluk-tek
+constitution:
+  - ../prompts/base.md
+roles:
+  - id: coder
+    provider: claude
+    workspace: main
+    prompt: ../../roles/coder.prompt
+    next: reviewer
+
+  - id: reviewer
+    provider: claude
+    workspace: reviewer
+    prompt: ../../roles/coder.prompt
+    receive: batch
+    syncBack: [coder]
+    reject: coder
+    next: done
+`;
+
+    // Dört rol, hem next hem reject hem de İKİ kapı (biri 'none' —
+    // davranışsal olarak kapı DEĞİL ve bu yüzden işaretlenmemeli, biri
+    // 'approval' — işaretlenmeli). Filtreleme kararı SAYFADA (bkz.
+    // model.ts "kapı tipi filtrelenmeden taşınıyor" yorumu).
+    const AB_PLANLI_FLOW = `
+name: ab-planli
+constitution:
+  - ../prompts/base.md
+roles:
+  - id: planner
+    provider: claude
+    workspace: main
+    prompt: ../../roles/coder.prompt
+    next: architect
+
+  - id: architect
+    provider: claude
+    workspace: architect
+    prompt: ../../roles/coder.prompt
+    next: coder
+
+  - id: coder
+    provider: claude
+    workspace: coder
+    prompt: ../../roles/coder.prompt
+    reject: planner
+    next: reviewer
+
+  - id: reviewer
+    provider: claude
+    workspace: reviewer
+    prompt: ../../roles/coder.prompt
+    receive: batch
+    reject: coder
+    next: done
+
+gates:
+  - after: architect
+    type: none
+  - after: coder
+    type: approval
+`;
+
+    /** Verilen akış metnini yükler, sunucuyu o akışla açar. */
+    async function akisSunucusuAc(ad: string, metin: string) {
+      await writeFile(join(root, "hub", "flows", `${ad}.yaml`), metin);
+      const flow = await loadFlow(join(root, "hub", "flows", `${ad}.yaml`), {
+        root, providers: knownProviderSet(),
+      });
+      const topo = snapshot(flow, root);
+      return serveUi({ root, queue: queue, topology: topo, flowName: flow.name, flowHash: flow.hash });
+    }
+
+    it("gunluk-tek: iki düğüm, next ileri, reject ve syncBack GERİ ve GÖRSEL OLARAK AYRI", async () => {
+      const s = await akisSunucusuAc("gunluk-tek", GUNLUK_TEK_FLOW);
+      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const hatalar: string[] = [];
+      page.on("pageerror", (e) => hatalar.push(String(e)));
+      try {
+        await page.goto(s.url, { waitUntil: "networkidle" });
+        await page.waitForSelector("#bar .pill", { timeout: 15_000 });
+        await page.click('button:has-text("Akışı düzenle")');
+        await page.waitForSelector(".diyagram-yatay .dugum", { timeout: 10_000 });
+
+        const dugumler = await page.evaluate(() =>
+          Array.from(document.querySelectorAll(".diyagram-yatay .dugum")).map((d) => d.getAttribute("data-rol")));
+        expect(dugumler.sort()).toEqual(["coder", "reviewer"]);
+
+        const next = await page.evaluate(() =>
+          document.querySelector('.diyagram-yatay .kenar[data-kind="next"][data-from="coder"][data-to="reviewer"]') !== null);
+        expect(next).toBe(true);
+
+        // RET KENARI reviewer -> coder yönünde; next'in TERSİ.
+        const reject = await page.evaluate(() =>
+          document.querySelector('.diyagram-yatay .kenar[data-kind="reject"][data-from="reviewer"][data-to="coder"]') !== null);
+        expect(reject).toBe(true);
+
+        // AYNI ÇİFTE giden syncBack de var ve reject'ten AYRI bir kenar —
+        // biri biri EZMEMELİ (model katmanında da aynı iddia, model.test.ts).
+        const ayniCift = await page.evaluate(() =>
+          document.querySelectorAll('.diyagram-yatay .kenar[data-from="reviewer"][data-to="coder"]').length);
+        expect(ayniCift).toBe(2);
+
+        // ÇİZGİ BİÇİMİ TEK TAŞIYICI (erişilebilirlik): next, reject,
+        // syncBack ÜÇÜNÜN de stroke-dasharray'i FARKLI — renk körü bir göz
+        // de ayırt edebilsin. Bu, "reject'i next gibi çiz" türü bir
+        // mutasyonun YAKALANDIĞI nokta: next'in dasharray'i hiç YOK
+        // (düz çizgi), reject ve syncBack'in VAR ve birbirinden FARKLI.
+        const dashler = await page.evaluate(() => {
+          const al = (sel: string) => document.querySelector(sel)?.getAttribute("stroke-dasharray") ?? null;
+          return {
+            next: al('.diyagram-yatay .kenar[data-kind="next"] line'),
+            reject: al('.diyagram-yatay .kenar[data-kind="reject"] path'),
+            syncBack: al('.diyagram-yatay .kenar[data-kind="syncBack"] path'),
+          };
+        });
+        expect(dashler.next).toBeNull();
+        expect(dashler.reject).not.toBeNull();
+        expect(dashler.syncBack).not.toBeNull();
+        expect(dashler.reject).not.toBe(dashler.syncBack);
+
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+        await s.close();
+      }
+    }, 60_000);
+
+    /**
+     * DAR EKRANDA YÖN DEĞİŞİR — zincir okunun aynı ilkesi (bkz.
+     * ".colhead .zincir .ok" sınaması). Yön bir CSS medya sorgusuyla
+     * çözülüyor, JS pencereyi ÖLÇEREK değil: bu yüzden iddia KAYNAK
+     * METİNDEN değil, iki GERÇEK viewport'ta HESAPLANAN 'display'dan.
+     */
+    it("geniş ekranda yatay diyagram görünür/dikey gizli, dar ekranda tersi", async () => {
+      const s = await akisSunucusuAc("gunluk-tek", GUNLUK_TEK_FLOW);
+      const genis = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const dar = await (browser as Tarayici).newPage({ viewport: { width: 400, height: 900 } });
+      try {
+        await genis.goto(s.url, { waitUntil: "networkidle" });
+        await genis.waitForSelector("#bar .pill", { timeout: 15_000 });
+        await genis.click('button:has-text("Akışı düzenle")');
+        await genis.waitForSelector(".diyagram-yatay .dugum", { timeout: 10_000 });
+        const genisGorunum = await genis.evaluate(() => ({
+          yatay: getComputedStyle(document.querySelector(".diyagram-yatay")).display,
+          dikey: getComputedStyle(document.querySelector(".diyagram-dikey")).display,
+        }));
+
+        await dar.goto(s.url, { waitUntil: "networkidle" });
+        await dar.waitForSelector("#bar .pill", { timeout: 15_000 });
+        await dar.click('button:has-text("Akışı düzenle")');
+        await dar.waitForSelector(".diyagram-dikey", { timeout: 10_000 });
+        const darGorunum = await dar.evaluate(() => ({
+          yatay: getComputedStyle(document.querySelector(".diyagram-yatay")).display,
+          dikey: getComputedStyle(document.querySelector(".diyagram-dikey")).display,
+        }));
+
+        expect(genisGorunum.yatay).not.toBe("none");
+        expect(genisGorunum.dikey).toBe("none");
+        expect(darGorunum.yatay).toBe("none");
+        expect(darGorunum.dikey).not.toBe("none");
+      } finally {
+        await genis.close();
+        await dar.close();
+        await s.close();
+      }
+    }, 60_000);
+
+    it("ab-planli: dört rol, zincirdeki her next/reject kenarı ve yalnızca onay kapısı işaretli", async () => {
+      const s = await akisSunucusuAc("ab-planli", AB_PLANLI_FLOW);
+      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const hatalar: string[] = [];
+      page.on("pageerror", (e) => hatalar.push(String(e)));
+      try {
+        await page.goto(s.url, { waitUntil: "networkidle" });
+        await page.waitForSelector("#bar .pill", { timeout: 15_000 });
+        await page.click('button:has-text("Akışı düzenle")');
+        await page.waitForSelector(".diyagram-yatay .dugum", { timeout: 10_000 });
+
+        const dugumler = await page.evaluate(() =>
+          Array.from(document.querySelectorAll(".diyagram-yatay .dugum")).map((d) => d.getAttribute("data-rol")));
+        expect(dugumler.sort()).toEqual(["architect", "coder", "planner", "reviewer"]);
+
+        // Sayfadaki HER kenarı (from, to, kind) üçlüsü olarak çıkarıp
+        // Node tarafında karşılaştırıyoruz — "Sayfa" tipi evaluate'e
+        // argüman geçmiyor (bkz. dosya başı), o yüzden seçiciyi tarayıcı
+        // içinde KURMAK yerine listeyi BURAYA taşıyoruz.
+        const kenarlar = await page.evaluate(() =>
+          Array.from(document.querySelectorAll(".diyagram-yatay .kenar")).map((g) => ({
+            from: g.getAttribute("data-from"),
+            to: g.getAttribute("data-to"),
+            kind: g.getAttribute("data-kind"),
+          })));
+        expect(kenarlar).toEqual(
+          expect.arrayContaining([
+            { from: "planner", to: "architect", kind: "next" },
+            { from: "architect", to: "coder", kind: "next" },
+            { from: "coder", to: "reviewer", kind: "next" },
+            { from: "coder", to: "planner", kind: "reject" },
+            { from: "reviewer", to: "coder", kind: "reject" },
+            // 'architect' açıkça 'reject' BEYAN ETMİYOR — load.ts kuralı
+            // varsayılanı GÖNDERENE (sender) bağlıyor, yani zincirdeki
+            // ÖNCEKİ role: planner. Bu beşinci değil altıncı kenar.
+            { from: "architect", to: "planner", kind: "reject" },
+          ]),
+        );
+        // Zincirin SONU 'done'a hiç kenar yok — gidecek bir düğüm yok.
+        expect(kenarlar.some((k) => k.to === "done")).toBe(false);
+        expect(kenarlar).toHaveLength(6);
+
+        // KAPI FİLTRESİ: 'none' davranışsal olarak kapı değil, çizilmiyor;
+        // 'approval' çiziliyor. İkisi de modelden geliyor (buildModel
+        // ikisini de taşıyor, bkz. model.test.ts), filtre SAYFADA.
+        const kapilar = await page.evaluate(() =>
+          Array.from(document.querySelectorAll(".diyagram-yatay .kapi-isaret")).map((g) => g.getAttribute("data-after")));
+        expect(kapilar).toEqual(["coder"]);
+
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+        await s.close();
+      }
+    }, 60_000);
+
+    /**
+     * BOZUK AKIŞTA DİYAGRAM DEĞİL HATA.
+     *
+     * Her `/durum` yoklaması `live.refresh()` ile dosyayı yeniden okuyor
+     * (bkz. server.ts `guncel()`), yani dosyayı bozup bir yoklama
+     * döngüsü (1000ms) bekleyince model `flow.error` ile işaretlenir.
+     * Yarım bir graf çizmek hatayı göstermekten KÖTÜ — sağlam görünür ama
+     * artık yaşayan topolojiyi yansıtmayabilir.
+     */
+    it("akış bozulunca diyagram yerine hata görünüyor, düğüm/kenar HİÇ basılmıyor", async () => {
+      const live = await LiveFlow.open(join(root, "hub", "flows", "test.yaml"), {
+        root, providers: knownProviderSet(),
+      });
+      const s = await serveUi({
+        root, queue, topology, flowName: "test", flowHash: live.flow.hash, live,
+      });
+      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const hatalar: string[] = [];
+      page.on("pageerror", (e) => hatalar.push(String(e)));
+      page.on("console", (m) => {
+        const mesaj = m as { type?: () => string; text?: () => string };
+        if (mesaj.type && mesaj.type() === "error") {
+          hatalar.push("konsol: " + (mesaj.text ? mesaj.text() : String(m)));
+        }
+      });
+      try {
+        await page.goto(s.url, { waitUntil: "networkidle" });
+        await page.waitForSelector("#bar .pill", { timeout: 15_000 });
+
+        // AYNI bozuk hal live.test.ts'te de kullanılıyor: boş 'roles'
+        // zincirin başı olmadığı için kural 5'i ihlal ediyor.
+        await writeFile(join(root, "hub", "flows", "test.yaml"), "name: bozuk\nroles: []\n");
+        await page.waitForTimeout(1500);
+
+        await page.click('button:has-text("Akışı düzenle")');
+        await page.waitForSelector(".panel .err", { timeout: 10_000 });
+
+        const hataMetni = await page.textContent(".panel .err");
+        expect(hataMetni).toMatch(/geçersiz/);
+        expect(await page.evaluate(() => document.querySelectorAll(".dugum").length)).toBe(0);
+        expect(await page.evaluate(() => document.querySelectorAll(".kenar").length)).toBe(0);
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+        await s.close();
+      }
+    }, 60_000);
+
+    /**
+     * HAM YAML HÂLÂ AÇILABİLİYOR VE DÜZENLEME ÇALIŞIYOR.
+     *
+     * Panel artık VARSAYILAN olarak diyagramla açılıyor ama eski editör
+     * KAYBOLMADI — "Ham YAML" sekmesinin arkasında, aynı uçlarla
+     * (POST /akis/yaz) çalışıyor. Bu, bu kartın kendi kısıtı: "yarım bir
+     * editör, iyi bir görüntüleyiciden kötüdür" — editör YARIM değil,
+     * yerinde durmalı.
+     */
+    it("Ham YAML sekmesinden rol adını değiştirip kaydetmek dosyayı GERÇEKTEN değiştiriyor", async () => {
+      const live = await LiveFlow.open(join(root, "hub", "flows", "test.yaml"), {
+        root, providers: knownProviderSet(),
+      });
+      const s = await serveUi({
+        root, queue, topology, flowName: "test", flowHash: live.flow.hash, live,
+        flowPath: live.flow.path,
+        loadOptions: { root, providers: knownProviderSet() },
+      });
+      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const hatalar: string[] = [];
+      page.on("pageerror", (e) => hatalar.push(String(e)));
+      try {
+        await page.goto(s.url, { waitUntil: "networkidle" });
+        await page.waitForSelector("#bar .pill", { timeout: 15_000 });
+        await page.click('button:has-text("Akışı düzenle")');
+        // VARSAYILAN SEKME DİYAGRAM: önce o görünmeli.
+        await page.waitForSelector(".diyagram-yatay .dugum", { timeout: 10_000 });
+
+        await page.click('button:has-text("Ham YAML")');
+        await page.waitForSelector(".rol input", { timeout: 10_000 });
+        await page.fill(".rol input", "coder-degisti");
+        // "change" olayını elle tetikliyoruz: alan()'daki dinleyici ona
+        // bağlı, 'fill' tek başına tetiklemeyebilir.
+        await page.evaluate(() => {
+          document.querySelector(".rol input")?.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+        await page.waitForSelector("#kaydet:not([disabled])", { timeout: 10_000 });
+        await page.click("#kaydet");
+        await page.waitForTimeout(500);
+
+        // İDDİA sunucunun söylediği değil DİSKTE GERÇEKTEN ne olduğu.
+        const yaml = await readFile(join(root, "hub", "flows", "test.yaml"), "utf8");
+        expect(yaml).toContain("id: coder-degisti");
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+        await s.close();
+      }
+    }, 60_000);
+  });
 });

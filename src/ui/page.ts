@@ -290,6 +290,30 @@ const PAGE = `<!doctype html>
   .card { cursor: pointer; }
   .card:hover { border-color: var(--accent-line); }
 
+  /*
+   * AKIŞ DİYAGRAMI. "Diyagram" ve "Ham YAML" sekmeleri aynı '.mini'
+   * düğmesini kullanıyor, seçili olan '.aktif' ile işaretleniyor.
+   *
+   * İKİ SVG BİRDEN gömülü (yatay + dikey): hangisinin görüneceğine karar
+   * veren bir medya sorgusu, JS'in pencereyi ÖLÇMESİ değil — zincir okunun
+   * yön değiştirdiği ".colhead .zincir .ok" kuralıyla AYNI ilke.
+   */
+  .sekmeler { display: flex; gap: var(--sp-3); margin: var(--sp-6) 0 var(--sp-6); }
+  .sekmeler .mini.aktif { border-color: var(--accent); color: var(--accent-ink); background: var(--accent-soft); }
+  .diyagram-sarmal { overflow-x: auto; }
+  .diyagram-sarmal svg { width: 100%; height: auto; display: block; }
+  /*
+   * Gizleme kuralı ".diyagram-sarmal svg"den DAHA ÖZGÜL olmak zorunda
+   * (iki sınıf > bir sınıf + tür) — aksi hâlde yukarıdaki "her svg block"
+   * kuralı burayı EZER ve dikey kopya geniş ekranda da görünür kalır
+   * (ölçüldü: gerçek tarayıcıda getComputedStyle "block" döndürdü).
+   */
+  .diyagram-sarmal .diyagram-dikey { display: none; }
+  @media (max-width: 640px) {
+    .diyagram-sarmal .diyagram-yatay { display: none; }
+    .diyagram-sarmal .diyagram-dikey { display: block; }
+  }
+
   /* akış düzenleyici */
   .ed { display: flex; flex-direction: column; gap: var(--sp-5); }
   .rol {
@@ -363,6 +387,11 @@ let AKISLAR = [];
 // YAML, bilinmeyen ad) kutuda yeni ad dururken pano hâlâ eskisini
 // gösteremez — ikisi aynı şeyi söylemek zorunda.
 let AKTIF_AD = "";
+// Diyagram panelinin okuduğu son model — her yoklamada (bkz. yokla) burada
+// güncelleniyor. Akış diyagramı AYRI bir uçtan değil bu modelden çiziliyor:
+// edges/gates zaten SUNUCUDA türetilmiş (model.ts), panel kendi YAML
+// ayrıştırıcısını yazmıyor.
+let SON_MODEL = null;
 const DOT = { accepted: "var(--accept)", rejected: "var(--reject)", gate: "var(--gate)", released: "var(--gate)", done: "var(--accept)" };
 
 /*
@@ -1114,6 +1143,7 @@ window.addEventListener("hashchange", hashOku);
 
 function ciz(m) {
   AKTIF_AD = m.flow.name;
+  SON_MODEL = m;
   const bar = document.getElementById("bar");
   bar.replaceChildren();
   // KUŞ İŞARETİ bardaki "Skein" metninin YERİNE geçiyor (bkz. isaretSvg
@@ -1479,8 +1509,292 @@ function yeniKartAc() {
   bi.focus();
 }
 
+// --- Akış diyagramı ---
+//
+// Akış bugüne kadar ekranda bir YAML metin kutusuydu — ama akış bir METİN
+// değil bir GRAF: roller düğüm, next/reject/syncBack kenar. Ayrıştırma
+// BURADA YAPILMIYOR: model.edges ve model.gates SUNUCUDA türetiliyor
+// (src/flow/load.ts akışın ne anlama geldiğine karar veren TEK yer
+// kalıyor, bkz. model.ts'teki UiModel.edges yorumu) — bu bölüm yalnızca o
+// listeyi ÇİZİYOR.
+//
+// Yerleşim kasıtlı BASİT: roller zaten zincir sırasında (next bağından
+// türetilmiş, bkz. flow/load.ts chainOrder), yani konum dizideki İNDEKS.
+// Genel amaçlı bir graf yerleşim algoritması YOK — bu akışlar küçük ve
+// doğrusal.
+const DIYAGRAM_NS = "http:" + "//www.w3.org/2000/svg";
+
+/** SVG düğümü kurar ve verilen öznitelikleri basar. */
+function sv(ad, oznitelikler) {
+  const n = document.createElementNS(DIYAGRAM_NS, ad);
+  if (oznitelikler) {
+    Object.keys(oznitelikler).forEach((k) => n.setAttribute(k, String(oznitelikler[k])));
+  }
+  return n;
+}
+
+/**
+ * Kenar türü başına çizgi biçimi.
+ *
+ * RENK TEK TAŞIYICI DEĞİL (erişilebilirlik): üç tür de kendi
+ * stroke-dasharray'ine sahip, yani renk körü bir göz de next'i reject'ten
+ * ayırabilir. "next" HER ZAMAN bitişik düğümler arasında düz bir çizgi;
+ * "reject" ve "syncBack" HER ZAMAN geriye kıvrılıyor (load.ts kural 6, 13)
+ * ve iki ayrı "lane"de duruyor ki aynı çifte giden reject+syncBack üst
+ * üste binmesin (gunluk-tek.yaml'daki reviewer->coder tam bu durum).
+ */
+const KENAR_STIL = {
+  next: { kesikli: "none", renk: "var(--ink-2)" },
+  reject: { kesikli: "7 5", renk: "var(--reject)" },
+  syncBack: { kesikli: "1.5 5", renk: "var(--accent)" },
+};
+const KENAR_LANE = { reject: 44, syncBack: 76 };
+const KAPI_BANT = 42;
+const DUGUM_W = 148;
+const DUGUM_H = 52;
+
+/** Verilen yöne (ucX, ucY) bakan dolu bir ok ucu üçgeni. */
+function okUcu(ucX, ucY, yonX, yonY, renk) {
+  const uzunluk = Math.hypot(yonX, yonY) || 1;
+  const ux = yonX / uzunluk;
+  const uy = yonY / uzunluk;
+  const boy = 9;
+  const yarimGenislik = 4;
+  const tabanX = ucX - ux * boy;
+  const tabanY = ucY - uy * boy;
+  const perpX = -uy;
+  const perpY = ux;
+  const ucgen = sv("polygon", {
+    points:
+      ucX + "," + ucY + " " +
+      (tabanX + perpX * yarimGenislik) + "," + (tabanY + perpY * yarimGenislik) + " " +
+      (tabanX - perpX * yarimGenislik) + "," + (tabanY - perpY * yarimGenislik),
+  });
+  ucgen.style.fill = renk;
+  return ucgen;
+}
+
+/**
+ * Bir diyagramı TEK yönde (yatay ya da dikey) SVG olarak kurar.
+ *
+ * İki kopya BİRDEN üretiliyor (bkz. diyagramIcerikCiz) ve hangisinin
+ * görüneceğine bir CSS medya sorgusu karar veriyor — JS ÖLÇEREK değil,
+ * zincir okunun yön değiştirdiği ".colhead .zincir .ok" kuralıyla AYNI
+ * ilke (dar ekranda ölçmek yarış durumuna açık; medya sorgusu değil).
+ */
+function diyagramSvgKur(model, yon) {
+  const roller = model.roles;
+  const n = roller.length;
+  const idx = new Map(roller.map((r, i) => [r.id, i]));
+  const ADIM = yon === "yatay" ? 180 : 86;
+  // ana eksen boyunca düğümün kapladığı uzunluk (ilk/son düğüm taşmasın diye dolgu)
+  const anaBoy = yon === "yatay" ? DUGUM_W : DUGUM_H;
+  // dik eksende düğümün kapladığı uzunluk (satır/sütunun kalınlığı)
+  const dikBoy = yon === "yatay" ? DUGUM_H : DUGUM_W;
+  const ANA_PAD = anaBoy / 2 + 18;
+  const SATIR = KAPI_BANT + dikBoy / 2 + 18;
+  // (ana, dik) çiftini gerçek (x, y)'ye çeviriyor — yerleşimin kendisi TEK,
+  // yalnızca bu eşleme yöne göre değişiyor.
+  const nokta = yon === "yatay"
+    ? (ana, dik) => ({ x: ana, y: dik })
+    : (ana, dik) => ({ x: dik, y: ana });
+  const anaKonum = (i) => ANA_PAD + i * ADIM;
+
+  const anaUzunluk = n <= 1 ? ANA_PAD * 2 : ANA_PAD * 2 + (n - 1) * ADIM;
+  const dikUzunluk = SATIR + dikBoy / 2 + KENAR_LANE.syncBack + 18;
+  const genislik = yon === "yatay" ? anaUzunluk : dikUzunluk;
+  const yukseklik = yon === "yatay" ? dikUzunluk : anaUzunluk;
+
+  const svg = sv("svg", {
+    viewBox: "0 0 " + genislik + " " + yukseklik,
+    role: "img",
+    "aria-label": "Akış diyagramı",
+  });
+  svg.classList.add("diyagram-" + yon);
+
+  const kenarKat = sv("g", { class: "kenarlar" });
+  const kapiKat = sv("g", { class: "kapilar" });
+  const dugumKat = sv("g", { class: "dugumler" });
+
+  model.edges.forEach((kenar) => {
+    const i = idx.get(kenar.from);
+    const j = idx.get(kenar.to);
+    if (i === undefined || j === undefined) return;
+    const stil = KENAR_STIL[kenar.kind];
+    const g = sv("g", {
+      class: "kenar kenar-" + kenar.kind,
+      "data-from": kenar.from, "data-to": kenar.to, "data-kind": kenar.kind,
+    });
+    if (kenar.kind === "next") {
+      // BİTİŞİK düğümler arasında düz çizgi — next zincirde HER ZAMAN
+      // ardıl role gider (load.ts chainOrder), sıçrama olmaz.
+      const p1 = nokta(anaKonum(i) + anaBoy / 2, SATIR);
+      const p2 = nokta(anaKonum(j) - anaBoy / 2, SATIR);
+      const cizgi = sv("line", { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y });
+      cizgi.style.stroke = stil.renk;
+      cizgi.style.strokeWidth = "2";
+      g.append(cizgi);
+      g.append(okUcu(p2.x, p2.y, p2.x - p1.x, p2.y - p1.y, stil.renk));
+    } else {
+      // GERİ kenar: satırın/sütunun DIŞINDA kavisli — ileri akışla
+      // KARIŞMASIN (bu kartın asıl kısıtı). "lane" türe sabit: aynı çifte
+      // giden reject ile syncBack iki ayrı eğride durur, biri biri
+      // ezmez.
+      const lane = KENAR_LANE[kenar.kind];
+      const p1 = nokta(anaKonum(i), SATIR + dikBoy / 2);
+      const p2 = nokta(anaKonum(j), SATIR + dikBoy / 2);
+      const orta = nokta((anaKonum(i) + anaKonum(j)) / 2, SATIR + dikBoy / 2 + lane);
+      const d = "M " + p1.x + " " + p1.y + " Q " + orta.x + " " + orta.y + " " + p2.x + " " + p2.y;
+      const yol = sv("path", { d: d, fill: "none" });
+      yol.style.stroke = stil.renk;
+      yol.style.strokeWidth = "2";
+      yol.setAttribute("stroke-dasharray", stil.kesikli);
+      g.append(yol);
+      g.append(okUcu(p2.x, p2.y, p2.x - orta.x, p2.y - orta.y, stil.renk));
+    }
+    kenarKat.append(g);
+  });
+
+  // KAPILAR — zincirin üstünde durağan bir işaret, akış kenarlarından
+  // ayrı. Yalnızca "approval" tipi çizilir: "none" davranışsal olarak
+  // kapı DEĞİL ve bu filtre kararı BURADA (modelde değil — bkz. model.ts
+  // "kapı tipi filtrelenmeden taşınıyor" yorumu).
+  model.gates.forEach((kapi) => {
+    if (kapi.type !== "approval") return;
+    const i = idx.get(kapi.after);
+    if (i === undefined) return;
+    const ana = anaKonum(i) + ADIM / 2;
+    const p = nokta(ana, SATIR - KAPI_BANT);
+    const g = sv("g", { class: "kapi-isaret", "data-after": kapi.after });
+    const pilG = 52;
+    const pilY = 20;
+    const pil = sv("rect", {
+      x: p.x - pilG / 2, y: p.y - pilY / 2, width: pilG, height: pilY, rx: 10,
+    });
+    pil.style.fill = "var(--gate-bg)";
+    pil.style.stroke = "var(--gate-line)";
+    g.append(pil);
+    const etiket = sv("text", { x: p.x, y: p.y + 3.5, "text-anchor": "middle" });
+    etiket.style.fill = "var(--gate-ink)";
+    etiket.style.fontSize = "10px";
+    etiket.style.fontWeight = "600";
+    etiket.textContent = "kapı";
+    g.append(etiket);
+    kapiKat.append(g);
+  });
+
+  // DÜĞÜMLER — kart değil ETİKET: id + sağlayıcı/workspace, hepsi kısa.
+  roller.forEach((rol, i) => {
+    const p = nokta(anaKonum(i), SATIR);
+    const g = sv("g", {
+      class: "dugum", "data-rol": rol.id,
+      transform: "translate(" + p.x + " " + p.y + ")",
+    });
+    const kutu = sv("rect", {
+      x: -DUGUM_W / 2, y: -DUGUM_H / 2, width: DUGUM_W, height: DUGUM_H, rx: 7,
+    });
+    kutu.style.fill = "var(--surface)";
+    kutu.style.stroke = "var(--line)";
+    g.append(kutu);
+    const id = sv("text", { x: 0, y: -4, "text-anchor": "middle", class: "mono" });
+    id.style.fill = "var(--ink)";
+    id.style.fontWeight = "700";
+    id.style.fontSize = "12.5px";
+    id.textContent = rol.id;
+    g.append(id);
+    const alt = sv("text", { x: 0, y: 14, "text-anchor": "middle" });
+    alt.style.fill = "var(--ink-3)";
+    alt.style.fontSize = "10px";
+    alt.textContent = rol.provider + " · " + rol.workspace;
+    g.append(alt);
+    dugumKat.append(g);
+  });
+
+  svg.append(kenarKat, kapiKat, dugumKat);
+  return svg;
+}
+
+/**
+ * Diyagramın gösterim içeriği — yatay VE dikey kopya birden, hangisinin
+ * görüneceğine CSS karar veriyor (bkz. diyagramSvgKur yorumu).
+ *
+ * Akış BOZUKSA (model.flow.error) diyagram ÇİZİLMİYOR, hata basılıyor:
+ * yarım bir graf hatayı göstermekten daha kötü, çünkü sağlam görünür ama
+ * artık yaşayan topolojiyi yansıtmıyor olabilir.
+ */
+function diyagramIcerikCiz(model) {
+  const sarmal = el("div", "diyagram-sarmal");
+  if (!model) {
+    sarmal.append(el("div", "err", "Durum henüz okunamadı."));
+    return sarmal;
+  }
+  if (model.flow.error) {
+    const hata = el("div", "err",
+      "Akış dosyası şu an geçersiz, diyagram bu yüzden çizilmiyor:\\n" + model.flow.error);
+    hata.style.cssText = "white-space:pre-wrap";
+    sarmal.append(hata);
+    return sarmal;
+  }
+  if (!model.roles.length) {
+    sarmal.append(el("div", "ipucu", "Akışta hiç rol yok."));
+    return sarmal;
+  }
+  sarmal.append(diyagramSvgKur(model, "yatay"));
+  sarmal.append(diyagramSvgKur(model, "dikey"));
+  return sarmal;
+}
+
+// Panelin hangi sekmede açıldığı: her açılışta "diyagram" — akış artık
+// ÖNCE grafla gösteriliyor, ham YAML bir tık arkada (bkz. bu kartın
+// isteği). "ham" sekmesi /akis okunamadıysa da çıkıyor; o durumda
+// gerekçesi AKIS_HATA'da, yalnızca o sekmede basılıyor — diyagramı
+// etkilemiyor çünkü diyagram zaten SON_MODEL'den geliyor, /akis'ten değil.
+let AKIS_SEKME = "diyagram";
+let AKIS_HATA = null;
+
+/** Akış panelinin DIŞ ÇATISI: kapat düğmesi, başlık, sekmeler, içerik. */
+function akisPanelCiz() {
+  const ust = el("div", "ust");
+  ust.addEventListener("click", (e) => { if (e.target === ust) kapat(); });
+  const p = el("div", "panel");
+
+  const kapatDugme = el("button", "kapat", "Kapat");
+  kapatDugme.type = "button";
+  kapatDugme.addEventListener("click", kapat);
+  p.append(kapatDugme);
+
+  p.append(el("h2", null, "Akış: " + (SON_MODEL ? SON_MODEL.flow.name : "")));
+
+  const sekmeler = el("div", "sekmeler");
+  const diyagramDugme = el("button", "mini" + (AKIS_SEKME === "diyagram" ? " aktif" : ""), "Diyagram");
+  diyagramDugme.type = "button";
+  diyagramDugme.addEventListener("click", () => { AKIS_SEKME = "diyagram"; yenile(); });
+  const hamDugme = el("button", "mini" + (AKIS_SEKME === "ham" ? " aktif" : ""), "Ham YAML");
+  hamDugme.type = "button";
+  hamDugme.addEventListener("click", () => { AKIS_SEKME = "ham"; yenile(); });
+  sekmeler.append(diyagramDugme, hamDugme);
+  p.append(sekmeler);
+
+  const icerik = el("div", null);
+  icerik.id = "akisIcerik";
+  if (AKIS_SEKME === "diyagram") {
+    icerik.append(diyagramIcerikCiz(SON_MODEL));
+  } else if (TASLAK !== null) {
+    icerik.append(editorIcerikCiz());
+  } else {
+    icerik.append(el("div", "err", AKIS_HATA || "Akış okunamadı."));
+  }
+  p.append(icerik);
+
+  ust.append(p);
+  return ust;
+}
+
 async function akisAc() {
-  const kap = document.getElementById("panel");
+  AKIS_SEKME = "diyagram";
+  TASLAK = null;
+  SAGLAYICILAR = [];
+  AKIS_HATA = null;
   try {
     const cevap = await fetch("/akis", { cache: "no-store" });
     const veri = await cevap.json();
@@ -1488,11 +1802,13 @@ async function akisAc() {
     if (!veri.draft) throw new Error("Bu ekran akış düzenlemeye açık değil.");
     TASLAK = veri.draft;
     SAGLAYICILAR = veri.providers || [];
-    kap.replaceChildren(editorCiz());
-    void onizle();
   } catch (e) {
-    kap.replaceChildren(el("div", "err", "Akış okunamadı: " + e.message));
+    // DİYAGRAMI ETKİLEMİYOR: /akis yalnızca "Ham YAML" sekmesinin
+    // kaynağı, diyagram SON_MODEL'den geliyor. Düzenleme kapalıysa bile
+    // diyagram görünmeli — görüntülemek düzenlemekten ayrı bir yetki.
+    AKIS_HATA = e.message;
   }
+  document.getElementById("panel").replaceChildren(akisPanelCiz());
 }
 
 function alan(ad, deger, onChange, secenekler) {
@@ -1599,31 +1915,39 @@ function rolAdiDegis(i, yeniAd) {
   yenile();
 }
 
+/**
+ * Panelin TAMAMINI yeniden kurar — hangi sekimde olunduğunu KORUYARAK.
+ *
+ * Eskiden burada doğrudan editorCiz() çağrılıyordu (panel HER ZAMAN
+ * editördü). Artık panel iki sekmeli; rol ekle/sil/yeniden adlandır gibi
+ * düzenleme eylemleri yalnızca "ham" sekmesinden gelebilir, o yüzden
+ * AKIS_SEKME burada OLDUĞU GİBİ kalıyor — akisPanelCiz() zaten ona bakıp
+ * doğru içeriği çiziyor.
+ */
 function yenile() {
-  document.getElementById("panel").replaceChildren(editorCiz());
+  document.getElementById("panel").replaceChildren(akisPanelCiz());
   void onizle();
 }
 
-function editorCiz() {
-  const ust = el("div", "ust");
-  ust.addEventListener("click", (e) => { if (e.target === ust) kapat(); });
-  const p = el("div", "panel");
-
-  const kapatDugme = el("button", "kapat", "Kapat");
-  kapatDugme.type = "button";
-  kapatDugme.addEventListener("click", kapat);
-  p.append(kapatDugme);
-
-  p.append(el("h2", null, "Akış: " + TASLAK.name));
-  p.append(el("div", "cid", TASLAK.roles.length + " rol · kaydetmek dosyayı YENİDEN YAZAR"));
+/**
+ * "Ham YAML" sekmesinin içeriği: rol alanları + canlı önizleme + kaydet.
+ *
+ * Eskiden bu, akisPanelCiz'in (o zamanki adıyla editorCiz'in) KENDİSİYDİ —
+ * panel hep editördü. Artık panelin dış çatısı (kapat, başlık, sekmeler)
+ * akisPanelCiz'de; bu fonksiyon yalnızca İÇERİĞİ döndürüyor, diyagram
+ * sekmesiyle AYNI yuvaya giriyor.
+ */
+function editorIcerikCiz() {
+  const icerik = el("div", null);
+  icerik.append(el("div", "cid", TASLAK.roles.length + " rol · kaydetmek dosyayı YENİDEN YAZAR"));
 
   const ed = el("div", "ed");
   TASLAK.roles.forEach((rol, i) => ed.append(rolCiz(rol, i)));
-  p.append(ed);
+  icerik.append(ed);
 
   const sonuc = el("div", "kutu");
   sonuc.id = "onizleme";
-  p.append(sonuc);
+  icerik.append(sonuc);
 
   const alt = el("div", "exits");
   const kaydet = el("button", "kaydet", "Dosyaya yaz");
@@ -1632,13 +1956,12 @@ function editorCiz() {
   kaydet.disabled = true;
   kaydet.addEventListener("click", () => { void yaz(); });
   alt.append(kaydet);
-  p.append(alt);
-  p.append(el("div", "soon",
+  icerik.append(alt);
+  icerik.append(el("div", "soon",
     "Kaydetmek akış dosyasını yeniden yazar: YORUMLAR KAYBOLUR. Dosya git'te, " +
     "diff'e bakabilirsin. Kapı metinleri, anayasa ve audit ayarları aynen korunur."));
 
-  ust.append(p);
-  return ust;
+  return icerik;
 }
 
 /** Taslağı DOSYAYA YAZMADAN doğrular; kural numarası kullanıcıya aynen gider. */
