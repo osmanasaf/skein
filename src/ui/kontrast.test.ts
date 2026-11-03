@@ -51,3 +51,53 @@ describe("esik sabitleri", () => {
     expect(IKINCIL_ETIKET_ESIGI).toBe(3);
   });
 });
+
+/**
+ * EŞİĞİN KENDİSİ PİNLİ OLMALI.
+ *
+ * Dürüst kayıt: bu sınamaları, "eşiği 4.5'ten 3.0'a düşüren mutasyon
+ * ayakta kaldı" diye ekledim. Yanlıştı — mutasyonum dosyadaki İLK
+ * "4.5"i değiştiriyordu ve o bir YORUMUN içindeydi. Sabiti doğru
+ * çapayla bozunca `token-kontrast.test.ts` zaten düşüyor: eşikler
+ * ajanın bıraktığı hâliyle de korunuyordu.
+ *
+ * Yine de kalıyorlar, çünkü ölçüt DIŞARIDAN geliyor (WCAG 2.1 AA) ve
+ * dolaylı korunuyordu: paletin oranları eşiği geçtiği için düşüyordu,
+ * sayının KENDİSİ hiçbir yerde yazılı değildi. Palet bir gün eşiğe
+ * yaklaşırsa o dolaylı koruma incelir. Dışarıdan gelen bir ölçütün
+ * yazılı olduğu yer sınamadır.
+ */
+describe("eşikler WCAG AA'nın kendisidir", () => {
+  it("normal metin eşiği 4.5:1 — gevşetilemez", () => {
+    expect(NORMAL_METIN_ESIGI).toBe(4.5);
+  });
+
+  it("ikincil etiket eşiği 3:1 — gevşetilemez", () => {
+    expect(IKINCIL_ETIKET_ESIGI).toBe(3);
+  });
+});
+
+/**
+ * ÖLÇÜ GERÇEKTEN REDDEDİYOR MU?
+ *
+ * Bu, turun asıl boşluğu: kontrast sınamalarının hepsi tek yönlüydü,
+ * "şu çift eşiği GEÇİYOR" diyorlardı. Hiçbiri "şu çift KALMALI"
+ * demiyordu. Bilinen-kötü bir çift olmadan, ölçünün ısırdığını değil
+ * yalnızca büyük sayı döndürdüğünü biliyorduk.
+ */
+describe("kontrastOrani bilinen-kötü çifti REDDEDER", () => {
+  it("açık gri üstünde beyaz AA'yı geçemez", () => {
+    const oran = kontrastOrani("#ffffff", "#bbbbbb");
+    expect(oran).toBeLessThan(NORMAL_METIN_ESIGI);
+  });
+
+  it("aynı renk 1:1'dir — ayırt edilemez", () => {
+    expect(kontrastOrani("#334455", "#334455")).toBeCloseTo(1, 5);
+  });
+
+  // Uç nokta: siyah/beyaz WCAG'de tam 21:1'dir. Hesabın ölçeği
+  // kaymışsa burada görünür.
+  it("siyah/beyaz tam 21:1", () => {
+    expect(kontrastOrani("#000000", "#ffffff")).toBeCloseTo(21, 2);
+  });
+});
