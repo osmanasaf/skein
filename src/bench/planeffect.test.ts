@@ -220,6 +220,41 @@ describe("teslim edilmeyen koşu", () => {
     expect(r.groups[0]?.planli?.runs).toBe(3);
     expect(r.groups[0]?.planli?.undelivered).toBe(0);
   });
+
+  /**
+   * RAPOR SATIRININ PAYDA KUSURU — doğrulanan kart `c-20261103-9ba80e`.
+   *
+   * `cli.ts`'in rapor satırı `runs` (yalnızca TESLİM EDİLMİŞ koşular) ile
+   * `activations`/`rejects` (BÜTÜN koşular) toplamlarını aynı satıra
+   * basıyordu; okuyan doğal olarak "aktivasyon/koşu" diye bölüyor ve payda
+   * karışıklığından yanlış sayıya çıkıyordu. `activations`/`rejects`
+   * teslim edilmeyeni toplamdan DÜŞEMEZ (o tur koştu, parası ödendi —
+   * HARCANAN GİZLENMEZ); düzeltme bu yüzden toplamı değiştirmiyor,
+   * `totalRuns` alanıyla paydayı veri olarak görünür kılıyor.
+   */
+  it("totalRuns bütün koşuları sayar, aktivasyon/ret bunun üzerinden toplanır", () => {
+    const r = planEffect([
+      // p1: ölçülmüş ve teslim edilmiş.
+      ...kosu("p1", "g", "planli", { red: 0, activations: 2 }),
+      settled("p1", "done"),
+      // p2: ölçülmüş ama kapıda kaldı — TESLİM EDİLMEDİ.
+      ...kosu("p2", "g", "planli", { red: 0, activations: 3 }),
+      settled("p2", "gate"),
+      // p3: hiç ÖLÇÜLEMEDİ.
+      ...kosu("p3", "g", "planli", { red: 0, activations: 5, ran: false }),
+      ...kosu("s1", "g", "plansiz", { red: 4, activations: 1 }),
+      settled("s1", "done"),
+    ]);
+    const planli = r.groups[0]?.planli;
+    // `runs` (teslim payda) yalnızca p1'i sayar.
+    expect(planli?.runs).toBe(1);
+    // `totalRuns` (aktivasyon/ret payda) üçünü de sayar — yanlış "düzeltme"
+    // bunu teslim sayısına (1) düşürür, bu satır onu yakalar.
+    expect(planli?.totalRuns).toBe(3);
+    // Aktivasyon toplamı teslim edilmeyen VE ölçülemeyen koşuları da içerir:
+    // 2 + 3 + 5 = 10, 2 (yalnız teslim) DEĞİL.
+    expect(planli?.activations).toBe(10);
+  });
 });
 
 /**

@@ -33,12 +33,28 @@ const pct = (n: number): string => `%${(n * 100).toFixed(0)}`;
  * olsaydı, hangisinin daha cömert okunduğu tartışması açılırdı.
  */
 export interface ArmSide {
-  /** Kolun ölçülebilmiş koşu sayısı. */
+  /** Kolun ölçülebilmiş VE TESLİM EDİLMİŞ koşu sayısı — `hooks`/`red`/`redRate`'in paydası. */
   runs: number;
   hooks: number;
   red: number;
   /** Kırmızı kanca oranı. */
   redRate: number;
+  /**
+   * `activations`/`rejects`/`usage`'ın GERÇEK paydası — kolun BÜTÜN
+   * koşusu, `runs` (teslim edilmiş) değil.
+   *
+   * Ölçülmüş kusur: `cli.ts`'in rapor satırı `runs`, `activations` ve
+   * `rejects`'i YAN YANA basıyordu; okuyan doğal olarak "aktivasyon/koşu"
+   * diye bölüyordu ama pay bütün koşuları, payda yalnızca teslim edilmiş
+   * olanları sayıyordu — yanlış sayıya çıkan sessiz bir payda uyuşmazlığı.
+   * Düzeltme iki yönde de sınırlı: `activations`/`rejects` TESLİM EDİLMEYEN
+   * koşuları da saymak ZORUNDA (o turlar koştu, parası ödendi — HARCANAN
+   * GİZLENMEZ), o yüzden toplamın kendisi değişmiyor. Değişen, paydanın
+   * görünür olması: bu alan `runs.length`'i (koşu kaydının tamamını)
+   * taşıyarak `cli.ts`'in "hangi sayı hangi paydayla" sorusuna veri
+   * üzerinden cevap vermesini sağlıyor — metne gömülü bir açıklamaya değil.
+   */
+  totalRuns: number;
   activations: number;
   /**
    * Kolun ölçüsü — ORTAK BİRİM TOKEN, dolar bildiren sağlayıcı için ek alan.
@@ -325,6 +341,9 @@ function side(runs: ArmRun[]): ArmSide | null {
     hooks,
     red,
     redRate: hooks === 0 ? 0 : red / hooks,
+    // `runs.length`: ölçülemeyen ve teslim edilmeyen koşular da burada —
+    // `activations`/`rejects`/`usage` tam bunların üzerinden toplanıyor.
+    totalRuns: runs.length,
     activations: runs.reduce((s, r) => s + r.activations, 0),
     usage: runs.reduce<UsageTotal>((u, r) => sumUsage(u, r.usage), {}),
     rejects: runs.reduce((s, r) => s + r.rejects, 0),

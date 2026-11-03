@@ -514,17 +514,27 @@ function printPlanEffect(r: PlanEffectReport): void {
   const pct = (n: number | null): string => (n === null ? "—" : `%${(n * 100).toFixed(0)}`);
   for (const g of r.groups) {
     console.log(`\n=== ${g.taskId} × ${g.model}  ·  k=${g.repeats} ===`);
-    console.log("  kol        koşu  kanca  kırmızı   oran   aktivasyon   ret   ölçü");
+    console.log("  kol        koşu  kanca  kırmızı   oran");
     for (const [ad, s] of [["plansız", g.plansiz], ["planlı", g.planli]] as const) {
       if (s === null) continue;
       console.log(`  ${ad.padEnd(10)}${String(s.runs).padStart(4)}${String(s.hooks).padStart(7)}` +
-        `${String(s.red).padStart(9)}${pct(s.redRate).padStart(7)}${String(s.activations).padStart(13)}` +
-        `${String(s.rejects).padStart(6)}   ${formatUsage(s.usage)}` +
+        `${String(s.red).padStart(9)}${pct(s.redRate).padStart(7)}` +
         (s.unmeasured > 0 ? `   (${s.unmeasured} ÖLÇÜLEMEDİ)` : "") +
         // TESLİM EDİLMEDİ üçüncü bir durum: süit koştu ama kart `done`'a
         // varmadı, yani artefakt kolun ürünü değil. Paydadan düştü ve
         // bunun görünür olması gerekiyor.
         (s.undelivered > 0 ? `   (${s.undelivered} TESLİM EDİLMEDİ)` : ""));
+      // Ölçülmüş kusur: `aktivasyon`/`ret`/`ölçü` eskiden yukarıdaki satırla
+      // AYNI satıra basılıyordu. Üstteki satırın paydası `s.runs` (yalnızca
+      // ÖLÇÜLMÜŞ VE TESLİM EDİLMİŞ koşular); bu üçünün paydası ise
+      // `s.totalRuns` (BÜTÜN koşular — teslim edilmeyen ve ölçülemeyen
+      // dahil, çünkü o turlar koştu ve parası ödendi). Aynı satırda iki
+      // farklı payda sessizce yan yana basılınca okuyan "aktivasyon/koşu"
+      // diye bölüp yanlış sayıya çıkıyordu. Düzeltme toplamı DEĞİŞTİRMİYOR
+      // (HARCANAN GİZLENMEZ); yalnızca paydayı kendi satırında, kendi
+      // sayısıyla açıkça söylüyor.
+      console.log(`    tümü (${s.totalRuns} koşu üzerinden): ` +
+        `${s.activations} aktivasyon · ${s.rejects} ret · ${formatUsage(s.usage)}`);
     }
     if (g.relativeReduction !== null) {
       console.log(`  göreli azalma: ${pct(g.relativeReduction)}`);

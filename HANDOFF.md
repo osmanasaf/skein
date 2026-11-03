@@ -69,12 +69,29 @@ sınama). Kampanyanın dört taraması da beşini kaçırdı.
 | 31 | Teşhis "`rol` KABUL ETTİ ama itiraz dosyası yok" diyor — ajan reddetmişti | teşhis, teşhis ettiği şeyi yanlış adlandırıyor |
 | 32 | `serve` uyku sınaması 60 ms'de "birden fazla süpürme" bekliyor | yüklü makinede kendi iddiasıyla ilgisiz sebeple düşüyor |
 | 33 | `kalibre` üretimin sağlığını (`cardState`/`escalation`) sormadan "ÖLÇER" diyor | o satır ~$4.5'lık kampanya kararı veriyor; `matrixSkip` dersi üçüncü yerde yazılı değildi |
+| 34 | Rapor satırında iki payda: `koşu` ölçülmüş-ve-teslim-edilmiş koşuyu, `aktivasyon`/`ret` BÜTÜN koşuları sayıyor, aynı satıra basılıyordu | okuyan "aktivasyon/koşu" diye bölüp yanlış sayıya çıkıyordu — pay bütün koşuları, payda yalnızca teslim edileni saydığı için |
 
-### AÇIK kalanlar — önem sırası
+Kart `c-20261103-9ba80e`: 34. kusur düzeltildi. `ArmSide.totalRuns` eklendi
+(`activations`/`rejects`/`usage`'ın gerçek paydası — BÜTÜN koşular; teslim
+edilmeyeni toplamdan düşmek HARCANAN GİZLENMEZ kuralını ihlal ederdi).
+`cli.ts` artık `tümü (N koşu üzerinden): ...` satırını AYRI basıyor, kendi
+paydasını kendi sayısıyla söylüyor — üstteki satırın paydası (`koşu`) ile
+sessizce karışmıyor.
 
-**Orta.**
-- Rapor satırında iki payda: `koşu` ölçülmüş koşuyu,
-  `aktivasyon`/`ret` BÜTÜN koşuları sayıyor.
+### Bu kartın kendi bulgusu — düzeltilmedi, kapsam dışı
+
+**Yüksek.** `retReduction()` (`planeffect.ts`) AYNI payda kusurunu
+`rejects / runs` olarak taşıyor ve bu BİR GÖSTERİM SATIRI değil, `decide()`
+içine giren karar metriği (`retAzalma`): `plansiz.rejects` ve
+`planli.rejects` BÜTÜN koşuları sayarken, bölen `plansiz.runs` /
+`planli.runs` yalnızca teslim edilmiş koşuları sayıyor. Teslim edilmeyen
+veya ölçülemeyen koşusu olan bir kolda bu oran (ret/koşu) yapay olarak
+şişiyor ve ÜÇÜNCÜ metriğin (downstream ret azalması, `PLANLAMA.md`'nin
+BİRİNCİ ölçütü) kendisi yanlış çıkabilir — "göreli azalma %X" diye basılan
+sayı ve `decide()`'ın verdiği "OLUMLU"/"OLUMSUZ" kararı buna dayanıyor.
+Bu kartın kapsamı tek rapor satırıydı; bu kusur ayrı bir kart ister çünkü
+düzeltmesi aynı tasarım sorusunu (hangi payda, nasıl görünür kılınır) karar
+metriği için de cevaplamak zorunda — gösterim satırından ödünç alınamaz.
 
 **Düşük.** Modelin hesaplayıp sayfanın basmadığı alanlar (`action`,
 `planHash`, adımın zaman damgası); `layerGaps`'in kendi kör noktası
