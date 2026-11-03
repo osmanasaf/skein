@@ -63,6 +63,12 @@ const PAGE = `<!doctype html>
     padding: 12px 18px; margin-bottom: 18px;
   }
   .brand { font-size: 19px; font-weight: 700; letter-spacing: -.02em; }
+  #akisSecici {
+    font: inherit; font-size: 13px; font-family: var(--mono); min-height: 34px;
+    padding: 0 8px; border: 1px solid var(--line); border-radius: 3px;
+    background: var(--surface-2); color: var(--ink); cursor: pointer;
+  }
+  #akisSecici:disabled { cursor: progress; opacity: .6; }
   .pill {
     display: inline-flex; align-items: center; gap: 8px;
     border: 1px solid var(--line); border-radius: 3px; padding: 5px 11px; font-size: 13px;
@@ -227,6 +233,14 @@ const PAGE = `<!doctype html>
 <div id="panel"></div>
 <script>
 const JETON = "__JETON__";
+// Seçilebilecek akış adları — sayfa açılışında BİR KEZ okunuyor (bkz.
+// akislarYukle). Dosya listesi koşarken değişmiyor; her yoklamada yeniden
+// istemek, değişmeyen bir şeyi saniyede bir sormak olurdu.
+let AKISLAR = [];
+// Seçicinin GERİ ALINACAĞI değer: çekirdek "/akis/sec"i reddederse (bozuk
+// YAML, bilinmeyen ad) kutuda yeni ad dururken pano hâlâ eskisini
+// gösteremez — ikisi aynı şeyi söylemek zorunda.
+let AKTIF_AD = "";
 const DOT = { accepted: "var(--accept)", rejected: "var(--reject)", gate: "var(--gate)", released: "var(--gate)", done: "var(--accept)" };
 const el = (tag, cls, text) => {
   const n = document.createElement(tag);
@@ -357,6 +371,43 @@ async function gozcuKomut(ne, dugme) {
     const kutu = el("div", "redd", e.message);
     kutu.style.cssText = "flex-basis:100%";
     document.getElementById("bar").append(kutu);
+  }
+}
+
+/**
+ * Ekranın baktığı akışı değiştirir — KOMUT göndererek.
+ *
+ * Çekirdek (POST /akis/sec) reddederse (bilinmeyen ad, bozuk YAML, kural
+ * ihlali) ekran O ANDA baktığı akışta aynen kalır: seçici de GERİ ALINIR,
+ * yoksa kutuda yeni akışın adı dururken pano hâlâ eskisini gösterirdi —
+ * "Geri gönder" düğmesinde bir kez düzeltilen kusurun aynısı.
+ */
+async function akisSec(ad, secici) {
+  const geriDon = AKTIF_AD;
+  secici.disabled = true;
+  const eski = document.querySelector("#bar .redd");
+  if (eski) eski.remove();
+  try {
+    const cevap = await fetch("/akis/sec", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-skein-token": JETON },
+      body: JSON.stringify({ ad }),
+    });
+    const veri = await cevap.json();
+    if (!cevap.ok) throw new Error(veri.hata || cevap.status);
+    // Açık panel (kart detayı, akış düzenleyici) ESKİ akışa ait olabilir —
+    // özellikle düzenleyicinin taslağı eski akışın dosyasından okunmuştu.
+    // Yeni akışa geçince kapatmak, bayat bir taslağı düzenlemeye devam
+    // etmekten iyi.
+    location.hash = "";
+    ciz(veri.model);
+  } catch (e) {
+    secici.value = geriDon;
+    const kutu = el("div", "redd", e.message);
+    kutu.style.cssText = "flex-basis:100%";
+    document.getElementById("bar").append(kutu);
+  } finally {
+    secici.disabled = false;
   }
 }
 
@@ -622,6 +673,7 @@ function hashOku() {
 window.addEventListener("hashchange", hashOku);
 
 function ciz(m) {
+  AKTIF_AD = m.flow.name;
   const bar = document.getElementById("bar");
   bar.replaceChildren();
   bar.append(el("div", "brand", "Skein"));
@@ -629,6 +681,25 @@ function ciz(m) {
   akis.append(el("div", "eyebrow", "Akış"));
   akis.append(el("div", "mono", m.flow.name + "  " + m.flow.hash.slice(0, 12) + "…"));
   bar.append(akis);
+
+  // AKIŞ SEÇİCİ. Ekran bugüne kadar açılışta verilen TEK akışa bağlıydı;
+  // başka bir akışa bakmak ekranı kapatıp komutu yeniden yazmak demekti.
+  // Liste boşsa (ekran akış seçimine açık değil ya da hiç akış yok) seçici
+  // hiç çıkmıyor — boş bir kutu sunmak, yapamayacağı bir şeyi vaat etmek
+  // olurdu.
+  if (AKISLAR.length) {
+    const secici = el("select");
+    secici.id = "akisSecici";
+    secici.setAttribute("aria-label", "Akış seç");
+    AKISLAR.forEach((ad) => {
+      const o = el("option", null, ad);
+      o.value = ad;
+      if (ad === m.flow.name) o.selected = true;
+      secici.append(o);
+    });
+    secici.addEventListener("change", () => void akisSec(secici.value, secici));
+    bar.append(secici);
+  }
 
   // Akış dosyası bozulduysa ekran eski topolojiyle çizmeye devam ediyor;
   // bunu söylemezse kullanıcı düzenlemesinin neden tutmadığını bilemez.
@@ -809,6 +880,26 @@ function ciz(m) {
 
   document.getElementById("foot").textContent =
     "okundu " + new Date(m.at).toLocaleTimeString("tr-TR") + " · .skein/ dizini + olaylar.jsonl · bu yüzey yalnızca okur";
+}
+
+/**
+ * Seçilebilecek akış adlarını okur.
+ *
+ * SAYFA AÇILIRKEN BİR KEZ çağrılıyor: dosya listesi ekran koşarken
+ * değişmiyor (akış dosyaları gözcü/ekran dışında elle eklenir), o yüzden
+ * her saniyelik yoklamada yeniden istemek gerekmiyor.
+ */
+async function akislarYukle() {
+  try {
+    const cevap = await fetch("/akislar", { cache: "no-store" });
+    const veri = await cevap.json();
+    AKISLAR = (cevap.ok && Array.isArray(veri.akislar)) ? veri.akislar : [];
+  } catch (e) {
+    // Liste okunamadıysa seçici hiç çıkmaz (AKISLAR boş kalır) — sessizce
+    // "başarılı ama boş" ile gerçek bir okuma hatasını karıştırmıyoruz,
+    // ama seçici YOKKEN ekranın asıl işi (pano) yine de çizilmeli.
+    AKISLAR = [];
+  }
 }
 
 async function yokla() {
@@ -1126,7 +1217,8 @@ async function yaz() {
   }
 }
 
-yokla().then(hashOku);
+// Liste ÖNCE: ilk çizimde seçici eksik çıkıp bir saniye sonra belirmesin.
+void akislarYukle().then(() => yokla().then(hashOku));
 setInterval(yokla, 1000);
 </script>
 </body>

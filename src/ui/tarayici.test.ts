@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { knownProviderSet } from "../adapters/factory.js";
 import { CardQueue } from "../card/queue.js";
 import { loadFlow } from "../flow/load.js";
+import { LiveFlow } from "../flow/live.js";
 import { snapshot, type TopologySnapshot } from "../flow/snapshot.js";
 import { acquireLock } from "../watch/lock.js";
 import { serveUi, type UiServer } from "./server.js";
@@ -64,6 +65,7 @@ type Sayfa = {
   waitForTimeout: (ms: number) => Promise<void>;
   click: (s: string) => Promise<void>;
   fill: (s: string, v: string) => Promise<void>;
+  selectOption: (s: string, v: string) => Promise<unknown>;
   textContent: (s: string) => Promise<string | null>;
   evaluate: <T>(fn: () => T) => Promise<T>;
   on: (ev: string, cb: (e: unknown) => void) => void;
@@ -246,6 +248,71 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
       expect(dugmeler.some((d) => d.includes("Gözcüyü durdur"))).toBe(false);
     } finally {
       await page.close();
+    }
+  }, 60_000);
+
+  /**
+   * SEÇİCİDEN AKIŞ DEĞİŞTİRMEK — gerçek tarayıcıda.
+   *
+   * `server.test.ts` uçları birim sınıyor ama "seçiciye tıklayınca pano
+   * GERÇEKTEN yeni akışın sütunlarını çiziyor mu" sorusu yalnızca sayfayı
+   * gerçekten açınca görünür — tıpkı gözcü düğmesindeki üç kusurun ancak
+   * burada çıkması gibi.
+   */
+  it("seçiciden akış değiştirince sütunlar değişiyor", async () => {
+    const FLOW2 = `
+name: ikinci
+constitution:
+  - ../prompts/base.md
+roles:
+  - id: digerrol
+    provider: claude
+    workspace: main
+    prompt: ../../roles/coder.prompt
+    next: done
+`;
+    await writeFile(join(root, "hub", "flows", "ikinci.yaml"), FLOW2);
+    const live = await LiveFlow.open(join(root, "hub", "flows", "test.yaml"), {
+      root, providers: knownProviderSet(),
+    });
+    const s = await serveUi({
+      root, queue, topology, flowName: "test", flowHash: live.flow.hash, live,
+      akisSecimi: {
+        listele: async () => ["test", "ikinci"],
+        ac: async (ad) => {
+          const l = await LiveFlow.open(join(root, "hub", "flows", `${ad}.yaml`), {
+            root, providers: knownProviderSet(),
+          });
+          return { live: l, flowPath: l.flow.path };
+        },
+      },
+    });
+
+    const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+    const hatalar: string[] = [];
+    page.on("pageerror", (e) => hatalar.push(String(e)));
+    try {
+      await page.goto(s.url, { waitUntil: "networkidle" });
+      await page.waitForSelector("#akisSecici", { timeout: 15_000 });
+
+      // Başlangıçta ilk akışın sütunu duruyor.
+      let basliklar = await page.evaluate(() =>
+        Array.from(document.querySelectorAll(".col .colhead")).map((e) => e.textContent ?? ""));
+      expect(basliklar.some((b) => b.includes("coder"))).toBe(true);
+
+      await page.selectOption("#akisSecici", "ikinci");
+      await page.waitForSelector('.colhead:has-text("digerrol")', { timeout: 10_000 });
+
+      // İDDİA "yeni sütun EKLENDİ" değil, "pano DEĞİŞTİ": eski akışın rolü
+      // artık hiç görünmemeli — sayfa iki akışı birden çizseydi bu kaçardı.
+      basliklar = await page.evaluate(() =>
+        Array.from(document.querySelectorAll(".col .colhead")).map((e) => e.textContent ?? ""));
+      expect(basliklar.some((b) => b.includes("digerrol"))).toBe(true);
+      expect(basliklar.some((b) => b.includes("coder"))).toBe(false);
+      expect(hatalar).toEqual([]);
+    } finally {
+      await page.close();
+      await s.close();
     }
   }, 60_000);
 });

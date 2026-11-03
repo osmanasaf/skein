@@ -241,6 +241,8 @@ function yetkili(
  *   GET  /akis                düzenleyicinin başlangıç hâli
  *   POST /akis/onizleme       taslağı DOSYAYA YAZMADAN doğrular
  *   POST /akis/yaz            geçerli taslağı atomik yazar
+ *   GET  /akislar             seçilebilecek akış adları + o an aktif olan
+ *   POST /akis/sec            ekranın baktığı akışı değiştirir (atomik)
  *
  * Yazan uç noktalar KOMUT gönderiyor: yüzey kendi kopyasını
  * güncellemiyor, `queue.release()` çağırıyor ve cevabı çekirdeğin ürettiği
@@ -542,6 +544,51 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
       return;
     }
 
+    if (req.method === "POST" && path === "/akis/sec") {
+      const hata = yetkili(req, token, adlar, portu());
+      if (hata !== null) {
+        res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ hata }));
+        return;
+      }
+      const ayar = options.akisSecimi;
+      if (ayar === undefined) {
+        res.writeHead(404, { "content-type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ hata: "Bu ekran akış seçimine açık değil." }));
+        return;
+      }
+      readBody(req)
+        .then(async (body) => {
+          const istek = JSON.parse(body === "" ? "{}" : body) as { ad?: unknown };
+          const ad = typeof istek.ad === "string" ? istek.ad : "";
+          // AD DOĞRUDAN YOLA ÇEVRİLMİYOR. `../` içeren bir ad "dizgi
+          // temizleyerek" reddedilseydi, temizleme kuralı bir gün eksik
+          // kalırdı — ÜYELİK asla eksik kalmaz: listede yoksa ad, hangi
+          // şekilde yazılmış olursa olsun, burada reddedilir.
+          const akislar = await ayar.listele();
+          if (!akislar.includes(ad)) {
+            throw new Error(`Bilinmeyen akış: ${ad}`);
+          }
+          // `ac` BAŞARISIZSA FIRLATIR (bozuk YAML, kural ihlali) ve
+          // `aktif` yalnızca BAŞARIDAN SONRA değişiyor — "yarı yüklenmiş
+          // akış" diye bir durum yok, `LiveFlow`'un kendi kuralının aynısı.
+          const { live, flowPath } = await ayar.ac(ad);
+          aktif = { live, flowPath };
+          const model = await buildModel(await guncel());
+          return model;
+        })
+        .then((model) => {
+          res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ model }));
+        })
+        .catch((error: unknown) => {
+          const kod = error instanceof QueueError ? 409 : 400;
+          res.writeHead(kod, { "content-type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ hata: (error as Error).message }));
+        });
+      return;
+    }
+
     if (req.method === "POST" && kapat !== null) {
       const hata = yetkili(req, token, adlar, portu());
       if (hata !== null) {
@@ -617,6 +664,27 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
     if (req.method !== "GET") {
       res.writeHead(405, { "content-type": "text/plain; charset=utf-8" });
       res.end("Bu uç nokta yalnızca okur.");
+      return;
+    }
+
+    if (path === "/akislar") {
+      // OKUMA UCU: `akisSecimi` verilmemişse 404 değil boş liste — ekran
+      // seçiciyi bu uca bakarak ÇİZEBİLMELİ, uç yoksa seçici hiç çıkmaz.
+      const ayar = options.akisSecimi;
+      const listele = ayar === undefined ? Promise.resolve<string[]>([]) : ayar.listele();
+      Promise.all([listele, guncel()]).then(
+        ([akislar, o]) => {
+          res.writeHead(200, {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "no-store",
+          });
+          res.end(JSON.stringify({ akislar, aktif: o.flowName }));
+        },
+        (error: unknown) => {
+          res.writeHead(500, { "content-type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ hata: (error as Error).message }));
+        },
+      );
       return;
     }
 

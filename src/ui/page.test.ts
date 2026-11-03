@@ -257,6 +257,40 @@ describe("renderPage — ekrandan kart açmak", () => {
  * "Geri gönder"de düzeltilen kusurun aynısı, ve yine gerçek tarayıcıda
  * koşturunca çıktı.
  */
+/**
+ * AKIŞ SEÇİCİ — BAĞLANTI sınaması.
+ *
+ * Bu dosya kaynak METNİ sınıyor, çizimi değil (gerçek çizim
+ * `tarayici.test.ts`'te). Burada iddia edilen şey bağlantının kendisi:
+ * liste boşsa seçici hiç çıkmamalı, çıkıyorsa doğru id'yle ve doğru uca
+ * jetonla gitmeli, ve liste sayfa açılışında bir kez okunmalı (her
+ * saniyelik yoklamada değil).
+ */
+describe("renderPage — akış seçici", () => {
+  it("liste boşsa seçici hiç çıkmıyor", () => {
+    const src = betik(renderPage("x"));
+    expect(src).toContain("if (AKISLAR.length)");
+    expect(src).toContain('secici.id = "akisSecici"');
+  });
+
+  it("seçim doğru uca jetonla gidiyor", () => {
+    const src = betik(renderPage("x"));
+    const at = src.indexOf('fetch("/akis/sec"');
+    expect(at).toBeGreaterThan(-1);
+    expect(src.slice(at, at + 300)).toContain("x-skein-token");
+  });
+
+  // Liste SAYFA AÇILIRKEN BİR KEZ okunuyor: dosya listesi ekran koşarken
+  // değişmiyor, her saniyelik yoklamaya eklemek değişmeyen bir şeyi
+  // tekrar tekrar sormak olurdu.
+  it("liste sayfa açılışında okunuyor, yoklama döngüsüne eklenmiyor", () => {
+    const src = betik(renderPage("x"));
+    expect(src).toContain('fetch("/akislar"');
+    expect(src).toContain("akislarYukle().then(() => yokla().then(hashOku))");
+    expect(src).not.toContain('setInterval(akislarYukle');
+  });
+});
+
 describe("renderPage — gözcü düğmesi", () => {
   it("düğme kilidin VARLIĞINA değil CANLI olmasına bakıyor", () => {
     const src = betik(renderPage("x"));

@@ -9,6 +9,7 @@ import { acquireLock } from "../watch/lock.js";
 import { newCard, type Card } from "../card/card.js";
 import { CardQueue } from "../card/queue.js";
 import { loadFlow, type Flow } from "../flow/load.js";
+import { LiveFlow } from "../flow/live.js";
 import { snapshot, type TopologySnapshot } from "../flow/snapshot.js";
 import { request } from "node:http";
 import { connect } from "node:net";
@@ -434,6 +435,284 @@ describe("serveUi — salt okunur ekran", () => {
     });
     expect(res.status).toBe(404);
     expect(((await (await fetch(`${server.url}akis`)).json()) as { draft: null }).draft).toBeNull();
+  });
+});
+
+/**
+ * EKRANDAN AKIŞ SEÇİMİ.
+ *
+ * Ekran bugüne kadar açılışta verilen TEK akışa bağlıydı: başka bir akışa
+ * bakmak için ekranı kapatıp komutu yeniden yazmak gerekiyordu. Bu
+ * sınamaların asıl işi üç kuralı pinlemek: değişiklik ATOMİK (başarısız
+ * `ac()` eskisini bozmaz), AD listeye ÜYELİKLE doğrulanır (dizgi
+ * temizleme değil), ve yazma kapısı diğer yazma uçlarıyla aynı.
+ */
+describe("serveUi — akış seçimi", () => {
+  const FLOW2 = `
+name: ikinci
+constitution:
+  - ../prompts/base.md
+roles:
+  - id: analiz
+    provider: claude
+    workspace: main
+    prompt: ../../roles/coder.prompt
+    next: done
+`;
+
+  /** İkinci akış dosyasını yazar ve iki akış arasında seçim yapabilen bir ekran açar. */
+  async function akisSecerSunucu(): Promise<UiServer> {
+    await writeFile(join(root, "hub", "flows", "ikinci.yaml"), FLOW2);
+    const live = await LiveFlow.open(join(root, "hub", "flows", "test.yaml"), {
+      root, providers: knownProviderSet(),
+    });
+    return serveUi({
+      root, queue, topology, flowName: "test", flowHash: gercekFlow.hash, live,
+      akisSecimi: {
+        listele: async () => ["test", "ikinci"],
+        ac: async (ad) => {
+          const l = await LiveFlow.open(join(root, "hub", "flows", `${ad}.yaml`), {
+            root, providers: knownProviderSet(),
+          });
+          return { live: l, flowPath: l.flow.path };
+        },
+      },
+    });
+  }
+
+  it("GET /akislar listeyi ve aktif akışı döner", async () => {
+    const s = await akisSecerSunucu();
+    try {
+      const v = (await (await fetch(`${s.url}akislar`)).json()) as {
+        akislar: string[]; aktif: string;
+      };
+      expect(v.akislar).toEqual(["test", "ikinci"]);
+      expect(v.aktif).toBe("test");
+    } finally {
+      await s.close();
+    }
+  });
+
+  // OKUMA UCU: `akisSecimi` verilmemiş bir ekranda 404 değil boş liste —
+  // ekran seçiciyi bu uca bakarak çizebilmeli.
+  it("akisSecimi verilmemişse GET /akislar boş liste döner (404 değil)", async () => {
+    const res = await fetch(`${server.url}akislar`);
+    const v = (await res.json()) as { akislar: string[]; aktif: string };
+    expect(res.status).toBe(200);
+    expect(v.akislar).toEqual([]);
+    expect(v.aktif).toBe("test");
+  });
+
+  it("akisSecimi verilmemişse POST /akis/sec 404", async () => {
+    const res = await fetch(`${server.url}akis/sec`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-skein-token": server.token },
+      body: JSON.stringify({ ad: "test" }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("seçim akışı değiştiriyor ve sonraki okumalar yeni akışı görüyor", async () => {
+    const s = await akisSecerSunucu();
+    try {
+      const res = await fetch(`${s.url}akis/sec`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-skein-token": s.token },
+        body: JSON.stringify({ ad: "ikinci" }),
+      });
+      const v = (await res.json()) as {
+        model: { flow: { name: string }; roles: { id: string }[] };
+      };
+
+      expect(res.status).toBe(200);
+      expect(v.model.flow.name).toBe("ikinci");
+      expect(v.model.roles.map((r) => r.id)).toEqual(["analiz"]);
+
+      // Değişiklik SADECE cevapta değil: sonraki bağımsız bir okuma da
+      // yeni akışı görmeli — ekran kendi kopyasını değil çekirdeğin
+      // tuttuğu `aktif`i okuyor.
+      const durum = (await (await fetch(`${s.url}durum`)).json()) as { flow: { name: string } };
+      expect(durum.flow.name).toBe("ikinci");
+    } finally {
+      await s.close();
+    }
+  });
+
+  /**
+   * ATOMİKLİK: `ac()` listede OLAN bir ad için de fırlatabilir (bozuk
+   * YAML, kural ihlali) ve bu durumda eski akış AYNEN durmalı — "yarı
+   * yüklenmiş akış" diye bir durum yok.
+   */
+  it("ac() başarısızsa (bozuk YAML) eski akış aynen durur", async () => {
+    const live = await LiveFlow.open(join(root, "hub", "flows", "test.yaml"), {
+      root, providers: knownProviderSet(),
+    });
+    const s = await serveUi({
+      root, queue, topology, flowName: "test", flowHash: gercekFlow.hash, live,
+      // Düzenleme de AÇIK: `aktif.flowPath` yalnızca `model`den değil,
+      // `/akis/yaz`ın GERÇEKTEN hangi dosyaya yazdığından da sınanabilsin —
+      // yarı güncellenmiş bir `flowPath` (yeni ada erken bağlanmış) `live`
+      // eski kalsa bile `/durum`da görünmez, ama bir sonraki kaydı YANLIŞ
+      // dosyaya yazdırır.
+      flowPath: live.flow.path,
+      loadOptions: { root, providers: knownProviderSet() },
+      akisSecimi: {
+        // "bozuk" listede VAR, yani üyelik denetimini geçiyor — asıl
+        // sınanan şey `ac()`in kendi reddi.
+        listele: async () => ["test", "bozuk"],
+        ac: async (ad) => {
+          if (ad === "bozuk") throw new Error("[kural 4] tam olarak bir rolün next değeri done olmalı");
+          const l = await LiveFlow.open(join(root, "hub", "flows", `${ad}.yaml`), {
+            root, providers: knownProviderSet(),
+          });
+          return { live: l, flowPath: l.flow.path };
+        },
+      },
+    });
+    try {
+      const res = await fetch(`${s.url}akis/sec`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-skein-token": s.token },
+        body: JSON.stringify({ ad: "bozuk" }),
+      });
+      const v = (await res.json()) as { hata: string };
+      expect(res.status).toBe(400);
+      expect(v.hata).toContain("kural 4");
+
+      // Eski akış AYNEN duruyor — "bozuk" diye yarı yüklenmiş bir hâl yok.
+      const durum = (await (await fetch(`${s.url}durum`)).json()) as {
+        flow: { name: string }; roles: { id: string }[];
+      };
+      expect(durum.flow.name).toBe("test");
+      expect(durum.roles.map((r) => r.id)).toEqual(["coder"]);
+
+      // `flowPath` da AYNEN duruyor mu — bunu `/durum` göstermiyor, ama
+      // bir kaydetme denemesi gösterir: hâlâ ESKİ dosyaya (test.yaml)
+      // yazmalı. `flowPath` sessizce yeni (var olmayan) ada erken
+      // bağlanmış olsaydı bu POST 404/ENOENT ile düşerdi.
+      const draft = ((await (await fetch(`${s.url}akis`)).json()) as {
+        draft: { description?: string };
+      }).draft;
+      draft.description = "atomiklik sınaması";
+      const yazRes = await fetch(`${s.url}akis/yaz`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-skein-token": s.token },
+        body: JSON.stringify(draft),
+      });
+      expect(yazRes.status).toBe(200);
+      expect(await readFile(gercekFlow.path, "utf8")).toContain("atomiklik sınaması");
+    } finally {
+      await s.close();
+    }
+  });
+
+  /**
+   * ÜYELİK denetimi kendi başına, `ac()`'in davranışına güvenmeden.
+   *
+   * `ac()` bilinmeyen bir dosyayı açmaya çalışıp KENDİSİ de fırlatabilir
+   * (dosya yok) — o zaman sınama 400'ü görür ama ÜYELİK kontrolünü hiç
+   * ÖLÇMEZ, yalnızca `ac`'in kendi hatasını ölçer. Isırması için `ac`
+   * burada ÇAĞRILMAMALI diye kurulu: çağrılırsa fırlatır ve sınama
+   * kendisi düşer, yani "ac hiç çağrılmadı" iddiasını ayrıca yazmaya
+   * gerek yok — mutasyonla doğrulandı (bkz. commit mesajı).
+   */
+  async function uyelikGozetenSunucu(): Promise<UiServer> {
+    await writeFile(join(root, "hub", "flows", "ikinci.yaml"), FLOW2);
+    const live = await LiveFlow.open(join(root, "hub", "flows", "test.yaml"), {
+      root, providers: knownProviderSet(),
+    });
+    return serveUi({
+      root, queue, topology, flowName: "test", flowHash: gercekFlow.hash, live,
+      akisSecimi: {
+        listele: async () => ["test", "ikinci"],
+        ac: async () => {
+          throw new Error("ac() ÇAĞRILMAMALIYDI — ad listede yoktu, üyelik denetimi onu ac'e hiç ulaştırmamalı");
+        },
+      },
+    });
+  }
+
+  // ÜYELİK denetimi: dizgi temizlemek değil, listede olup olmadığını
+  // sormak. Kural numarasıyla uğraşmıyoruz — bilinmeyen HER ad aynı
+  // kapıdan döner.
+  it("bilinmeyen akış adı reddedilir, akış DEĞİŞMEZ", async () => {
+    const s = await uyelikGozetenSunucu();
+    try {
+      const res = await fetch(`${s.url}akis/sec`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-skein-token": s.token },
+        body: JSON.stringify({ ad: "boyle-bir-akis-yok" }),
+      });
+      const v = (await res.json()) as { hata: string };
+      expect(res.status).toBe(400);
+      // `ac()` çağrılsaydı kendi hatasıyla (üstteki metin) düşerdi;
+      // gördüğümüz mesaj sunucunun KENDİ üyelik reddi olmalı.
+      expect(v.hata).toContain("Bilinmeyen akış");
+
+      const durum = (await (await fetch(`${s.url}durum`)).json()) as { flow: { name: string } };
+      expect(durum.flow.name).toBe("test");
+    } finally {
+      await s.close();
+    }
+  });
+
+  // `../` içeren bir ad DİZGİ TEMİZLEYEREK değil, listede YOK diye
+  // reddedilmeli — temizleme kuralı bir gün eksik kalır, üyelik kalmaz.
+  it("'../' içeren ad reddedilir, akış DEĞİŞMEZ", async () => {
+    const s = await uyelikGozetenSunucu();
+    try {
+      const res = await fetch(`${s.url}akis/sec`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-skein-token": s.token },
+        body: JSON.stringify({ ad: "../../../etc/passwd" }),
+      });
+      const v = (await res.json()) as { hata: string };
+      expect(res.status).toBe(400);
+      expect(v.hata).toContain("Bilinmeyen akış");
+
+      const durum = (await (await fetch(`${s.url}durum`)).json()) as { flow: { name: string } };
+      expect(durum.flow.name).toBe("test");
+    } finally {
+      await s.close();
+    }
+  });
+
+  it("jetonsuz seçim isteği 403 ve akış DEĞİŞMİYOR", async () => {
+    const s = await akisSecerSunucu();
+    try {
+      const res = await fetch(`${s.url}akis/sec`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ad: "ikinci" }),
+      });
+      expect(res.status).toBe(403);
+
+      const durum = (await (await fetch(`${s.url}durum`)).json()) as { flow: { name: string } };
+      expect(durum.flow.name).toBe("test");
+    } finally {
+      await s.close();
+    }
+  });
+
+  it("başka kaynaktan gelen seçim isteği reddedilir", async () => {
+    const s = await akisSecerSunucu();
+    try {
+      const res = await fetch(`${s.url}akis/sec`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-skein-token": s.token,
+          origin: "https://kotu-site.example",
+        },
+        body: JSON.stringify({ ad: "ikinci" }),
+      });
+      expect(res.status).toBe(403);
+
+      const durum = (await (await fetch(`${s.url}durum`)).json()) as { flow: { name: string } };
+      expect(durum.flow.name).toBe("test");
+    } finally {
+      await s.close();
+    }
   });
 });
 

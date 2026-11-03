@@ -1,13 +1,17 @@
 #!/usr/bin/env node
+import { readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { knownProviderSet } from "../adapters/factory.js";
 import { CardQueue } from "../card/queue.js";
 import { FlowError } from "../flow/load.js";
 import { LiveFlow } from "../flow/live.js";
-import { serveUi } from "./server.js";
+import { serveUi, type CanliAkis } from "./server.js";
 
 const USAGE = `Kullanım:
-  npx tsx src/ui/cli.ts <akış> [--port <n>]
+  npx tsx src/ui/cli.ts [akış] [--port <n>]
+
+AKIŞ VERİLMEZSE \`hub/flows/\` altındaki ilk akış açılır (ada göre sıralı).
+Ekrandaki seçiciden başka bir akışa her an geçilebilir.
 
 Ekranı açar. YALNIZCA OKUR: kartların yerini \`.skein/\` dizininden, ne
 olduğunu \`.skein/olaylar.jsonl\` dosyasından, gözcünün açık olup olmadığını
@@ -34,6 +38,27 @@ Gözcüye geçirilen bayraklar (verilirse düğme açılır):
   --permission-mode <m>  varsayılan gözcünün kendi varsayılanı
   --bin <p=yol>          sağlayıcının çalıştırılabilirini değiştir
   --poll <ms>            yoklama aralığı`;
+
+/**
+ * `hub/flows/*.yaml` adları, uzantısız ve sıralı.
+ *
+ * Sıralı: akış argümanı verilmediğinde "ilkini aç" tekrarlanabilir olmalı
+ * — her açılışta rastgele bir akışa düşmek, ekranın hangi akışı açacağını
+ * tahmin edilemez kılardı.
+ */
+async function listFlowNames(root: string): Promise<string[]> {
+  let entries: string[];
+  try {
+    entries = await readdir(join(root, "hub", "flows"));
+  } catch {
+    // Dizin yoksa akış yok — çağıran taraf bunu "hiç akış yok" olarak okur.
+    return [];
+  }
+  return entries
+    .filter((e) => e.endsWith(".yaml"))
+    .map((e) => e.slice(0, -".yaml".length))
+    .sort();
+}
 
 async function main(argv: string[]): Promise<number> {
   let flowName: string | undefined;
@@ -72,9 +97,12 @@ async function main(argv: string[]): Promise<number> {
     return 1;
   }
 
-  if (flowName === undefined) {
+  // Argümansız çağrı (`--help` niyetiyle) hâlâ kullanım metnini basıyor.
+  // Akış argümanı ARTIK ZORUNLU DEĞİL — verilmezse `hub/flows` altındaki
+  // ilk akış açılır ve ekrandaki seçiciden başka birine geçilebilir.
+  if (flowName === undefined && argv.length === 0) {
     console.log(USAGE);
-    return argv.length === 0 ? 0 : 1;
+    return 0;
   }
   if (port !== undefined && (!Number.isInteger(port) || port < 0 || port > 65535)) {
     console.error("✗ --port 0-65535 arası bir tamsayı olmalı");
@@ -82,12 +110,20 @@ async function main(argv: string[]): Promise<number> {
   }
 
   const root = resolve(process.cwd());
+  const loadOptions = { root, providers: knownProviderSet() };
+
+  if (flowName === undefined) {
+    const akislar = await listFlowNames(root);
+    if (akislar.length === 0) {
+      console.error(`✗ hub/flows altında hiç akış yok: ${join(root, "hub", "flows")}`);
+      return 1;
+    }
+    flowName = akislar[0];
+  }
+
   // Akış yaşayan: her okumadan önce yoklanıyor. Dosya değişirse ekran yeni
   // sütunları çiziyor; geçersizse eskisiyle çizip gerekçeyi gösteriyor.
-  const live = await LiveFlow.open(join(root, "hub", "flows", `${flowName}.yaml`), {
-    root,
-    providers: knownProviderSet(),
-  });
+  const live = await LiveFlow.open(join(root, "hub", "flows", `${flowName}.yaml`), loadOptions);
   const flow = live.flow;
   const topology = live.topology;
 
@@ -103,12 +139,25 @@ async function main(argv: string[]): Promise<number> {
     flowName: flow.name,
     flowHash: flow.hash,
     live,
+    // Akış seçimi SALT OKUNURLUĞA bağlı değil: başka bir akışa bakmak
+    // yazmak değil, panonun hangi dosyayı okuduğunu değiştirmek. `ac`
+    // başarısızsa (bozuk YAML, kural ihlali) fırlatıyor ve ekran o anda
+    // baktığı akışta aynen kalıyor — `LiveFlow.open` zaten bu kuralı
+    // taşıyor, burada tekrar uygulanmıyor.
+    akisSecimi: {
+      listele: () => listFlowNames(root),
+      ac: async (ad): Promise<{ live: CanliAkis; flowPath: string }> => {
+        const yeniYol = join(root, "hub", "flows", `${ad}.yaml`);
+        const yeniLive = await LiveFlow.open(yeniYol, loadOptions);
+        return { live: yeniLive, flowPath: yeniYol };
+      },
+    },
     // Akış düzenleme açık: ekranın ürettiği dosya tam olarak bu yol.
     ...(saltOkunur
       ? {}
       : {
           flowPath: flow.path,
-          loadOptions: { root, providers: knownProviderSet() },
+          loadOptions,
           providerIds: knownProviderSet().ids(),
         }),
     ...(port === undefined ? {} : { port }),
