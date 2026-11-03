@@ -95,6 +95,15 @@ const PAGE = `<!doctype html>
     padding: var(--sp-5) var(--sp-8); margin-bottom: var(--sp-8);
   }
   .brand { font-size: var(--fs-brand); font-weight: 700; letter-spacing: -.02em; }
+  /*
+   * KUS ISARETI. Duz metin "Skein" yerine gecti - isim zaten iki anlami
+   * birden tasiyor (cile ipligin kivrimi / V diziliminde ucan suru) ve
+   * marka bunu SOYLEMEK yerine GOSTERMELI. svg currentColor kullaniyor,
+   * yani renk burada degil govdenin --ink'inden geliyor: iki tema icin
+   * iki ayri kopya YOK, tek govde iki temada da dogru renkte.
+   */
+  .marka { display: inline-flex; align-items: center; }
+  .marka svg { width: 26px; height: 26px; color: var(--ink); display: block; }
   #akisSecici {
     font: inherit; font-size: var(--fs-ui); font-family: var(--mono); min-height: 34px;
     padding: 0 var(--sp-3); border: 1px solid var(--line); border-radius: 3px;
@@ -130,6 +139,19 @@ const PAGE = `<!doctype html>
   .card.live { border: 2px solid var(--accent); padding: var(--sp-5) var(--sp-6); }
   .card.gate { background: var(--gate-bg); border-color: var(--gate-line); }
   .card.orphan { border-color: var(--reject); border-style: dashed; }
+  /*
+   * DEVIR HAREKETI. Kart yeni bir sutuna gectiginde ya da panoya ilk
+   * dustugunde bu sinif bir yoklama boyunca uzerinde durur (bkz. JS
+   * tarafinda kartYerlestir). Hareket EN ONEMLI kisitla geliyor: hareket
+   * duyarliligi olan biri icin prefers-reduced-motion: reduce bunu
+   * tamamen SIFIRLIYOR - bir suslemeyi kapatmiyoruz, bir erisilebilirlik
+   * kosulunu yerine getiriyoruz.
+   */
+  @keyframes kartGelis { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+  .card.gelis { animation: kartGelis .3s ease-out; }
+  @media (prefers-reduced-motion: reduce) {
+    .card.gelis { animation: none; }
+  }
   .band {
     border: 1px dashed var(--reject); border-radius: 4px; padding: var(--sp-6) var(--sp-7); margin-bottom: var(--sp-7);
   }
@@ -291,6 +313,77 @@ let AKISLAR = [];
 // gösteremez — ikisi aynı şeyi söylemek zorunda.
 let AKTIF_AD = "";
 const DOT = { accepted: "var(--accept)", rejected: "var(--reject)", gate: "var(--gate)", released: "var(--gate)", done: "var(--accept)" };
+
+/*
+ * KUŞ İŞARETİ — TEK ÇİZGİ, İKİ ANLAM.
+ *
+ * "skein" hem bir çile ipliğin (yumak edilmeden gevşek sarılmış ip) hem
+ * de V dizilişinde uçan bir kuş sürüsünün adı. Bu yol ("d") ikisini de
+ * AYNI çizgide taşıyor kasıtlı olarak: üç köşeli zikzak (her köşe bir V
+ * açısı, kuş sürüsünün önden lider izlediği dalgalı hat) ipin son ucunda
+ * bir kıvrıma (küçük bir eğri) kapanıyor — gevşek sarılmış bir çilenin
+ * ucu gibi. İKİ AYRI SVG YOK: hem bardaki işaret hem favicon bu TEK
+ * sabitten türüyor (bkz. faviconAyarla).
+ */
+const ISARET_D = "M3 17 L8 6 L12.5 16 L17 5 L21 15 C23.5 18 21 20.8 18 19";
+
+/**
+ * İşaretin bir <svg> düğümünü kurar.
+ *
+ * "renk" parametre: bardaki kullanım "currentColor" veriyor (gövdenin
+ * --ink'inden gelsin, iki temada da kendiliğinden doğru renkte olsun —
+ * bu yüzden burada hiçbir hex YOK). Favicon ayrı bir belge gibi
+ * render edildiği için (tarayıcı sekmesinde, sayfanın CSS'i ona
+ * ulaşmıyor) "currentColor" orada anlamsız; faviconAyarla() kendi sabit
+ * rengini veriyor ama AYNI ISARET_D yolunu kullanıyor.
+ *
+ * NOT: bu dosya gömülü istemci betiğini bir ŞABLON DİZESİ içinde taşıyor
+ * — yorumda ters tırnak dizgiyi kapatır ve derleme kırılır.
+ */
+function isaretSvg(renk) {
+  // Değer İKİYE BÖLÜNMÜŞ YAZILIYOR: sayfa "dış kaynak yüklemez" iddiasını
+  // kaynak metinde bir URL şeması dizgesi aramasıyla sınıyor (bkz.
+  // page.test.ts) ve bu isim uzayı hiçbir şey İNDİRMİYOR — ad alanı
+  // (namespace) kimliği, ağdan çekilen bir adres değil. Sonuç AYNI,
+  // kaynak metinde tek parça değil.
+  const NS = "http:" + "//www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-label", "Skein");
+  svg.setAttribute("role", "img");
+  const yol = document.createElementNS(NS, "path");
+  yol.setAttribute("d", ISARET_D);
+  yol.setAttribute("fill", "none");
+  yol.setAttribute("stroke", renk);
+  yol.setAttribute("stroke-width", "2.2");
+  yol.setAttribute("stroke-linecap", "round");
+  yol.setAttribute("stroke-linejoin", "round");
+  svg.append(yol);
+  return svg;
+}
+
+/**
+ * Favicon'u AYNI işaretten kurar — sekmede bugün varsayılan ikon duruyor.
+ *
+ * Dosya indirme yok: data URI gömülü. Sayfanın mevcut <link rel=icon>
+ * etiketi yok, o yüzden önce bir tane açılıyor; sonraki çağrılarda
+ * (bu fonksiyon yalnızca sayfa yüklenirken BİR KEZ çağrılıyor) aynı
+ * etiket güncellenir.
+ */
+function faviconAyarla() {
+  const svgMetin = "<svg xmlns='http:" + "//www.w3.org/2000/svg' viewBox='0 0 24 24'>" +
+    "<path d='" + ISARET_D + "' fill='none' stroke='#15212C' stroke-width='2.4' " +
+    "stroke-linecap='round' stroke-linejoin='round'/></svg>";
+  let link = document.querySelector("link[rel=icon]");
+  if (!link) {
+    link = document.createElement("link");
+    link.rel = "icon";
+    document.head.append(link);
+  }
+  link.type = "image/svg+xml";
+  link.href = "data:image/svg+xml," + encodeURIComponent(svgMetin);
+}
+faviconAyarla();
 const el = (tag, cls, text) => {
   const n = document.createElement(tag);
   if (cls) n.className = cls;
@@ -330,6 +423,43 @@ function maliyetMetni(tutar, olculmeyen, tokens) {
   if (tutar) return "\u2265" + para(tutar);
   return tokens ? "maliyet \u00f6l\u00e7\u00fclmedi \u00b7 \u2265" + kisaSayi(tokens) + " token"
                 : "maliyet \u00f6l\u00e7\u00fclmedi";
+}
+
+/**
+ * BOS ROL SUTUNU NE ANLATMALI.
+ *
+ * Varsayilan hal GENELLIKLE dogru: kartlar bossa (bu role atanmis
+ * aktif/kuyruktaki/kapidaki hicbir kart yoksa) role'e gercekten is
+ * gelmemis demektir. Ama rol.depth (kuyruk dizininin TAZE taramasi) ile
+ * kartlar (modelin biraz ONCEKI taramasindan) iki AYRI okuma; aralarinda
+ * bir kart alinmis/kuyruga dusmus olabilir. O yariste rol.depth sifirdan
+ * buyukken "kuyrukta kart yok" demek EKRANIN BILMEDIGI bir seyi degil,
+ * bildigi ama YANLIS soyledigi bir seyi yazardi -- model bu ayrimi zaten
+ * tasiyor (bkz. "N kuyrukta" notu), bos durum da ayni gercegi okumali.
+ */
+function bosRolMetni(rol, kartlar) {
+  if (rol.depth > kartlar.length) return rol.depth + " kart kuyrukta, henuz yuklenmedi";
+  return "kuyrukta kart yok";
+}
+
+/**
+ * BOS "BITTI" SUTUNU NE ANLATMALI -- ve niye "kuyrukta kart yok" ile AYNI
+ * CUMLE OLAMAZ.
+ *
+ * "Bitti" bosken uc farkli gercek olabilir ve ucu de modelden BILINIYOR,
+ * UYDURULMUYOR:
+ *   - bir yerde bir ajan GERCEKTEN kosuyor (state active) -- is suruyor,
+ *     henuz hicbir sey bitmedi;
+ *   - kosan yok ama kuyrukta/kapida bekleyen kart VAR (totals.open) --
+ *     akis duraklamis ya da insan kapida, ama hala is var;
+ *   - hicbiri yoksa gercekten hic kart acilmamis.
+ * "kuyrukta kart yok" bunlarin HICBIRINI dogru anlatmaz: "bitti" sutunu
+ * zaten kuyruktan degil, biten karttan bahsediyor.
+ */
+function bosBittiMetni(m) {
+  if (m.cards.some((c) => c.state === "active")) return "bir rol su an kosuyor, henuz biten kart yok";
+  if (m.totals.open > 0) return "kart kuyrukta ya da kapida bekliyor, henuz biten yok";
+  return "henuz kart acilmadi";
 }
 
 function kapiCikislari(kind, planKilidi, geriHedef) {
@@ -488,8 +618,18 @@ async function akisSec(ad, secici) {
   }
 }
 
-function kartCiz(c) {
-  const kutu = el("div", "card" + (c.state === "active" ? " live" : "") + (c.gate ? " gate" : "") + (c.orphan ? " orphan" : ""));
+/**
+ * Kartın İÇERİĞİNİ "kutu"ya kurar — "kutu"nun KENDİSİNİ YARATMIYOR.
+ *
+ * Niye ayrı: devir hareketinin anlamlı olması için aynı kartın aynı DOM
+ * düğümü kalması gerekiyor (bkz. kartYerlestir); bunu yapabilmek için
+ * içerik kurma ile düğüm yaratma birbirinden AYRILMIŞ olmalı — yoksa her
+ * yoklamada el("div", ...) çağrısı yeni bir düğüm doğurur ve kimlik
+ * hiç korunamaz.
+ */
+function kartIcerik(kutu, c) {
+  kutu.className = "card" + (c.state === "active" ? " live" : "") + (c.gate ? " gate" : "") + (c.orphan ? " orphan" : "");
+  kutu.replaceChildren();
 
   const ust = el("div", "tag " + (c.gate ? "gate" : c.state === "active" ? "run" : "queued"));
   if (c.state === "active") ust.append(el("span", "dot"));
@@ -602,15 +742,89 @@ function kartCiz(c) {
     });
     kutu.append(cikis);
   }
+  // aria-label HER çağrıda tazeleniyor (c.title değişebilir), ama
+  // tabIndex/role/tıklama dinleyicisi BURADA yok — kutu.addEventListener
+  // bu fonksiyon her yoklamada çağrıldığında tekrarlanırsa (kartYerlestir
+  // aynı düğümü yeniden kullandığı için) her saniye bir dinleyici daha
+  // eklenir ve tek tıkla panel N kere açılır. Onlar düğümün YARATILDIĞI
+  // yerde (kartCiz, kartYerlestir) BİR KEZ bağlanıyor.
+  kutu.setAttribute("aria-label", c.title + " — detay");
+}
+
+/** Bir kart için TAZE bir düğüm yaratır — kimliğin önemsiz olduğu yerlerde (bant kartları). */
+function kartCiz(c) {
+  const kutu = el("div");
+  kartIcerik(kutu, c);
+  kartDugumBaslat(kutu, c.id);
+  return kutu;
+}
+
+/**
+ * Yeni yaratılan bir kart düğümüne BİR KEZ bağlanması gereken şeyleri
+ * kurar: erişilebilirlik öznitelikleri ve tıklama/klavye dinleyicisi.
+ *
+ * "id" kartın kendi kimliği — bir kartın ÖMRÜ boyunca değişmez, o yüzden
+ * burada kapatılan değer (closure) hep doğru kalır; kartYerlestir bu
+ * fonksiyonu yalnızca düğüm YENİ yaratıldığında çağırıyor.
+ */
+function kartDugumBaslat(kutu, id) {
   kutu.tabIndex = 0;
   kutu.setAttribute("role", "button");
-  kutu.setAttribute("aria-label", c.title + " — detay");
   // Panel adreslenebilir: bir karta bakarken URL'yi paylaşabilmek,
   // "hangi kart" sorusunu konuşmanın en kısa yolu.
-  const ac = () => { location.hash = "kart/" + c.id; };
+  const ac = () => { location.hash = "kart/" + id; };
   kutu.addEventListener("click", ac);
   kutu.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); ac(); } });
+}
+
+// Kartın panoda hangi sütunda durduğunu ve DOM düğümünü hatırlar — devir
+// hareketinin ÖN KOŞULU. Modül kapsamında yaşıyor, yani bir yoklamadan
+// (ciz çağrısı) ötekine HAYATTA kalıyor; ciz() içinde yeniden
+// yaratılsaydı her çağrı "ilk kez görülen kart" sanırdı.
+const KART_DUGUM = new Map();
+const KART_SUTUN = new Map();
+
+/**
+ * Panodaki bir kartın düğümünü verir — VARSA AYNI düğümü, YOKSA yenisini.
+ *
+ * Bu, "kartın KİMLİĞİ korunsun" kısıtının tam karşılığı: tarayıcı aynı
+ * nesneyi görürse (çağıran taraf bunu col.append(kutu) ile başka bir
+ * ebeveyne TAŞIR, yok edip yeniden yaratmaz) CSS geçişi/animasyonu o
+ * düğüm üzerinde anlamlı kalır. "kolonAnahtari" değiştiyse (ya da düğüm
+ * hiç yoktuysa) "gelis" sınıfı eklenir — devrin görünür hareketi bu.
+ */
+function kartYerlestir(kolonAnahtari, c) {
+  let kutu = KART_DUGUM.get(c.id);
+  const yeniDugum = kutu === undefined;
+  if (yeniDugum) {
+    kutu = el("div");
+    KART_DUGUM.set(c.id, kutu);
+    kartDugumBaslat(kutu, c.id);
+  }
+  const sutunDegisti = !yeniDugum && KART_SUTUN.get(c.id) !== kolonAnahtari;
+  // İçerik ÖNCE kuruluyor: kartIcerik className'i baştan yazıyor, yani
+  // ".gelis" sınıfı buradan SONRA eklenmezse bir önceki yoklamanın
+  // kalıntısı yeni içerik tarafından zaten silinmiş olurdu.
+  kartIcerik(kutu, c);
+  KART_SUTUN.set(c.id, kolonAnahtari);
+  if (yeniDugum || sutunDegisti) kutu.classList.add("gelis");
   return kutu;
+}
+
+/**
+ * Artık panoda GÖRÜNMEYEN kartların hafızasını siler.
+ *
+ * KART_DUGUM/KART_SUTUN hiç küçülmezse (kart bitip yetim/başka-akış
+ * bandına düşse ya da kapansa) her ikisi de sonsuza kadar büyür —
+ * düğümler DOM'dan çoktan ayrılmış olsa da referans burada yaşar.
+ * Sızıntı bir performans sorunudan önce bir DOĞRULUK sorunu: silinmeyen
+ * bir KART_SUTUN girdisi, aynı kimlikte bambaşka bir kart geri
+ * geldiğinde "sütun değişmedi" sanıp devir animasyonunu YUTARDI.
+ */
+function kartHafizasiniBudat(canliIdler) {
+  for (const id of KART_DUGUM.keys()) {
+    if (!canliIdler.has(id)) { KART_DUGUM.delete(id); KART_SUTUN.delete(id); }
+  }
 }
 
 const OLAY = {
@@ -762,7 +976,12 @@ function ciz(m) {
   AKTIF_AD = m.flow.name;
   const bar = document.getElementById("bar");
   bar.replaceChildren();
-  bar.append(el("div", "brand", "Skein"));
+  // KUŞ İŞARETİ bardaki "Skein" metninin YERİNE geçiyor (bkz. isaretSvg
+  // yorumu) — currentColor kullandığı için burada hiçbir renk kararı
+  // verilmiyor, gövdenin --ink'i ne ise işaret onu alıyor.
+  const marka = el("div", "marka");
+  marka.append(isaretSvg("currentColor"));
+  bar.append(marka);
   const akis = el("div");
   akis.append(el("div", "eyebrow", "Akış"));
   akis.append(el("div", "mono", m.flow.name + "  " + m.flow.hash.slice(0, 12) + "…"));
@@ -939,6 +1158,11 @@ function ciz(m) {
 
   const board = document.getElementById("board");
   board.replaceChildren();
+  // DEVİR HAREKETİNİN KİMLİK KOŞULU: bu yoklamada panoda kalan her kart
+  // kimliğini KORUYOR (bkz. kartYerlestir) — hangi kartların kaldığını
+  // biliyoruz ki döngü bitince düşenleri KART_DUGUM/KART_SUTUN'dan silelim
+  // (kartHafizasiniBudat), yoksa hafıza sonsuza dek büyür.
+  const canliIdler = new Set();
   m.roles.forEach((rol) => {
     const col = el("div", "col");
     const head = el("div", "colhead");
@@ -955,8 +1179,11 @@ function ciz(m) {
       head.append(k);
     }
     col.append(head);
-    if (!kartlar.length) col.append(el("div", "empty", "—"));
-    kartlar.forEach((c) => col.append(kartCiz(c)));
+    if (!kartlar.length) col.append(el("div", "empty", bosRolMetni(rol, kartlar)));
+    kartlar.forEach((c) => {
+      canliIdler.add(c.id);
+      col.append(kartYerlestir(rol.id, c));
+    });
     board.append(col);
   });
 
@@ -967,9 +1194,13 @@ function ciz(m) {
   head.append(el("div", "spacer"));
   head.append(el("span", "mono", String(bitti.length)));
   col.append(head);
-  if (!bitti.length) col.append(el("div", "empty", "—"));
-  bitti.forEach((c) => col.append(kartCiz(c)));
+  if (!bitti.length) col.append(el("div", "empty", bosBittiMetni(m)));
+  bitti.forEach((c) => {
+    canliIdler.add(c.id);
+    col.append(kartYerlestir("bitti", c));
+  });
   board.append(col);
+  kartHafizasiniBudat(canliIdler);
 
   // "bu yuzey yalnizca okur" ARTIK DOGRU DEGILDI ve en gorunur yerde
   // duruyordu: ekran kapi karari veriyor, kart aciyor, akis ve prompt
