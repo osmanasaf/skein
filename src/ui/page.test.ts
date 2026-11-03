@@ -383,3 +383,70 @@ describe("ozetle — katlı özetin kısaltması TAM METNİ etkilemiyor", () => 
     expect(sonuc.endsWith("…")).toBe(true);
   });
 });
+
+/**
+ * BOŞ ROL SÜTUNU EKRANIN BİLDİĞİNİ SÖYLER, BİLMEDİĞİNİ UYDURMAZ.
+ *
+ * `rol.depth` kuyruk dizininin TAZE taraması, `kartlar` modelin biraz
+ * ÖNCEKİ taramasından — aralarında bir kart alınmış/kuyruğa düşmüş
+ * olabilir. Bu YARIŞ gerçek tarayıcıda GÜVENİLİR tetiklenemiyor (iki
+ * tarama arasına zamanlamayla kart sıkıştırmak kırılgan olurdu), o yüzden
+ * saf karar burada DOĞRUDAN çağrılarak sınanıyor; tarayici.test.ts
+ * yalnızca gerçek uygulamada ERİŞİLEBİLEN metinleri sınıyor.
+ */
+describe("bosRolMetni — boş sütun metninin karar noktası", () => {
+  const metin = (rol: { depth: number }, kartlar: unknown[]): string =>
+    fonksiyon<(r: { depth: number }, k: unknown[]) => string>(renderPage("t"), "bosRolMetni")(
+      rol, kartlar,
+    );
+
+  it("kuyruk da boşsa 'kuyrukta kart yok' der", () => {
+    expect(metin({ depth: 0 }, [])).toBe("kuyrukta kart yok");
+  });
+
+  // YARIŞ: depth kartlar listesinden büyük — ekran bunu BİLİYOR, "boş"
+  // demek bildiği ama yanlış söylemek olurdu.
+  it("rol.depth kartlar listesinden büyükse yarış durumunu söyler, 'boş' demez", () => {
+    expect(metin({ depth: 3 }, [])).toBe("3 kart kuyrukta, henuz yuklenmedi");
+  });
+
+  // SINIR: depth kartlar sayısına EŞİTSE (büyük DEĞİL) yarış yok — bu dal
+  // `>` ile `>=` arasındaki farkı yakalıyor; `>=` yazılsaydı burada da
+  // yarış cümlesi dönerdi.
+  it("rol.depth kartlar sayısına eşitse (büyük değilse) normal boş cümleyi söyler", () => {
+    expect(metin({ depth: 2 }, [{}, {}])).toBe("kuyrukta kart yok");
+  });
+});
+
+/**
+ * BOŞ "BİTTİ" SÜTUNU — "kuyrukta kart yok" İLE AYNI CÜMLEYİ KURMAZ.
+ *
+ * Üç ayrı gerçek, üçü de modelden BİLİNİYOR: bir rol koşuyor mu, kuyrukta/
+ * kapıda bekleyen var mı, yoksa hiç kart açılmamış mı. Öncelik sırası da
+ * bir KARAR — "koşuyor" ile "kuyrukta bekliyor" aynı anda doğruyken hangisi
+ * SÖYLENİR, mutasyonla korunmalı.
+ */
+describe("bosBittiMetni — boş 'bitti' sütununun karar noktası", () => {
+  const metin = (cards: { state: string }[], open: number): string =>
+    fonksiyon<(m: { cards: { state: string }[]; totals: { open: number } }) => string>(
+      renderPage("t"), "bosBittiMetni",
+    )({ cards, totals: { open } });
+
+  it("hiç kart açılmamışsa bunu söyler", () => {
+    expect(metin([], 0)).toBe("henuz kart acilmadi");
+  });
+
+  it("bir rol şu an koşuyorsa 'iş sürüyor' der, 'hiç açılmadı' demez", () => {
+    expect(metin([{ state: "active" }], 1)).toBe("bir rol su an kosuyor, henuz biten kart yok");
+  });
+
+  it("koşan yok ama kuyrukta/kapıda kart varsa onu söyler", () => {
+    expect(metin([{ state: "gate" }], 1)).toBe("kart kuyrukta ya da kapida bekliyor, henuz biten yok");
+  });
+
+  // ÖNCELİK: ikisi de doğruyken "koşuyor" cümlesi kazanır.
+  it("hem koşan rol hem kuyrukta kart varsa 'koşuyor' cümlesi öne geçer", () => {
+    expect(metin([{ state: "active" }, { state: "gate" }], 2))
+      .toBe("bir rol su an kosuyor, henuz biten kart yok");
+  });
+});

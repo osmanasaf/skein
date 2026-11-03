@@ -55,26 +55,38 @@ roles:
  * derlenmesi, kaçınmak istediğimiz tam o. Bu yüzden yalnızca bu dosyada,
  * ihtiyaç duyulan kadarı bildiriliyor.
  */
+/**
+ * Tek bir DOM düğümü için gereken kadarı — recursive: `.querySelector` kendi
+ * tipini döndürüyor, "sütun içinde boş kutuyu bul" gibi İÇ İÇE aramalar için
+ * (bkz. boş durum sınamaları).
+ */
+type El = {
+  textContent: string | null;
+  style: { display: string };
+  classList: { contains: (c: string) => boolean };
+  /** Yalnızca `<details>` öğesinde var — bkz. kapı gerekçesi sınaması. */
+  open?: boolean;
+  /** Kuş işaretinin `d`/`stroke` özniteliklerini ve kimlik sınamasının
+   * işaretleyici özniteliğini okumak/yazmak için. */
+  getAttribute: (ad: string) => string | null;
+  setAttribute: (ad: string, deger: string) => void;
+  querySelector: (s: string) => El | null;
+  /** Yalnızca zincir okunun sütunları GERÇEKTEN alt alta mı sınaması için. */
+  getBoundingClientRect: () => { top: number; left: number };
+};
 declare const document: {
-  querySelector: (s: string) => {
-    textContent: string | null;
-    style: { display: string };
-    classList: { contains: (c: string) => boolean };
-    /** Yalnızca `<details>` öğesinde var — bkz. kapı gerekçesi sınaması. */
-    open?: boolean;
-  } | null;
-  querySelectorAll: (s: string) => ArrayLike<{
-    textContent: string | null;
-    /** Yalnızca zincir okunun sütunları GERÇEKTEN alt alta mı sınaması için. */
-    getBoundingClientRect: () => { top: number; left: number };
-  }>;
+  querySelector: (s: string) => El | null;
+  querySelectorAll: (s: string) => ArrayLike<El>;
   body: unknown;
 };
 /**
- * Yalnızca zemin rengini ve dönüşü okumak için — gökyüzü paleti ile
- * zincir okunun yön sınamasının ihtiyacı kadar.
+ * Zemin rengi, dönüş, kuş işaretinin GERÇEK rengi (currentColor'ın çözüldüğü
+ * `color`) ve devir animasyonunun adı için — gökyüzü paleti, zincir okunun
+ * yönü, kuş işareti ve devir hareketi sınamalarının ihtiyacı kadar.
  */
-declare function getComputedStyle(el: unknown): { backgroundColor: string; transform: string };
+declare function getComputedStyle(
+  el: unknown,
+): { backgroundColor: string; transform: string; color: string; animationName: string };
 
 type Tarayici = { newPage: (o?: unknown) => Promise<Sayfa>; close: () => Promise<void> };
 type Sayfa = {
@@ -201,6 +213,26 @@ async function acTema(sema: "light" | "dark"): Promise<{ page: Sayfa; hatalar: s
       hatalar.push("konsol: " + (mesaj.text ? mesaj.text() : String(m)));
     }
   });
+  await page.goto(server.url, { waitUntil: "networkidle" });
+  return { page, hatalar };
+}
+
+/**
+ * Sayfayı BELİRLİ bir `prefers-reduced-motion` tercihiyle açar.
+ *
+ * Devir hareketinin EN ÖNEMLİ kısıtı bu tercihle çöküyor — Playwright'ın
+ * `reducedMotion` seçeneği `matchMedia` sorgusunu gerçekten bağlıyor (ölçüldü:
+ * `page.evaluate(() => matchMedia(...).matches)` ile doğrulandı), yani burada
+ * CSS'i KAYNAK METİNDEN değil tarayıcının GERÇEKTEN uyguladığı hesaplanmış
+ * stilden okuyoruz.
+ */
+async function acHareket(hareket: "reduce" | "no-preference"): Promise<{ page: Sayfa; hatalar: string[] }> {
+  const page = await (browser as Tarayici).newPage({
+    viewport: { width: 1280, height: 900 },
+    reducedMotion: hareket,
+  });
+  const hatalar: string[] = [];
+  page.on("pageerror", (e) => hatalar.push(String(e)));
   await page.goto(server.url, { waitUntil: "networkidle" });
   return { page, hatalar };
 }
@@ -567,6 +599,218 @@ roles:
       expect(await page.textContent(".card.gate .reason"))
         .toBe("ağaçta işlenmemiş değişiklik var: README.md");
       expect(await page.evaluate(() => document.querySelector(".card.gate .ajanDetay"))).toBeNull();
+      expect(hatalar).toEqual([]);
+    } finally {
+      await page.close();
+    }
+  }, 60_000);
+
+  /**
+   * KUŞ İŞARETİ — bardaki metnin YERİNE çizilen SVG, GERÇEKTEN görünür ve
+   * her iki temada da kendiliğinden doğru renkte.
+   *
+   * `page.test.ts` yalnızca kaynak metni (ISARET_D sabiti var mı) sınayabilir
+   * — "currentColor gerçekten --ink'e eşitleniyor mu" sorusu GERÇEK çizim
+   * olmadan görünmez: yanlış bir seçici ya da unutulmuş bir sabit renk bile
+   * kaynak metinde dururdu.
+   */
+  it("kuş işareti bardaki svg olarak çiziliyor, iki temada da currentColor --ink'e eşit", async () => {
+    const { page: acik, hatalar: hatalarAcik } = await acTema("light");
+    try {
+      await acik.waitForSelector(".marka svg path", { timeout: 15_000 });
+      // İŞARET currentColor KULLANIYOR: renk kararı burada DEĞİL, gövdenin
+      // --ink'inden geliyor — bu yüzden 'stroke' özniteliğinin KENDİSİ
+      // "currentColor" dizgesi olmalı (bir hex DEĞİL).
+      const stroke = await acik.evaluate(() => document.querySelector(".marka svg path")?.getAttribute("stroke"));
+      expect(stroke).toBe("currentColor");
+      // currentColor'ın ÇÖZÜLMÜŞ hâli: path'in computed 'color'ı, --ink'in
+      // o temadaki gerçek değeri.
+      const ciziliRenkAcik = await acik.evaluate(() =>
+        getComputedStyle(document.querySelector(".marka svg path")).color);
+      // --ink (açık): #15212C → rgb(21, 33, 44)
+      expect(ciziliRenkAcik).toBe("rgb(21, 33, 44)");
+      expect(hatalarAcik).toEqual([]);
+    } finally {
+      await acik.close();
+    }
+
+    const { page: koyu, hatalar: hatalarKoyu } = await acTema("dark");
+    try {
+      await koyu.waitForSelector(".marka svg path", { timeout: 15_000 });
+      const ciziliRenkKoyu = await koyu.evaluate(() =>
+        getComputedStyle(document.querySelector(".marka svg path")).color);
+      // --ink (koyu): #E8EEF4 → rgb(232, 238, 244)
+      expect(ciziliRenkKoyu).toBe("rgb(232, 238, 244)");
+      expect(hatalarKoyu).toEqual([]);
+    } finally {
+      await koyu.close();
+    }
+  }, 60_000);
+
+  /**
+   * FAVICON — AYNI işaretten kurulan bir data URI, dosya indirme yok.
+   *
+   * Sekmede bugün varsayılan ikon duruyordu: `<link rel=icon>` hiç yoktu.
+   * Bu sınama sayfanın kendisinin o etiketi GERÇEKTEN eklediğini ölçüyor —
+   * kaynak metinde `faviconAyarla` fonksiyonunun durması, tarayıcıda
+   * ÇAĞRILDIĞINI göstermez.
+   */
+  it("favicon aynı işaretten data URI olarak kuruluyor, dosya indirmiyor", async () => {
+    const { page, hatalar } = await ac();
+    try {
+      await page.waitForSelector(".marka svg path", { timeout: 15_000 });
+      const href = await page.evaluate(() => {
+        const l = document.querySelector("link[rel=icon]") as unknown as { href: string } | null;
+        return l === null ? null : l.href;
+      });
+      expect(href).not.toBeNull();
+      expect(href).toMatch(/^data:image\/svg\+xml,/);
+      // DOSYA İNDİRME YOK: href bir ağ adresi DEĞİL, gömülü veri.
+      expect(href).not.toContain("http://");
+      expect(href).not.toContain("https://");
+      expect(hatalar).toEqual([]);
+    } finally {
+      await page.close();
+    }
+  }, 60_000);
+
+  /**
+   * DEVİR HAREKETİ — `prefers-reduced-motion: reduce` HAREKETİ TAMAMEN
+   * SIFIRLAR.
+   *
+   * Bu bir süs tercihi değil, erişilebilirlik koşulu: `page.test.ts`
+   * medya sorgusunun KAYNAK METİNDE durduğunu görebilir ama tarayıcının
+   * onu GERÇEKTEN uyguladığını göremez. Aynı senaryo iki hareket
+   * tercihiyle AÇILIYOR: reduce'da hesaplanan animasyon 'none', aksi
+   * hâlde kartın GERÇEKTEN animasyonu var — ikisi karşılaştırılmadan
+   * "animasyon yok" iddiası "hiç animasyon TANIMLI değil" kusuruyla
+   * karıştırılabilirdi.
+   */
+  it("yeni kart: prefers-reduced-motion'da animasyon YOK, aksi hâlde VAR", async () => {
+    const { page: azalt, hatalar: hatalarAzalt } = await acHareket("reduce");
+    try {
+      await queue.add(newCard({ title: "hareket-azalt", task: "iş", topology }));
+      await azalt.waitForSelector(".card", { timeout: 15_000 });
+      const animAzalt = await azalt.evaluate(() => getComputedStyle(document.querySelector(".card")).animationName);
+      expect(animAzalt).toBe("none");
+      expect(hatalarAzalt).toEqual([]);
+    } finally {
+      await azalt.close();
+    }
+  }, 60_000);
+
+  it("yeni kart: hareket tercihi 'no-preference' ise GERÇEKTEN animasyon oynuyor", async () => {
+    const { page: normal, hatalar: hatalarNormal } = await acHareket("no-preference");
+    try {
+      await queue.add(newCard({ title: "hareket-normal", task: "iş", topology }));
+      await normal.waitForSelector(".card", { timeout: 15_000 });
+      const animNormal = await normal.evaluate(() => getComputedStyle(document.querySelector(".card")).animationName);
+      expect(animNormal).not.toBe("none");
+      expect(hatalarNormal).toEqual([]);
+    } finally {
+      await normal.close();
+    }
+  }, 60_000);
+
+  /**
+   * KARTIN KİMLİĞİ İKİ YOKLAMA ARASINDA KORUNUYOR.
+   *
+   * Pano her yoklamada baştan çiziliyor (bkz. page.ts `ciz`), ama devrin
+   * hareketi ANLAMLI olması için aynı kartın aynı DOM düğümü kalması
+   * gerekiyor — yoksa her yoklamada her kart "yeni gelmiş" gibi oynardı.
+   *
+   * Düğüm NASIL sınanır: kartın kendi düğümüne bir öznitelik İŞARETLENİR
+   * (`setAttribute`) ve bir yoklama döngüsünden (1000ms) SONRA o işaretin
+   * HÂLÂ ORADA olduğu ölçülür. `kartIcerik` her yoklamada `replaceChildren`
+   * ve `className` ile içeriği baştan kuruyor ama düğümün KENDİSİNİ yok
+   * etmiyor — eğer `kartYerlestir` yeni bir düğüm YARATSAYDI (kimliği
+   * korumayan bir uygulama), bu işaret taze düğümde HİÇ BULUNMAZDI.
+   */
+  it("aynı kart, hiçbir şey değişmeden geçen bir yoklamadan sonra AYNI DOM düğümü", async () => {
+    await queue.add(newCard({ title: "kimlik-sinama", task: "iş", topology }));
+    const { page, hatalar } = await ac();
+    try {
+      await page.waitForSelector(".card", { timeout: 15_000 });
+      await page.evaluate(() => {
+        document.querySelector(".card")?.setAttribute("data-kimlik-sinama", "aynen-burada");
+      });
+      // En az bir yoklama döngüsünü (1000ms) GEÇİRİYORUZ — sunucu /durum'u
+      // tekrar yoklayıp panoyu yeniden çizecek kadar.
+      await page.waitForTimeout(1500);
+      const isaretHalaDuruyor = await page.evaluate(() =>
+        document.querySelector(".card")?.getAttribute("data-kimlik-sinama") ?? null);
+      expect(isaretHalaDuruyor).toBe("aynen-burada");
+      // İKİ KEZ ÇİZİLMEDİ: işaretli düğüm TEK, yoklama kartı ne kaybetti
+      // ne de yanına bir ikincisini ekledi.
+      const kartSayisi = await page.evaluate(() => document.querySelectorAll(".card").length);
+      expect(kartSayisi).toBe(1);
+      expect(hatalar).toEqual([]);
+    } finally {
+      await page.close();
+    }
+  }, 60_000);
+
+  /**
+   * BOŞ DURUMLAR — sütun neden boş olduğunu GERÇEKTEN söylüyor, "—"
+   * demiyor; "bitti" boşken ile rol sütunu boşken AYNI cümleyi kurmuyor.
+   *
+   * Üç GERÇEK senaryo, üçü de gerçek tarayıcıda ERİŞİLEBİLİR (yarış
+   * durumunun ayrı sınaması page.test.ts'te — bkz. `bosRolMetni` orada,
+   * burada tekrarlanmıyor çünkü gerçek uygulamada güvenilir tetiklenemez):
+   *   - hiç kart yokken,
+   *   - bir kart koşarken (biten yok ama iş sürüyor),
+   *   - bir kart kuyrukta/kapıda beklerken (koşan yok, biten de yok).
+   */
+  it("boş 'bitti' sütunu: hiç kart açılmadıysa bunu söyler, rol sütunuyla AYNI cümleyi kurmaz", async () => {
+    const { page, hatalar } = await ac();
+    try {
+      await page.waitForSelector("#bar .pill", { timeout: 15_000 });
+      const metinler = await page.evaluate(() => {
+        const sutunlar = Array.from(document.querySelectorAll(".col"));
+        return sutunlar.map((s) => s.querySelector(".empty")?.textContent ?? null);
+      });
+      const rolBos = metinler[0] ?? null;
+      const bittiBos = metinler[metinler.length - 1] ?? null;
+      expect(rolBos).toBe("kuyrukta kart yok");
+      expect(bittiBos).toBe("henuz kart acilmadi");
+      expect(rolBos).not.toBe(bittiBos);
+      expect(hatalar).toEqual([]);
+    } finally {
+      await page.close();
+    }
+  }, 60_000);
+
+  it("boş 'bitti' sütunu: bir kart koşarken 'iş sürüyor' der, 'hiç açılmadı' demez", async () => {
+    await queue.add(newCard({ title: "kosan-kart", task: "iş", topology }));
+    await al(queue, "coder");
+    const { page, hatalar } = await ac();
+    try {
+      await page.waitForSelector(".card.live", { timeout: 15_000 });
+      const bittiBos = await page.evaluate(() => {
+        const sutunlar = Array.from(document.querySelectorAll(".col"));
+        const son = sutunlar[sutunlar.length - 1];
+        return son?.querySelector(".empty")?.textContent ?? null;
+      });
+      expect(bittiBos).toBe("bir rol su an kosuyor, henuz biten kart yok");
+      expect(hatalar).toEqual([]);
+    } finally {
+      await page.close();
+    }
+  }, 60_000);
+
+  it("boş 'bitti' sütunu: kart kapıda beklerken 'biten yok' der, koşan yokken 'hiç açılmadı' demez", async () => {
+    await queue.add(newCard({ title: "kapida-bekleyen", task: "iş", topology }));
+    const taken = await al(queue, "coder");
+    await queue.escalate(taken, "insan kararı bekleniyor");
+    const { page, hatalar } = await ac();
+    try {
+      await page.waitForSelector(".card.gate", { timeout: 15_000 });
+      const bittiBos = await page.evaluate(() => {
+        const sutunlar = Array.from(document.querySelectorAll(".col"));
+        const son = sutunlar[sutunlar.length - 1];
+        return son?.querySelector(".empty")?.textContent ?? null;
+      });
+      expect(bittiBos).toBe("kart kuyrukta ya da kapida bekliyor, henuz biten yok");
       expect(hatalar).toEqual([]);
     } finally {
       await page.close();
