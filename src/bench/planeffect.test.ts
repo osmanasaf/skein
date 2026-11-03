@@ -235,13 +235,13 @@ describe("teslim edilmeyen koşu", () => {
   it("totalRuns bütün koşuları sayar, aktivasyon/ret bunun üzerinden toplanır", () => {
     const r = planEffect([
       // p1: ölçülmüş ve teslim edilmiş.
-      ...kosu("p1", "g", "planli", { red: 0, activations: 2 }),
+      ...kosu("p1", "g", "planli", { red: 0, activations: 2, rejects: 1 }),
       settled("p1", "done"),
       // p2: ölçülmüş ama kapıda kaldı — TESLİM EDİLMEDİ.
-      ...kosu("p2", "g", "planli", { red: 0, activations: 3 }),
+      ...kosu("p2", "g", "planli", { red: 0, activations: 3, rejects: 2 }),
       settled("p2", "gate"),
       // p3: hiç ÖLÇÜLEMEDİ.
-      ...kosu("p3", "g", "planli", { red: 0, activations: 5, ran: false }),
+      ...kosu("p3", "g", "planli", { red: 0, activations: 5, rejects: 4, ran: false }),
       ...kosu("s1", "g", "plansiz", { red: 4, activations: 1 }),
       settled("s1", "done"),
     ]);
@@ -254,6 +254,16 @@ describe("teslim edilmeyen koşu", () => {
     // Aktivasyon toplamı teslim edilmeyen VE ölçülemeyen koşuları da içerir:
     // 2 + 3 + 5 = 10, 2 (yalnız teslim) DEĞİL.
     expect(planli?.activations).toBe(10);
+    // `rejects` de AYNI paydayı kullanıyor ve bu satır onu pinliyor.
+    //
+    // Bu satır kapıdan GEÇTİKTEN SONRA eklendi: yorum ve commit mesajı
+    // "activations/rejects/usage aynı paydayı paylaşır" diyordu ama karar
+    // yolunda yalnızca `activations` pinliydi — "rejects'i teslim
+    // edilenler üzerinden topla" mutasyonu sınamaların hiçbirini
+    // düşürmüyordu. Bu depoda adı konmuş kusur sınıfı: PROZADA yazılı
+    // ama karar yolunda olmayan ölçüt. Denetçi turu da bunu kaçırdı.
+    // 1 + 2 + 4 = 7, 1 (yalnız teslim) DEĞİL.
+    expect(planli?.rejects).toBe(7);
   });
 });
 

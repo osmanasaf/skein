@@ -20,7 +20,7 @@ olduğu için kendiliğinden eklenmedi.
 
 ---
 
-## QA KAMPANYASI — 37 bulgu, 30 düzeltildi (1-3 Kasım)
+## QA KAMPANYASI — 39 bulgu, 32 düzeltildi (1-3 Kasım)
 
 Dört paralel tarama koştu (ekran · kart+git · tick+planlama · ölçüm takımı),
 32 bulgu çıktı. Her bulgu kabul edilmeden önce **kendim doğruladım**; her
@@ -70,6 +70,8 @@ sınama). Kampanyanın dört taraması da beşini kaçırdı.
 | 32 | `serve` uyku sınaması 60 ms'de "birden fazla süpürme" bekliyor | yüklü makinede kendi iddiasıyla ilgisiz sebeple düşüyor |
 | 33 | `kalibre` üretimin sağlığını (`cardState`/`escalation`) sormadan "ÖLÇER" diyor | o satır ~$4.5'lık kampanya kararı veriyor; `matrixSkip` dersi üçüncü yerde yazılı değildi |
 | 34 | Rapor satırında iki payda: `koşu` ölçülmüş-ve-teslim-edilmiş koşuyu, `aktivasyon`/`ret` BÜTÜN koşuları sayıyor, aynı satıra basılıyordu | okuyan "aktivasyon/koşu" diye bölüp yanlış sayıya çıkıyordu — pay bütün koşuları, payda yalnızca teslim edileni saydığı için |
+| 38 | `retReduction()` AYNI payda kusurunu KARAR YOLUNDA taşıyor (`rejects / runs`) | basılan bir satır değil, `decide()`'ın metriği — kampanya verdikti yanlış çıkabilir |
+| 39 | `coder`'ın sınaması `rejects` paydaısını pinlemiyordu | yorum "aynı payda" diyordu, karar yolunda yoktu; denetçi de kaçırdı |
 
 Kart `c-20261103-9ba80e`: 34. kusur düzeltildi. `ArmSide.totalRuns` eklendi
 (`activations`/`rejects`/`usage`'ın gerçek paydası — BÜTÜN koşular; teslim
@@ -77,6 +79,33 @@ edilmeyeni toplamdan düşmek HARCANAN GİZLENMEZ kuralını ihlal ederdi).
 `cli.ts` artık `tümü (N koşu üzerinden): ...` satırını AYRI basıyor, kendi
 paydasını kendi sayısıyla söylüyor — üstteki satırın paydası (`koşu`) ile
 sessizce karışmıyor.
+
+### Kart `c-20261103-9ba80e` — ORKESTRATÖRÜN KENDİ KOŞUSU
+
+Bu kusur **gerçek ajanlarla, `gunluk-tek` akışında** düzeltildi — el ile
+değil. İki koşu, 3 aktivasyon, **$3.51**:
+
+1. **1. koşu (1 aktivasyon, $2.08) — İNSAN KAPISI.** Ajan işi yaptı ama
+   commit atamadı ve test koşamadı (iç içe sandbox: süreç yürütme ve git
+   yazma kapalı). Önemli olan şu: verdikt dosyasını YAZMADI, `accept`
+   demedi, gerekçesini yazdı ve kart kapıya çıktı. "Çıktısız turu başarılı
+   sayma" kapısı gerçek bir koşuda gerçekten tuttu.
+2. **2. koşu (2 aktivasyon, $1.43) — zincir tamamlandı.** Araçlar
+   (`git add/commit`, `npx vitest/tsc`) açıldıktan sonra `coder` commit
+   attı, `reviewer` denetledi ve kabul etti.
+
+**ÖLÇÜM: DENETÇİ BİR ŞEY KAÇIRDI.** `coder`'ın sınaması `totalRuns` ve
+`activations` mutasyonlarını yakalıyordu ama `rejects`'i PINLEMEMİŞTİ:
+yorumu "activations/rejects/usage aynı paydayı paylaşır" diyordu, karar
+yolunda yalnızca `activations` vardı. `reviewer` bunu bulmadı — kendi
+doğrulamasında `coder`'ın ZATEN İDDİA ETTİĞİ mutasyonu tekrarladı.
+Operatör mutasyonla buldu ve kapattı (39. bulgu).
+
+Bu, tezin minyatür bir sınaması ve **aynı-satıcı denetimin bir şeyi
+kaçırdığı İLK veri noktası** (önceki üç hücrede 3/3 yakalamıştı). Tek
+gözlem, k=1, kontrolsüz: bir kanıt DEĞİL, ama aranılan kusur SINIFININ
+nerede yaşadığına dair bir işaret — "yorumda yazılı ama karar yolunda
+olmayan ölçüt", okumakla görülmeyen, ancak MUTASYONLA görülen bir kusur.
 
 ### Bu kartın kendi bulgusu — düzeltilmedi, kapsam dışı
 
