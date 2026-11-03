@@ -6,7 +6,8 @@ import type { Adapter, InvokeRequest, InvokeResult } from "../adapters/contract.
 import { readEvents } from "../events/log.js";
 import { VERDICT_FILE } from "../watch/verdict.js";
 import {
-  ArmError, armAdapters, armMetrics, prepareSandbox, requireAdapters, runArm, type Arm,
+  ArmError, armAdapters, armMetrics, onKontrol, prepareSandbox, requireAdapters, runArm,
+  type Arm, type ArmResult,
 } from "./ab.js";
 
 // Bu dosyanın sınamaları BÜTÜNLEŞME sınaması: her biri geçici bir git deposu
@@ -327,3 +328,75 @@ describe("kol sürdürme", () => {
     })).rejects.toThrow(/sürdürülecek kart yok/);
   });
 });
+
+/**
+ * Ön kontrol ÜRETİMİN SAĞLIĞINI güç kontrolünden ÖNCE sormalı.
+ *
+ * `kalibre` komutu yalnızca "süit koştu mu" ve "kırmızı kanca var mı"
+ * sorularına bakıyordu. `cardState` ve `escalation` elinin altındaydı ve
+ * hiç sorulmuyordu, yani kartı kapıda kalmış bir kolda bile "ÖLÇER —
+ * sıradaki: planab --k=3" yazabiliyordu. O satır para harcama kararı
+ * veriyor.
+ *
+ * `matrixSkip` bu dersi zaten öğrenmişti ve aynı sırayla söylüyor: üretim
+ * sağlıksızsa kırmızı kancalar kusur değil, artefaktın yokluğu olabilir —
+ * ve aynı mantıkla yeşiller de "kusur yok" demek değildir.
+ */
+describe("onKontrol", () => {
+  const kol = (over: Partial<Pick<ArmResult, "ran" | "cardState" | "red" | "escalation">> = {}) => ({
+    ran: true,
+    cardState: "done",
+    red: ["hooks/gizli.test.ts"],
+    ...over,
+  });
+
+  it("süit koşmadıysa hiçbir okuma geçerli değil", () => {
+    const karar = onKontrol(kol({ ran: false, red: [] }));
+    expect(karar.kind).toBe("olculemedi");
+    // "Kusur yok" diye okunmaması gerektiği SÖYLENİYOR: bildirilmemiş
+    // sıfır değildir.
+    expect(karar.kind === "olculemedi" && karar.neden).toMatch(/kusur yok/i);
+  });
+
+  it("kart done değilse ŞÜPHELİ — ÖLÇER demiyor", () => {
+    const karar = onKontrol(kol({ cardState: "gate", escalation: "işlenmemiş değişiklik var" }));
+    expect(karar.kind).toBe("kuskulu");
+    if (karar.kind !== "kuskulu") throw new Error("kuskulu beklendi");
+    // Sebep satırı insana GİDİYOR: iki zıt durumu yalnızca o ayırt ediyor.
+    expect(karar.neden).toContain("gate");
+    expect(karar.neden).toContain("işlenmemiş değişiklik var");
+    // Kancalar atılmıyor: insan onlara bakarak karar verecek.
+    expect(karar.red).toEqual(["hooks/gizli.test.ts"]);
+  });
+
+  /**
+   * SIRA önemli ve bu sınama onu pinliyor.
+   *
+   * Güç kontrolü önce gelse, yarıda kalmış bir koşu "ÖLÇEMEZ" diye
+   * damgalanır ve sebebi hiç görünmezdi — oysa kancaların yeşil olması
+   * işin hiç yapılmamış olmasından kaynaklanıyor olabilir.
+   */
+  it("kart done değil ve kanca yoksa da ŞÜPHELİ, ÖLÇEMEZ değil", () => {
+    const karar = onKontrol(kol({ cardState: "gate", red: [], escalation: "ret limiti doldu" }));
+    expect(karar.kind).toBe("kuskulu");
+  });
+
+  it("iş bitti ve kanca yoksa ÖLÇEMEZ", () => {
+    const karar = onKontrol(kol({ red: [] }));
+    expect(karar.kind).toBe("olcemez");
+    expect(karar.kind === "olcemez" && karar.neden).toMatch(/azalma olmaz/);
+  });
+
+  it("iş bitti ve kanıtlanmış kusur varsa ÖLÇER", () => {
+    const karar = onKontrol(kol({ red: ["a", "b"] }));
+    expect(karar).toEqual({ kind: "olcer", red: ["a", "b"] });
+  });
+
+  // `escalation` yoksa da sebep satırı kartın durumunu söylemek zorunda:
+  // "ŞÜPHELİ" tek başına operatöre hiçbir şey anlatmaz.
+  it("escalation yoksa bile durum adı sebepte", () => {
+    const karar = onKontrol(kol({ cardState: "active" }));
+    expect(karar.kind === "kuskulu" && karar.neden).toContain("active");
+  });
+});
+

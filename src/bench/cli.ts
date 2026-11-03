@@ -16,7 +16,7 @@ import { TurnRecorder, diffLines, diffSnapshots, loadSnapshot,
   type Snapshot, type SnapshotDiff } from "./snapshot.js";
 import { selfTest } from "./selftest.js";
 import { networkFailure } from "./failure.js";
-import { armAdapters, runArm, ARM_FLOW, type Arm } from "./ab.js";
+import { armAdapters, onKontrol, runArm, ARM_FLOW, type Arm } from "./ab.js";
 import { kararlilikDamgasi, planEffect, type PlanEffectReport, type PlanGroup } from "./planeffect.js";
 import { scoreTargets, scoreAll, classifyTargets, classifyAll } from "./score.js";
 import { effectReport, filterByTask, type EffectReport, type PairScore, type Side } from "./effect.js";
@@ -279,21 +279,39 @@ async function kalibre(taskId: string, modelSpec: string): Promise<void> {
   });
 
   console.log();
-  if (!r.ran) {
-    console.log(`  ÖLÇÜLEMEDİ — kol düştü${r.escalation === undefined ? "" : `: ${r.escalation}`}`);
-    console.log("  Bu 'kusur yok' DEĞİL. Kolu düşüren sebebi gider ve tekrar koş.");
-    return;
-  }
+  // Kolun sayıları her hâlükarda basılıyor: karar ne olursa olsun koşunun
+  // ne kadara mal olduğu görünmek zorunda.
   console.log(`  ${r.total - r.red.length}/${r.total} yeşil  ·  ${r.activations} aktivasyon  ` +
-    `·  $${r.costUsd.toFixed(4)}`);
-  if (r.red.length === 0) {
-    console.log("\n  ÖLÇEMEZ — kontrol kolunda hiç kırmızı kanca yok.");
-    console.log("  Sıfırdan azalma olmaz: bu hücreye harcanan her tekrar boşa gider.");
-    console.log("  Daha zayıf bir üretici ya da daha zor bir görev dene.");
-    return;
+    `·  kart ${r.cardState}  ·  $${r.costUsd.toFixed(4)}`);
+
+  // Karar TEK yerde ve üretimin SAĞLIĞINI güç kontrolünden ÖNCE soruyor
+  // (`onKontrol`). Eskiden bu blok `cardState`'i hiç sormuyordu: kartı
+  // kapıda kalmış bir kolda da "ÖLÇER — sıradaki planab --k=3" yazıyordu
+  // ve o satır para harcama kararı veriyor.
+  const karar = onKontrol(r);
+  switch (karar.kind) {
+    case "olculemedi":
+      console.log(`\n  ÖLÇÜLEMEDİ — ${karar.neden}`);
+      console.log("  Kolu düşüren sebebi gider ve tekrar koş.");
+      return;
+    case "kuskulu":
+      console.log(`\n  ŞÜPHELİ — ${karar.neden}`);
+      console.log(`  ${karar.red.length} kırmızı kanca: ${karar.red.join("; ")}`);
+      console.log("  İki zıt durum aynı görünür ve sebep satırı ayırt eder:");
+      console.log("    · model commit atmadıysa artefakt yarım — kancalar İŞİN YOKLUĞUNU ölçüyor");
+      console.log("    · ret limiti dolduysa denetçi düzeltemedi — kancalar GERÇEK kusur");
+      console.log("  Sebebi oku ve karar ver; kampanyaya kör girmek parayı çöpe atar.");
+      return;
+    case "olcemez":
+      console.log(`\n  ÖLÇEMEZ — ${karar.neden}`);
+      console.log("  Bu hücreye harcanan her tekrar boşa gider.");
+      console.log("  Daha zayıf bir üretici ya da daha zor bir görev dene.");
+      return;
+    case "olcer":
+      console.log(`\n  ÖLÇER — ${karar.red.length} kırmızı kanca: ${karar.red.join("; ")}`);
+      console.log(`  Sıradaki: cli.ts planab ${taskId} --k=3 --model=${modelSpec}`);
+      return;
   }
-  console.log(`\n  ÖLÇER — ${r.red.length} kırmızı kanca: ${r.red.join("; ")}`);
-  console.log(`  Sıradaki: cli.ts planab ${taskId} --k=3 --model=${modelSpec}`);
 }
 
 /**

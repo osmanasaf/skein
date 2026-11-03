@@ -87,6 +87,67 @@ export interface ArmResult {
   escalation?: string;
 }
 
+/** Ön kontrolün kararı — dört sonuç, sırası önemli. */
+export type OnKontrol =
+  /** Gizli süit hiç koşmadı: yer gerçeği yok, hiçbir okuma geçerli değil. */
+  | { kind: "olculemedi"; neden: string }
+  /** Kırmızı kanca var AMA iş bitmedi: hangisi olduğuna insan karar verir. */
+  | { kind: "kuskulu"; red: string[]; neden: string }
+  /** İş bitti ve hiç kırmızı kanca yok: sıfırdan azalma olmaz. */
+  | { kind: "olcemez"; neden: string }
+  /** İş bitti ve kanıtlanmış kusur var: hücre ölçebilir. */
+  | { kind: "olcer"; red: string[] };
+
+/**
+ * Ön kontrolün kararını TEK yerde verir — ve ÜRETİMİN SAĞLIĞINI önce sorar.
+ *
+ * `kalibre` komutu yalnızca iki şeye bakıyordu: süit koştu mu, kırmızı
+ * kanca var mı. `cardState` ve `escalation` elinin altındaydı ve hiç
+ * sorulmuyordu, yani kartı kapıda kalmış bir kolda bile "ÖLÇER — sıradaki:
+ * planab --k=3" yazabiliyordu. O satır para harcama kararı veriyor.
+ *
+ * `matrixSkip` bu dersi zaten öğrenmişti ve SIRASIYLA söylüyor: üretim
+ * sağlıksızsa kırmızı kancalar kusur değil, artefaktın yokluğu olabilir —
+ * ve aynı mantıkla yeşil kancalar da "kusur yok" demek değildir. Bu yüzden
+ * sağlık kontrolü güç kontrolünden ÖNCE geliyor; tersi sırada, yarıda
+ * kalmış bir koşu "ÖLÇEMEZ" diye damgalanır ve sebebi hiç görünmez.
+ *
+ * Kartı `done` olmayan kol BLOKE edilmiyor, ŞÜPHELİ işaretleniyor. İki
+ * ayrı durum aynı `cardState`'i veriyor ve ikisi zıt:
+ *
+ * - model commit atmadı → artefakt yarım, kancalar işin yokluğunu ölçüyor
+ * - ret limiti doldu → denetçi kusuru düzeltemedi, kancalar GERÇEK kusur
+ *
+ * İkisini `cardState` ayırt etmiyor; `escalation` satırı ayırt ediyor ve o
+ * satır insana veriliyor. Burada körü körüne bloke etmek, geçerli bir
+ * ölçümü çöpe atmak olurdu.
+ */
+export function onKontrol(
+  r: Pick<ArmResult, "ran" | "cardState" | "red" | "escalation">,
+): OnKontrol {
+  if (!r.ran) {
+    return {
+      kind: "olculemedi",
+      neden: "gizli süit hiç koşmadı — bu \"kusur yok\" DEĞİLDİR, yer gerçeği yok.",
+    };
+  }
+  if (r.cardState !== "done") {
+    return {
+      kind: "kuskulu",
+      red: r.red,
+      neden: `kart \`${r.cardState}\` durumunda kaldı` +
+        (r.escalation === undefined ? "" : `: ${r.escalation}`),
+    };
+  }
+  if (r.red.length === 0) {
+    return {
+      kind: "olcemez",
+      neden: "kontrol kolunda hiç kırmızı kanca yok; sıfırdan azalma olmaz.",
+    };
+  }
+  return { kind: "olcer", red: r.red };
+}
+
 async function git(cwd: string, args: string[]): Promise<void> {
   const child = spawnPortable("git", args, { cwd });
   const code = await new Promise<number>((resolve) => child.on("close", (c) => resolve(c ?? 1)));

@@ -20,7 +20,7 @@ olduğu için kendiliğinden eklenmedi.
 
 ---
 
-## QA KAMPANYASI — 37 bulgu, 29 düzeltildi (1-3 Kasım)
+## QA KAMPANYASI — 37 bulgu, 30 düzeltildi (1-3 Kasım)
 
 Dört paralel tarama koştu (ekran · kart+git · tick+planlama · ölçüm takımı),
 32 bulgu çıktı. Her bulgu kabul edilmeden önce **kendim doğruladım**; her
@@ -68,12 +68,11 @@ sınama). Kampanyanın dört taraması da beşini kaçırdı.
 | 30 | Aynı kayıp ÜÇ dalda: kabul, tırmanma ve ilerlemeyen tur | bildirilen yalnızca biriydi; ikisi okurken çıktı |
 | 31 | Teşhis "`rol` KABUL ETTİ ama itiraz dosyası yok" diyor — ajan reddetmişti | teşhis, teşhis ettiği şeyi yanlış adlandırıyor |
 | 32 | `serve` uyku sınaması 60 ms'de "birden fazla süpürme" bekliyor | yüklü makinede kendi iddiasıyla ilgisiz sebeple düşüyor |
+| 33 | `kalibre` üretimin sağlığını (`cardState`/`escalation`) sormadan "ÖLÇER" diyor | o satır ~$4.5'lık kampanya kararı veriyor; `matrixSkip` dersi üçüncü yerde yazılı değildi |
 
 ### AÇIK kalanlar — önem sırası
 
 **Orta.**
-- `kalibre` ön kontrolü üretimin sağlığını (`cardState`/`escalation`)
-  sormadan "ÖLÇER" diyebiliyor; `matrixSkip`/`power2x2` o dersi öğrenmişti.
 - Rapor satırında iki payda: `koşu` ölçülmüş koşuyu,
   `aktivasyon`/`ret` BÜTÜN koşuları sayıyor.
 
