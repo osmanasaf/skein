@@ -971,6 +971,26 @@ gates:
       return serveUi({ root, queue: queue, topology: topo, flowName: flow.name, flowHash: flow.hash });
     }
 
+    /**
+     * `akisSunucusuAc`'IN DÜZENLEMEYE AÇIK hâli — `live`/`flowPath`/
+     * `loadOptions` VERİLMEDEN diyagram tıklanamaz (bkz. `akisAc`
+     * yorumu: "görüntülemek düzenlemekten ayrı bir yetki"), bu yüzden
+     * diyagramdan düzenleme sınamaları AYRI bir sunucu açılışına
+     * ihtiyaç duyuyor — "Ham YAML" sekmesinin kendi sınamasıyla (bkz.
+     * yukarıdaki describe dışı test) AYNI kalıp.
+     */
+    async function akisSunucusuDuzenlenebilirAc(ad: string, metin: string) {
+      const yol = join(root, "hub", "flows", `${ad}.yaml`);
+      await writeFile(yol, metin);
+      const live = await LiveFlow.open(yol, { root, providers: knownProviderSet() });
+      return serveUi({
+        root, queue, topology: live.topology, flowName: live.flow.name, flowHash: live.flow.hash,
+        live, flowPath: live.flow.path,
+        loadOptions: { root, providers: knownProviderSet() },
+        providerIds: knownProviderSet().ids(),
+      });
+    }
+
     it("gunluk-tek: iki düğüm, next ileri, reject ve syncBack GERİ ve GÖRSEL OLARAK AYRI", async () => {
       const s = await akisSunucusuAc("gunluk-tek", GUNLUK_TEK_FLOW);
       const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
@@ -1171,6 +1191,53 @@ gates:
     }, 60_000);
 
     /**
+     * AYNI İDDİA, EKRAN DÜZENLEMEYE AÇIKKEN: yukarıdaki sınama `live`yi
+     * `flowPath`/`loadOptions` VERMEDEN açıyor, yani TASLAK hep `null`
+     * kalıyor ve diyagram zaten SON_MODEL'den çiziliyor — bu YOLDA
+     * `akisGecerli` kontrolüne hiç uğranmıyor. Ekran düzenlemeye AÇIKKEN
+     * `/akis` BAŞARIYLA dönüyor (bkz. `LiveFlow`'un kendi kuralı: başarısız
+     * `refresh()` ESKİ — hâlâ GEÇERLİ — akışı taşımaya devam eder), yani
+     * TASLAK burada `null` DEĞİL. Diyagram o taslaktan (eski, hâlâ sağlam
+     * topolojiden) çizilseydi, akış o AN geçersizken sağlammış GİBİ
+     * görünürdü — tam da `akisGecerli` kontrolünün kapattığı kusur.
+     */
+    it("akış bozulunca, DÜZENLEMEYE AÇIK ekranda da diyagram yerine hata görünüyor (taslak eski akıştan hâlâ dolu olsa bile)", async () => {
+      const live = await LiveFlow.open(join(root, "hub", "flows", "test.yaml"), {
+        root, providers: knownProviderSet(),
+      });
+      const s = await serveUi({
+        root, queue, topology, flowName: "test", flowHash: live.flow.hash, live,
+        flowPath: live.flow.path,
+        loadOptions: { root, providers: knownProviderSet() },
+      });
+      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const hatalar: string[] = [];
+      page.on("pageerror", (e) => hatalar.push(String(e)));
+      try {
+        await page.goto(s.url, { waitUntil: "networkidle" });
+        await page.waitForSelector("#bar .pill", { timeout: 15_000 });
+
+        await writeFile(join(root, "hub", "flows", "test.yaml"), "name: bozuk\nroles: []\n");
+        await page.waitForTimeout(1500);
+
+        await page.click('button:has-text("Akışı düzenle")');
+        await page.waitForSelector(".panel .err", { timeout: 10_000 });
+
+        // TASLAK BURADA null DEĞİL (eski geçerli akıştan dolu) — iddia
+        // tam da BUNUN diyagramı yanıltmadığı: hâlâ hata görünüyor, eski
+        // (hâlâ sağlam) topolojiden bir düğüm/kenar SIZMIYOR.
+        const hataMetni = await page.textContent(".panel .err");
+        expect(hataMetni).toMatch(/geçersiz/);
+        expect(await page.evaluate(() => document.querySelectorAll(".dugum").length)).toBe(0);
+        expect(await page.evaluate(() => document.querySelectorAll(".kenar").length)).toBe(0);
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+        await s.close();
+      }
+    }, 60_000);
+
+    /**
      * HAM YAML HÂLÂ AÇILABİLİYOR VE DÜZENLEME ÇALIŞIYOR.
      *
      * Panel artık VARSAYILAN olarak diyagramla açılıyor ama eski editör
@@ -1213,6 +1280,300 @@ gates:
         // İDDİA sunucunun söylediği değil DİSKTE GERÇEKTEN ne olduğu.
         const yaml = await readFile(join(root, "hub", "flows", "test.yaml"), "utf8");
         expect(yaml).toContain("id: coder-degisti");
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+        await s.close();
+      }
+    }, 60_000);
+
+    /**
+     * DÜĞÜME TIKLAYINCA ALANLAR AÇILIYOR, KAYDETMEK DOSYAYI DEĞİŞTİRİYOR.
+     *
+     * Bu kartın 1. isteği: "diyagramda rol düğümüne tıklayınca sağlayıcı,
+     * workspace, next, reject, syncBack düzenlenebilsin". Burada sağlayıcı
+     * sınanıyor (öteki dördü silme/ekleme sınamalarında zaten değişiyor:
+     * next aşağıdaki "rol çıkar" sınamasında, reject/syncBack da orada
+     * TEMİZLENEREK sınanıyor).
+     */
+    it("diyagramdan düğüme tıklayınca düzenleme alanları açılıyor, provider değiştirip kaydetmek dosyayı değiştiriyor", async () => {
+      const s = await akisSunucusuDuzenlenebilirAc("gunluk-tek", GUNLUK_TEK_FLOW);
+      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const hatalar: string[] = [];
+      page.on("pageerror", (e) => hatalar.push(String(e)));
+      try {
+        await page.goto(s.url, { waitUntil: "networkidle" });
+        await page.waitForSelector("#bar .pill", { timeout: 15_000 });
+        await page.click('button:has-text("Akışı düzenle")');
+        await page.waitForSelector(".diyagram-yatay .dugum", { timeout: 10_000 });
+
+        // TIKLAMADAN ÖNCE: düzenleme alanları henüz yok.
+        expect(await page.evaluate(() => document.querySelectorAll(".diyagram-sarmal .rol").length)).toBe(0);
+
+        await page.click('.diyagram-yatay .dugum[data-rol="coder"]');
+        await page.waitForSelector(".diyagram-sarmal .rol", { timeout: 10_000 });
+        // SEÇİLİ düğüm KENDİ dış çizgisiyle işaretli (bkz. diyagramSvgKur
+        // yorumu) — operatör hangi düğümü düzenlediğini kaybetmemeli.
+        const seciliSinifli = await page.evaluate(() =>
+          document.querySelector('.diyagram-yatay .dugum[data-rol="coder"]')?.classList.contains("dugum-secili"));
+        expect(seciliSinifli).toBe(true);
+
+        await page.selectOption('.diyagram-sarmal .rol label:has-text("provider") select', "codex");
+        await page.waitForSelector("#kaydet:not([disabled])", { timeout: 10_000 });
+        await page.click("#kaydet");
+        await page.waitForTimeout(500);
+
+        const yaml = await readFile(join(root, "hub", "flows", "gunluk-tek.yaml"), "utf8");
+        expect(yaml).toMatch(/id: coder[\s\S]*provider: codex/);
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+        await s.close();
+      }
+    }, 60_000);
+
+    /**
+     * DİYAGRAMDAN "+" İLE ROL EKLEME — bu kartın 2. isteği. "+" işareti
+     * `coder` ile `reviewer` arasındaki `next` kenarının ortasında;
+     * tıklanınca açılan panel NEREYE eklendiğini (başlıkta VE "sonra"
+     * seçiminde) önceden söylüyor, sonra /rol/yeni'yi ATOMİK çağırıyor.
+     */
+    it("diyagramdaki '+' ile iki düğüm arasına rol ekleniyor, zincire doğru yere giriyor", async () => {
+      const s = await akisSunucusuDuzenlenebilirAc("gunluk-tek", GUNLUK_TEK_FLOW);
+      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const hatalar: string[] = [];
+      page.on("pageerror", (e) => hatalar.push(String(e)));
+      try {
+        await page.goto(s.url, { waitUntil: "networkidle" });
+        await page.waitForSelector("#bar .pill", { timeout: 15_000 });
+        await page.click('button:has-text("Akışı düzenle")');
+        await page.waitForSelector('.diyagram-yatay .kenar-ekle[data-sonra="coder"]', { timeout: 10_000 });
+
+        await page.click('.diyagram-yatay .kenar-ekle[data-sonra="coder"]');
+        await page.waitForSelector("#yeniRolId", { timeout: 10_000 });
+
+        // NEREYE GİRECEĞİ ÖNCEDEN SÖYLENMİŞ: başlık VE "sonra" seçimi.
+        const baslik = await page.textContent(".panel h2");
+        expect(baslik).toContain("coder");
+        expect(baslik).toContain("reviewer");
+        const sonraSecili = await page.evaluate(() =>
+          (document.querySelector("#yeniRolSonra") as unknown as { value: string } | null)?.value);
+        expect(sonraSecili).toBe("coder");
+
+        await page.fill("#yeniRolId", "ortadaki");
+        await page.selectOption("#yeniRolProvider", "claude");
+        await page.fill("#yeniRolWorkspace", "ortadaki");
+        await page.click('button:has-text("Rolü ekle")');
+        // BAŞARILI EKLEME paneli KAPATIYOR (bkz. yeniRolGonder: ciz(model)
+        // + location.hash = "") — iddia panoda, panelin içinde değil;
+        // "prompt panelinden yeni rol ekleniyor" sınamasıyla AYNI kalıp.
+        await page.waitForSelector('.colhead:has-text("ortadaki")', { timeout: 10_000 });
+
+        const yaml = await readFile(join(root, "hub", "flows", "gunluk-tek.yaml"), "utf8");
+        expect(yaml).toMatch(/id: coder[\s\S]*next: ortadaki/);
+        expect(yaml).toMatch(/id: ortadaki[\s\S]*next: reviewer/);
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+        await s.close();
+      }
+    }, 60_000);
+
+    /**
+     * DİYAGRAMDAN ROL ÇIKARMA — bu kartın 3. isteği, ZİNCİR KOPMADAN.
+     *
+     * server.test.ts'teki HTTP sınaması AYNI iddiayı tarayıcı olmadan
+     * kanıtlıyor; bu sınama GERÇEK tıklamanın (düğüm seç → "Rolü sil" →
+     * kaydet) aynı sonucu ürettiğini kanıtlıyor — page.ts'teki `rolSil`in
+     * KENDİSİ koşuyor, HTTP gövdesi elle kurulmuyor.
+     */
+    const UCLU_FLOW = `
+name: uclu
+constitution:
+  - ../prompts/base.md
+roles:
+  - id: coder
+    provider: claude
+    workspace: main
+    prompt: ../../roles/coder.prompt
+    next: reviewer
+
+  - id: reviewer
+    provider: claude
+    workspace: reviewer
+    prompt: ../../roles/coder.prompt
+    receive: batch
+    syncBack: [coder]
+    reject: coder
+    next: gatekeeper
+
+  - id: gatekeeper
+    provider: claude
+    workspace: gatekeeper
+    prompt: ../../roles/coder.prompt
+    receive: batch
+    reject: reviewer
+    next: done
+`;
+
+    it("diyagramdan rol silinince zincir KOPMUYOR, çıkarılan role işaret eden kenarlar TEMİZLENİYOR", async () => {
+      const s = await akisSunucusuDuzenlenebilirAc("uclu", UCLU_FLOW);
+      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const hatalar: string[] = [];
+      page.on("pageerror", (e) => hatalar.push(String(e)));
+      try {
+        await page.goto(s.url, { waitUntil: "networkidle" });
+        await page.waitForSelector("#bar .pill", { timeout: 15_000 });
+        await page.click('button:has-text("Akışı düzenle")');
+        await page.waitForSelector('.diyagram-yatay .dugum[data-rol="reviewer"]', { timeout: 10_000 });
+
+        await page.click('.diyagram-yatay .dugum[data-rol="reviewer"]');
+        await page.waitForSelector('button:has-text("Rolü sil")', { timeout: 10_000 });
+        await page.click('button:has-text("Rolü sil")');
+
+        // DÜĞÜM GERÇEKTEN GİTTİ — hem reviewer'ın kendisi hem de düzenleme
+        // formu (seçim temizlendi, bkz. diyagramRolSil yorumu).
+        await page.waitForSelector('.diyagram-yatay .dugum[data-rol="reviewer"]', { state: "detached", timeout: 10_000 });
+        expect(await page.evaluate(() => document.querySelectorAll(".diyagram-sarmal .rol").length)).toBe(0);
+
+        await page.waitForSelector("#kaydet:not([disabled])", { timeout: 10_000 });
+        await page.click("#kaydet");
+        await page.waitForTimeout(500);
+
+        const yaml = await readFile(join(root, "hub", "flows", "uclu.yaml"), "utf8");
+        expect(yaml).not.toContain("reviewer");
+        // ZİNCİR KOPMADI: coder artık DOĞRUDAN gatekeeper'a next veriyor.
+        expect(yaml).toMatch(/id: coder[\s\S]*next: gatekeeper/);
+        // ÇIKARILAN ROLE İŞARET EDEN reject TEMİZLENDİ — "reviewer" artık
+        // hiçbir rolün reject hedefi değil.
+        expect(yaml).not.toMatch(/reject: reviewer/);
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+        await s.close();
+      }
+    }, 60_000);
+
+    /**
+     * KURAL İHLALİ DİYAGRAMDA DA ANINDA GÖRÜNÜYOR — bu kartın 4. isteği.
+     * `load.ts`nin mesajı OLDUĞU GİBİ basılıyor, yeniden yazılmıyor (bkz.
+     * `onizle` yorumu): burada o mesajın GERÇEKTEN diyagram sekmesinin
+     * önizleme kutusuna düştüğü kanıtlanıyor, "Ham YAML" sekmesine
+     * geçmeden.
+     */
+    it("diyagramdan geçersiz bir değişiklik yapınca kural mesajı EKRANDA (diyagram sekmesinde) görünüyor", async () => {
+      const s = await akisSunucusuDuzenlenebilirAc("gunluk-tek", GUNLUK_TEK_FLOW);
+      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const hatalar: string[] = [];
+      page.on("pageerror", (e) => hatalar.push(String(e)));
+      try {
+        await page.goto(s.url, { waitUntil: "networkidle" });
+        await page.waitForSelector("#bar .pill", { timeout: 15_000 });
+        await page.click('button:has-text("Akışı düzenle")');
+        await page.waitForSelector(".diyagram-yatay .dugum", { timeout: 10_000 });
+
+        await page.click('.diyagram-yatay .dugum[data-rol="coder"]');
+        await page.waitForSelector(".diyagram-sarmal .rol", { timeout: 10_000 });
+        // reviewer'IN workspace'İYLE AYNI değeri vererek kural 2'yi ihlal
+        // ettiriyoruz ("aynı workspace'i paylaşan iki rol reddedilir").
+        await page.fill('.diyagram-sarmal .rol label:has-text("workspace") input', "reviewer");
+        // "change" olayını elle tetikliyoruz: alan()'daki dinleyici ona
+        // bağlı, 'fill' tek başına tetiklemeyebilir (bkz. "Ham YAML"
+        // sınamasındaki AYNI not). ':has-text()' Playwright'ın KENDİ
+        // seçici motoru — düz DOM'da (`page.evaluate` içinde) ÇALIŞMAZ,
+        // o yüzden burada etiket metnine göre elle arıyoruz.
+        await page.evaluate(() => {
+          const etiketler = Array.from(document.querySelectorAll(".diyagram-sarmal .rol label"));
+          const workspaceEtiketi = etiketler.find((l) => (l.textContent ?? "").startsWith("workspace"));
+          workspaceEtiketi?.querySelector("input")?.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+
+        await page.waitForSelector("#onizleme .err", { timeout: 10_000 });
+        const mesaj = await page.textContent("#onizleme .err");
+        expect(mesaj).toContain("kural");
+        // GEÇERSİZKEN KAYDET KAPALI — hiçbir yarım taslak dosyaya düşemez.
+        expect(await page.evaluate(() =>
+          (document.querySelector("#kaydet") as unknown as { disabled: boolean } | null)?.disabled)).toBe(true);
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+        await s.close();
+      }
+    }, 60_000);
+
+    /**
+     * KAYBOLAN ALAN OLMAZ — diyagramdan TEK bir kenar değiştirilince.
+     *
+     * `fromFlow`/`toYaml` bu garantiyi ZATEN taşıyor (bkz. flow/draft.ts
+     * ve draft.test.ts "ekranın modellemediği bloklar korunuyor") ama o
+     * sınama `FlowDraft` nesnesini ELLE kuruyor — diyagramın GERÇEKTEN
+     * ürettiği taslağın da aynı yoldan geçtiğini kanıtlamıyor. Burada
+     * yorumlu, `audit` ve "planlama" (ekranın hiç MODELLEMEDİĞİ bir blok)
+     * taşıyan bir akışta diyagramdan TEK bir syncBack kenarı ekleniyor;
+     * iddia geri kalan HER ŞEYİN yerinde durduğu.
+     */
+    it("diyagramdan bir kenar değişince yorumlar, audit ve planlama bloğu AYNEN duruyor", async () => {
+      const PLANLI_FLOW = `# Üst başlık yorumu
+# İkinci satır
+
+name: planli
+constitution:
+  - ../prompts/base.md
+roles:
+  - id: coder
+    provider: claude
+    workspace: main
+    prompt: ../../roles/coder.prompt
+    next: reviewer
+
+  - id: reviewer
+    provider: claude
+    workspace: reviewer
+    prompt: ../../roles/coder.prompt
+    receive: batch
+    reject: coder
+    next: done
+
+audit:
+  enabled: true
+  fingerprint: [name, roles]
+
+planlama:
+  katilimcilar: [coder]
+  plan: docs/plan/{kart}.md
+  denetci: reviewer
+`;
+      const yol = join(root, "hub", "flows", "planli.yaml");
+      const s = await akisSunucusuDuzenlenebilirAc("planli", PLANLI_FLOW);
+      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const hatalar: string[] = [];
+      page.on("pageerror", (e) => hatalar.push(String(e)));
+      try {
+        await page.goto(s.url, { waitUntil: "networkidle" });
+        await page.waitForSelector("#bar .pill", { timeout: 15_000 });
+        await page.click('button:has-text("Akışı düzenle")');
+        await page.waitForSelector('.diyagram-yatay .dugum[data-rol="reviewer"]', { timeout: 10_000 });
+
+        // TEK KENAR DEĞİŞİKLİĞİ: reviewer'a bir syncBack hedefi (coder)
+        // ekliyoruz — GERİYE işaret ettiği için kural 13'ü ihlal etmez.
+        await page.click('.diyagram-yatay .dugum[data-rol="reviewer"]');
+        await page.waitForSelector(".diyagram-sarmal .rol", { timeout: 10_000 });
+        await page.click(".syncback-oge:has-text('coder') input[type=checkbox]");
+        await page.waitForSelector("#kaydet:not([disabled])", { timeout: 10_000 });
+        await page.click("#kaydet");
+        await page.waitForTimeout(500);
+
+        const yazilan = await readFile(yol, "utf8");
+        // DEĞİŞEN: yeni kenar GERÇEKTEN dosyada.
+        expect(yazilan).toMatch(/id: reviewer[\s\S]*syncBack:\s*\n\s*- coder/);
+        // DEĞİŞMEYEN — hepsi AYNEN duruyor:
+        expect(yazilan).toContain("# Üst başlık yorumu");
+        expect(yazilan).toContain("# İkinci satır");
+        expect(yazilan).toContain("audit:");
+        expect(yazilan).toContain("fingerprint:");
+        expect(yazilan).toContain("planlama:");
+        expect(yazilan).toContain("denetci: reviewer");
+        expect(yazilan).toContain("plan: docs/plan/{kart}.md");
         expect(hatalar).toEqual([]);
       } finally {
         await page.close();

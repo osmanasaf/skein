@@ -10,6 +10,7 @@ import { newCard, type Card } from "../card/card.js";
 import { CardQueue } from "../card/queue.js";
 import { loadFlow, type Flow } from "../flow/load.js";
 import { LiveFlow } from "../flow/live.js";
+import type { FlowDraft } from "../flow/draft.js";
 import { snapshot, type TopologySnapshot } from "../flow/snapshot.js";
 import { request } from "node:http";
 import { connect } from "node:net";
@@ -423,6 +424,159 @@ describe("serveUi — akış düzenleme", () => {
   it("jetonsuz önizleme de reddedilir", async () => {
     const res = await fetch(`${s.url}akis/onizleme`, { method: "POST", body: "{}" });
     expect(res.status).toBe(403);
+  });
+});
+
+/**
+ * DİYAGRAMDAN ROL ÇIKARMA — zincir KOPMAMALI.
+ *
+ * Diyagramın "rol çıkar" eylemi (bkz. page.ts `rolSil`/`rolSilById`)
+ * sunucuya YENİ bir uç GETİRMİYOR: aradan çıkarılmış ve yeniden bağlanmış
+ * bir `FlowDraft`, var olan /akis/onizleme + /akis/yaz çiftinden geçiyor
+ * (bkz. bu kartın A kısıtı: "YAZMA TEK YOLDAN"). Bu describe o TEK yolun,
+ * diyagramın ÜRETMESİ gereken taslağı GERÇEKTEN kabul ettiğini, ve
+ * diyagramın ÜRETMEMESİ gereken (temizlenmemiş referans taşıyan) taslağı
+ * GERÇEKTEN reddettiğini — ikisini de HTTP üzerinden, tarayıcı
+ * gerekmeden — kanıtlıyor.
+ *
+ * Zincir: coder -> reviewer -> gatekeeper -> done, reviewer coder'a
+ * `reject` ve `syncBack` ediyor, gatekeeper reviewer'a `reject` ediyor.
+ * "reviewer" çıkarılınca BEKLENEN: coder.next gatekeeper'a kayar,
+ * gatekeeper.reject temizlenir (artık var olmayan bir role işaret
+ * edemez) — tam olarak page.ts'teki `rolSil`in ürettiği şey.
+ */
+describe("serveUi — akış düzenleme, diyagramdan rol çıkarma", () => {
+  const COKLU_FLOW = `
+name: coklu
+constitution:
+  - ../prompts/base.md
+roles:
+  - id: coder
+    provider: claude
+    workspace: main
+    prompt: ../../roles/coder.prompt
+    next: reviewer
+
+  - id: reviewer
+    provider: claude
+    workspace: reviewer
+    prompt: ../../roles/coder.prompt
+    receive: batch
+    syncBack: [coder]
+    reject: coder
+    next: gatekeeper
+
+  - id: gatekeeper
+    provider: claude
+    workspace: gatekeeper
+    prompt: ../../roles/coder.prompt
+    receive: batch
+    reject: reviewer
+    next: done
+`;
+
+  let s2: UiServer;
+  let cokluPath: string;
+
+  beforeEach(async () => {
+    cokluPath = join(root, "hub", "flows", "coklu.yaml");
+    await writeFile(cokluPath, COKLU_FLOW);
+    const live = await LiveFlow.open(cokluPath, { root, providers: knownProviderSet() });
+    s2 = await serveUi({
+      root, queue, topology: live.topology, flowName: live.flow.name, flowHash: live.flow.hash,
+      live, flowPath: live.flow.path, loadOptions: { root, providers: knownProviderSet() },
+    });
+  });
+  afterEach(async () => {
+    await s2.close();
+  });
+
+  const gonder2 = (yol: string, govde: unknown) =>
+    fetch(`${s2.url}${yol}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-skein-token": s2.token },
+      body: JSON.stringify(govde),
+    });
+
+  /** Draft'ı okur, "reviewer"i sayfanın `rolSil`iyle AYNI şekilde çıkarır. */
+  async function reviewerCikarilmisTaslak(): Promise<FlowDraft> {
+    const veri = (await (await fetch(`${s2.url}akis`)).json()) as { draft: FlowDraft };
+    const taslak = veri.draft;
+    const giden = taslak.roles.find((r) => r.id === "reviewer");
+    if (giden === undefined) throw new Error("reviewer taslakta yok");
+    const kalanlar = taslak.roles.filter((r) => r.id !== "reviewer").map((r) => {
+      // `exactOptionalPropertyTypes` altında `reject`i `undefined`a
+      // ATAMAK yerine ANAHTARI hiç taşımıyoruz — page.ts'teki `rolSil`in
+      // JS'te yaptığı "sil" burada tip düzeyinde "alanı hiç yazma" olur.
+      const { reject, ...kalan } = r;
+      return {
+        ...kalan,
+        next: r.next === giden.id ? giden.next : r.next,
+        ...(reject !== undefined && reject !== giden.id ? { reject } : {}),
+        ...(r.syncBack ? { syncBack: r.syncBack.filter((x) => x !== giden.id) } : {}),
+      };
+    });
+    return { ...taslak, roles: kalanlar };
+  }
+
+  it("doğru BAĞLANMIŞ taslak (next kaydırılmış, reject temizlenmiş) doğrulamadan GEÇER", async () => {
+    const taslak = await reviewerCikarilmisTaslak();
+    // BEKLENEN RECONNECT: coder artık doğrudan gatekeeper'a next veriyor.
+    expect(taslak.roles.find((r) => r.id === "coder")?.next).toBe("gatekeeper");
+    // BEKLENEN TEMİZLİK: var olmayan role işaret eden reject kalmıyor.
+    expect(taslak.roles.find((r) => r.id === "gatekeeper")?.reject).toBeUndefined();
+
+    const v = (await (await gonder2("akis/onizleme", taslak)).json()) as { ok: boolean; message?: string };
+    expect(v.ok).toBe(true);
+  });
+
+  it("TEMİZLENMEMİŞ referans (gatekeeper hâlâ silinen reviewer'ı reddediyor) kural numarasıyla REDDEDİLİR", async () => {
+    const taslak = await reviewerCikarilmisTaslak();
+    // MUTASYON BURADA ELLE: reconnect/temizlik adımı atlanmış GİBİ davran —
+    // "çıkarılan role işaret eden kenarlar temizlenmezse ne olur" sorusunun
+    // kanıtı. Diyagramın `rolSil`i bunu asla üretmemeli; bu taslak onun
+    // YOKLUĞUNDA ortaya çıkacak hâli taşıyor.
+    const temizlenmemis: FlowDraft = {
+      ...taslak,
+      roles: taslak.roles.map((r) => (r.id === "gatekeeper" ? { ...r, reject: "reviewer" } : r)),
+    };
+
+    const v = (await (await gonder2("akis/onizleme", temizlenmemis)).json()) as {
+      ok: boolean; message?: string;
+    };
+    expect(v.ok).toBe(false);
+    expect(v.message).toContain("kural");
+  });
+
+  it("geçersiz (temizlenmemiş) taslak YAZILMAZ, ESKİ akış (3 rol) aynen durur", async () => {
+    const once = await readFile(cokluPath, "utf8");
+    const taslak = await reviewerCikarilmisTaslak();
+    const temizlenmemis: FlowDraft = {
+      ...taslak,
+      roles: taslak.roles.map((r) => (r.id === "gatekeeper" ? { ...r, reject: "reviewer" } : r)),
+    };
+
+    const res = await gonder2("akis/yaz", temizlenmemis);
+
+    expect(res.status).toBe(409);
+    expect(await readFile(cokluPath, "utf8")).toBe(once);
+  });
+
+  it("doğru taslak yazılınca zincir KOPMADAN 2 role düşer, coder DOĞRUDAN gatekeeper'a next veriyor", async () => {
+    const taslak = await reviewerCikarilmisTaslak();
+
+    const res = await gonder2("akis/yaz", taslak);
+    expect(res.status).toBe(200);
+
+    const yaml = await readFile(cokluPath, "utf8");
+    expect(yaml).not.toContain("reviewer");
+    expect(yaml).toMatch(/id: coder[\s\S]*next: gatekeeper/);
+
+    // GET /akis sonraki okumada da aynı GERÇEĞİ görüyor — ekranın kendi
+    // kopyası değil, diskten yeniden okunan taslak.
+    const veri = (await (await fetch(`${s2.url}akis`)).json()) as { draft: FlowDraft };
+    expect(veri.draft.roles.map((r) => r.id)).toEqual(["coder", "gatekeeper"]);
+    expect(veri.draft.roles.find((r) => r.id === "coder")?.next).toBe("gatekeeper");
   });
 });
 

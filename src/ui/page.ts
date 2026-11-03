@@ -327,6 +327,15 @@ const PAGE = `<!doctype html>
     background: var(--bg); color: var(--ink); min-width: 0;
   }
   .rol .genis { grid-column: 1 / -1; }
+  /*
+   * syncBack ÇOKLU seçim: her diğer rol kendi onay kutusu. alan()'ın
+   * tek-değerli select kalıbı burada uymuyor (bkz. syncBackAlani yorumu).
+   */
+  .syncback { display: flex; flex-wrap: wrap; gap: var(--sp-4); }
+  .syncback-oge {
+    display: flex !important; flex-direction: row !important; align-items: center; gap: 4px;
+    font-family: var(--mono); font-size: var(--fs-tight); color: var(--ink-2);
+  }
   .rolust { grid-column: 1 / -1; display: flex; align-items: center; gap: var(--sp-3); }
   .rolust b { font-family: var(--mono); font-size: var(--fs-tight); }
   .mini {
@@ -1575,14 +1584,56 @@ function okUcu(ucX, ucY, yonX, yonY, renk) {
 }
 
 /**
+ * Bir 'next' kenarının ortasına konan "+" düğmesi.
+ *
+ * Tıklanınca yeni rolü sonraId'nin ARDINA eklemek üzere /rol/yeni
+ * formunu açıyor (bkz. diyagramRolArasiEkleAc) — diyagramın kendi bir
+ * yazma yolu YOK, bu düğme sadece aynı tek yolu (POST /rol/yeni, o da
+ * writeDraft'tan geçiyor) diyagramdan ÇAĞIRIYOR.
+ */
+function ekleIsaretiKur(x, y, sonraId) {
+  const g = sv("g", { class: "kenar-ekle", "data-sonra": sonraId });
+  g.style.cursor = "pointer";
+  const daire = sv("circle", { cx: x, cy: y, r: 9 });
+  daire.style.fill = "var(--surface)";
+  daire.style.stroke = "var(--accent)";
+  daire.style.strokeWidth = "1.5";
+  g.append(daire);
+  const artiMetni = sv("text", { x: x, y: y + 3.5, "text-anchor": "middle" });
+  artiMetni.style.fill = "var(--accent-ink)";
+  artiMetni.style.fontSize = "13px";
+  artiMetni.style.fontWeight = "700";
+  artiMetni.textContent = "+";
+  g.append(artiMetni);
+  g.addEventListener("click", (e) => {
+    e.stopPropagation();
+    diyagramRolArasiEkleAc(sonraId);
+  });
+  return g;
+}
+
+/**
  * Bir diyagramı TEK yönde (yatay ya da dikey) SVG olarak kurar.
  *
  * İki kopya BİRDEN üretiliyor (bkz. diyagramIcerikCiz) ve hangisinin
  * görüneceğine bir CSS medya sorgusu karar veriyor — JS ÖLÇEREK değil,
  * zincir okunun yön değiştirdiği ".colhead .zincir .ok" kuralıyla AYNI
  * ilke (dar ekranda ölçmek yarış durumuna açık; medya sorgusu değil).
+ *
+ * editable TRUE'yken diyagram artık yalnızca GÖSTERMİYOR:
+ *   - her düğüm TIKLANABİLİR — tıklayınca DIYAGRAM_SECILI o rolün id'sine
+ *     dönüyor ve diyagramın altında düzenleme alanları açılıyor (bkz.
+ *     diyagramIcerikCiz, diyagramDuzenlePaneliCiz).
+ *   - her 'next' kenarının ORTASINDA bir "+" işareti çıkıyor: tıklanınca
+ *     YENİ bir rol tam o iki düğümün ARASINA eklenecek (bkz.
+ *     diyagramRolArasiEkleAc) — hangi kenara tıklandığı, yeni rolün
+ *     zincire NEREYE gireceğini KENDİSİ gösteriyor.
+ * editable FALSE'ken (akış salt okunur ekranda açılmış ya da taslak hiç
+ * yüklenemediyse) diyagram AYNEN eski davranışı korur — tıklanamaz,
+ * "+" yok. Görüntülemek düzenlemekten ayrı bir yetki (bkz. akisAc
+ * yorumu), bu ayrım burada da geçerli.
  */
-function diyagramSvgKur(model, yon) {
+function diyagramSvgKur(model, yon, editable) {
   const roller = model.roles;
   const n = roller.length;
   const idx = new Map(roller.map((r, i) => [r.id, i]));
@@ -1635,6 +1686,15 @@ function diyagramSvgKur(model, yon) {
       cizgi.style.strokeWidth = "2";
       g.append(cizgi);
       g.append(okUcu(p2.x, p2.y, p2.x - p1.x, p2.y - p1.y, stil.renk));
+      kenarKat.append(g);
+      if (editable) {
+        // "+" İŞARETİ kenarın TAM ORTASINDA — buraya basmak, yeni rolün
+        // kenar.from ile kenar.to arasına gireceğini GÖSTERİYOR, ayrı
+        // bir "nereye eklensin" sorusu sormuyor çünkü soru zaten diyagramda
+        // tıklanan yerle cevaplanmış.
+        kenarKat.append(ekleIsaretiKur((p1.x + p2.x) / 2, (p1.y + p2.y) / 2, kenar.from));
+      }
+      return;
     } else {
       // GERİ kenar: satırın/sütunun DIŞINDA kavisli — ileri akışla
       // KARIŞMASIN (bu kartın asıl kısıtı). "lane" türe sabit: aynı çifte
@@ -1684,18 +1744,30 @@ function diyagramSvgKur(model, yon) {
   });
 
   // DÜĞÜMLER — kart değil ETİKET: id + sağlayıcı/workspace, hepsi kısa.
+  //
+  // editable'ken tıklanabilir: DIYAGRAM_SECILI o rolün id'sine döner ve
+  // panel kendini yeniden kurup (bkz. yenile) diyagramın altına o rolün
+  // düzenleme alanlarını açar. SEÇİLİ düğüm kendi dış çizgisiyle (vurgu
+  // rengi, kalın çizgi) işaretli — operatör hangi düğümü düzenlediğini
+  // kaybetmesin.
   roller.forEach((rol, i) => {
     const p = nokta(anaKonum(i), SATIR);
+    const secili = editable && DIYAGRAM_SECILI === rol.id;
     const g = sv("g", {
-      class: "dugum", "data-rol": rol.id,
+      class: "dugum" + (secili ? " dugum-secili" : ""), "data-rol": rol.id,
       transform: "translate(" + p.x + " " + p.y + ")",
     });
     const kutu = sv("rect", {
       x: -DUGUM_W / 2, y: -DUGUM_H / 2, width: DUGUM_W, height: DUGUM_H, rx: 7,
     });
     kutu.style.fill = "var(--surface)";
-    kutu.style.stroke = "var(--line)";
+    kutu.style.stroke = secili ? "var(--accent)" : "var(--line)";
+    kutu.style.strokeWidth = secili ? "2.5" : "1";
     g.append(kutu);
+    if (editable) {
+      g.style.cursor = "pointer";
+      g.addEventListener("click", () => { DIYAGRAM_SECILI = rol.id; yenile(); });
+    }
     const id = sv("text", { x: 0, y: -4, "text-anchor": "middle", class: "mono" });
     id.style.fill = "var(--ink)";
     id.style.fontWeight = "700";
@@ -1715,6 +1787,29 @@ function diyagramSvgKur(model, yon) {
 }
 
 /**
+ * TASLAK'tan diyagramın çizdiği biçime (bkz. UiModel.edges, model.ts) —
+ * sunucudan GELMİYOR, çünkü taslak henüz DİSKE YAZILMADI; sunucunun
+ * /durum'u onu hiç görmüyor. Kenar türetme mantığı
+ * model.ts'teki buildModel ile AYNI (next !== 'done' → next kenarı,
+ * reject varsa → reject kenarı, syncBack'in her ögesi → syncBack kenarı):
+ * iki yerde iki ayrı "akış ne diyor" yorumu olmasın.
+ */
+function taslakModelKur(taslak) {
+  const edges = [];
+  taslak.roles.forEach((rol) => {
+    if (rol.next !== "done") edges.push({ from: rol.id, to: rol.next, kind: "next" });
+    if (rol.reject) edges.push({ from: rol.id, to: rol.reject, kind: "reject" });
+    (rol.syncBack || []).forEach((hedef) => edges.push({ from: rol.id, to: hedef, kind: "syncBack" }));
+  });
+  return {
+    flow: {},
+    roles: taslak.roles.map((rol) => ({ id: rol.id, provider: rol.provider, workspace: rol.workspace })),
+    edges,
+    gates: taslak.gates || [],
+  };
+}
+
+/**
  * Diyagramın gösterim içeriği — yatay VE dikey kopya birden, hangisinin
  * görüneceğine CSS karar veriyor (bkz. diyagramSvgKur yorumu).
  *
@@ -1722,7 +1817,7 @@ function diyagramSvgKur(model, yon) {
  * yarım bir graf hatayı göstermekten daha kötü, çünkü sağlam görünür ama
  * artık yaşayan topolojiyi yansıtmıyor olabilir.
  */
-function diyagramIcerikCiz(model) {
+function diyagramIcerikCiz(model, editable) {
   const sarmal = el("div", "diyagram-sarmal");
   if (!model) {
     sarmal.append(el("div", "err", "Durum henüz okunamadı."));
@@ -1739,9 +1834,96 @@ function diyagramIcerikCiz(model) {
     sarmal.append(el("div", "ipucu", "Akışta hiç rol yok."));
     return sarmal;
   }
-  sarmal.append(diyagramSvgKur(model, "yatay"));
-  sarmal.append(diyagramSvgKur(model, "dikey"));
+  sarmal.append(diyagramSvgKur(model, "yatay", editable));
+  sarmal.append(diyagramSvgKur(model, "dikey", editable));
+
+  // SEÇİLİ rolün düzenleme alanları diyagramın ALTINDA — TASLAK'tan
+  // (modelden değil: model yalnızca id/provider/workspace taşıyor, bkz.
+  // UiRole, düzenlemek için next/reject/syncBack GEREKİYOR). Seçili id
+  // taslakta artık yoksa (silindiyse ya da hiç yoksa) hiçbir şey basılmaz
+  // — yarım bir form, hiç form olmamaktan kötü.
+  //
+  // Önizleme + "Dosyaya yaz" bloğu seçime BAĞLI DEĞİL — HER ZAMAN
+  // basılıyor (editable'ken). Rol SİLMEK gibi yapısal bir değişiklik
+  // seçimi KENDİSİ temizliyor (bkz. diyagramRolSil): o blok seçime bağlı
+  // kalsaydı, silme işleminden sonra "Dosyaya yaz" düğmesi KAYBOLUR ve
+  // operatör onay vermiş bir değişikliği kaydedecek yer bulamazdı.
+  if (editable) {
+    const i = TASLAK.roles.findIndex((r) => r.id === DIYAGRAM_SECILI);
+    if (i !== -1) sarmal.append(diyagramDuzenlePaneliCiz(TASLAK.roles[i], i));
+    sarmal.append(onizlemeBlokCiz());
+  }
   return sarmal;
+}
+
+/**
+ * Diyagramdan tıklanan düğümün düzenleme alanları: sağlayıcı, workspace,
+ * next, reject, syncBack — bu kartın İSTEDİĞİ TAM KÜME. 'id' burada
+ * DÜZENLENMİYOR (yeniden adlandırma "Ham YAML" sekmesinde kalıyor,
+ * diyagramın düğüm kimliği aynı zamanda SEÇİMİN kendisi — aynı tıklamada
+ * değiştirmek kafa karıştırırdı) ve prompt/receive de diyagramın
+ * konusu değil (ajanın gördüğü METİN ayrı bir panelin işi, bkz.
+ * "Promptları düzenle").
+ *
+ * Değişiklikler TASLAK'ı mutasyona uğratıp onizle()'yi tetikliyor —
+ * "Ham YAML" sekmesiyle AYNI TEK yazma yolu (POST /akis/onizleme, sonra
+ * "Dosyaya yaz" ile POST /akis/yaz): diyagramın kendi ayrı bir yazma
+ * yolu YOK.
+ */
+function diyagramDuzenlePaneliCiz(rol, i) {
+  const sarmal = el("div", null);
+
+  const kutu = el("div", "rol");
+  const ust = el("div", "rolust");
+  ust.append(el("b", null, "Düzenle: " + rol.id));
+  ust.append(el("div", "spacer"));
+
+  const sil = el("button", "mini sil", "Rolü sil");
+  sil.type = "button";
+  sil.addEventListener("click", () => { diyagramRolSil(rol.id); });
+  ust.append(sil);
+
+  const kapatSecim = el("button", "mini", "Seçimi kapat");
+  kapatSecim.type = "button";
+  kapatSecim.addEventListener("click", () => { DIYAGRAM_SECILI = null; yenile(); });
+  ust.append(kapatSecim);
+  kutu.append(ust);
+
+  const idler = TASLAK.roles.map((r) => r.id);
+  const digerIdler = idler.filter((x) => x !== rol.id);
+  const hedefler = digerIdler.concat(["done"]);
+  const retler = [""].concat(digerIdler);
+
+  kutu.append(alan("provider", rol.provider, (v) => (rol.provider = v), SAGLAYICILAR));
+  kutu.append(alan("workspace", rol.workspace, (v) => (rol.workspace = v)));
+  kutu.append(alan("next", rol.next, (v) => (rol.next = v), hedefler));
+  kutu.append(alan("reject", rol.reject || "", (v) => { rol.reject = v || undefined; }, retler));
+  kutu.append(syncBackAlani(rol, digerIdler));
+  sarmal.append(kutu);
+  return sarmal;
+}
+
+/**
+ * Diyagramdan silme — rolSilById ile AYNI reconnect mantığı (bkz. o
+ * fonksiyonun ve rolSil'in yorumu): zincir kopmuyor, giden role işaret
+ * eden reject/syncBack/gates.after temizleniyor. Seçim de temizlenir
+ * — silinen düğümün düzenleme formu açık kalamaz.
+ */
+function diyagramRolSil(id) {
+  DIYAGRAM_SECILI = null;
+  rolSilById(id);
+}
+
+/**
+ * Diyagramdaki bir "+" işaretine tıklanınca: yeni rol oncekiId'nin
+ * ARDINA girecek. Aynı "Yeni rol" panelini (bkz. yeniRolAc) açıyoruz —
+ * diyagramın kendi formu YOK, var olan /rol/yeni yolunu diyagramdan
+ * ÇAĞIRIYORUZ. YENI_ROL_ONCEDEN_SONRA o panele "nereye gireceğini"
+ * önceden söylüyor: operatör boş bir "sonra" listesiyle karşılaşmıyor.
+ */
+function diyagramRolArasiEkleAc(oncekiId) {
+  YENI_ROL_ONCEDEN_SONRA = oncekiId;
+  location.hash = "prompt/yeni";
 }
 
 // Panelin hangi sekmede açıldığı: her açılışta "diyagram" — akış artık
@@ -1751,6 +1933,9 @@ function diyagramIcerikCiz(model) {
 // etkilemiyor çünkü diyagram zaten SON_MODEL'den geliyor, /akis'ten değil.
 let AKIS_SEKME = "diyagram";
 let AKIS_HATA = null;
+// Diyagramda TIKLANMIŞ düğümün id'si — o rolün düzenleme alanlarını
+// diyagramın ALTINDA açıyor. null = hiçbir düğüm seçili değil.
+let DIYAGRAM_SECILI = null;
 
 /** Akış panelinin DIŞ ÇATISI: kapat düğmesi, başlık, sekmeler, içerik. */
 function akisPanelCiz() {
@@ -1778,7 +1963,21 @@ function akisPanelCiz() {
   const icerik = el("div", null);
   icerik.id = "akisIcerik";
   if (AKIS_SEKME === "diyagram") {
-    icerik.append(diyagramIcerikCiz(SON_MODEL));
+    // DÜZENLENEBİLİRKEN diyagram TASLAK'tan çiziliyor (bkz.
+    // taslakModelKur): rol silme/ekleme gibi YAPISAL değişiklikler
+    // diyagramda ANINDA görünsün — kaydetmeyi BEKLEMEDEN (bkz. rolSil'in
+    // çağırdığı yenile()). Tek istisna: akış şu an GEÇERSİZSE (bkz.
+    // model.flow.error) SON_MODEL'den çizilmeye devam ediliyor — TASLAK o
+    // anda bozuk akıştan ÖNCEKİ (son geçerli) hâli taşıyor olabilir ve onu
+    // sağlammış gibi göstermek "akış bozulunca diyagram değil hata
+    // görünür" kuralını (bkz. diyagramIcerikCiz yorumu) sessizce delerdi.
+    // Düzenleme AÇIK mı (düğümler tıklanabilir, "+"ler çıkıyor mu)
+    // sorusunun cevabı ise HER ZAMAN TASLAK'ın var olup olmadığı —
+    // görüntülemek düzenlemekten ayrı bir yetki (bkz. akisAc yorumu).
+    const duzenlenebilir = TASLAK !== null;
+    const akisGecerli = !(SON_MODEL && SON_MODEL.flow && SON_MODEL.flow.error);
+    const diyagramModeli = duzenlenebilir && akisGecerli ? taslakModelKur(TASLAK) : SON_MODEL;
+    icerik.append(diyagramIcerikCiz(diyagramModeli, duzenlenebilir));
   } else if (TASLAK !== null) {
     icerik.append(editorIcerikCiz());
   } else {
@@ -1795,6 +1994,7 @@ async function akisAc() {
   TASLAK = null;
   SAGLAYICILAR = [];
   AKIS_HATA = null;
+  DIYAGRAM_SECILI = null;
   try {
     const cevap = await fetch("/akis", { cache: "no-store" });
     const veri = await cevap.json();
@@ -1830,6 +2030,39 @@ function alan(ad, deger, onChange, secenekler) {
   return l;
 }
 
+/**
+ * syncBack alanı — rolün BAŞKA hangi rollerin kuyruğuna haber bıraktığı.
+ *
+ * Eskiden bu alan hiç düzenlenemiyordu: rolCiz id/provider/workspace/
+ * receive/next/reject gösteriyordu ama syncBack taslakta sessizce
+ * TAŞINIYOR, hiçbir form alanı ona dokunmuyordu — operatör onu yalnızca
+ * Ham YAML önizlemesinde (yazılacak dosyanın metninde) görebiliyordu,
+ * DEĞİŞTİREMİYORDU. Çoklu hedef olduğu için alan()'ın tek-değerli
+ * select/input kalıbı burada uymuyor: her diğer rol kendi onay kutusu.
+ */
+function syncBackAlani(rol, digerIdler) {
+  const l = el("label", "genis");
+  l.append(document.createTextNode("syncBack"));
+  const kutu = el("div", "syncback");
+  digerIdler.forEach((id) => {
+    const etiket = el("label", "syncback-oge");
+    const kutucuk = el("input");
+    kutucuk.type = "checkbox";
+    kutucuk.checked = (rol.syncBack || []).includes(id);
+    kutucuk.addEventListener("change", () => {
+      const mevcut = new Set(rol.syncBack || []);
+      if (kutucuk.checked) mevcut.add(id);
+      else mevcut.delete(id);
+      rol.syncBack = Array.from(mevcut);
+      void onizle();
+    });
+    etiket.append(kutucuk, document.createTextNode(id));
+    kutu.append(etiket);
+  });
+  l.append(kutu);
+  return l;
+}
+
 function rolCiz(rol, i) {
   const kutu = el("div", "rol");
   const ust = el("div", "rolust");
@@ -1859,6 +2092,7 @@ function rolCiz(rol, i) {
   kutu.append(alan("receive", rol.receive || "task", (v) => (rol.receive = v), ["task", "batch"]));
   kutu.append(alan("next", rol.next, (v) => (rol.next = v), hedefler));
   kutu.append(alan("reject", rol.reject || "", (v) => { rol.reject = v || undefined; }, retler));
+  kutu.append(syncBackAlani(rol, idler.filter((x) => x !== rol.id)));
   const p = alan("prompt", rol.prompt, (v) => (rol.prompt = v));
   p.className = "genis";
   kutu.append(p);
@@ -1900,6 +2134,19 @@ function rolSil(i) {
   });
   if (TASLAK.gates) TASLAK.gates = TASLAK.gates.filter((g) => g.after !== giden.id);
   yenile();
+}
+
+/**
+ * rolSil'in KİMLİKLE çağrılan hâli.
+ *
+ * Diyagramdan tıklanan düğüm bir İNDEKS taşımıyor, bir id taşıyor
+ * (bkz. data-rol özniteliği) — bu sarmalayıcı aynı reconnect mantığını
+ * (bkz. rolSil yorumu) diyagramın konuştuğu kimlikle çağırıyor, mantığı
+ * İKİ YERDE yazmak yerine.
+ */
+function rolSilById(id) {
+  const i = TASLAK.roles.findIndex((r) => r.id === id);
+  if (i !== -1) rolSil(i);
 }
 
 function rolAdiDegis(i, yeniAd) {
@@ -1945,9 +2192,24 @@ function editorIcerikCiz() {
   TASLAK.roles.forEach((rol, i) => ed.append(rolCiz(rol, i)));
   icerik.append(ed);
 
+  icerik.append(onizlemeBlokCiz());
+  return icerik;
+}
+
+/**
+ * Önizleme kutusu + "Dosyaya yaz" düğmesi + uyarı metni.
+ *
+ * Diyagram sekmesindeki rol düzenleme paneli de AYNI #onizleme/#kaydet
+ * çiftine ihtiyaç duyuyor (bkz. onizle/yaz) — iki sekme AYNI ANDA DOM'da
+ * durmuyor (bkz. akisPanelCiz, icerik hep TEK sekmenin içeriği), yani id
+ * çatışması yok. Mantığı burada TEK yerde tutmak, "Ham YAML"ın ileride
+ * değişip diyagramın eski kalması riskini kapatıyor.
+ */
+function onizlemeBlokCiz() {
+  const sarmal = el("div", null);
   const sonuc = el("div", "kutu");
   sonuc.id = "onizleme";
-  icerik.append(sonuc);
+  sarmal.append(sonuc);
 
   const alt = el("div", "exits");
   const kaydet = el("button", "kaydet", "Dosyaya yaz");
@@ -1956,12 +2218,11 @@ function editorIcerikCiz() {
   kaydet.disabled = true;
   kaydet.addEventListener("click", () => { void yaz(); });
   alt.append(kaydet);
-  icerik.append(alt);
-  icerik.append(el("div", "soon",
+  sarmal.append(alt);
+  sarmal.append(el("div", "soon",
     "Kaydetmek akış dosyasını yeniden yazar: YORUMLAR KAYBOLUR. Dosya git'te, " +
     "diff'e bakabilirsin. Kapı metinleri, anayasa ve audit ayarları aynen korunur."));
-
-  return icerik;
+  return sarmal;
 }
 
 /** Taslağı DOSYAYA YAZMADAN doğrular; kural numarası kullanıcıya aynen gider. */
@@ -2170,9 +2431,21 @@ async function promptYaz() {
 // sırasından geliyor (/akis'in draft'ı) ve operatör seçiyor.
 let YENI_ROL_SAGLAYICILAR = [];
 let YENI_ROL_ROLLER = [];
+/**
+ * Diyagramdan tıklanan "+" işaretinin önceden söylediği yer — bkz.
+ * diyagramRolArasiEkleAc. yeniRolAc bunu OKUYUP SIFIRLIYOR: panel
+ * "Promptları düzenle" yolundan da açılabiliyor ve o yolda bu ön seçim
+ * olmamalı (eski bir diyagram tıklaması bir sonraki, İLİŞKİSİZ açılışı
+ * etkilemesin).
+ */
+let YENI_ROL_ONCEDEN_SONRA = null;
+/** Seçili "sonra" rolünün tam kaydı — başlıkta "X ile Y arasına" yazmak için. */
+let YENI_ROL_SONRA_VARSAYILAN = null;
 
 async function yeniRolAc() {
   const kap = document.getElementById("panel");
+  const oncedenSonra = YENI_ROL_ONCEDEN_SONRA;
+  YENI_ROL_ONCEDEN_SONRA = null;
   try {
     const cevap = await fetch("/akis", { cache: "no-store" });
     const veri = await cevap.json();
@@ -2182,8 +2455,14 @@ async function yeniRolAc() {
     // formu doldurduktan SONRA reddedilmeye bırakmıyor.
     if (!veri.draft) throw new Error("Bu ekran rol eklemeye açık değil.");
     YENI_ROL_SAGLAYICILAR = veri.providers || [];
-    YENI_ROL_ROLLER = (veri.draft.roles || []).map((r) => r.id);
+    const roller = veri.draft.roles || [];
+    YENI_ROL_ROLLER = roller.map((r) => r.id);
     if (!YENI_ROL_ROLLER.length) throw new Error("Akışta hiç rol yok — ardına eklenecek bir rol bulunamadı.");
+    // Diyagramdan gelen ön seçim GERÇEKTEN akışta bir rolse kullanılıyor —
+    // uydurma bir id formu bozuk bir varsayılanla açmasın.
+    YENI_ROL_SONRA_VARSAYILAN = YENI_ROL_ROLLER.includes(oncedenSonra)
+      ? roller.find((r) => r.id === oncedenSonra)
+      : null;
     kap.replaceChildren(yeniRolEditorCiz());
   } catch (e) {
     kap.replaceChildren(el("div", "err", "Rol eklenemedi: " + e.message));
@@ -2209,7 +2488,13 @@ function yeniRolEditorCiz() {
   kapatDugme.addEventListener("click", kapat);
   p.append(kapatDugme);
 
-  p.append(el("h2", null, "Yeni rol"));
+  // DİYAGRAMDAN AÇILDIYSA başlık NEREYE eklendiğini AÇIKÇA söylüyor —
+  // bu kartın kendi isteği ("yeni rolün zincire NEREYE girdiğini açıkça
+  // göstermek"). next zincirin BİR SONRAKİ rolü: "A ile B arasına".
+  const baslik = YENI_ROL_SONRA_VARSAYILAN === null
+    ? "Yeni rol"
+    : "Yeni rol — " + YENI_ROL_SONRA_VARSAYILAN.id + " ile " + YENI_ROL_SONRA_VARSAYILAN.next + " arasına";
+  p.append(el("h2", null, baslik));
   p.append(el("div", "cid",
     "rol VE promptu BİRLİKTE yaratılır — geçersiz bir akış üretirse ikisi de GERİ ALINIR"));
 
@@ -2235,10 +2520,14 @@ function yeniRolEditorCiz() {
   kutu.append(workspaceEtiket);
 
   // "sonra" ÇAĞIRANIN (burada: operatörün) seçimi — uç bunu tahmin etmiyor.
+  // DİYAGRAMDAN gelen ön seçim VARSAYILAN olarak işaretli (operatör
+  // isterse değiştirebilir) — başlıktaki "A ile B arasına" ile AYNI yere
+  // işaret ediyor.
   const { etiket: sonraEtiket, giris: sonraSec } = yeniRolAlani("sonra — hangi rolün ARDINA", "select", "yeniRolSonra");
   YENI_ROL_ROLLER.forEach((id) => {
     const o = el("option", null, id);
     o.value = id;
+    if (YENI_ROL_SONRA_VARSAYILAN !== null && id === YENI_ROL_SONRA_VARSAYILAN.id) o.selected = true;
     sonraSec.append(o);
   });
   kutu.append(sonraEtiket);
