@@ -317,6 +317,46 @@ describe("downstream ret metriği", () => {
     ]);
     expect(r.groups[0]?.verdict.reason).toMatch(/Downstream ret azalması: —/);
   });
+
+  /**
+   * PAYDA UYUŞMAZLIĞI — bulgu 38, kart `c-20261103-18959e`.
+   *
+   * `rejects` BÜTÜN koşuların (`totalRuns`) üzerinden toplanıyor: teslim
+   * edilmeyen koşu da koştu, parası ödendi, reddi sayıma giriyor. Payda
+   * `runs` (yalnız TESLİM EDİLMİŞ koşular) olursa pay başka bir kümeyi,
+   * payda başka bir kümeyi sayar — `cli.ts`'in rapor satırında düzeltilen
+   * aynı kusur sınıfı, burada `decide()`'a giden sayıda.
+   */
+  it("teslim edilmeyen koşunun reddi payda dışına düşürülünce azalma yanlış çıkar", () => {
+    const settled = (runId: string, state: string): SkeinEvent =>
+      ev({ type: "card.settled", cell: "c", card: "k", role: "coder", outcome: "escalated", state }, runId);
+    const r = planEffect([
+      ...[1, 2, 3].flatMap((k) => [
+        ...kosu(`s${k}`, "g", "plansiz", { red: 4, rejects: 4 }),
+        settled(`s${k}`, "done"),
+      ]),
+      ...[1, 2, 3].flatMap((k) => [
+        ...kosu(`p${k}`, "g", "planli", {
+          red: 1, rejects: 1, planning: { objections: 1, accepted: 1, invalid: 0 },
+        }),
+        settled(`p${k}`, "done"),
+      ]),
+      // Dördüncü planlı koşu kapıda kaldı — TESLİM EDİLMEDİ ama reddi
+      // yine de koştu ve paraya mal oldu: `rejects` toplamına giriyor,
+      // `runs` (teslim payda) içine girmiyor.
+      ...kosu("p4", "g", "planli", {
+        red: 1, rejects: 5, planning: { objections: 1, accepted: 1, invalid: 0 },
+      }),
+      settled("p4", "gate"),
+    ]);
+    const planli = r.groups[0]?.planli;
+    expect(planli?.runs).toBe(3);
+    expect(planli?.totalRuns).toBe(4);
+    expect(planli?.rejects).toBe(8);
+    // Payda `runs` (3) olsaydı oran 8/3 çıkar, azalma (4 − 8/3)/4 = %33
+    // görünürdü. Doğru payda `totalRuns` (4): (4 − 8/4)/4 = %50.
+    expect(r.groups[0]?.verdict.reason).toMatch(/Downstream ret azalması: %50/);
+  });
 });
 
 describe("obligationStats — madde başına son karar", () => {

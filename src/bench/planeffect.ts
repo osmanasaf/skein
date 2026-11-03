@@ -397,9 +397,15 @@ function retReduction(plansiz: ArmSide | null, planli: ArmSide | null): number |
   if (plansiz === null || planli === null) return null;
   if (plansiz.runs === 0 || planli.runs === 0) return null;
   if (plansiz.rejects === 0) return null;
-  // Koşu başına: kolların koşu sayısı farklı olabiliyor.
-  const a = plansiz.rejects / plansiz.runs;
-  const b = planli.rejects / planli.runs;
+  // `rejects` BÜTÜN koşuların (`totalRuns`) üzerinden toplanıyor —
+  // teslim edilmeyen koşu da koştu, parası ödendi, reddi sayıma giriyor
+  // (bkz. `side`'daki `ArmSide.totalRuns` yorumu). Payda `runs` (yalnız
+  // TESLİM EDİLMİŞ koşular) olsaydı pay-payda farklı kümeleri sayardı ve
+  // oran küçülürken gerçek kusur büyümüş gibi görünebilirdi — tam da
+  // `cli.ts`'in rapor satırında düzeltilen payda uyuşmazlığının aynısı,
+  // burada `decide()`'a giden sayıda (bulgu 38, kart `c-20261103-18959e`).
+  const a = plansiz.rejects / plansiz.totalRuns;
+  const b = planli.rejects / planli.totalRuns;
   return (a - b) / a;
 }
 
