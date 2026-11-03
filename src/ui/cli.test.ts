@@ -131,6 +131,14 @@ function ekraniBaslat(
 }
 
 describe("ui cli — port hafızası (gerçek süreç)", () => {
+  /**
+   * `PATH=""` ile çocuk sürece açacak komutu BULUNAMAZ hâle getiriyoruz —
+   * ortamda `xdg-open`/`open` kurulu olsun ya da olmasın, tarayıcı açma
+   * denemesi DETERMİNİSTİK başarısız olur ve testler gerçek bir pencere
+   * açmaz.
+   */
+  const KOMUTSUZ_ORTAM = { ...process.env, PATH: "" };
+
   it("--port verilen açılış o portta açılır ve hatırlanan hâle gelir", async () => {
     const e = await ekraniBaslat(["test", "--tarayici-yok", "--port", "18391"]);
     try {
@@ -173,6 +181,40 @@ describe("ui cli — port hafızası (gerçek süreç)", () => {
     }
   });
 
+  it("argümansız çağrı (GERÇEK `npm start` senaryosu) ekranı AÇAR, USAGE basmayıp çıkmaz", async () => {
+    // `npm start` (package.json) hiçbir ek argüman geçirmiyor — yani
+    // `process.argv.slice(2)` burada da tam olarak `[]` olmalı. Bu dal
+    // eskiden (reddedilen turda) `argv.length === 0` özel durumuna düşüp
+    // yalnızca USAGE basıp 0 ile çıkıyordu; ekran HİÇ AÇILMIYORDU. Akış adı
+    // da VERİLMİYOR: `hub/flows` altındaki tek akış (`test`) varsayılan
+    // olarak seçilmeli.
+    const e = await ekraniBaslat([], { env: KOMUTSUZ_ORTAM });
+    try {
+      expect(e.port).toBeGreaterThan(0);
+      expect(e.metni()).not.toContain("Kullanım:");
+    } finally {
+      await e.durdur();
+    }
+  });
+
+  it("`--help` kullanım metnini basar ve ekranı AÇMADAN 0 ile çıkar", async () => {
+    const child = spawnPortable(
+      process.execPath,
+      [tsxYolu(), join(process.cwd(), "src", "ui", "cli.ts"), "--help"],
+      { cwd: root },
+    );
+    let cikti = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+      cikti += chunk.toString();
+    });
+    const kod = await new Promise<number | null>((res) => {
+      child.on("close", (code) => res(code));
+    });
+    expect(kod).toBe(0);
+    expect(cikti).toContain("Kullanım:");
+    expect(cikti).not.toContain("ekran açık");
+  });
+
   it("bozuk `.skein/ekran.json` açılışı ENGELLEMİYOR", async () => {
     await mkdir(join(root, ".skein"), { recursive: true });
     await writeFile(join(root, ".skein", "ekran.json"), "{ bu json degil", "utf8");
@@ -184,15 +226,11 @@ describe("ui cli — port hafızası (gerçek süreç)", () => {
     }
   });
 
-  /**
-   * `PATH=""` ile çocuk sürece açacak komutu BULUNAMAZ hâle getiriyoruz —
-   * ortamda `xdg-open`/`open` kurulu olsun ya da olmasın, hata yolu
-   * DETERMİNİSTİK tetikleniyor. Sahte bir spawn enjekte etmiyoruz:
-   * `tarayiciyiAc` birim sınamasında (`open-browser.test.ts`) o yapıldı,
-   * burada asıl soru `cli.ts`'in gerçek hatayı GERÇEKTEN yutup yutmadığı.
-   */
-  const KOMUTSUZ_ORTAM = { ...process.env, PATH: "" };
-
+  // `KOMUTSUZ_ORTAM` yukarıda tanımlı (`describe` kapsamı) — açacak komutu
+  // BULUNAMAZ hâle getirip tarayıcı açma denemesini DETERMİNİSTİK başarısız
+  // kılıyor. Sahte bir spawn enjekte etmiyoruz: `tarayiciyiAc` birim
+  // sınamasında (`open-browser.test.ts`) o yapıldı, burada asıl soru
+  // `cli.ts`'in gerçek hatayı GERÇEKTEN yutup yutmadığı.
   it("tarayıcı açma başarısız olsa da ekran çalışır durumda kalır", async () => {
     // `--tarayici-yok` KASITLI verilmiyor: gerçek açma yolu koşuyor.
     const e = await ekraniBaslat(["test", "--port", "18395"], { env: KOMUTSUZ_ORTAM });

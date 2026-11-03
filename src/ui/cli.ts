@@ -47,6 +47,7 @@ Seçenekler:
   --host <h>      dinlenecek arayüz (varsayılan 127.0.0.1 — yerel araç)
   --salt-okunur   akış düzenlemeyi kapat
   --tarayici-yok  tarayıcıyı kendiliğinden AÇMA (uzaktan/konteyner koşumu için)
+  --help, -h      bu metni bas ve çık (ARGÜMANSIZ çağrı ekranı AÇAR, bunu basmaz)
 
 Gözcüye geçirilen bayraklar (verilirse düğme açılır):
   --model <spec>         zorunlu, ör. claude:claude-sonnet-5
@@ -77,6 +78,17 @@ async function listFlowNames(root: string): Promise<string[]> {
 }
 
 async function main(argv: string[]): Promise<number> {
+  // `--help`/`-h` AÇIK bir istektir — kullanım metnini basar ve çıkar.
+  // ARGÜMANSIZ çağrı (ör. `npm start`) bununla KARIŞTIRILMAZ: akış artık
+  // zorunlu değil, verilmezse `hub/flows` altındaki ilk akış açılır. Eskiden
+  // `argv.length === 0` de bu dala düşüyordu — bu, `npm start`ın (ek argüman
+  // geçirmeyen betik) ekranı HİÇ AÇMAMASI anlamına geliyordu; kartın birinci
+  // gereksinimiyle (tek komutla ekran açılsın) doğrudan çelişiyordu.
+  if (argv.includes("--help") || argv.includes("-h")) {
+    console.log(USAGE);
+    return 0;
+  }
+
   let flowName: string | undefined;
   let port: number | undefined;
   let host: string | undefined;
@@ -115,13 +127,6 @@ async function main(argv: string[]): Promise<number> {
     return 1;
   }
 
-  // Argümansız çağrı (`--help` niyetiyle) hâlâ kullanım metnini basıyor.
-  // Akış argümanı ARTIK ZORUNLU DEĞİL — verilmezse `hub/flows` altındaki
-  // ilk akış açılır ve ekrandaki seçiciden başka birine geçilebilir.
-  if (flowName === undefined && argv.length === 0) {
-    console.log(USAGE);
-    return 0;
-  }
   if (port !== undefined && (!Number.isInteger(port) || port < 0 || port > 65535)) {
     console.error("✗ --port 0-65535 arası bir tamsayı olmalı");
     return 1;
