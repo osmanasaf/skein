@@ -2,7 +2,7 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import { mkdtemp, writeFile, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ClaudeCliAdapter, needsStdin } from "./claude.js";
+import { ClaudeCliAdapter, birikimeEkle, kismiKullanim, needsStdin, yeniBirikim } from "./claude.js";
 import type { AgentStep } from "./contract.js";
 import { makeFakeCli, type FakeCliSpec } from "../testing/fake-cli.js";
 
@@ -433,5 +433,134 @@ describe("needsStdin", () => {
     const uzun = "x".repeat(8001);
     expect(needsStdin(uzun, false)).toBe(true);
     expect(needsStdin(uzun, true)).toBe(true);
+  });
+});
+
+/**
+ * YARIM ÖLÇÜ — kapanış kaydı hiç gelmediğinde.
+ *
+ * Gerçek koşuda bir aktivasyon 20 dakika koştu, 156 adım attı, zaman
+ * aşımıyla öldürüldü ve günlüğe ÖLÇÜSÜZ düştü: `result` satırı hiç
+ * basılmamıştı ve ölçünün tek kaynağı oydu. Ekranda o tur bedava
+ * göründü. Harcanan gizlenmez — akıştaki her mesaj kendi kullanımını
+ * taşıyor ve kapanış gelmezse ölçü oradan toplanıyor.
+ */
+const MESAJ = (girdi: number, cikti: number, onbellek = 0) => JSON.stringify({
+  type: "assistant",
+  message: {
+    content: [{ type: "text", text: "çalışıyorum" }],
+    usage: { input_tokens: girdi, output_tokens: cikti, cache_read_input_tokens: onbellek },
+  },
+});
+
+describe("akış birikimi", () => {
+  const rec = (metin: string) => {
+    const v = JSON.parse(metin) as Record<string, unknown>;
+    return { type: v["type"] as string, value: v };
+  };
+
+  it("assistant mesajlarının token'larını toplar; önbellek okuması da girdidir", () => {
+    const b = yeniBirikim();
+    birikimeEkle(b, rec(MESAJ(10, 3, 200)));
+    birikimeEkle(b, rec(MESAJ(5, 2, 100)));
+    // Girdi = önbelleğe girmemiş + önbellekten okunan. Tek başına
+    // `input_tokens` okumak hacmi 15 gösterirdi; gerçek hacim 315.
+    expect(b).toEqual({ girdi: 315, cikti: 5, sayac: 2 });
+  });
+
+  it("assistant OLMAYAN kayıt sayılmaz", () => {
+    const b = yeniBirikim();
+    birikimeEkle(b, rec(JSON.stringify({ type: "system", subtype: "init" })));
+    birikimeEkle(b, rec(JSON.stringify({ type: "user", message: { content: [] } })));
+    expect(b.sayac).toBe(0);
+  });
+
+  // Yukarıdaki sınama tip kontrolünü UYANDIRMIYOR: o kayıtlarda zaten
+  // kullanım bloğu yok, sonraki koruma onları eliyor. Tip kontrolünü
+  // gerçekten sınamak için kullanım TAŞIYAN ama assistant OLMAYAN bir
+  // kayıt gerekiyor — sağlayıcı bir gün araç sonucuna kullanım eklerse
+  // o blok ikinci kez sayılır ve toplam sessizce şişer.
+  it("assistant olmayan kayıt kullanım TAŞISA DA sayılmaz", () => {
+    const b = yeniBirikim();
+    birikimeEkle(b, rec(JSON.stringify({
+      type: "user",
+      message: { content: [], usage: { input_tokens: 999, output_tokens: 9 } },
+    })));
+    expect(b).toEqual({ girdi: 0, cikti: 0, sayac: 0 });
+  });
+
+  // Kullanım bloğu OLMAYAN bir mesaj "sıfır token" demek değil: sayacı
+  // artırmak, yarım toplamı olduğundan büyük gösterirdi.
+  it("kullanım bildirmeyen assistant mesajı sayacı artırmaz", () => {
+    const b = yeniBirikim();
+    birikimeEkle(b, rec(S_TOOL));
+    expect(b).toEqual({ girdi: 0, cikti: 0, sayac: 0 });
+  });
+
+  // Ve aynı kural bir adım derinde: kullanım bloğu VAR ama içi BOŞ.
+  // Yukarıdaki sınama bunu da yakalamıyordu, çünkü bloğun kendisi hiç
+  // yoktu ve dış koruma devreye giriyordu.
+  it("kullanım bloğu BOŞ gelirse de sayaç artmaz", () => {
+    const b = yeniBirikim();
+    birikimeEkle(b, rec(JSON.stringify({
+      type: "assistant",
+      message: { content: [], usage: {} },
+    })));
+    expect(b).toEqual({ girdi: 0, cikti: 0, sayac: 0 });
+  });
+
+  it("hiç mesaj görülmediyse ÖLÇÜ YOK — sıfır token değil", () => {
+    expect(kismiKullanim(yeniBirikim())).toBeUndefined();
+  });
+
+  it("birikim ölçüye çevrilince KISMİ işaretlenir ve dolar İÇERMEZ", () => {
+    const b = yeniBirikim();
+    birikimeEkle(b, rec(MESAJ(10, 3)));
+    const u = kismiKullanim(b);
+    expect(u).toEqual({ inputTokens: 10, outputTokens: 3, kismi: true });
+    // Dolar uydurmak bir fiyat tablosu uydurmaktır: bayatlar, ama kesin
+    // görünür. Sağlayıcı doları yalnızca kapanış kaydında veriyor.
+    expect(u?.costUsd).toBeUndefined();
+  });
+});
+
+describe("ClaudeCliAdapter — ölçü kapanış kaydı gelmediğinde", () => {
+  it("zaman aşımında akıştan toplanan YARIM ölçüyü bildirir", async () => {
+    // Kapanış kaydı YOK: iki mesaj basılıyor, sonra süreç asılıyor ve
+    // zaman aşımıyla öldürülüyor — gerçek koşudaki dizilişin aynısı.
+    const bin = await fakeCli({
+      chunks: [`${MESAJ(1000, 10)}
+`, `${MESAJ(2000, 20)}
+`],
+      chunkDelayMs: 10,
+      sleepMs: 30_000,
+    });
+    const r = await new ClaudeCliAdapter({ model: "m", bin })
+      .invoke(req({ onStep: () => {}, timeoutMs: 1500 }));
+
+    expect(r.timedOut).toBe(true);
+    expect(r.usage).toEqual({ inputTokens: 3000, outputTokens: 30, kismi: true });
+  });
+
+  // Kapanış kaydı GELDİYSE ölçü odur. Yarım toplam onu ezseydi, biten
+  // turların dolar değeri kaybolurdu — düzeltme yeni bir kusur olurdu.
+  it("kapanış kaydı geldiyse yarım toplam onu EZMEZ", async () => {
+    const bin = await fakeCli({ stdout: `${MESAJ(1000, 10)}
+${S_RESULT}
+` });
+    const r = await new ClaudeCliAdapter({ model: "m", bin }).invoke(req({ onStep: () => {} }));
+
+    expect(r.usage).toEqual({ inputTokens: 7, outputTokens: 3, costUsd: 0.02 });
+    expect(r.usage?.kismi).toBeUndefined();
+  });
+
+  // Hiç mesaj görülmeden ölen bir süreç ÖLÇÜLEMEZ, sıfır değil.
+  it("hiç mesaj gelmeden öldüyse ölçü BOŞ kalır", async () => {
+    const bin = await fakeCli({ sleepMs: 30_000 });
+    const r = await new ClaudeCliAdapter({ model: "m", bin })
+      .invoke(req({ onStep: () => {}, timeoutMs: 400 }));
+
+    expect(r.timedOut).toBe(true);
+    expect(r.usage).toBeUndefined();
   });
 });

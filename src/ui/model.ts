@@ -31,7 +31,23 @@ export interface UiModel {
   daemon: { alive: boolean; info: LockInfo } | null;
   roles: UiRole[];
   cards: UiCard[];
-  totals: { open: number; done: number; costUsd: number; activations: number; orphans: number };
+  totals: {
+    open: number;
+    done: number;
+    costUsd: number;
+    /**
+     * Dolar bildirmemiş aktivasyon sayısı — toplam bir ALT SINIR mı.
+     *
+     * Eskiden toplam `?? 0` ile kuruluyordu ve bu, projenin kendi
+     * yasakladığı kalıbın ta kendisiydi (bkz. `bench/usage.ts`): zaman
+     * aşımına uğrayan bir aktivasyon ölçü bildirmiyor, ekran da onu
+     * harcanmamış sayıyordu. Gerçek bir koşuda 20 dakikalık bir tur
+     * böyle görünmez oldu.
+     */
+    olculmeyen: number;
+    activations: number;
+    orphans: number;
+  };
   /**
    * Ayrıştırılamayan kart dosyalarının yolları.
    *
@@ -120,6 +136,22 @@ export interface UiCard {
   lastReject: string | null;
   durationMs: number;
   costUsd: number;
+  /**
+   * Bu kartın dolar bildirmemiş aktivasyon sayısı.
+   *
+   * Sıfırdan büyükse `costUsd` bir ALT SINIR. Kartın yanında `$0.59`
+   * yazması ile `≥$0.59` yazması aynı şey değil; ikincisi operatöre
+   * "burada ölçülmemiş harcama var" diyor.
+   */
+  olculmeyen: number;
+  /**
+   * Kartın bütün aktivasyonlarının token'ı (girdi + çıktı).
+   *
+   * Dolar yoksa ölçü bu: zaman aşımına uğrayan tur artık akıştan toplanan
+   * token'ları bildiriyor (bkz. `Usage.kismi`), ve ekran onu göstermezse
+   * bildiğinden azını söylemiş olur — harcanan yine gizlenir.
+   */
+  tokens: number;
   /** Kart koşuyorsa ajanın son adımı. */
   live: UiStep | null;
   /**
@@ -252,6 +284,7 @@ export async function buildModel(options: BuildOptions): Promise<UiModel> {
       open: ui.filter((c) => c.state !== "done").length,
       done: ui.filter((c) => c.state === "done").length,
       costUsd: ui.reduce((sum, c) => sum + c.costUsd, 0),
+      olculmeyen: ui.reduce((sum, c) => sum + c.olculmeyen, 0),
       activations: events.filter((e) => e.type === "agent.started").length,
     },
     bozuk: await options.queue.bozuklar(),
@@ -317,10 +350,17 @@ function toUiCard(
 ): UiCard {
   let costUsd = 0;
   let durationMs = 0;
+  // BİLDİRİLMEYEN SIFIR DEĞİLDİR. Dolar bildirmeyen her aktivasyon
+  // sayılıyor; `?? 0` ile toplamak onları harcanmamış gösterirdi.
+  let olculmeyen = 0;
+  let tokens = 0;
   for (const event of events) {
     if (event.type !== "agent.finished") continue;
     durationMs += event.durationMs;
-    costUsd += event.usage?.costUsd ?? 0;
+    const dolar = event.usage?.costUsd;
+    if (typeof dolar === "number") costUsd += dolar;
+    else olculmeyen += 1;
+    tokens += (event.usage?.inputTokens ?? 0) + (event.usage?.outputTokens ?? 0);
   }
 
   const trail: UiCard["trail"] = [];
@@ -355,6 +395,8 @@ function toUiCard(
     lastReject,
     durationMs,
     costUsd,
+    olculmeyen,
+    tokens,
     live: card.state === "active" ? lastStep(events) : null,
     orphan: hiza.orphan,
     stale: hiza.stale,

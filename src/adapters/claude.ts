@@ -181,6 +181,9 @@ export class ClaudeCliAdapter implements Adapter {
     // sürecin bitmesi beklenmez. stdout yine de biriktirilir — teşhis için
     // ham çıktı sözleşmenin parçası.
     let streamed: ClaudeJsonResult | undefined;
+    // Akış sürerken toplanan token'lar — kapanış kaydı hiç gelmezse ölçünün
+    // TEK kalıntısı bu olur (bkz. `Usage.kismi`).
+    const biriken = yeniBirikim();
     if (req.onStep !== undefined) {
       const onStep = req.onStep;
       const splitter = new LineSplitter((line) => {
@@ -190,6 +193,7 @@ export class ClaudeCliAdapter implements Adapter {
           streamed = record.value as ClaudeJsonResult;
           return;
         }
+        birikimeEkle(biriken, record);
         for (const step of stepsOf(record, req.workdir)) onStep(step);
       });
       child.stdout.on("data", (c: string) => {
@@ -233,7 +237,10 @@ export class ClaudeCliAdapter implements Adapter {
       stderr,
       durationMs: Date.now() - started,
     };
-    const usage = toUsage(parsed);
+    // Kapanış kaydı GELDİYSE ölçü odur — yarım toplam onu EZMEZ.
+    // Gelmediyse (zaman aşımı/öldürme) akıştan toplanan alt sınır yazılır:
+    // bildirilmeyen sıfır değildir, ama uydurulmuş bir dolar da olmaz.
+    const usage = toUsage(parsed) ?? (parsed === undefined ? kismiKullanim(biriken) : undefined);
     if (usage) result.usage = usage;
     // Ajanın son mesajı: tur sonuçsuz bittiğinde sebebi çoğu zaman burada.
     if (typeof parsed?.result === "string" && parsed.result.trim() !== "") {
@@ -316,6 +323,60 @@ function toUsage(parsed: ClaudeJsonResult | undefined): Usage | undefined {
   if (typeof parsed.usage?.output_tokens === "number") usage.outputTokens = parsed.usage.output_tokens;
   if (typeof parsed.total_cost_usd === "number") usage.costUsd = parsed.total_cost_usd;
   return Object.keys(usage).length > 0 ? usage : undefined;
+}
+
+/**
+ * Akış sürerken biriken token sayacı.
+ *
+ * Her `assistant` kaydı KENDİ API isteğinin kullanımını taşıyor; toplamak
+ * doğru olan, çünkü her tur önbelleği yeniden okuyor ve sağlayıcı da parayı
+ * böyle sayıyor. `sayac` ayrı tutuluyor: hiç mesaj görülmediyse "sıfır
+ * token" demek yanlış olurdu, ÖLÇÜ YOK demek doğru.
+ */
+export interface AkisBirikimi {
+  girdi: number;
+  cikti: number;
+  sayac: number;
+}
+
+export function yeniBirikim(): AkisBirikimi {
+  return { girdi: 0, cikti: 0, sayac: 0 };
+}
+
+/**
+ * Bir akış kaydının bildirdiği kullanımı birikime ekler.
+ *
+ * Yalnızca `assistant` kayıtları sayılıyor: `user` kayıtları araç
+ * sonuçlarını taşıyor ve kendi kullanımları yok, `system` kayıtları da
+ * ölçü bildirmiyor. Kayıt kullanım bloğu taşımıyorsa SAYAÇ DA ARTMAZ —
+ * görülmemiş bir ölçüyü görülmüş saymak, yarım toplamı olduğundan büyük
+ * gösterirdi.
+ */
+export function birikimeEkle(b: AkisBirikimi, record: StreamRecord): void {
+  if (record.type !== "assistant") return;
+  const message = record.value["message"];
+  if (message === null || typeof message !== "object") return;
+  const u = (message as Record<string, unknown>)["usage"];
+  if (u === null || typeof u !== "object") return;
+  const blok = u as NonNullable<ClaudeJsonResult["usage"]>;
+  const girdi = girdiToplami(blok);
+  const cikti = blok.output_tokens;
+  if (girdi === undefined && typeof cikti !== "number") return;
+  b.girdi += girdi ?? 0;
+  b.cikti += typeof cikti === "number" ? cikti : 0;
+  b.sayac += 1;
+}
+
+/**
+ * Birikimi YARIM ölçüye çevirir; hiç mesaj görülmediyse ölçü yoktur.
+ *
+ * Dolar KASITLI olarak yok: sağlayıcı dolar değerini yalnızca kapanış
+ * kaydında veriyor ve onu buradan hesaplamak bir fiyat tablosu uydurmak
+ * olurdu — bayatlayan, ama kesin görünen bir sayı.
+ */
+export function kismiKullanim(b: AkisBirikimi): Usage | undefined {
+  if (b.sayac === 0) return undefined;
+  return { inputTokens: b.girdi, outputTokens: b.cikti, kismi: true };
 }
 
 /** Akıştaki tek kayıt: tipi ve gövdesi. */

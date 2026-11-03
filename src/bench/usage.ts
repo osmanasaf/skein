@@ -13,6 +13,14 @@ export interface UsageTotal {
   costUsd?: number;
   inputTokens?: number;
   outputTokens?: number;
+  /**
+   * Toplama giren ÇAĞRILARDAN en az biri yarım ölçüydü (bkz. `Usage.kismi`).
+   *
+   * O zaman bu toplam bir ALT SINIR. İşaret toplamla birlikte taşınmazsa
+   * yarım bir sayı tam bir sayı gibi okunur — ölçünün yarım olduğunu bilip
+   * söylememek, hiç ölçmemekten daha yanıltıcı.
+   */
+  kismi?: true;
 }
 
 /**
@@ -39,10 +47,14 @@ export function totalUsage(list: readonly (Usage | undefined)[]): UsageTotal {
   const costUsd = topla((u) => u.costUsd);
   const inputTokens = topla((u) => u.inputTokens);
   const outputTokens = topla((u) => u.outputTokens);
+  // Tek bir yarım çağrı bütün toplamı alt sınıra çevirir: kirlilik yukarı
+  // taşınır, aşağı değil.
+  const kismi = list.some((u) => u?.kismi === true);
   return {
     ...(costUsd === undefined ? {} : { costUsd }),
     ...(inputTokens === undefined ? {} : { inputTokens }),
     ...(outputTokens === undefined ? {} : { outputTokens }),
+    ...(kismi ? { kismi: true as const } : {}),
   };
 }
 
@@ -61,9 +73,21 @@ export function formatUsage(t: UsageTotal): string {
   const token = t.inputTokens !== undefined || t.outputTokens !== undefined
     ? `${t.inputTokens ?? "?"}→${t.outputTokens ?? "?"} token`
     : undefined;
+  // Yarım ölçü SAYIYA YAPIŞIR, cümlenin sonuna iliştirilmez: satır
+  // kırpıldığında bile "en az" okunur kalmalı.
+  const en = t.kismi === true ? "≥" : "";
   if (t.costUsd !== undefined) {
-    return token === undefined ? `$${t.costUsd.toFixed(4)}` : `$${t.costUsd.toFixed(4)} · ${token}`;
+    const dolar = `${en}$${t.costUsd.toFixed(4)}`;
+    return token === undefined ? dolar : `${dolar} · ${en}${token}`;
   }
-  if (token !== undefined) return `${token} · dolar yok (abonelik kimliği)`;
+  if (token !== undefined) {
+    // İki ayrı "dolar yok" sebebi var ve karıştırılmamalı: abonelik kimliği
+    // dolar BİLDİRMİYOR, yarım ölçüde ise dolar HİÇ ÜRETİLMEDİ çünkü tur
+    // bitmedi. İlki ücretsiz olabilir, ikincisi kesinlikle değil.
+    const sebep = t.kismi === true
+      ? "tur yarıda kesildi, dolar bildirilmedi — ALT SINIR"
+      : "dolar yok (abonelik kimliği)";
+    return `${en}${token} · ${sebep}`;
+  }
   return "ÖLÇÜ YOK";
 }

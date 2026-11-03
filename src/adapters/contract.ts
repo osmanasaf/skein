@@ -49,6 +49,21 @@ export interface Usage {
   inputTokens?: number;
   outputTokens?: number;
   costUsd?: number;
+  /**
+   * Ölçü YARIM: sağlayıcının kapanış kaydı hiç gelmedi.
+   *
+   * Tur zaman aşımıyla öldürüldüğünde sağlayıcı `result` satırını hiç
+   * basmıyor ve o satır ölçünün TEK kaynağıydı: gerçek bir koşuda 20
+   * dakika, 156 adım ve milyonlarca token harcayan bir aktivasyon
+   * günlüğe ÖLÇÜSÜZ düştü, ekranda `$0.00` gibi okundu. Harcanan
+   * gizlenmez.
+   *
+   * Bu işaretli ölçü akıştaki tek tek mesajlardan toplanıyor ve bir ALT
+   * SINIR: son mesajın kullanımı kayıp olabilir. Dolar bu yoldan HİÇ
+   * gelmez — sağlayıcı onu yalnızca kapanış kaydında bildiriyor, ve
+   * uydurulmuş bir dolar, eksik bir dolardan kötüdür.
+   */
+  kismi?: true;
 }
 
 export interface InvokeResult {

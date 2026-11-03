@@ -636,6 +636,67 @@ describe("tick — sessiz başarısızlık yasağı", () => {
     expect(((await queue.list())[0] as Card).history.at(-1)).toMatchObject({ event: "gate" });
   });
 
+  /**
+   * TUR SONUÇSUZ BİTTİ AMA COMMIT VAR — BUNU SÖYLE.
+   *
+   * Gerçek koşuda ajan işi bitirip commit'ledi, 46 saniye sonra zaman
+   * aşımına uğradı, ve kart kapıya yalnızca "zaman aşımı" diye çıktı.
+   * Operatörün gördüğü her şey işin kaybolduğunu söylüyordu; oysa commit
+   * duruyordu ve çalışıyordu. Bilgi zaten elimizdeydi — HEAD aktivasyondan
+   * önce ve sonra okunuyor — ve atılıyordu. Bildiğinden azını söyleyen bir
+   * raporlama yolu burada parayla ölçülüyor: insan turu yeniden koşturup
+   * aynı bedeli ikinci kez ödüyor.
+   */
+  const kayanHead = (...degerler: string[]) => {
+    let i = 0;
+    return async (): Promise<string | undefined> => degerler[Math.min(i++, degerler.length - 1)];
+  };
+
+  it("zaman aşımında ajan commit attıysa gerekçe bunu SÖYLER", async () => {
+    await put();
+    claude.answer = async () => ({ exitCode: 124, stdout: "", stderr: "", durationMs: 1, timedOut: true });
+
+    const result = await tick("coder", {
+      ...options,
+      headCommit: kayanHead("eski111", "yeni222"),
+    });
+
+    const reason = (result as { reason: string }).reason;
+    expect(reason).toContain("zaman aşımına uğradı");
+    expect(reason).toContain("yeni222");
+    // Devir teslimin OLMADIĞI da aynı cümlede: commit üreticinin
+    // worktree'sinde duruyor, sonraki role taşınmadı.
+    expect(reason).toContain("devir teslim OLMADI");
+  });
+
+  // Karşı yan: HEAD kıpırdamadıysa commit'ten söz ETME. Her kapı
+  // gerekçesine "commit attı" eklemek, cümleyi gürültüye çevirir ve
+  // iddia yanlış olur.
+  it("HEAD kıpırdamadıysa commit'ten söz ETMEZ", async () => {
+    await put();
+    claude.answer = async () => ({ exitCode: 124, stdout: "", stderr: "", durationMs: 1, timedOut: true });
+
+    const result = await tick("coder", { ...options, headCommit: kayanHead("ayni333") });
+
+    expect((result as { reason: string }).reason).not.toContain("commit attı");
+  });
+
+  // Aynı kural verdikt yazmayan turda da geçerli: ajan temiz çıktı ama
+  // cevap vermedi, yine de commit üretmiş olabilir.
+  it("verdikt yazmayan tur da commit'i bildirir", async () => {
+    await put();
+    claude.answer = async () => {};
+
+    const result = await tick("coder", {
+      ...options,
+      headCommit: kayanHead("eski111", "yeni444"),
+    });
+
+    const reason = (result as { reason: string }).reason;
+    expect(reason).toContain("verdikt yazmadı");
+    expect(reason).toContain("yeni444");
+  });
+
   it("bozuk verdikt JSON'u kartı kapıya çıkarır", async () => {
     await put();
     claude.answer = async (req) => {

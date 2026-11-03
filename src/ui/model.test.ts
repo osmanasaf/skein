@@ -246,6 +246,84 @@ describe("buildModel — ölçüm", () => {
 
     expect(model.cards.find((c) => c.id === mine.id)?.costUsd).toBe(0);
   });
+
+  /**
+   * BİLDİRİLMEYEN SIFIR DEĞİLDİR — ekran tarafı.
+   *
+   * Model eskiden `costUsd ?? 0` ile topluyordu, yani projenin kendi
+   * yasakladığı kalıbın ta kendisi (bkz. `bench/usage.ts`). Gerçek bir
+   * koşuda zaman aşımına uğrayan bir aktivasyon dolar bildirmedi ve
+   * ekranda o tur BEDAVA göründü: 20 dakika, 156 adım, milyonlarca
+   * token. Sayı eksik değildi, YANLIŞTI.
+   */
+  it("dolar bildirmeyen aktivasyon SAYILIR — toplam alt sınır olduğunu söyler", async () => {
+    const card = await put();
+    const log = new EventLog(logPath, "kosu-1");
+    await log.append({
+      type: "agent.finished", cell: `${card.id}:coder`, exitCode: 0, durationMs: 1_000,
+      usage: { costUsd: 0.5 },
+    });
+    // Zaman aşımı: dolar YOK, token var (akıştan toplanan yarım ölçü).
+    await log.append({
+      type: "agent.finished", cell: `${card.id}:reviewer`, exitCode: 137, durationMs: 1_200_000,
+      timedOut: true, usage: { inputTokens: 3_000_000, outputTokens: 40_000, kismi: true },
+    });
+
+    const model = await buildModel(base);
+    const c = model.cards[0];
+
+    expect(c?.costUsd).toBeCloseTo(0.5, 5);
+    expect(c?.olculmeyen).toBe(1);
+    expect(c?.tokens).toBe(3_040_000);
+    expect(model.totals.olculmeyen).toBe(1);
+  });
+
+  // Ölçü HİÇ bildirilmediğinde de aynı: dolar da token da yok, ama
+  // aktivasyon oldu ve sayılmalı.
+  it("hiç ölçü taşımayan aktivasyon da ölçülmeyen sayılır", async () => {
+    const card = await put();
+    const log = new EventLog(logPath, "kosu-1");
+    await log.append({
+      type: "agent.finished", cell: `${card.id}:coder`, exitCode: 1, durationMs: 500,
+    });
+
+    const model = await buildModel(base);
+
+    expect(model.cards[0]?.olculmeyen).toBe(1);
+    expect(model.cards[0]?.tokens).toBe(0);
+  });
+
+  // Karşı yan: her şey ölçüldüyse işaret SIFIR kalmalı, yoksa her toplam
+  // alt sınır gibi okunur ve uyarı anlamını yitirir.
+  it("hepsi dolar bildirdiyse ölçülmeyen SIFIR", async () => {
+    const card = await put();
+    const log = new EventLog(logPath, "kosu-1");
+    await log.append({
+      type: "agent.finished", cell: `${card.id}:coder`, exitCode: 0, durationMs: 10,
+      usage: { costUsd: 0.01 },
+    });
+
+    const model = await buildModel(base);
+
+    expect(model.cards[0]?.olculmeyen).toBe(0);
+    expect(model.totals.olculmeyen).toBe(0);
+  });
+
+  // Sıfır dolar BİLDİREN bir çağrı, dolar BİLDİRMEYEN bir çağrı değildir.
+  // Bu ayrım kaybolursa ücretsiz bir tur ölçülmemiş sayılır ve uyarı
+  // yanlış yerde çıkar.
+  it("doları 0 olarak BİLDİREN çağrı ölçülmüş sayılır", async () => {
+    const card = await put();
+    const log = new EventLog(logPath, "kosu-1");
+    await log.append({
+      type: "agent.finished", cell: `${card.id}:coder`, exitCode: 0, durationMs: 10,
+      usage: { costUsd: 0 },
+    });
+
+    const model = await buildModel(base);
+
+    expect(model.cards[0]?.olculmeyen).toBe(0);
+  });
 });
 
 describe("buildModel — canlı adım", () => {

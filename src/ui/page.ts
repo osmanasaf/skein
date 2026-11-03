@@ -271,6 +271,34 @@ const sure = (ms) => {
 };
 const para = (n) => "$" + (n || 0).toFixed(2);
 
+// Buyuk sayiyi okunur kisalt: 1240000 -> 1.2M. Ham rakam ekranda
+// sayilamiyor, kiyaslanamiyor; buyukluk mertebesi yeterli.
+function kisaSayi(n) {
+  if (!n) return "0";
+  if (n >= 1e9) return (n / 1e9).toFixed(1) + "B";
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
+  if (n >= 1e3) return (n / 1e3).toFixed(0) + "K";
+  return String(n);
+}
+
+// HARCANAN GIZLENMEZ.
+//
+// Bir aktivasyon dolar bildirmediyse (tur zaman asimiyla oldurulduyse
+// saglayici kapanis kaydini hic basmiyor) toplam bir ALT SINIR. Eskiden
+// ekran onu sessizce 0 sayiyordu: 20 dakika calisip milyonlarca token
+// harcayan bir tur kartta BEDAVA gorunuyordu.
+//
+// Uc hal var ve ucu de ayri sey soyluyor:
+//   - olculmeyen yok            -> tam rakam
+//   - olculmeyen var, dolar var -> alt sinir isareti
+//   - olculmeyen var, dolar yok -> rakam DEGIL, "olculmedi"; token varsa o
+function maliyetMetni(tutar, olculmeyen, tokens) {
+  if (!olculmeyen) return para(tutar);
+  if (tutar) return "\u2265" + para(tutar);
+  return tokens ? "maliyet \u00f6l\u00e7\u00fclmedi \u00b7 \u2265" + kisaSayi(tokens) + " token"
+                : "maliyet \u00f6l\u00e7\u00fclmedi";
+}
+
 function kapiCikislari(kind, planKilidi, geriHedef) {
   // ZİNCİRİN BAŞINDA "Geri gönder" YOK. back kararının hedefi rolün ret
   // hedefi; yoksa çekirdek kartı aynı role döndürüyor, yani olan şey bir
@@ -493,7 +521,12 @@ function kartCiz(c) {
   if (c.rejects > 0) meta.append(el("span", "bad", c.rejects + " ret"));
   meta.append(el("span", null, c.turns + " tur"));
   if (c.durationMs) meta.append(el("span", null, sure(c.durationMs)));
-  if (c.costUsd) meta.append(el("span", null, para(c.costUsd)));
+  // Kosul artik SADECE dolara bakmiyor: olculmemis bir aktivasyon da
+  // soylenmeli, dolari sifir olsa bile.
+  if (c.costUsd || c.olculmeyen) {
+    meta.append(el("span", c.olculmeyen ? "bad" : null,
+      maliyetMetni(c.costUsd, c.olculmeyen, c.tokens)));
+  }
   kutu.append(meta);
 
   // Sayı tek başına anlatmıyor: "2 ret" ile "kabul, ret, kapı, ret, bitti"
@@ -601,7 +634,10 @@ function detayCiz(d) {
   if (d.card.rejects) m.append(el("span", "bad", d.card.rejects + " ret"));
   m.append(el("span", null, d.card.turns + " tur"));
   if (d.card.durationMs) m.append(el("span", null, sure(d.card.durationMs)));
-  if (d.card.costUsd) m.append(el("span", null, para(d.card.costUsd)));
+  if (d.card.costUsd || d.card.olculmeyen) {
+    m.append(el("span", d.card.olculmeyen ? "bad" : null,
+      maliyetMetni(d.card.costUsd, d.card.olculmeyen, d.card.tokens)));
+  }
   p.append(m);
 
   // "En son neden reddedildi" — gerekçeler kartın kendi geçmişinden.
@@ -769,7 +805,10 @@ function ciz(m) {
   promptlarDugme.type = "button";
   promptlarDugme.addEventListener("click", () => { location.hash = "prompt"; });
   bar.append(promptlarDugme);
-  [["Açık", m.totals.open], ["Bitti", m.totals.done], ["Aktivasyon", m.totals.activations], ["Maliyet", para(m.totals.costUsd)]]
+  // Ust bardaki toplam da alt sinir olabilir; isaret oraya da gider,
+  // yoksa kart duzeyinde durust olup ozette yalan sorulmus olurduk.
+  [["Açık", m.totals.open], ["Bitti", m.totals.done], ["Aktivasyon", m.totals.activations],
+   ["Maliyet", (m.totals.olculmeyen ? "\u2265" : "") + para(m.totals.costUsd)]]
     .forEach(([ad, deger]) => {
       const s = el("div", "stat");
       s.append(el("div", "eyebrow", ad));
@@ -899,8 +938,13 @@ function ciz(m) {
   bitti.forEach((c) => col.append(kartCiz(c)));
   board.append(col);
 
+  // "bu yuzey yalnizca okur" ARTIK DOGRU DEGILDI ve en gorunur yerde
+  // duruyordu: ekran kapi karari veriyor, kart aciyor, akis ve prompt
+  // yaziyor, gozcuyu baslatiyor. Ozellikler eklendikce bayatlayan bir
+  // guvence, hic verilmemis bir guvenceden kotudur.
   document.getElementById("foot").textContent =
-    "okundu " + new Date(m.at).toLocaleTimeString("tr-TR") + " · .skein/ dizini + olaylar.jsonl · bu yüzey yalnızca okur";
+    "okundu " + new Date(m.at).toLocaleTimeString("tr-TR") +
+    " · durum .skein/ ve olaylar.jsonl'dan okunuyor · değişiklik yalnızca düğmelerle";
 }
 
 /**

@@ -231,6 +231,11 @@ async function runRole(card: Card, role: SnapshotRole, options: TickOptions): Pr
     promptHash: prompt.hash,
   });
 
+  // Aktivasyondan ÖNCEKİ HEAD. Tek işi, tur sonuçsuz bittiğinde "ajan yine
+  // de commit attı mı" sorusunu cevaplayabilmek: sonrakiyle karşılaştırmadan
+  // bu bilinemez, ve bilinmeyince operatör çalışan bir işi yok sanıyor.
+  const oncekiCommit = await (options.headCommit ?? head)(workdir);
+
   const steps = stepSink(cell, role.id, log);
   const result = await adapter.invoke({
     workdir,
@@ -252,6 +257,25 @@ async function runRole(card: Card, role: SnapshotRole, options: TickOptions): Pr
 
   const commit = await (options.headCommit ?? head)(workdir);
 
+  /**
+   * Tur sonuçsuz bitti ama ajan commit attıysa bunu SÖYLE.
+   *
+   * Bu bilgi zaten elimizdeydi ve atılıyordu: gerçek bir koşuda ajan işi
+   * bitirip commit'ledi, 46 saniye sonra zaman aşımına uğradı, ve kart
+   * kapıya "zaman aşımı" diye çıktı. Operatörün gördüğü her şey işin
+   * kaybolduğunu söylüyordu; oysa commit duruyordu ve çalışıyordu. Bildiğini
+   * söylemeyen bir raporlama yolu, hiç raporlamamaktan daha pahalı: insan
+   * yeniden koşturup aynı parayı ikinci kez harcıyor.
+   *
+   * Devir teslim OLMADIĞI da aynı cümlede duruyor — commit üreticinin
+   * worktree'sinde, sonraki role taşınmadı.
+   */
+  const commitNotu = (): string =>
+    commit !== undefined && commit !== oncekiCommit
+      ? `\n  Ajan yine de commit attı: ${commit}. Kod \`${role.workspace}\` ` +
+        `worktree'sinde duruyor, devir teslim OLMADI — kapıdan karar vermeden önce bak.`
+      : "";
+
   if (result.exitCode !== 0) {
     // stderr VE stdout. Bu dal eskiden yalnızca stderr'e bakıyordu ve canlı
     // bir koşuda tam bu yüzden sessiz kaldı: sağlayıcı CLI'ı 1 ile çıktı,
@@ -265,6 +289,7 @@ async function runRole(card: Card, role: SnapshotRole, options: TickOptions): Pr
     const reason =
       `Ajan ${result.timedOut === true ? "zaman aşımına uğradı" : `hata kodu ${result.exitCode} ile bitti`}` +
       (tail === "" ? "" : `: ${tail}`) +
+      commitNotu() +
       agentSaid(result);
     return { status: "escalated", card: await queue.escalate(card, reason), reason };
   }
@@ -275,11 +300,12 @@ async function runRole(card: Card, role: SnapshotRole, options: TickOptions): Pr
     const reason =
       "Ajan verdikt yazmadı — tur sonuçsuz. Cevap vermemek bir cevap değildir; " +
       "sessizce kabul saymak, hiçbir şey üretmemiş bir koşuyu başarılı saymak olurdu." +
+      commitNotu() +
       agentSaid(result);
     return { status: "escalated", card: await queue.escalate(card, reason), reason };
   }
   if (verdict.kind === "invalid") {
-    const reason = `Verdikt geçersiz: ${verdict.problem}${agentSaid(result)}`;
+    const reason = `Verdikt geçersiz: ${verdict.problem}${commitNotu()}${agentSaid(result)}`;
     return { status: "escalated", card: await queue.escalate(card, reason), reason };
   }
 
