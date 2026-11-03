@@ -1,0 +1,62 @@
+# Tek satıcılı günlük sürücü — yalnızca `claude` CLI'ı gerekiyor.
+#
+# Şema: SCHEMA.md
+#
+# NİYE VAR: `daily.yaml` kasıtlı olarak iki satıcı kullanıyor (claude +
+# codex) ve projenin kurucu tezi orada yaşıyor. Ama DURUM.md "bugün
+# kullanılabilir olan şey tek satıcılı denetim zinciri" diyordu ve o
+# akışın dosyası depoda YOKTU — belge bir şeyi tavsiye ediyor, depo onu
+# sunmuyordu. Bu dosya o boşluğu kapatıyor.
+#
+# ÖLÇÜLMÜŞ GERÇEK, iki yönlü ve ikisi de doğru:
+#
+#   · Aynı satıcılı denetim İŞE YARIYOR. Ölçülen üç hücrede üçünde de
+#     denetçi üreticinin kusurlarını yakaladı (2/2, 2/2, 1/1). Yani bu
+#     akış boş bir tören değil.
+#   · Kanıtlanmamış olan şey çaprazlamanın DAHA FAZLASINI yakaladığı.
+#     Çapraz satıcı için `daily.yaml`, tez için `bench/DESIGN.md`.
+#
+# Kullan: npx tsx src/watch/cli.ts gunluk-tek --serve --model claude:claude-sonnet-5
+
+name: gunluk-tek
+description: Tek satıcılı üretim + denetim zinciri. Günlük iş için en kısa yol.
+
+# Tüm rollerin üstünde kanun. Sıra anlamlı; yollar bu dosyaya göre çözülür.
+#
+# Mühendislik maddesi DİLE ÖZELDİR. Bu akış TypeScript için; başka bir
+# dilde koşacaksan `engineering-ts.md` yerine kendi maddeni koy.
+constitution:
+  - ../prompts/constitution/base.md
+  - ../prompts/constitution/engineering-ts.md
+
+roles:
+  - id: coder
+    provider: claude
+    workspace: main             # ana checkout; tam olarak bir rol alır
+    prompt: ../prompts/roles/coder.md
+    receive: task
+    next: reviewer
+
+  - id: reviewer
+    provider: claude            # aynı satıcı — tek CLI yeter
+    workspace: reviewer         # kendi git worktree'si: üreticinin ağacını GÖRMEZ
+    prompt: ../prompts/roles/reviewer.md
+    receive: batch              # kuyruktaki eşdeğer işleri tek turda yut
+    syncBack: [coder]           # merge-only kopya; maliyeti görünür
+    reject: coder               # itiraz varsa KART geri döner, gerekçesiyle
+    next: done                  # zinciri kapatır
+
+# Kapı yok: kod zaten senin önünden geçiyor. Ret limiti dolunca yine de
+# insan kapısı kuruluyor (aşağıda) — sessizce geçmiyor.
+gates: []
+
+reject:
+  limit: 2                      # aynı kenarda en fazla 2 ret
+  onExhausted: gate             # sonra karar senin
+
+audit:
+  enabled: true
+  fingerprint: [task, recipients, commit, draft]
+
+# Maliyet: ~2 aktivasyon/kart (retsiz), ~6 en kötü — her kenar limitine
+# kadar tetiklenirse. `flow check` bu sayıyı kendisi hesaplayıp basıyor.
