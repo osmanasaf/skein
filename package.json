@@ -7,6 +7,9 @@
   "engines": {
     "node": ">=22"
   },
+  "bin": {
+    "skein": "bin/skein.mjs"
+  },
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
@@ -16,7 +19,8 @@
     "flow": "tsx src/flow/cli.ts",
     "card": "tsx src/card/cli.ts",
     "watch": "tsx src/watch/cli.ts",
-    "ui": "tsx src/ui/cli.ts"
+    "ui": "tsx src/ui/cli.ts",
+    "start": "tsx src/ui/cli.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

@@ -5,10 +5,17 @@ import { knownProviderSet } from "../adapters/factory.js";
 import { CardQueue } from "../card/queue.js";
 import { FlowError } from "../flow/load.js";
 import { LiveFlow } from "../flow/live.js";
+import { tarayiciyiAc } from "./open-browser.js";
+import { portuHatirlayarakAc } from "./port-memory.js";
 import { serveUi, type CanliAkis } from "./server.js";
 
 const USAGE = `Kullanım:
+  npm start [-- [akış] [--port <n>]]
+  npx skein [akış] [--port <n>]
   npx tsx src/ui/cli.ts [akış] [--port <n>]
+
+Üçü de aynı ekranı açar; \`npm start\` ve \`npx skein\` bu depoda \`tsx\`
+kurulumuyla ilgilenmeden çalışır.
 
 AKIŞ VERİLMEZSE \`hub/flows/\` altındaki ilk akış açılır (ada göre sıralı).
 Ekrandaki seçiciden başka bir akışa her an geçilebilir.
@@ -16,6 +23,12 @@ Ekrandaki seçiciden başka bir akışa her an geçilebilir.
 Ekranı açar. YALNIZCA OKUR: kartların yerini \`.skein/\` dizininden, ne
 olduğunu \`.skein/olaylar.jsonl\` dosyasından, gözcünün açık olup olmadığını
 \`.skein/daemon.json\` kilidinden okur. Hiçbir şey yazmaz.
+
+Açılınca bastığı adresi TARAYICIDA KENDİLİĞİNDEN açar (\`--tarayici-yok\` ile
+kapatılır — uzaktan/konteyner koşumunda açacak tarayıcı yoktur). Dinlenen
+port \`.skein/ekran.json\`da hatırlanır: bir sonraki açılış önce onu dener,
+doluysa boş bir porta düşer. \`--port\` AÇIK bir istektir, hatırlanan portu
+yok sayar ve yeni port hatırlanan kaydı ezer.
 
 GÖZCÜYÜ EKRANDAN yönetmek için, gözcü bayraklarını ekranı açarken ver:
   npx tsx src/ui/cli.ts <akış> --model claude:<model> --allow-tool "Bash(git add:*)"
@@ -28,9 +41,10 @@ Bayrak vermezsen gözcü düğmesi çıkmaz; ayrı bir kabukta koşturursun:
   npx tsx src/watch/cli.ts <akış> --serve --model claude:<model>
 
 Seçenekler:
-  --port <n>   dinlenecek port (varsayılan: boş bir port seçilir)
-  --host <h>   dinlenecek arayüz (varsayılan 127.0.0.1 — yerel araç)
-  --salt-okunur  akış düzenlemeyi kapat
+  --port <n>      dinlenecek port (varsayılan: hatırlanan port, yoksa/doluysa boş port)
+  --host <h>      dinlenecek arayüz (varsayılan 127.0.0.1 — yerel araç)
+  --salt-okunur   akış düzenlemeyi kapat
+  --tarayici-yok  tarayıcıyı kendiliğinden AÇMA (uzaktan/konteyner koşumu için)
 
 Gözcüye geçirilen bayraklar (verilirse düğme açılır):
   --model <spec>         zorunlu, ör. claude:claude-sonnet-5
@@ -65,6 +79,7 @@ async function main(argv: string[]): Promise<number> {
   let port: number | undefined;
   let host: string | undefined;
   let saltOkunur = false;
+  let tarayiciYok = false;
   // Gözcüye AYNEN geçirilecek bayraklar. Ekran onları yorumlamıyor,
   // yalnızca taşıyor: hangi modelin hangi araçlarla koşacağına karar veren
   // yer `watch/cli.ts` olmalı, ekran değil.
@@ -75,6 +90,7 @@ async function main(argv: string[]): Promise<number> {
     if (value === "--port") port = Number(argv[++i]);
     else if (value === "--host") host = argv[++i];
     else if (value === "--salt-okunur") saltOkunur = true;
+    else if (value === "--tarayici-yok") tarayiciYok = true;
     else if (
       value === "--model" || value === "--allow-tool" ||
       value === "--permission-mode" || value === "--bin" || value === "--poll"
@@ -132,7 +148,10 @@ async function main(argv: string[]): Promise<number> {
   // KASITLI olarak çağrılmıyor: o yazan bir işlem ve gözcünün işi.
   await queue.init();
 
-  const server = await serveUi({
+  // Dinlenecek port, yazılması gereken tek yerde: `serverOptions`e göre
+  // `serveUi`yi KAÇ port adayıyla çağıracağına `portuHatirlayarakAc` karar
+  // veriyor, bu fonksiyon yalnızca "hangi seçeneklerle" sorusuna cevap.
+  const serverOptions = {
     root,
     queue,
     topology,
@@ -146,7 +165,7 @@ async function main(argv: string[]): Promise<number> {
     // taşıyor, burada tekrar uygulanmıyor.
     akisSecimi: {
       listele: () => listFlowNames(root),
-      ac: async (ad): Promise<{ live: CanliAkis; flowPath: string }> => {
+      ac: async (ad: string): Promise<{ live: CanliAkis; flowPath: string }> => {
         const yeniYol = join(root, "hub", "flows", `${ad}.yaml`);
         const yeniLive = await LiveFlow.open(yeniYol, loadOptions);
         return { live: yeniLive, flowPath: yeniYol };
@@ -160,7 +179,6 @@ async function main(argv: string[]): Promise<number> {
           loadOptions,
           providerIds: knownProviderSet().ids(),
         }),
-    ...(port === undefined ? {} : { port }),
     ...(host === undefined ? {} : { host }),
     // Gözcü düğmesi YALNIZCA bayrak verildiyse açılıyor; verilmediyse uç
     // 404 dönüyor ve ekran bugünkü hâlinde kalıyor.
@@ -179,7 +197,15 @@ async function main(argv: string[]): Promise<number> {
             bayraklar: gozcuBayraklari,
           },
         }),
-  });
+  };
+
+  // `--port` AÇIK bir istek: hatırlanan port hiç okunmuyor ve bu sonuç onu
+  // EZİYOR. Verilmediyse önce hatırlanan port denenir (`.skein/ekran.json`);
+  // doluysa (`EADDRINUSE`) sessizce boş bir porta düşülür — tarayıcı sekmesi
+  // açılışlar arasında aynı adreste çalışmaya devam eder, ama ekranın
+  // açılması o portun o anki durumuna BAĞLI olamaz.
+  const server = await portuHatirlayarakAc(root, port, (p) =>
+    serveUi(p === undefined ? serverOptions : { ...serverOptions, port: p }));
 
   console.log(`ekran açık: ${server.url}`);
   console.log(`akış: ${flow.name} (${flow.hash.slice(0, 12)}…) · ${topology.roles.length} rol`);
@@ -192,6 +218,12 @@ async function main(argv: string[]): Promise<number> {
     console.log(`gözcü düğmesi AÇIK — bayraklar: ${gozcuBayraklari.join(" ")}`);
     console.log(`gözcü çıktısı: ${join(root, ".skein", "gozcu.log")}`);
   }
+
+  // Tarayıcıyı KENDİLİĞİNDEN aç — "her şeyi önyüzden yönet" diyen bir
+  // araçta başlamanın kendisi en zor adım olmamalı. Bu HİÇBİR KOŞULDA
+  // ekranı düşürmez (`tarayiciyiAc` kendi içinde yutuyor); yalnızca
+  // `--tarayici-yok` ile (uzaktan/konteyner koşumu) devre dışı.
+  if (!tarayiciYok) tarayiciyiAc(server.url);
 
   const stop = (): void => {
     void server.close().then(() => process.exit(0));

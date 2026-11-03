@@ -101,11 +101,21 @@ Adım gelmemesi turu etkilemez.
 ### Ekran
 
 ```powershell
-npx tsx src/ui/cli.ts daily            # boş bir port seçer
+npm start -- daily                     # hatırlanan portu dener, yoksa/doluysa boş port seçer
+npx skein daily                        # aynısı, tsx kurulumuyla ilgilenmeden
 npx tsx src/ui/cli.ts daily --port 7799
 ```
 
-Bastığı adresi tarayıcıda aç. Gösterdikleri:
+Üçü de aynı ekranı açar. Açılınca bastığı adresi **tarayıcıda kendiliğinden**
+açar — açacak tarayıcı yoksa (SSH, konteyner) `--tarayici-yok` ile kapat.
+Açılamazsa (komut yok, izin yok) ekran yine çalışır, bir uyarı satırı basılır.
+
+Dinlenen port `.skein/ekran.json`da hatırlanır: bir sonraki açılış önce onu
+dener, böylece tarayıcı sekmesi açılışlar arasında aynı adreste çalışmaya
+devam eder. `--port` AÇIK bir istektir — hatırlanan portu yok sayar ve
+sonucunu hatırlanan kaydın üstüne yazar.
+
+Gösterdikleri:
 
 - **Pano** — hangi kart hangi rolde, kuyruk derinliği, gözcü açık mı
 - **Canlı adım** — koşan ajanın son adımı (araç adı + dokunduğu dosya)
