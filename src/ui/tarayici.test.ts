@@ -475,6 +475,63 @@ roles:
   }, 60_000);
 
   /**
+   * YENİ ROL EKRANDAN — gerçek tarayıcıda.
+   *
+   * `server.test.ts` `/rol/yeni`'yi birim sınıyor ama "panelden doldurup
+   * basınca sütunlarda GERÇEKTEN yeni bir sütun beliriyor mu" sorusu
+   * yalnızca sayfayı gerçekten açınca görünür — akış seçicideki ve prompt
+   * panelindeki aynı boşluğun aynısı. Yol kart bunu açıkça istiyor:
+   * "ekrandan yeni rol ekleniyor ve sütunlarda beliriyor".
+   */
+  it("prompt panelinden yeni rol ekleniyor ve sütunlarda beliriyor", async () => {
+    const live = await LiveFlow.open(join(root, "hub", "flows", "test.yaml"), {
+      root, providers: knownProviderSet(),
+    });
+    const s = await serveUi({
+      root, queue, topology, flowName: "test", flowHash: live.flow.hash, live,
+      flowPath: live.flow.path,
+      loadOptions: { root, providers: knownProviderSet() },
+      providerIds: knownProviderSet().ids(),
+    });
+
+    const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+    const hatalar: string[] = [];
+    page.on("pageerror", (e) => hatalar.push(String(e)));
+    try {
+      await page.goto(s.url, { waitUntil: "networkidle" });
+      await page.waitForSelector("#bar .pill", { timeout: 15_000 });
+      await page.click('button:has-text("Promptları düzenle")');
+      await page.waitForSelector('button:has-text("Yeni rol")', { timeout: 10_000 });
+      await page.click('button:has-text("Yeni rol")');
+      await page.waitForSelector("#yeniRolId", { timeout: 10_000 });
+
+      await page.fill("#yeniRolId", "reviewer");
+      await page.selectOption("#yeniRolProvider", "claude");
+      await page.fill("#yeniRolWorkspace", "reviewer");
+      await page.selectOption("#yeniRolSonra", "coder");
+      // Prompt BOŞ bırakılıyor — sunucu şablondan yazmalı (kural 9).
+      await page.click('button:has-text("Rolü ekle")');
+      await page.waitForSelector('.colhead:has-text("reviewer")', { timeout: 10_000 });
+
+      // İDDİA panonun SÖYLEDİĞİ değil, DİSKTE GERÇEKTEN ne olduğu: hem
+      // YAML hem de yeni promptu dosyası.
+      const basliklar = await page.evaluate(() =>
+        Array.from(document.querySelectorAll(".col .colhead")).map((e) => e.textContent ?? ""));
+      expect(basliklar.some((b) => b.includes("coder"))).toBe(true);
+      expect(basliklar.some((b) => b.includes("reviewer"))).toBe(true);
+
+      const yaml = await readFile(join(root, "hub", "flows", "test.yaml"), "utf8");
+      expect(yaml).toContain("id: reviewer");
+      const promptMetni = await readFile(join(root, "roles", "reviewer.md"), "utf8");
+      expect(promptMetni).toContain("Rolün: reviewer");
+      expect(hatalar).toEqual([]);
+    } finally {
+      await page.close();
+      await s.close();
+    }
+  }, 60_000);
+
+  /**
    * ZİNCİR OKU — dar ekranda yön AŞAĞI döner, geniş ekranda SAĞ kalır.
    *
    * Yön page.ts'teki bir CSS medya sorgusuyla çözülüyor

@@ -1106,6 +1106,7 @@ function hashOku() {
   if (h.startsWith("kart/")) detayAc(h.slice("kart/".length));
   else if (h === "akis") void akisAc();
   else if (h === "prompt") void promptAc();
+  else if (h === "prompt/yeni") void yeniRolAc();
   else if (h === "yeni") yeniKartAc();
   else document.getElementById("panel").replaceChildren();
 }
@@ -1731,6 +1732,14 @@ function promptEditorCiz() {
   p.append(el("h2", null, "Rol promptları"));
   p.append(el("div", "cid", "akışın bildirdiği dosyalar — kaydetmek dosyayı YENİDEN YAZAR"));
 
+  // YENİ ROL yolu bu panelde: zincire bir rol eklemek demek, promptunu da
+  // BİRLİKTE yaratmak demek (bkz. /rol/yeni yorumu, server.ts) — iki ayrı
+  // ekrana bölmek yarı yaratılmış bir rolü vaat ederdi.
+  const yeniRolDugme = el("button", "mini", "Yeni rol");
+  yeniRolDugme.type = "button";
+  yeniRolDugme.addEventListener("click", () => { location.hash = "prompt/yeni"; });
+  p.append(yeniRolDugme);
+
   const ed = el("div", "promptEd");
 
   const liste = el("div", "promptListe");
@@ -1826,6 +1835,167 @@ async function promptYaz() {
     hataKutu.style.cssText = "display:block;white-space:pre-wrap";
   } finally {
     kaydet.disabled = false;
+  }
+}
+
+// --- Yeni rol ---
+//
+// Zincire rol eklemek dosyasız yapılamıyordu, dosya rolsüz yaratılamıyordu
+// (bkz. /rol/yeni yorumu, server.ts) — uç ikisini TEK gövdede, ATOMİK
+// yapıyor. İstemci burada "sonra" (yeni rolün hangi rolün ARDINA gireceği)
+// sorusunu KENDİ KAFASINA GÖRE tahmin etmiyor: liste akışın GERÇEK rol
+// sırasından geliyor (/akis'in draft'ı) ve operatör seçiyor.
+let YENI_ROL_SAGLAYICILAR = [];
+let YENI_ROL_ROLLER = [];
+
+async function yeniRolAc() {
+  const kap = document.getElementById("panel");
+  try {
+    const cevap = await fetch("/akis", { cache: "no-store" });
+    const veri = await cevap.json();
+    if (!cevap.ok) throw new Error(veri.hata || cevap.status);
+    // /rol/yeni'nin kendi kapısıyla AYNI koşul: taslak yoksa (salt okunur
+    // ekran) uç de 404 döner — burada önceden söylemek, operatörü boş bir
+    // formu doldurduktan SONRA reddedilmeye bırakmıyor.
+    if (!veri.draft) throw new Error("Bu ekran rol eklemeye açık değil.");
+    YENI_ROL_SAGLAYICILAR = veri.providers || [];
+    YENI_ROL_ROLLER = (veri.draft.roles || []).map((r) => r.id);
+    if (!YENI_ROL_ROLLER.length) throw new Error("Akışta hiç rol yok — ardına eklenecek bir rol bulunamadı.");
+    kap.replaceChildren(yeniRolEditorCiz());
+  } catch (e) {
+    kap.replaceChildren(el("div", "err", "Rol eklenemedi: " + e.message));
+  }
+}
+
+function yeniRolAlani(etiket, girisTag, id) {
+  const l = el("label", null);
+  l.append(document.createTextNode(etiket));
+  const g = el(girisTag);
+  g.id = id;
+  l.append(g);
+  return { etiket: l, giris: g };
+}
+
+function yeniRolEditorCiz() {
+  const ust = el("div", "ust");
+  ust.addEventListener("click", (e) => { if (e.target === ust) kapat(); });
+  const p = el("div", "panel");
+
+  const kapatDugme = el("button", "kapat", "Kapat");
+  kapatDugme.type = "button";
+  kapatDugme.addEventListener("click", kapat);
+  p.append(kapatDugme);
+
+  p.append(el("h2", null, "Yeni rol"));
+  p.append(el("div", "cid",
+    "rol VE promptu BİRLİKTE yaratılır — geçersiz bir akış üretirse ikisi de GERİ ALINIR"));
+
+  const kutu = el("div", "rol");
+
+  const { etiket: idEtiket, giris: idGiris } = yeniRolAlani("id", "input", "yeniRolId");
+  idGiris.type = "text";
+  idGiris.placeholder = "örn. reviewer";
+  kutu.append(idEtiket);
+
+  const { etiket: saglayiciEtiket, giris: saglayiciSec } =
+    yeniRolAlani("provider", "select", "yeniRolProvider");
+  YENI_ROL_SAGLAYICILAR.forEach((s) => {
+    const o = el("option", null, s);
+    o.value = s;
+    saglayiciSec.append(o);
+  });
+  kutu.append(saglayiciEtiket);
+
+  const { etiket: workspaceEtiket, giris: workspaceGiris } =
+    yeniRolAlani("workspace", "input", "yeniRolWorkspace");
+  workspaceGiris.type = "text";
+  kutu.append(workspaceEtiket);
+
+  // "sonra" ÇAĞIRANIN (burada: operatörün) seçimi — uç bunu tahmin etmiyor.
+  const { etiket: sonraEtiket, giris: sonraSec } = yeniRolAlani("sonra — hangi rolün ARDINA", "select", "yeniRolSonra");
+  YENI_ROL_ROLLER.forEach((id) => {
+    const o = el("option", null, id);
+    o.value = id;
+    sonraSec.append(o);
+  });
+  kutu.append(sonraEtiket);
+
+  // Prompt BOŞ bırakılabilir: sunucu bu durumda ŞABLONDAN yazıyor (kural 9
+  // boş dosyayı reddediyor, bkz. rolPromptSablonu yorumu).
+  const { etiket: promptEtiket, giris: promptGiris } = yeniRolAlani(
+    "prompt (boş bırakılırsa ŞABLONDAN yazılır)", "textarea", "yeniRolPrompt",
+  );
+  promptEtiket.className = "genis";
+  promptGiris.rows = 10;
+  kutu.append(promptEtiket);
+
+  p.append(kutu);
+
+  const altSatir = el("div", "exits");
+  const ekle = el("button", "primary", "Rolü ekle");
+  ekle.type = "button";
+  ekle.id = "yeniRolEkle";
+  ekle.addEventListener("click", () => { void yeniRolGonder(); });
+  altSatir.append(ekle);
+  const vazgec = el("button", null, "Vazgeç");
+  vazgec.type = "button";
+  vazgec.addEventListener("click", kapat);
+  altSatir.append(vazgec);
+  p.append(altSatir);
+
+  const hataKutu = el("div", "err");
+  hataKutu.id = "yeniRolHata";
+  hataKutu.style.cssText = "display:none";
+  p.append(hataKutu);
+
+  ust.append(p);
+  return ust;
+}
+
+/**
+ * Yeni rolü KOMUT göndererek yaratır.
+ *
+ * Çekirdek reddederse (aynı id, bilinmeyen 'sonra', geçersiz akış/workspace)
+ * mesaj OLDUĞU GİBİ operatöre gider — workspace/provider kuralları burada
+ * TEKRAR UYGULANMIYOR, doğrulama çekirdekte (bkz. server.ts yorumu).
+ */
+async function yeniRolGonder() {
+  const idGiris = document.getElementById("yeniRolId");
+  const saglayiciSec = document.getElementById("yeniRolProvider");
+  const workspaceGiris = document.getElementById("yeniRolWorkspace");
+  const sonraSec = document.getElementById("yeniRolSonra");
+  const promptGiris = document.getElementById("yeniRolPrompt");
+  const ekle = document.getElementById("yeniRolEkle");
+  const hataKutu = document.getElementById("yeniRolHata");
+  if (!idGiris || !saglayiciSec || !workspaceGiris || !sonraSec || !promptGiris || !ekle || !hataKutu) return;
+
+  ekle.disabled = true;
+  hataKutu.style.cssText = "display:none";
+  try {
+    const promptMetni = promptGiris.value;
+    const govde = {
+      id: idGiris.value.trim(),
+      provider: saglayiciSec.value,
+      workspace: workspaceGiris.value.trim(),
+      sonra: sonraSec.value,
+      ...(promptMetni.trim() === "" ? {} : { prompt: promptMetni }),
+    };
+    const cevap = await fetch("/rol/yeni", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-skein-token": JETON },
+      body: JSON.stringify(govde),
+    });
+    const veri = await cevap.json();
+    if (!cevap.ok) throw new Error(veri.hata || cevap.status);
+    // Çekirdeğin döndürdüğü model çiziliyor: ekran kendi kopyasını
+    // uydurmuyor, yeni rolün GERÇEKTEN nereye bağlandığını çekirdek söylüyor.
+    ciz(veri.model);
+    location.hash = "";
+  } catch (e) {
+    hataKutu.textContent = e.message;
+    hataKutu.style.cssText = "display:block;white-space:pre-wrap";
+  } finally {
+    ekle.disabled = false;
   }
 }
 
