@@ -1,7 +1,9 @@
 import crossSpawn from "cross-spawn";
 import type { ChildProcess } from "node:child_process";
+import { realpathSync } from "node:fs";
 import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import type { Readable, Writable } from "node:stream";
 
 const WINDOWS = process.platform === "win32";
@@ -139,4 +141,40 @@ export function tsxCliYolu(root: string): string {
   const req = createRequire(join(root, "package.json"));
   const paketYolu = req.resolve("tsx/package.json");
   return join(dirname(paketYolu), "dist", "cli.mjs");
+}
+
+/**
+ * Bu modül sürecin GİRİŞ NOKTASI mı, yoksa biri onu `import` mu etti?
+ *
+ * Gerçekte şöyle patladı: `watch/cli.ts` ve `ui/cli.ts` dosya sonunda
+ * koşulsuz `main(process.argv.slice(2))` çağırıyordu. `parseArgs`'ı sınamak
+ * için modülü `import` eden sınama dosyası, farkında olmadan GÖZCÜYÜ sınama
+ * sürecinin içinde koşturdu: vitest'in argv'si ayrıştırıldı, `main` ilerledi
+ * ve `process.exit` çağrıldı. vitest `process.exit`i yakaladığı için takım
+ * yeşil kaldı — kusuru yalnızca bir "unhandled rejection" satırı anlattı ve
+ * o satır "dokunulmamış bir dosyadaki eski uyarı" diye geçiştirildi. Oysa
+ * `.skein/` kilidini almaya ya da ajan çağırmaya kadar gidebilirdi.
+ *
+ * Bir modülü içe almanın YAN ETKİSİ olmamalı. Giriş noktası olup olmadığını
+ * `process.argv[1]` ile karşılaştırarak anlıyoruz.
+ *
+ * İki biçim de aday: `resolve` edilmiş hâli ve `realpathSync`'ten geçmiş
+ * hâli. Deponun kendisi bir sembolik bağın arkasındaysa `import.meta.url`
+ * ile `argv[1]` farklı yazılır; tek biçimle karşılaştırmak o kurulumda
+ * CLI'ı SESSİZCE hiç çalışmaz hâle getirirdi — düzelttiğimiz kusurun tam
+ * olarak aynısı, bu kez bizim elimizden.
+ */
+export function girisNoktasiMi(moduleUrl: string): boolean {
+  const giris = process.argv[1];
+  if (giris === undefined || giris === "") return false;
+  // `resolve` bir dizge için ASLA atmaz — bu yüzden try/catch'i yok ve
+  // yukarıdaki undefined/boş denetimi TAŞIYICI: onu kaldıran bir mutasyon
+  // burada yakalanıyor, sessizce yutulmuyor.
+  const adaylar = new Set<string>([pathToFileURL(resolve(giris)).href]);
+  try {
+    adaylar.add(pathToFileURL(realpathSync(giris)).href);
+  } catch {
+    // Dosya yok (ör. `node -e`); diğer adaya bak.
+  }
+  return adaylar.has(moduleUrl);
 }

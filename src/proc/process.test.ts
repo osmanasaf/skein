@@ -1,8 +1,9 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { tsxCliYolu } from "./process.js";
+import { pathToFileURL } from "node:url";
+import { girisNoktasiMi, tsxCliYolu } from "./process.js";
 
 /**
  * `tsxCliYolu` köke doğru GERÇEK `tsx` kurulumuna bakmadan da sınanabilir:
@@ -39,5 +40,67 @@ describe("tsxCliYolu", () => {
   it("node_modules doğrudan kökte olduğunda da aynı sonucu verir", () => {
     const beklenen = join(root, "node_modules", "tsx", "dist", "cli.mjs");
     expect(tsxCliYolu(root)).toBe(beklenen);
+  });
+});
+
+/**
+ * BİR MODÜLÜ İÇE ALMANIN YAN ETKİSİ OLMAMALI.
+ *
+ * Bu sınamaların koruduğu kusur gerçekti: iki CLI da dosya sonunda koşulsuz
+ * `main()` çağırıyordu, `parseArgs`'ı içe alan sınama gözcüyü sınama
+ * sürecinde koşturdu ve kusur yalnızca bir "unhandled rejection" satırı
+ * olarak göründü.
+ *
+ * Buradaki asıl tehlike DÜZELTMENİN KENDİSİ: koruma yanlış tarafa düşerse
+ * CLI hiç çalışmaz ve bunu kimse duymaz. Onun için iki yön de pinli —
+ * "içe alınınca false" VE "giriş noktasıyken true".
+ */
+describe("girisNoktasiMi", () => {
+  const eskiArgv = process.argv[1];
+  afterEach(() => {
+    process.argv[1] = eskiArgv as string;
+  });
+
+  it("BAŞKA bir dosya giriş noktasıysa false — içe alma yan etki yapmaz", () => {
+    process.argv[1] = join(root, "baska-giris.mjs");
+    expect(girisNoktasiMi(pathToFileURL(join(root, "modul.ts")).href)).toBe(false);
+  });
+
+  // ASIL SINAV: bu yön düşerse CLI'lar SESSİZCE hiç koşmaz.
+  it("modülün KENDİSİ giriş noktasıysa true", async () => {
+    const giris = join(root, "giris.mjs");
+    await writeFile(giris, "export {};\n");
+    process.argv[1] = giris;
+    expect(girisNoktasiMi(pathToFileURL(giris).href)).toBe(true);
+  });
+
+  it("göreli yazılmış giriş yolunu da tanır — `resolve`'dan geçiyor", async () => {
+    const giris = join(root, "goreli.mjs");
+    await writeFile(giris, "export {};\n");
+    const eskiCwd = process.cwd();
+    process.chdir(root);
+    try {
+      process.argv[1] = "goreli.mjs";
+      expect(girisNoktasiMi(pathToFileURL(giris).href)).toBe(true);
+    } finally {
+      process.chdir(eskiCwd);
+    }
+  });
+
+  // Depo bir sembolik bağın arkasındaysa `import.meta.url` gerçek yolu
+  // yazar, `argv[1]` ise bağı. Tek biçimle karşılaştırmak o kurulumda
+  // CLI'ı sessizce öldürürdü.
+  it("giriş sembolik bağla verilse de GERÇEK yolu tanır", async () => {
+    const gercek = join(root, "gercek.mjs");
+    await writeFile(gercek, "export {};\n");
+    const bag = join(root, "bag.mjs");
+    await symlink(gercek, bag);
+    process.argv[1] = bag;
+    expect(girisNoktasiMi(pathToFileURL(gercek).href)).toBe(true);
+  });
+
+  it("giriş noktası yoksa (`node -e`) false", () => {
+    delete process.argv[1];
+    expect(girisNoktasiMi(pathToFileURL(join(root, "modul.ts")).href)).toBe(false);
   });
 });

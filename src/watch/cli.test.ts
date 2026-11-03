@@ -1,4 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { spawnPortable, tsxCliYolu } from "../proc/process.js";
 import { parseArgs, zamanAsimiSecenegi } from "./cli.js";
 
 /**
@@ -98,4 +103,70 @@ describe("parseArgs — bilinmeyen bayrak", () => {
     expect(args.timeoutMs).toBe(30 * 60_000);
     expect(args.models).toEqual(["claude:m"]);
   });
+});
+
+/**
+ * Koruma eklendikten sonra kalan tek soru: gözcü GERÇEKTEN hâlâ koşuyor mu?
+ *
+ * `girisNoktasiMi` her zaman false dönerse birim sınamaları yeşil kalır,
+ * takım yeşil kalır ve CLI hiçbir şey yapmadan sessizce çıkar. Bu sınama
+ * süreci gerçekten başlatıp `main`'in çalıştığının KANITINI arıyor:
+ * bilinmeyen bayrak reddi ancak `main` koştuysa basılır.
+ */
+describe("giriş noktası — İÇE ALMAK gözcüyü başlatmaz", () => {
+  /**
+   * BU SINAMANIN VAR OLMA SEBEBİ: mutasyon turunda "korumayı kaldır, yine
+   * koşulsuz `main()` çağır" mutasyonu AYAKTA KALDI. Kusurun belirtisi bir
+   * assertion değil, vitest'in "unhandled rejection" satırıydı: `Tests`
+   * satırı yeşil kalıyor, çıkış kodu değişmiyor ve kimse duymuyor.
+   *
+   * Bir belirtiyi sınamak için onu ÖLÇÜLEBİLİR hâle getirmek gerekiyordu:
+   * modülü ayrı bir süreçte, giriş noktası OLMADAN içe alıyoruz. Koruma
+   * yoksa `main([])` akış adı olmadan koşar, `✗` basıp 1 ile çıkar.
+   * Koruma varsa hiçbir şey olmaz ve işaret basılır.
+   */
+  it("ayrı bir süreçte import edilince main KOŞMAZ — temiz çıkar", async () => {
+    const dizin = await mkdtemp(join(tmpdir(), "skein-iceal-"));
+    try {
+      const modul = pathToFileURL(join(process.cwd(), "src", "watch", "cli.ts")).href;
+      const betik = join(dizin, "iceal.mjs");
+      await writeFile(
+        betik,
+        `const m = await import(${JSON.stringify(modul)});\n` +
+          `console.log("ICE_ALINDI:" + typeof m.parseArgs);\n`,
+      );
+      const child = spawnPortable(process.execPath, [tsxCliYolu(process.cwd()), betik], {
+        cwd: process.cwd(),
+      });
+      let cikti = "";
+      child.stdout.on("data", (c: Buffer) => { cikti += c.toString(); });
+      child.stderr.on("data", (c: Buffer) => { cikti += c.toString(); });
+      const kod = await new Promise<number | null>((res) => child.on("close", res));
+
+      // İçe almak BAŞARILI olmalı ve `main`in hiçbir izi olmamalı.
+      expect(cikti).toContain("ICE_ALINDI:function");
+      expect(kod).toBe(0);
+      expect(cikti).not.toContain("✗");
+      expect(cikti).not.toContain("gözcü");
+    } finally {
+      await rm(dizin, { recursive: true, force: true });
+    }
+  }, 60_000);
+});
+
+describe("giriş noktası — main GERÇEKTEN koşuyor", () => {
+  it("süreç olarak çağrıldığında ayrıştırma çalışır (koruma doğru tarafta)", async () => {
+    const child = spawnPortable(
+      process.execPath,
+      [tsxCliYolu(process.cwd()), join(process.cwd(), "src", "watch", "cli.ts"), "akis", "--yok-boyle"],
+      { cwd: process.cwd() },
+    );
+    let cikti = "";
+    child.stdout.on("data", (c: Buffer) => { cikti += c.toString(); });
+    child.stderr.on("data", (c: Buffer) => { cikti += c.toString(); });
+    const kod = await new Promise<number | null>((res) => child.on("close", res));
+
+    expect(kod).toBe(1);
+    expect(cikti).toContain("--yok-boyle");
+  }, 60_000);
 });

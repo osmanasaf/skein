@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { join, resolve } from "node:path";
+import { girisNoktasiMi } from "../proc/process.js";
 import type { Adapter } from "../adapters/contract.js";
 import { adapterFor, knownProviderSet } from "../adapters/factory.js";
 import { CardQueue } from "../card/queue.js";
@@ -447,14 +448,18 @@ async function run(root: string, live: LiveFlow, queue: CardQueue, args: Args): 
   return 0;
 }
 
-main(process.argv.slice(2)).then(
-  (code) => process.exit(code),
-  (error: unknown) => {
-    if (error instanceof FlowError || error instanceof WorkspaceError || error instanceof ConfigError) {
-      console.error(`✗ ${error.message}`);
+// `parseArgs`/`zamanAsimiSecenegi` sınanabilsin diye bu modül içe
+// alınabiliyor; içe almak GÖZCÜYÜ BAŞLATMAMALI. Bkz. `girisNoktasiMi`.
+if (girisNoktasiMi(import.meta.url)) {
+  main(process.argv.slice(2)).then(
+    (code) => process.exit(code),
+    (error: unknown) => {
+      if (error instanceof FlowError || error instanceof WorkspaceError || error instanceof ConfigError) {
+        console.error(`✗ ${error.message}`);
+        process.exit(1);
+      }
+      console.error(error);
       process.exit(1);
-    }
-    console.error(error);
-    process.exit(1);
-  },
-);
+    },
+  );
+}

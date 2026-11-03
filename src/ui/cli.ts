@@ -5,7 +5,7 @@ import { knownProviderSet } from "../adapters/factory.js";
 import { CardQueue } from "../card/queue.js";
 import { FlowError, loadFlow, type LoadOptions } from "../flow/load.js";
 import { LiveFlow } from "../flow/live.js";
-import { tsxCliYolu } from "../proc/process.js";
+import { girisNoktasiMi, tsxCliYolu } from "../proc/process.js";
 import { tarayiciyiAc } from "./open-browser.js";
 import { portuHatirlayarakAc, sonAkisiOku, sonAkisiYaz } from "./port-memory.js";
 import { serveUi, type CanliAkis } from "./server.js";
@@ -327,14 +327,17 @@ async function main(argv: string[]): Promise<number> {
   });
 }
 
-main(process.argv.slice(2)).then(
-  (code) => process.exit(code),
-  (error: unknown) => {
-    if (error instanceof FlowError) {
-      console.error(`✗ ${error.message}`);
+// İçe almanın yan etkisi olmamalı — gözcü CLI'ındaki kuralın aynısı.
+if (girisNoktasiMi(import.meta.url)) {
+  main(process.argv.slice(2)).then(
+    (code) => process.exit(code),
+    (error: unknown) => {
+      if (error instanceof FlowError) {
+        console.error(`✗ ${error.message}`);
+        process.exit(1);
+      }
+      console.error(error);
       process.exit(1);
-    }
-    console.error(error);
-    process.exit(1);
-  },
-);
+    },
+  );
+}
