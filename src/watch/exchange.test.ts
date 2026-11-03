@@ -347,6 +347,92 @@ describe("alışveriş — planlama turunda ret kanalı yok (kural 22)", () => {
     expect(result.status === "escalated" && result.reason).toMatch(/itiraz dosyası yok/);
   });
 
+  /**
+   * Ajanın ret GEREKÇESİ kaybolmamalı.
+   *
+   * Karar kanal değil (yukarıdaki sınamalar bunu pinliyor) ama ajanın
+   * `reason` alanı TAMAMEN atılıyordu: üç paragraflık bir itiraz, parası
+   * ödenmiş bir turun tek çıktısı, ne günlüğe ne ekrana ne karta
+   * yazılmadan kayboluyordu. "Kanal yanlış" demek "içerik yok" demek
+   * değil.
+   */
+  it("ret gerekçesi uyarıya olduğu gibi giriyor", async () => {
+    const card = await put();
+    await planYaz(card);
+    dosyalar.set(at("architect", ITIRAZ_YOLU(card.id)), itiraz("açık"));
+    const uzunGerekce =
+      "Birinci paragraf: depo dosyası sözleşmeyi zorunlu kılmıyor.\n\n" +
+      "İkinci paragraf: tüketici modül bu değişmezi kendi okuyor.\n\n" +
+      "Üçüncü paragraf: bu yüzden plan olduğu gibi ilerlerse kusur tekrar yazılır.";
+    claude.answer = reddet(uzunGerekce);
+
+    const result = await tick("architect", options);
+
+    expect(result.status).toBe("accepted");
+    const uyarilar = result.status === "accepted" ? (result.warnings ?? []).join("\n") : "";
+    // Kırpma YOK: kırpmak kusurun daha küçük bir hâlini üretmek olurdu.
+    expect(uyarilar).toContain(uzunGerekce);
+    // Kanal uyarısı da duruyor; ikisi birbirinin yerine geçmiyor.
+    expect(uyarilar).toMatch(/kural 22/);
+  });
+
+  it("ret gerekçesi olay günlüğüne de giriyor", async () => {
+    const card = await put();
+    const logPath = join(root, "olaylar.jsonl");
+    await planYaz(card);
+    dosyalar.set(at("architect", ITIRAZ_YOLU(card.id)), itiraz("açık"));
+    claude.answer = reddet("plan tüketici modülü hiç saymıyor");
+
+    await tick("architect", { ...options, log: new EventLog(logPath, "r1") });
+
+    const settled = (await readEvents(logPath)).events.filter((e) => e.type === "card.settled");
+    const metin = JSON.stringify(settled);
+    // Günlük operatörün SONRADAN bakacağı yer: ekrandaki uyarı uçucu.
+    expect(metin).toContain("plan tüketici modülü hiç saymıyor");
+  });
+
+  /**
+   * İtiraz dosyası YOKKEN de gerekçe kaybolmamalı — ve teşhis ajanın ne
+   * dediğini doğru adlandırmalı.
+   *
+   * Bu dalda mesaj "`architect` KABUL ETTİ ama itiraz dosyası yok"
+   * diyordu; ajan "reject" demişti. Teşhis, teşhis ettiği şeyi yanlış
+   * adlandırıyordu — ve asıl teşhis değeri taşıyan gerekçe atılıyordu.
+   */
+  it("itiraz dosyası yokken gerekçe tırmanma sebebine giriyor", async () => {
+    const card = await put();
+    await planYaz(card);
+    claude.answer = reddet("itiraz yazamadım çünkü plan dosyasını okuyamadım");
+
+    const result = await tick("architect", options);
+
+    expect(result.status).toBe("escalated");
+    const reason = result.status === "escalated" ? result.reason : "";
+    expect(reason).toMatch(/itiraz dosyası yok/);
+    expect(reason).toContain("itiraz yazamadım çünkü plan dosyasını okuyamadım");
+    // "kabul etti" demiyor: ajan reddetti.
+    expect(reason).toContain("ret dedi");
+    expect(reason).not.toContain("kabul etti");
+  });
+
+  // Tur İLERLEMEDİĞİNDE de (ör. birleştirme düştü) gerekçe kaybolmamalı;
+  // o dalda taşıyıcı `warnings` değil `reason`.
+  it("birleştirme düşerse gerekçe tırmanma sebebine giriyor", async () => {
+    const card = await put();
+    await planYaz(card);
+    dosyalar.set(at("architect", ITIRAZ_YOLU(card.id)), itiraz("açık"));
+    claude.answer = reddet("plan yanlış ve sebebi şu");
+
+    const result = await tick("architect", {
+      ...options,
+      mergeForward: async () => ({ kind: "conflict" as const, paths: ["a.ts"] }),
+    });
+
+    expect(result.status).toBe("escalated");
+    const reason = result.status === "escalated" ? result.reason : "";
+    expect(reason).toContain("plan yanlış ve sebebi şu");
+  });
+
   // Planlama DIŞINDAKİ rollerde ret kanalı yerinde duruyor: kural 22
   // yalnızca katılımcıları bağlıyor.
   it("planlama dışı rolde ret kanalı çalışmaya devam eder", async () => {

@@ -101,13 +101,34 @@ async function put(title = "iş"): Promise<Card> {
 }
 
 describe("serve — uyku", () => {
+  /**
+   * Beklenen şey SAAT değil KOŞUL.
+   *
+   * Bu sınama eskiden 60 ms uyuyup "birden fazla süpürme olmuş olmalı"
+   * diyordu ve 56 dosyanın paralel koştuğu yüklü bir makinede düştü —
+   * sınadığı şeyle ilgisiz bir sebeple. Zamana bağlı eşik, kendi iddiasını
+   * kumara çeviren bir sınamadır. Artık ikinci süpürmenin KENDİSİ
+   * bekleniyor; gelmezse vitest zaman aşımıyla düşüyor ve sebep net.
+   */
   it("kuyruk boşken ölmez, uyur", async () => {
     const stop = new AbortController();
-    const running = serve({ topology }, { ...base, signal: stop.signal });
+    let sweeps = 0;
+    let ikinciGeldi: () => void = () => undefined;
+    const ikinci = new Promise<void>((resolve) => {
+      ikinciGeldi = resolve;
+    });
+    const running = serve({ topology }, {
+      ...base,
+      signal: stop.signal,
+      onSweep: () => {
+        sweeps += 1;
+        if (sweeps >= 2) ikinciGeldi();
+      },
+    });
 
-    // Toplu koşu burada çıkardı. Gözcü çıkmamalı: birkaç uyku turu sonra
-    // hâlâ koşuyor olmalı.
-    await new Promise((r) => setTimeout(r, 60));
+    // Toplu koşu birinci süpürmeden sonra ÇIKARDI. Gözcü çıkmamalı:
+    // ikinci süpürme gelmek zorunda.
+    await ikinci;
     expect(claude.calls).toBe(0);
 
     stop.abort();

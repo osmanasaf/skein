@@ -20,16 +20,17 @@ olduğu için kendiliğinden eklenmedi.
 
 ---
 
-## QA KAMPANYASI — 35 bulgu, 26 düzeltildi (1-2 Kasım)
+## QA KAMPANYASI — 37 bulgu, 29 düzeltildi (1-3 Kasım)
 
 Dört paralel tarama koştu (ekran · kart+git · tick+planlama · ölçüm takımı),
 32 bulgu çıktı. Her bulgu kabul edilmeden önce **kendim doğruladım**; her
 düzeltme **mutasyonla** sınandı. 820 → 915 test.
 
-33-34. bulgular kampanyanın değil, **düzeltmeleri yaparken benim**
-bulgularımdır: 19. satır (yarım yazılan kilit) ve 25. satır (kapı
-kararının iki yerde hesaplanması). Kampanyanın dört taraması da ikisini
-kaçırdı.
+33-37. bulgular kampanyanın değil, **düzeltmeleri yaparken benim**
+bulgularımdır: 19 (yarım yazılan kilit), 25 (kapı kararının iki yerde
+hesaplanması), 30 (ret gerekçesi üç ayrı dalda atılıyor — bildirilen
+yalnızca biriydi), 31 ("kabul etti" diyen teşhis) ve 32 (zamana bağlı
+sınama). Kampanyanın dört taraması da beşini kaçırdı.
 
 ### Düzeltilenler
 
@@ -63,6 +64,10 @@ kaçırdı.
 | 26 | `close()` kopyada `found[0]` alıyor, "uzun geçmiş kazanır"ı uygulamıyor | bayat kopya arşivlenip güncel olan kuyrukta kalıyor |
 | 27 | `close()` kaybeden kopyayı silmiyor | kapatma KAPATMIYOR: kart `done`'a gidiyor, kopyası panoda duruyor |
 | 28 | Kuyruk engeli EKRANDA görünmüyor | teşhis gözcünün terminalinde kalıyor; operatör panoya bakıyor ve kart sessizce bekliyor |
+| 29 | Planlama turunda `reject` gelirse ajanın `reason`'ı atılıyor | üç paragraf itiraz, ödenmiş turun tek çıktısı, hiçbir yere yazılmadan kayboluyor |
+| 30 | Aynı kayıp ÜÇ dalda: kabul, tırmanma ve ilerlemeyen tur | bildirilen yalnızca biriydi; ikisi okurken çıktı |
+| 31 | Teşhis "`rol` KABUL ETTİ ama itiraz dosyası yok" diyor — ajan reddetmişti | teşhis, teşhis ettiği şeyi yanlış adlandırıyor |
+| 32 | `serve` uyku sınaması 60 ms'de "birden fazla süpürme" bekliyor | yüklü makinede kendi iddiasıyla ilgisiz sebeple düşüyor |
 
 ### AÇIK kalanlar — önem sırası
 
@@ -71,8 +76,6 @@ kaçırdı.
   sormadan "ÖLÇER" diyebiliyor; `matrixSkip`/`power2x2` o dersi öğrenmişti.
 - Rapor satırında iki payda: `koşu` ölçülmüş koşuyu,
   `aktivasyon`/`ret` BÜTÜN koşuları sayıyor.
-- Planlama turunda `reject` verdikti gelirse ajanın `reason`'ı tamamen
-  atılıyor — üç paragraf itiraz hiçbir yere yazılmadan kayboluyor.
 
 **Düşük.** Modelin hesaplayıp sayfanın basmadığı alanlar (`action`,
 `planHash`, adımın zaman damgası); `layerGaps`'in kendi kör noktası

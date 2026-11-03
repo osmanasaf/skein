@@ -312,6 +312,26 @@ async function runRole(card: Card, role: SnapshotRole, options: TickOptions): Pr
   const planTuru = planFazi.kind === "itiraz" || planFazi.kind === "cevap";
   const yanlisKanal = planTuru && verdict.verdict.decision === "reject";
 
+  /**
+   * Ajanın ret gerekçesi ATILMAMALI.
+   *
+   * Planlama turunda `reject` kanal değil (kural 22) ve karar yok
+   * sayılıyor — ama ajanın `reason` alanı TAMAMEN atılıyordu. Üç
+   * paragraflık bir itiraz, parası ödenmiş bir turun tek çıktısı,
+   * hiçbir yere yazılmadan kayboluyordu: ne günlükte, ne ekranda, ne
+   * kartta. "Kanal yanlış" demek "içerik yok" demek değil.
+   *
+   * Kırpma YOK, `agentSaid`'in aksine. Orada son 600 karakter alınıyor
+   * çünkü hata çıktısının işe yarar kısmı SONDA olur (yığın izi, son
+   * hata). Burada atılan şeyin kendisi konu ve bir itirazın tezi
+   * BAŞTA durur; kırpmak kusurun daha küçük bir hâlini üretmek olurdu.
+   */
+  const retGerekcesi = yanlisKanal ? (verdict.verdict.reason ?? "").trim() : "";
+  const retSoyledi = retGerekcesi === ""
+    ? ""
+    : `\n\n\`${role.id}\` ret gerekçesi olarak şunu yazdı — ret kanalı ` +
+      `olmadığı için karara GİRMEDİ, ama kaybolmadı:\n${retGerekcesi}`;
+
   if (verdict.verdict.decision === "reject" && !planTuru) {
     const reason = verdict.verdict.reason as string;
     const sent = await queue.reject(card, { reason, ...(commit === undefined ? {} : { commit }) });
@@ -422,17 +442,27 @@ async function runRole(card: Card, role: SnapshotRole, options: TickOptions): Pr
   // çözümü prompta yazmaktı; prompt bir talimattır, kapı değil. Burası
   // kapısı: dosyalar diskte aranıyor, ajanın "yazdım" demesine
   // bakılmıyor (PHILOSOPHY 8).
-  const adim = await planStep(card, role, options, workdir, summary);
+  const adim = await planStep(card, role, options, workdir, summary, verdict.verdict.decision);
   if (adim.kind === "hata") {
-    return { status: "escalated", card: await queue.escalate(card, adim.reason), reason: adim.reason };
+    // Gerekçe burada da ekleniyor: itiraz dosyası yazmayıp "reject" diyen
+    // bir rolün söyledikleri, teşhisin EN değerli parçasıdır.
+    const reason = `${adim.reason}${retSoyledi}`;
+    return { status: "escalated", card: await queue.escalate(card, reason), reason };
   }
   if (adim.kind === "tasindi") {
-    if (!yanlisKanal || adim.result.status !== "accepted") return adim.result;
+    if (!yanlisKanal) return adim.result;
+    if (adim.result.status !== "accepted") {
+      // Tur ilerlemedi (ör. birleştirme düştü). Gerekçe yine kaybolmamalı;
+      // bu dalda taşıyıcı `warnings` değil `reason`.
+      return "reason" in adim.result
+        ? { ...adim.result, reason: `${adim.result.reason}${retSoyledi}` }
+        : adim.result;
+    }
     // Deneme kayda geçiyor: sessizce yok saymak, rolün ne yapmaya
     // çalıştığını operatörden saklamak olurdu.
     const uyari = `\`${role.id}\` verdiktte "reject" dedi; planlama turunda ret kanalı ` +
       `YOK (kural 22). Tur itiraz dosyasından okundu. Değer kararı için itirazın ` +
-      `\`Durum\` satırına \`insana: <gerekçe>\` yaz.`;
+      `\`Durum\` satırına \`insana: <gerekçe>\` yaz.${retSoyledi}`;
     return { ...adim.result, warnings: [...(adim.result.warnings ?? []), uyari] };
   }
   const plan = adim.kind === "devam" ? adim.plan : null;
@@ -493,6 +523,15 @@ async function planStep(
   options: TickOptions,
   workdir: string,
   summary?: string,
+  /**
+   * Ajanın verdikt kararı — YALNIZCA mesaj metni için.
+   *
+   * Akışı değiştirmiyor (planlama turunda karar kanal değil), ama
+   * `eksik()` mesajı "kabul etti" diyordu: ajan "reject" dediğinde bu
+   * cümle operatöre OLMAYAN bir şey söylüyordu. Teşhis, teşhis ettiği
+   * şeyi doğru adlandırmak zorunda.
+   */
+  karar?: "accept" | "reject",
 ): Promise<PlanAdim> {
   const phase = planPhase(card, role.id, card.topology);
   if (phase.kind === "yok") return { kind: "yok" };
@@ -546,7 +585,8 @@ async function planStep(
 
   const eksik = (yol: { role: string; path: string }, neden: string): PlanAdim => ({
     kind: "hata",
-    reason: `\`${role.id}\` kabul etti ama ${neden}: \`${yol.path}\`. ` +
+    reason: `\`${role.id}\` ${karar === "reject" ? "ret dedi" : "kabul etti"} ` +
+      `ama ${neden}: \`${yol.path}\`. ` +
       `İtirazın yoksa da dosyayı yaz ve bunu söyle — sessizlik anlaşma değildir.`,
   });
 
