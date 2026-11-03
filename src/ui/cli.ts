@@ -63,6 +63,7 @@ Seçenekler:
 
 Gözcüye geçirilen bayraklar (verilirse düğme açılır):
   --model <spec>         zorunlu, ör. claude:claude-sonnet-5
+  --timeout <dk>         bir aktivasyonun üst sınırı, dakika (varsayılan 20)
   --allow-tool <t>       birden fazla kez verilebilir
   --permission-mode <m>  varsayılan gözcünün kendi varsayılanı
   --bin <p=yol>          sağlayıcının çalıştırılabilirini değiştir
@@ -163,7 +164,12 @@ async function main(argv: string[]): Promise<number> {
     else if (value === "--tarayici-yok") tarayiciYok = true;
     else if (
       value === "--model" || value === "--allow-tool" ||
-      value === "--permission-mode" || value === "--bin" || value === "--poll"
+      value === "--permission-mode" || value === "--bin" || value === "--poll" ||
+      // `--timeout` gözcünün bayrağı ve ekran onu YORUMLAMIYOR, yalnızca
+      // taşıyor: bir turun ne kadar sürebileceğine karar veren yer
+      // `watch/cli.ts` olmalı, ekran değil. Listede olmadığı sürece
+      // sessizce düşüyordu.
+      value === "--timeout"
     ) {
       const deger = argv[++i];
       if (deger === undefined) {
@@ -173,6 +179,13 @@ async function main(argv: string[]): Promise<number> {
       if (value === "--model") modelVar = true;
       gozcuBayraklari.push(value, deger);
     } else if (!value.startsWith("--") && flowName === undefined) flowName = value;
+    // TANIMADIĞIN BAYRAĞI SESSİZCE YUTMA — gözcü CLI'ındaki kuralın
+    // aynısı, aynı sebeple. Burada ek bir tuzak var: bayrak yutulunca
+    // DEĞERİ de ("50") ortada kalıyor ve akış adı sanılabiliyordu.
+    else if (value.startsWith("-")) {
+      console.error(`✗ bilinmeyen bayrak: ${value}. Seçenekler için --help.`);
+      return 1;
+    }
   }
 
   // `--model` olmadan gözcü koşmuyor (akış dosyası model taşımıyor), yani

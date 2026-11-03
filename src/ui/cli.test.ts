@@ -224,6 +224,56 @@ describe("ui cli — port hafızası (gerçek süreç)", () => {
     expect(cikti).not.toContain("ekran açık");
   });
 
+  /**
+   * TANIMADIĞIN BAYRAĞI SESSİZCE YUTMA.
+   *
+   * Gerçekte şöyle patladı: ekranı `--timeout 50` ile açtım ve 50
+   * dakikalık bir koşu başlattığımı sandım. Bayrak ekran CLI'ının
+   * listesinde yoktu, hiçbir yere kaydedilmeden düştü, ve turlar yine
+   * 20 dakikada kesilecekti. İkinci tuzak: bayrak yutulunca DEĞERİ de
+   * ("50") ortada kalıyor ve akış adı sanılabiliyor.
+   */
+  it("bilinmeyen bayrak ekranı AÇMAZ, 1 ile çıkar ve hangisi olduğunu söyler", async () => {
+    const child = spawnPortable(
+      process.execPath,
+      [tsxYolu(), join(process.cwd(), "src", "ui", "cli.ts"), "test", "--zamanasimi", "50"],
+      { cwd: root },
+    );
+    let cikti = "";
+    child.stdout.on("data", (c: Buffer) => { cikti += c.toString(); });
+    child.stderr.on("data", (c: Buffer) => { cikti += c.toString(); });
+    const kod = await new Promise<number | null>((res) => child.on("close", res));
+
+    expect(kod).toBe(1);
+    expect(cikti).toContain("--zamanasimi");
+    expect(cikti).not.toContain("ekran açık");
+  });
+
+  // `--timeout` gözcünün bayrağı; ekran onu YORUMLAMIYOR, taşıyor. Taşıma
+  // listesinde olmadığı sürece sessizce düşüyordu — yukarıdaki sınama
+  // artık bilinmeyeni yakalıyor, bu sınama da TANINDIĞINI yakalıyor.
+  // İkisi birden olmazsa bayrağı listeden çıkaran mutasyon ayakta kalır.
+  it("`--timeout` GÖZCÜ bayrağı sayılıyor — bilinmeyen muamelesi görmüyor", async () => {
+    // `--timeout` tek başına verilince ekran "gözcü bayrağı var ama
+    // --model yok" diye reddediyor. İDDİA tam bu ayrımda: red sebebi
+    // "bilinmeyen bayrak" OLMAMALI. Böylece hem tanındığını hem gözcüye
+    // taşınanlar arasında sayıldığını, gerçek bir gözcü komutu
+    // çözümlemeye gerek kalmadan pinliyoruz.
+    const child = spawnPortable(
+      process.execPath,
+      [tsxYolu(), join(process.cwd(), "src", "ui", "cli.ts"), "test", "--timeout", "45"],
+      { cwd: root },
+    );
+    let cikti = "";
+    child.stdout.on("data", (c: Buffer) => { cikti += c.toString(); });
+    child.stderr.on("data", (c: Buffer) => { cikti += c.toString(); });
+    const kod = await new Promise<number | null>((res) => child.on("close", res));
+
+    expect(kod).toBe(1);
+    expect(cikti).toContain("--model");
+    expect(cikti).not.toContain("bilinmeyen bayrak");
+  });
+
   it("bozuk `.skein/ekran.json` açılışı ENGELLEMİYOR", async () => {
     await mkdir(join(root, ".skein"), { recursive: true });
     await writeFile(join(root, ".skein", "ekran.json"), "{ bu json degil", "utf8");

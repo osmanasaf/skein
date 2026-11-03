@@ -116,6 +116,20 @@ export function parseArgs(argv: string[]): Args {
       if (path !== undefined) args.log = path;
     }
     else if (!value.startsWith("--") && args.flow === undefined) args.flow = value;
+    // TANIMADIĞIN BAYRAĞI SESSİZCE YUTMA.
+    //
+    // Eskiden bu döngünün sonunda hiçbir şey yoktu: bilinmeyen bir
+    // `--bayrak` kaydı hiç bırakmadan düşüyordu. Operatör bir şey istediğini
+    // sanıyor, gözcü eski davranışla koşuyor ve ikisi arasındaki fark
+    // hiçbir yerde görünmüyordu. Bu kusur tam olarak başıma geldi:
+    // `--timeout 50` verip 50 dakikalık bir koşu başlattığımı sandım;
+    // bayrak yutulmuştu ve turlar yine 20'de kesilecekti.
+    //
+    // Yazım hatası yapan operatöre "anlamadım" demek, ona sessizce
+    // başka bir şey yapmaktan her zaman ucuzdur.
+    else if (value.startsWith("-")) {
+      throw new ConfigError(`bilinmeyen bayrak: ${value}. Seçenekler için --help.`);
+    }
   }
   return args;
 }

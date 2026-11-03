@@ -67,3 +67,35 @@ describe("zamanAsimiSecenegi", () => {
       .toEqual({ timeoutMs: 45 * 60_000 });
   });
 });
+
+/**
+ * TANIMADIĞIN BAYRAĞI SESSİZCE YUTMA.
+ *
+ * Bu kusur gerçekte şöyle patladı: ekranı `--timeout 50` ile açtım ve 50
+ * dakikalık bir koşu başlattığımı sandım. Bayrak tanınmıyordu, hiçbir
+ * yere kaydedilmeden düştü, ve turlar yine 20 dakikada kesilecekti.
+ * Yazım hatası yapan operatöre "anlamadım" demek, ona sessizce başka bir
+ * şey yapmaktan her zaman ucuzdur.
+ */
+describe("parseArgs — bilinmeyen bayrak", () => {
+  it("bilinmeyen uzun bayrağı REDDEDER", () => {
+    expect(() => parseArgs(["akis", "--zamanasimi", "50"])).toThrow(/bilinmeyen bayrak/);
+  });
+
+  it("bilinmeyen kısa bayrağı da reddeder", () => {
+    expect(() => parseArgs(["akis", "-x"])).toThrow(/bilinmeyen bayrak/);
+  });
+
+  // Hata mesajı HANGİ bayrak olduğunu söylemeli: "bilinmeyen bayrak"
+  // tek başına, beş bayraklı bir komut satırında işe yaramaz.
+  it("hata hangi bayrak olduğunu söyler", () => {
+    expect(() => parseArgs(["akis", "--zamanasimi"])).toThrow(/--zamanasimi/);
+  });
+
+  it("tanınan bayraklar etkilenmez", () => {
+    const args = parseArgs(["akis", "--serve", "--timeout", "30", "--model", "claude:m"]);
+    expect(args.serve).toBe(true);
+    expect(args.timeoutMs).toBe(30 * 60_000);
+    expect(args.models).toEqual(["claude:m"]);
+  });
+});
