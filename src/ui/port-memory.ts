@@ -3,17 +3,47 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 /**
- * Son kullanılan dinleme portu nereye yazılıyor.
+ * Son kullanılan dinleme portu VE son açılan akışın adı nereye yazılıyor.
  *
  * `.skein/` altında — kuyruk da orada ve gözcünün kilidi de. Bu dosya
  * İKİSİNİN de parçası değil: yalnızca ekranın "önceki açılışta neredeydim"
- * hafızası, bozulması hiçbir yazma yolunu kilitlemez (bkz. `sonPortuOku`).
+ * hafızası, bozulması hiçbir yazma yolunu kilitlemez (bkz. `sonPortuOku`,
+ * `sonAkisiOku`).
+ *
+ * İki alan (`port`, `akis`) AYNI dosyada ve okuma/yazma BİRBİRİNİ EZMİYOR:
+ * her yazma önce mevcut kaydı okuyup yalnızca kendi alanını değiştiriyor
+ * (bkz. `hamKaydiYaz`). Bu olmasa `sonPortuYaz` sonra gelen bir `sonAkisiYaz`
+ * portu, ya da tersi, SESSİZCE silerdi.
  */
 const DOSYA_ADI = "ekran.json";
 
 /** `port` alanı makul bir TCP portu mu — 0 ayrılmamış, 65535 üst sınır. */
 function gecerliPort(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value > 0 && value <= 65535;
+}
+
+/**
+ * Ham kaydı okur — dosya yoksa, okunamıyorsa ya da kök öğe bir eşleme
+ * (mapping) değilse boş nesne döner, FIRLATMAZ.
+ *
+ * Her iki alanın (`port`, `akis`) okuyucusu da BURADAN geçiyor: "bozuk
+ * dosya kilitlemez" kuralının tek yeri, ikisi için ayrı ayrı yazılmıyor.
+ */
+async function hamKaydiOku(root: string): Promise<Record<string, unknown>> {
+  let text: string;
+  try {
+    text = await readFile(join(root, ".skein", DOSYA_ADI), "utf8");
+  } catch {
+    return {};
+  }
+  try {
+    const value: unknown = JSON.parse(text);
+    return value !== null && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
 }
 
 /**
@@ -27,36 +57,65 @@ function gecerliPort(value: unknown): value is number {
  * boş bir port seçerek açılmaya devam eder.
  */
 export async function sonPortuOku(root: string): Promise<number | undefined> {
-  let text: string;
-  try {
-    text = await readFile(join(root, ".skein", DOSYA_ADI), "utf8");
-  } catch {
-    return undefined;
-  }
-  try {
-    const value: unknown = JSON.parse(text);
-    if (value === null || typeof value !== "object") return undefined;
-    const port = (value as Record<string, unknown>)["port"];
-    return gecerliPort(port) ? port : undefined;
-  } catch {
-    return undefined;
-  }
+  const port = (await hamKaydiOku(root))["port"];
+  return gecerliPort(port) ? port : undefined;
+}
+
+/**
+ * `.skein/ekran.json`'dan son açılan akışın adını okur.
+ *
+ * Aynı "bozuk kayıt kilitlemez" kuralı: dosya yoksa, bozuksa ya da `akis`
+ * alanı boş/yanlış tipteyse `undefined` döner — FIRLATMAZ. Çağıran taraf
+ * (ekranın varsayılan akış seçimi, `ui/cli.ts`) bunu yalnızca bir İPUCU
+ * sayıyor: adı dönse bile o akış artık diskte olmayabilir ya da bozuk
+ * olabilir, bu fonksiyon o denetimi YAPMIYOR — "var mı, geçerli mi" sorusu
+ * çağıranın işi.
+ */
+export async function sonAkisiOku(root: string): Promise<string | undefined> {
+  const akis = (await hamKaydiOku(root))["akis"];
+  return typeof akis === "string" && akis.trim() !== "" ? akis : undefined;
+}
+
+/**
+ * Kaydın TEK bir alanını değiştirip atomik yazar — ötekisi (port/akış)
+ * AYNEN kalır.
+ *
+ * Önce mevcut kaydı okuyup üstüne yazıyoruz (merge): `sonPortuYaz` ve
+ * `sonAkisiYaz` aynı dosyaya BAĞIMSIZ yazıyor gibi görünse de, biri ötekini
+ * ezebilirdi — bu fonksiyon o riski kapatıyor. Yazma yine tmp+rename ile
+ * atomik: `card/queue.ts`'teki kart yazma disipliniyle aynı, yarım yazılmış
+ * bir dosya bir sonraki okumada "bozuk" sayılıp yok sayılır.
+ */
+async function hamKaydiYaz(root: string, alan: string, deger: unknown): Promise<void> {
+  const dir = join(root, ".skein");
+  await mkdir(dir, { recursive: true });
+  const mevcut = await hamKaydiOku(root);
+  const yeni = { ...mevcut, [alan]: deger };
+  const tmp = join(dir, `.tmp-${randomBytes(6).toString("hex")}`);
+  await writeFile(tmp, JSON.stringify(yeni), "utf8");
+  await rename(tmp, join(dir, DOSYA_ADI));
 }
 
 /**
  * Kullanılan portu `.skein/ekran.json`'a kalıcı yazar.
  *
- * tmp+rename ile atomik — `card/queue.ts`'teki kart yazma disipliniyle
- * aynı: yarım yazılmış bir dosya, bir sonraki açılışın `sonPortuOku`'sunda
- * "bozuk" sayılıp sessizce yok sayılır, ama yarım dosyanın KENDİSİ hiç
- * görünmez.
+ * `akis` alanı AYNEN kalır (bkz. `hamKaydiYaz`) — port hatırlama ile akış
+ * hatırlama birbirinden bağımsız iki özellik, biri ötekini silmemeli.
  */
 export async function sonPortuYaz(root: string, port: number): Promise<void> {
-  const dir = join(root, ".skein");
-  await mkdir(dir, { recursive: true });
-  const tmp = join(dir, `.tmp-${randomBytes(6).toString("hex")}`);
-  await writeFile(tmp, JSON.stringify({ port }), "utf8");
-  await rename(tmp, join(dir, DOSYA_ADI));
+  await hamKaydiYaz(root, "port", port);
+}
+
+/**
+ * Son açılan akışın adını `.skein/ekran.json`'a kalıcı yazar.
+ *
+ * Ekrandaki seçiciden akış değiştirmek de bunu çağırmalı (bkz.
+ * `ui/cli.ts`'teki `akisSecimi.ac`) — yoksa "son açılan" yalan olurdu:
+ * seçiciyle değiştirilen akış ekranda görünür ama bir sonraki `npm start`
+ * hâlâ eski kaydı okurdu.
+ */
+export async function sonAkisiYaz(root: string, akis: string): Promise<void> {
+  await hamKaydiYaz(root, "akis", akis);
 }
 
 /** `EADDRINUSE` mi — başka biri o portu tutuyor demek. */

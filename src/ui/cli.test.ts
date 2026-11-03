@@ -270,3 +270,161 @@ describe("ui cli — port hafızası (gerçek süreç)", () => {
     }
   });
 }, 60_000);
+
+/**
+ * VARSAYILAN AKIŞ SEÇİMİ — gerçek süreç.
+ *
+ * `npm start` akış adı verilmeden çalıştırılınca `hub/flows/` altındaki ADA
+ * GÖRE İLK akış açılıyordu — "ada göre ilk" bir varsayılan değil, bir kaza.
+ * Kart şu önceliği istiyor: komut satırı argümanı > SON AÇILAN akış
+ * (`.skein/ekran.json`) > `gunluk-tek` > ada göre ilk (son çare). Her adım
+ * KENDİSİ YOKSA ya da BOZUKSA (geçersiz YAML, kural ihlali) engel olmuyor,
+ * sıradaki adıma düşülüyor.
+ *
+ * Birim sınamaları yok: seçim mantığı (`varsayilanAkisAdi`) `cli.ts`'in
+ * modül düzeyinde kendini çağırdığı için import edilemiyor (dosyanın
+ * başındaki not) — bu yüzden her karar noktası GERÇEK bir süreç açıp
+ * `GET /durum`un döndürdüğü `flow.name`e bakarak sınanıyor.
+ */
+describe("ui cli — varsayılan akış seçimi (gerçek süreç)", () => {
+  const KOMUTSUZ_ORTAM = { ...process.env, PATH: "" };
+
+  /** Tek rollü, geçerli bir akış dosyası metni — ad ve rol id'si parametreli. */
+  function akisYaml(ad: string, rol: string): string {
+    return `
+name: ${ad}
+constitution:
+  - ../prompts/base.md
+roles:
+  - id: ${rol}
+    provider: claude
+    workspace: main
+    prompt: ../../roles/coder.prompt
+    next: done
+`;
+  }
+
+  async function akisYarat(ad: string, rol: string): Promise<void> {
+    await writeFile(join(root, "hub", "flows", `${ad}.yaml`), akisYaml(ad, rol));
+  }
+
+  async function hatirlananaYaz(ad: string): Promise<void> {
+    await mkdir(join(root, ".skein"), { recursive: true });
+    await writeFile(join(root, ".skein", "ekran.json"), JSON.stringify({ akis: ad }), "utf8");
+  }
+
+  async function aktifAkisAdi(e: CalisanEkran): Promise<string> {
+    const model = (await (await fetch(`${e.url}durum`)).json()) as { flow: { name: string } };
+    return model.flow.name;
+  }
+
+  // Sayfaya gömülü yazma jetonunu GERÇEK bir HTTP yanıtından çıkarıyoruz —
+  // bu sınama gerçek bir süreçle konuşuyor, `serveUi`nin döndürdüğü
+  // `token`a doğrudan erişimi yok (bkz. `server.test.ts`'teki o erişim).
+  async function jetonAl(url: string): Promise<string> {
+    const html = await (await fetch(url)).text();
+    const m = /const JETON = "([^"]+)"/.exec(html);
+    if (m === null) throw new Error("sayfada jeton bulunamadı");
+    return m[1] as string;
+  }
+
+  // `beforeEach` zaten `test.yaml` (rol: coder) yaratıyor; alfabetik sırada
+  // kasıtlı olarak ARADA bir yere düşüyor, bazı sınamalarda devre dışı
+  // bırakmamak için kullanılmıyor, sadece orada duruyor.
+
+  it("hafıza boşken ve gunluk-tek alfabetik İLK olmasa da gunluk-tek açılır", async () => {
+    // "aaa" alfabetik olarak gunluk-tek'ten ÖNCE — "ada göre ilk" kuralı
+    // yanlışlıkla hâlâ birincil olsaydı bu sınama "aaa" görürdü.
+    await akisYarat("aaa", "aaarol");
+    await akisYarat("gunluk-tek", "guntol");
+    const e = await ekraniBaslat([], { env: KOMUTSUZ_ORTAM });
+    try {
+      expect(await aktifAkisAdi(e)).toBe("gunluk-tek");
+    } finally {
+      await e.durdur();
+    }
+  });
+
+  it("hatırlanan akış VARSA gunluk-tek'TEN ÖNCELİKLİ", async () => {
+    await akisYarat("ikinci", "ikincirol");
+    await akisYarat("gunluk-tek", "guntol");
+    await hatirlananaYaz("ikinci");
+    const e = await ekraniBaslat([], { env: KOMUTSUZ_ORTAM });
+    try {
+      expect(await aktifAkisAdi(e)).toBe("ikinci");
+    } finally {
+      await e.durdur();
+    }
+  });
+
+  it("hatırlanan akış ARTIK YOKSA engel olmuyor, gunluk-tek'e düşülüyor", async () => {
+    await akisYarat("gunluk-tek", "guntol");
+    await hatirlananaYaz("boyle-bir-akis-yok");
+    const e = await ekraniBaslat([], { env: KOMUTSUZ_ORTAM });
+    try {
+      expect(await aktifAkisAdi(e)).toBe("gunluk-tek");
+    } finally {
+      await e.durdur();
+    }
+  });
+
+  it("hatırlanan akış dosyası VAR AMA BOZUK, engel olmuyor, gunluk-tek'e düşülüyor", async () => {
+    await writeFile(join(root, "hub", "flows", "kirik.yaml"), "{ gecerli yaml degil : : :");
+    await akisYarat("gunluk-tek", "guntol");
+    await hatirlananaYaz("kirik");
+    const e = await ekraniBaslat([], { env: KOMUTSUZ_ORTAM });
+    try {
+      expect(await aktifAkisAdi(e)).toBe("gunluk-tek");
+    } finally {
+      await e.durdur();
+    }
+  });
+
+  it("hatırlanan da gunluk-tek de yoksa ADA GÖRE İLK akış açılır (son çare)", async () => {
+    await akisYarat("bbb", "bbbrol");
+    await akisYarat("aaa", "aaarol");
+    // `test.yaml` de var ("test" > "bbb" > "aaa" alfabetik) — en önce "aaa".
+    const e = await ekraniBaslat([], { env: KOMUTSUZ_ORTAM });
+    try {
+      expect(await aktifAkisAdi(e)).toBe("aaa");
+    } finally {
+      await e.durdur();
+    }
+  });
+
+  it("komut satırı argümanı hatırlananı VE gunluk-tek'i EZER", async () => {
+    await akisYarat("gunluk-tek", "guntol");
+    await akisYarat("ucuncu", "ucuncurol");
+    await hatirlananaYaz("gunluk-tek");
+    const e = await ekraniBaslat(["ucuncu", "--tarayici-yok"]);
+    try {
+      expect(await aktifAkisAdi(e)).toBe("ucuncu");
+    } finally {
+      await e.durdur();
+    }
+  });
+
+  it("ekrandaki seçiciden akış değiştirmek 'son açılan' hafızasını da günceller", async () => {
+    await akisYarat("ikinci", "ikincirol");
+    const e1 = await ekraniBaslat(["test", "--tarayici-yok"]);
+    try {
+      const jeton = await jetonAl(e1.url);
+      const res = await fetch(`${e1.url}akis/sec`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-skein-token": jeton },
+        body: JSON.stringify({ ad: "ikinci" }),
+      });
+      expect(res.status).toBe(200);
+    } finally {
+      await e1.durdur();
+    }
+
+    // İKİNCİ açılış argümansız — hafızada şimdi "ikinci" olmalı.
+    const e2 = await ekraniBaslat([], { env: KOMUTSUZ_ORTAM });
+    try {
+      expect(await aktifAkisAdi(e2)).toBe("ikinci");
+    } finally {
+      await e2.durdur();
+    }
+  });
+}, 60_000);

@@ -2,7 +2,7 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { portuHatirlayarakAc, sonPortuOku, sonPortuYaz } from "./port-memory.js";
+import { portuHatirlayarakAc, sonAkisiOku, sonAkisiYaz, sonPortuOku, sonPortuYaz } from "./port-memory.js";
 
 let root: string;
 
@@ -90,6 +90,73 @@ describe("sonPortuYaz", () => {
     await sonPortuYaz(root, 4321);
     const text = await readFile(join(root, ".skein", "ekran.json"), "utf8");
     expect(JSON.parse(text)).toEqual({ port: 4321 });
+  });
+});
+
+/**
+ * SON AÇILAN AKIŞIN HAFIZASI.
+ *
+ * Varsayılan akış seçiminin (`ui/cli.ts`) kullandığı ipucu. Aynı "bozuk
+ * kayıt kilitlemez" kuralı `sonPortuOku` ile — bu sınamalar kuralın akış
+ * adı tarafını pinliyor.
+ */
+describe("sonAkisiOku", () => {
+  it("dosya yoksa undefined döner — ilk açılışta hafıza boş sayılır", async () => {
+    expect(await sonAkisiOku(root)).toBeUndefined();
+  });
+
+  it("sonAkisiYaz ile yazılan ad geri okunur", async () => {
+    await sonAkisiYaz(root, "gunluk-tek");
+    expect(await sonAkisiOku(root)).toBe("gunluk-tek");
+  });
+
+  it("bozuk JSON engel olmuyor — undefined döner, fırlatmaz", async () => {
+    await mkdir(join(root, ".skein"), { recursive: true });
+    await writeFile(join(root, ".skein", "ekran.json"), "{ bu json degil", "utf8");
+    await expect(sonAkisiOku(root)).resolves.toBeUndefined();
+  });
+
+  it("akis alanı metin değilse yok sayılır", async () => {
+    await mkdir(join(root, ".skein"), { recursive: true });
+    await writeFile(join(root, ".skein", "ekran.json"), JSON.stringify({ akis: 7 }), "utf8");
+    expect(await sonAkisiOku(root)).toBeUndefined();
+  });
+
+  it("akis alanı boş/boşluk metinse yok sayılır", async () => {
+    await mkdir(join(root, ".skein"), { recursive: true });
+    await writeFile(join(root, ".skein", "ekran.json"), JSON.stringify({ akis: "   " }), "utf8");
+    expect(await sonAkisiOku(root)).toBeUndefined();
+  });
+});
+
+/**
+ * İKİ ALANIN BAĞIMSIZLIĞI.
+ *
+ * `port` ve `akis` AYNI dosyada duruyor ve biri ötekini EZMEMELİ — "önce
+ * oku, sonra kendi alanını değiştirip yaz" (bkz. `hamKaydiYaz`) olmasa bu
+ * sınamalar düşerdi: sıradan bir "nesneyi olduğu gibi yaz" mutasyonu ikinci
+ * yazılan alanın öncekini silmesine yol açar.
+ */
+describe("port ve akış hafızası birbirini EZMİYOR", () => {
+  it("port yazıldıktan sonra akış yazmak portu SİLMİYOR", async () => {
+    await sonPortuYaz(root, 7777);
+    await sonAkisiYaz(root, "gunluk-tek");
+    expect(await sonPortuOku(root)).toBe(7777);
+    expect(await sonAkisiOku(root)).toBe("gunluk-tek");
+  });
+
+  it("akış yazıldıktan sonra port yazmak akışı SİLMİYOR", async () => {
+    await sonAkisiYaz(root, "gunluk-tek");
+    await sonPortuYaz(root, 7777);
+    expect(await sonAkisiOku(root)).toBe("gunluk-tek");
+    expect(await sonPortuOku(root)).toBe(7777);
+  });
+
+  it("ikisi de aynı dosyaya yazılıyor — iki ayrı dosya yok", async () => {
+    await sonPortuYaz(root, 7777);
+    await sonAkisiYaz(root, "gunluk-tek");
+    const entries = await import("node:fs/promises").then((m) => m.readdir(join(root, ".skein")));
+    expect(entries).toEqual(["ekran.json"]);
   });
 });
 

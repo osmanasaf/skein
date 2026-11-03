@@ -3,12 +3,15 @@ import { readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { knownProviderSet } from "../adapters/factory.js";
 import { CardQueue } from "../card/queue.js";
-import { FlowError } from "../flow/load.js";
+import { FlowError, loadFlow, type LoadOptions } from "../flow/load.js";
 import { LiveFlow } from "../flow/live.js";
 import { tsxCliYolu } from "../proc/process.js";
 import { tarayiciyiAc } from "./open-browser.js";
-import { portuHatirlayarakAc } from "./port-memory.js";
+import { portuHatirlayarakAc, sonAkisiOku, sonAkisiYaz } from "./port-memory.js";
 import { serveUi, type CanliAkis } from "./server.js";
+
+/** Akış argümanı verilmediğinde, hatırlanan kayıt da yoksa/bozuksa düşülecek akış. */
+const GUNLUK_TEK = "gunluk-tek";
 
 const USAGE = `Kullanım:
   npm start [-- [akış] [--port <n>]]
@@ -18,7 +21,15 @@ const USAGE = `Kullanım:
 Üçü de aynı ekranı açar; \`npm start\` ve \`npx skein\` bu depoda \`tsx\`
 kurulumuyla ilgilenmeden çalışır.
 
-AKIŞ VERİLMEZSE \`hub/flows/\` altındaki ilk akış açılır (ada göre sıralı).
+AKIŞ VERİLMEZSE, sırayla:
+  1. SON AÇILAN akış (\`.skein/ekran.json\`da hatırlanır; ekrandaki seçiciden
+     akış değiştirmek de bu kaydı günceller).
+  2. Hatırlanan yoksa, artık yoksa ya da bozuksa \`gunluk-tek\` — deponun
+     günlük sürücüsü.
+  3. O da yoksa/bozuksa, \`hub/flows/\` altındaki ilk akış (ada göre sıralı).
+Hiçbiri engel değil: bir adım bozuksa (geçersiz YAML, kural ihlali)
+sıradakine düşülür, ekran AÇILMAMA değil.
+
 Ekrandaki seçiciden başka bir akışa her an geçilebilir.
 
 Ekranı açar. KARTLARA VE OLAY GÜNLÜĞÜNE DOKUNMAZ: kartların yerini
@@ -76,6 +87,50 @@ async function listFlowNames(root: string): Promise<string[]> {
     .filter((e) => e.endsWith(".yaml"))
     .map((e) => e.slice(0, -".yaml".length))
     .sort();
+}
+
+/**
+ * Akış argümanı verilmediğinde hangi akış açılır — ÖNCELİK SIRASI:
+ *
+ * 1. SON AÇILAN akış (`.skein/ekran.json`, `sonAkisiOku`) — ekranı en son
+ *    hangi akışla açtıysak (ya da ekrandaki seçiciden hangisine geçtiysek)
+ *    onu hatırlar.
+ * 2. `gunluk-tek` — deponun günlük sürücüsü (bkz. `gunluk-tek.yaml`'ın
+ *    kendi yorumu).
+ * 3. ADA GÖRE İLK — son çare, DEĞİŞMEYEN eski davranış.
+ *
+ * KISIT (kart bunu açıkça istiyor): hatırlanan akış ya da `gunluk-tek`
+ * artık YOKSA ya da BOZUKSA (geçersiz YAML, kural ihlali) bu açılışı
+ * ENGELLEMEZ — sıradaki kurala düşülür. `port-memory.ts`'teki "bozuk kayıt
+ * kilitlemez" kuralının aynısı, burada akış seçimine uygulanmış hâli.
+ *
+ * Son çare DOĞRULANMIYOR: `akislar` zaten boş değil (çağıran taraf bunu
+ * önce denetliyor), yani bir ad her zaman döner — o ad da bozuksa bunu
+ * `LiveFlow.open` kendi hata mesajıyla bildirir, bugünkü (değişmeyen)
+ * davranışın aynısı.
+ */
+async function varsayilanAkisAdi(
+  root: string, akislar: readonly string[], loadOptions: LoadOptions,
+): Promise<string> {
+  const adaylar: string[] = [];
+  const hatirlanan = await sonAkisiOku(root);
+  if (hatirlanan !== undefined) adaylar.push(hatirlanan);
+  adaylar.push(GUNLUK_TEK);
+
+  for (const ad of adaylar) {
+    // YOKSA bu adım hiç denenmiyor — "bozuk" ile "hiç yok" burada aynı
+    // kapıdan geçiyor, ikisi de sıradaki kurala düşüyor.
+    if (!akislar.includes(ad)) continue;
+    try {
+      await loadFlow(join(root, "hub", "flows", `${ad}.yaml`), loadOptions);
+      return ad;
+    } catch {
+      // BOZUKSA sıradaki kurala düş — bu adım hiç ENGEL olmuyor.
+    }
+  }
+
+  // Son çare: ada göre ilk, DOĞRULANMADAN — bugünkü (eski) davranış.
+  return akislar[0] as string;
 }
 
 async function main(argv: string[]): Promise<number> {
@@ -136,13 +191,16 @@ async function main(argv: string[]): Promise<number> {
   const root = resolve(process.cwd());
   const loadOptions = { root, providers: knownProviderSet() };
 
+  // Komut satırı argümanı AÇIK bir istek: aşağıdaki öncelik sırası hiç
+  // devreye girmiyor — `flowName` burada zaten tanımlıysa bu dalın tamamı
+  // atlanıyor.
   if (flowName === undefined) {
     const akislar = await listFlowNames(root);
     if (akislar.length === 0) {
       console.error(`✗ hub/flows altında hiç akış yok: ${join(root, "hub", "flows")}`);
       return 1;
     }
-    flowName = akislar[0];
+    flowName = await varsayilanAkisAdi(root, akislar, loadOptions);
   }
 
   // Akış yaşayan: her okumadan önce yoklanıyor. Dosya değişirse ekran yeni
@@ -150,6 +208,12 @@ async function main(argv: string[]): Promise<number> {
   const live = await LiveFlow.open(join(root, "hub", "flows", `${flowName}.yaml`), loadOptions);
   const flow = live.flow;
   const topology = live.topology;
+
+  // Gerçekten AÇILAN akış "son açılan" hâline geliyor — nasıl seçildiğine
+  // bakılmadan (argüman, hatırlanan, varsayılan ya da son çare). Açılış
+  // BAŞARISIZSA (yukarıdaki satır fırlatır) buraya hiç ulaşılmıyor, yani
+  // bozuk bir akış hiçbir zaman "son açılan" olarak kaydedilmiyor.
+  await sonAkisiYaz(root, flowName);
 
   const queue = new CardQueue(join(root, ".skein"));
   // `init` yalnızca eksik dizinleri yaratır — kuyruğa dokunmaz. `recover()`
@@ -176,6 +240,12 @@ async function main(argv: string[]): Promise<number> {
       ac: async (ad: string): Promise<{ live: CanliAkis; flowPath: string }> => {
         const yeniYol = join(root, "hub", "flows", `${ad}.yaml`);
         const yeniLive = await LiveFlow.open(yeniYol, loadOptions);
+        // Kayıt YALNIZCA açılış BAŞARILIYSA güncelleniyor — yukarıdaki satır
+        // fırlasa buraya hiç ulaşılmaz. Bu, ekrandaki seçiciden akış
+        // değiştirmenin "son açılan" hafızasını da güncellediği tek yer:
+        // yapmazsak seçiciyle geçilen akış ekranda görünür ama bir sonraki
+        // `npm start` hâlâ eski kaydı okur — "son açılan" yalan olurdu.
+        await sonAkisiYaz(root, ad);
         return { live: yeniLive, flowPath: yeniYol };
       },
     },
