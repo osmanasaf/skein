@@ -5,6 +5,7 @@ import { knownProviderSet } from "../adapters/factory.js";
 import { CardQueue } from "../card/queue.js";
 import { FlowError } from "../flow/load.js";
 import { LiveFlow } from "../flow/live.js";
+import { tsxCliYolu } from "../proc/process.js";
 import { tarayiciyiAc } from "./open-browser.js";
 import { portuHatirlayarakAc } from "./port-memory.js";
 import { serveUi, type CanliAkis } from "./server.js";
@@ -198,7 +199,7 @@ async function main(argv: string[]): Promise<number> {
             // eskisini başlatırdı.
             komut: [
               process.execPath,
-              join(root, "node_modules", "tsx", "dist", "cli.mjs"),
+              tsxCliYolu(root),
               join(root, "src", "watch", "cli.ts"),
             ],
             bayraklar: gozcuBayraklari,

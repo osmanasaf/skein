@@ -1,5 +1,7 @@
 import crossSpawn from "cross-spawn";
 import type { ChildProcess } from "node:child_process";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 import type { Readable, Writable } from "node:stream";
 
 const WINDOWS = process.platform === "win32";
@@ -117,4 +119,24 @@ export function capture(
     child.on("error", () => finish(-1));
     child.on("close", (code) => finish(code ?? -1));
   });
+}
+
+/**
+ * `tsx`'in CLI giriş noktasını (`node_modules/tsx/dist/cli.mjs`) bulur.
+ *
+ * `join(root, "node_modules", "tsx", "dist", "cli.mjs")` gibi ELLE
+ * birleştirmiyoruz: `git worktree add` ile açılan bir çalışma ağacının
+ * KENDİ `node_modules`'ü yoktur (paketler ana depoda kalır, `npm install`
+ * worktree'de koşmaz) — elle birleştirme orada "modül yok" diye patlar.
+ * Node'un kendi modül çözümlemesi (`createRequire(...).resolve`) `root`tan
+ * başlayıp ÜST dizinlere doğru `node_modules` arar — `npx tsx` komutunun
+ * yaptığı tam da bu, biz süreci `npx` ÜZERİNDEN başlatmadan (bu modülün
+ * çağıranları `PATH`i boşaltıp başka bir alt süreci [ör. tarayıcı açma]
+ * deterministik başarısız kılmak isteyebiliyor; `npx` komutunun kendisi de
+ * `PATH`te bulunduğundan bu ihtiyaçla çakışırdı) aynı sonucu üretiyoruz.
+ */
+export function tsxCliYolu(root: string): string {
+  const req = createRequire(join(root, "package.json"));
+  const paketYolu = req.resolve("tsx/package.json");
+  return join(dirname(paketYolu), "dist", "cli.mjs");
 }

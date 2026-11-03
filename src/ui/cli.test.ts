@@ -2,7 +2,7 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { killTree, spawnPortable } from "../proc/process.js";
+import { killTree, spawnPortable, tsxCliYolu } from "../proc/process.js";
 
 /**
  * EKRANI GERÇEK SÜREÇ OLARAK KOŞTURAN SINAMALAR.
@@ -62,16 +62,25 @@ interface CalisanEkran {
  */
 /**
  * `tsx`'i `npx` ÜZERİNDEN DEĞİL, DOĞRUDAN çağırıyoruz — bu depodaki gözcü
- * başlatma koduyla (`ui/cli.ts`'in `gercekSpawn`'ı) aynı desen.
+ * başlatma koduyla (`ui/cli.ts`'in `komut` dizisi, `../proc/process.js`'teki
+ * `tsxCliYolu`) aynı desen.
  *
  * Fark burada ÖNEMLİ: bir sınama `PATH`i boşaltarak çocuğun İÇİNDEKİ
  * `xdg-open` aramasını deterministik olarak başarısız kılmak istiyor.
  * `npx` KENDİSİ PATH'te bir ad olduğu için `PATH=""` ile dışarıdan hiç
  * BULUNAMAZDI — mutlak yola gidince dış süreç PATH'e bağımlı olmuyor, yalnız
  * `cli.ts`'in İÇİNDE arandığı `xdg-open` bağımlı kalıyor.
+ *
+ * ÖNCEKİ tur burada `join(process.cwd(), "node_modules", "tsx", ...)` diye
+ * ELLE birleştiriyordu — bu, orkestratörün rolleri çalıştırdığı asıl ortamda
+ * (`git worktree add` ile açılan bir çalışma ağacı, KENDİ `node_modules`'ü
+ * YOK) "modül yok" diye patlıyordu ve reviewer'ı bu turu geri göndermeye
+ * götürdü. `tsxCliYolu` Node'un kendi modül çözümlemesiyle ÜST dizinlere
+ * doğru arıyor, tam `npx tsx` gibi — ama `npx`i PATH üzerinden ÇAĞIRMADAN
+ * (yukarıdaki `PATH=""` ihtiyacıyla çakışmadan).
  */
 function tsxYolu(): string {
-  return join(process.cwd(), "node_modules", "tsx", "dist", "cli.mjs");
+  return tsxCliYolu(process.cwd());
 }
 
 function ekraniBaslat(
