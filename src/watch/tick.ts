@@ -213,6 +213,45 @@ async function runRole(card: Card, role: SnapshotRole, options: TickOptions): Pr
   }
 
   const workdir = await resolveWorkspace(root, role.workspace);
+
+  // TUR TEMİZ AĞAÇTA BAŞLAR.
+  //
+  // Bu denetim eskiden YALNIZCA devir teslimde koşuyordu ve aradaki boşluk
+  // gerçek bir koşuda şöyle patladı: bir tur zaman aşımına uğradı,
+  // `src/ui/page.ts` içinde 240 satır işlenmemiş iş bırakıp kapıya çıktı;
+  // SIRADAKİ kartın ajanı o kirli ağaçta başladı, yabancı değişikliği
+  // gördü ve — doğru davranarak — commit'ledi. Böylece bir rolün
+  // DENETLENMEMİŞ işi, başka bir kartın turunda ürünün geçmişine girdi.
+  //
+  // "Bu rol ne üretti" sorusunun cevabı, her aktivasyonun bilinen temiz
+  // bir ağaçta başlamasına dayanıyor. Kontrol edilmeyen bir varsayım,
+  // varsayım değil temennidir.
+  //
+  // Kart kuyruğa GERİ KONUYOR, kapıya çıkarılmıyor: ortam sorunu kartın
+  // kusuru değil ve bir tek dosya bütün kuyruğu insana yıkmamalı.
+  let kirli: string[];
+  try {
+    kirli = await (options.dirtyPaths ?? dirtyPaths)(workdir, ORCHESTRATOR_PATHS);
+  } catch (cause) {
+    // Bilmiyorsak BAŞLATMIYORUZ. Devir teslimdeki kuralın aynısı: üçüncü
+    // bir cevap yok, ve "bilmiyorum"u "temiz" saymak kapıyı sessizce açar.
+    const mesaj = `çalışma ağacının durumu okunamadı: ${(cause as Error).message}`;
+    await queue.requeue(card, mesaj);
+    return { status: "engelli", engeller: [{ path: workdir, code: "GIT", message: mesaj }] };
+  }
+  if (kirli.length > 0) {
+    const mesaj =
+      `\`${role.workspace}\` çalışma ağacı kirli, tur BAŞLATILMADI. ` +
+      `İşlenmemiş iş başka bir rolün turuna karışır ve kime ait olduğu kaybolur.`;
+    await queue.requeue(card, mesaj);
+    // Her kirli yol AYRI engel: toplu bir satır hangi dosya olduğunu
+    // söylemezdi, ve ekranda temizlenecek şeyin listesi lazım.
+    return {
+      status: "engelli",
+      engeller: kirli.map((yol) => ({ path: yol, code: "KIRLI", message: mesaj })),
+    };
+  }
+
   const prompt = await assemblePrompt(promptLayers(card.topology, role, root));
   const promptDir = await mkdtemp(join(tmpdir(), "skein-prompt-"));
   const promptFile = join(promptDir, `${role.id}.md`);

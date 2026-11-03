@@ -29,6 +29,10 @@ Seçenekler:
   --serve         kuyruk boşalınca ÇIKMA, bekle — kart açıldığında kendisi
                   uyanır; durdurmak için Ctrl-C
   --poll <ms>     beklerken yoklama aralığı (varsayılan 1000)
+  --timeout <dk>  bir aktivasyonun üst sınırı, DAKİKA (varsayılan 20).
+                  Büyük kartlarda 20 dakika yetmiyor: kesilen tur kartı
+                  kapıya çıkarır, parası ödenir ve ağaçta işlenmemiş iş
+                  bırakır. Kartın boyuna göre ver.
   --once          tek geçiş yap, dur (varsayılan: kart kalmayana kadar)
   --model <spec>  bir sağlayıcının modelini pinle, örn. --model codex:gpt-5.5
                   (birden fazla kez verilebilir)
@@ -43,11 +47,12 @@ Seçenekler:
 
 Her sağlayıcı için \`--model\` zorunludur; akış dosyası model taşımaz.`;
 
-interface Args {
+export interface Args {
   flow?: string;
   once: boolean;
   serve: boolean;
   pollMs?: number;
+  timeoutMs?: number;
   plan: boolean;
   models: string[];
   bins: string[];
@@ -56,7 +61,27 @@ interface Args {
   log?: string;
 }
 
-function parseArgs(argv: string[]): Args {
+/**
+ * Zaman aşımı seçeneği — VERİLMEDİYSE ALAN HİÇ YAZILMAZ.
+ *
+ * Dışa veriliyor çünkü pinlenmesi gereken kural tam bu: varsayılan TEK
+ * yerde, `tick.ts` içindeki `DEFAULT_TIMEOUT_MS`'te. Burada bir
+ * `?? 20 * 60_000` yazmak sınamaların hiçbirini düşürmezdi ama iki ayrı
+ * gerçek yaratırdı — çekirdekteki varsayılan değiştiğinde CLI sessizce
+ * eskisini taşımaya devam ederdi. Bu depodaki yinelenen kusur sınıfı.
+ */
+export function zamanAsimiSecenegi(args: Pick<Args, "timeoutMs">): { timeoutMs?: number } {
+  return args.timeoutMs === undefined ? {} : { timeoutMs: args.timeoutMs };
+}
+
+/**
+ * Bayrakları ayrıştırır.
+ *
+ * Dışa veriliyor çünkü buradaki DOĞRULAMA kuralları sınanmak zorunda:
+ * `Number("abc")` NaN verir ve sayısal bir bayrağın NaN olması sessizce
+ * yanlış davranış üretir (bkz. `--timeout`).
+ */
+export function parseArgs(argv: string[]): Args {
   const args: Args = { once: false, serve: false, plan: false, models: [], bins: [], allowTools: [] };
   for (let i = 0; i < argv.length; i += 1) {
     const value = argv[i] as string;
@@ -66,6 +91,17 @@ function parseArgs(argv: string[]): Args {
       const ms = Number(argv[++i]);
       if (!Number.isFinite(ms) || ms <= 0) throw new ConfigError(`--poll pozitif bir sayı olmalı (verilen: ${String(argv[i])})`);
       args.pollMs = ms;
+    }
+    // DOĞRULAMA ŞART, varsayılana düşmek DEĞİL: `Number("abc")` NaN verir
+    // ve `setTimeout(_, NaN)` beklemeyi SIFIR sayar — yani yazım hatası
+    // yapan operatör, her turu anında kesilen bir gözcü elde ederdi ve
+    // sebebi hiçbir yerde yazmazdı.
+    else if (value === "--timeout") {
+      const dk = Number(argv[++i]);
+      if (!Number.isFinite(dk) || dk <= 0) {
+        throw new ConfigError(`--timeout pozitif bir sayı olmalı, dakika cinsinden (verilen: ${String(argv[i])})`);
+      }
+      args.timeoutMs = dk * 60_000;
     }
     else if (value === "--plan") args.plan = true;
     else if (value === "--model") args.models.push(argv[++i] as string);
@@ -364,7 +400,7 @@ async function run(root: string, live: LiveFlow, queue: CardQueue, args: Args): 
     },
   );
   const log = new EventLog(args.log ?? join(root, ".skein", "olaylar.jsonl"), `kosu-${Date.now()}`);
-  const options = { root, queue, adapters, log };
+  const options = { root, queue, adapters, log, ...zamanAsimiSecenegi(args) };
 
   let gated = 0;
   const report = (results: { role: string; result: TickResult }[]): void => {

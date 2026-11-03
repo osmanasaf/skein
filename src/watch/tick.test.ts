@@ -599,13 +599,19 @@ describe("tick — syncBack", () => {
 describe("tick — işlenmemiş iş devredilemez", () => {
   // Gerçek koşuda bulundu: coder dosyaları yazdı, commit atmadı, yine de
   // "accept" dedi. Devir teslim iskelet commit'ini kaydediyordu.
+  // Ağaç TUR BAŞINDA temiz, DEVİR TESLİMDE kirli: ajan dosyaları yazdı,
+  // commit atmadı ve yine de "accept" dedi. Sahte fonksiyon eskiden her
+  // çağrıda kirli diyordu ve iki ayrı durumu ayırt edemiyordu — tur
+  // başındaki denetim eklenince o kurgu "tur hiç başlamadı"yı sınar hâle
+  // gelmişti, oysa bu sınamanın derdi devir teslim.
   it("kirli ağaçla kabul kartı kapıya çıkarır", async () => {
     const card = await put();
     claude.answer = writes({ decision: "accept" });
+    let cagri = 0;
 
     const result = await tick("coder", {
       ...options,
-      dirtyPaths: async () => ["src/retry.ts", "src/retry.test.ts"],
+      dirtyPaths: async () => (cagri++ === 0 ? [] : ["src/retry.ts", "src/retry.test.ts"]),
     });
 
     expect(result.status).toBe("escalated");
@@ -992,5 +998,97 @@ describe("tick — prompt derleme", () => {
     const text = await readFile(claude.calls[0]?.promptFile as string, "utf8");
     expect(text).not.toContain("Jitter ekle");
     expect(claude.calls[0]?.taskText).toContain("Jitter ekle");
+  });
+});
+
+/**
+ * TUR TEMİZ AĞAÇTA BAŞLAR.
+ *
+ * Denetim eskiden yalnızca devir teslimde koşuyordu. Gerçek bir koşuda
+ * aradaki boşluk şöyle patladı: bir tur zaman aşımına uğradı,
+ * `src/ui/page.ts` içinde 240 satır işlenmemiş iş bırakıp kapıya çıktı;
+ * SIRADAKİ kartın ajanı o kirli ağaçta başladı ve yabancı değişikliği
+ * commit'ledi. Bir rolün denetlenmemiş işi, başka bir kartın turunda
+ * ürünün geçmişine girdi.
+ */
+describe("tick — tur başında temiz ağaç", () => {
+  it("ağaç kirliyse tur HİÇ BAŞLAMAZ ve kart kuyruğa geri döner", async () => {
+    const card = await put();
+
+    const result = await tick("coder", {
+      ...options,
+      dirtyPaths: async () => ["src/ui/page.ts", "src/ui/yeni.ts"],
+    });
+
+    // Parası ödenmiş bir tur yok: ajan hiç çağrılmadı.
+    expect(claude.calls).toHaveLength(0);
+    expect(result.status).toBe("engelli");
+    const engeller = (result as { engeller: { path: string; code: string }[] }).engeller;
+    // Her kirli yol AYRI engel: toplu bir satır hangi dosya olduğunu
+    // söylemezdi ve ekranda temizlenecek şeyin listesi lazım.
+    expect(engeller.map((e) => e.path)).toEqual(["src/ui/page.ts", "src/ui/yeni.ts"]);
+    expect(engeller.every((e) => e.code === "KIRLI")).toBe(true);
+
+    // Kart KAPIDA değil KUYRUKTA: ortam sorunu kartın kusuru değil.
+    const geri = (await queue.list()).find((c) => c.id === card.id) as Card;
+    expect(geri.state).toBe("queued");
+    expect(geri.role).toBe("coder");
+  });
+
+  // Ağaç temizlenince kart kendiliğinden koşmalı — insan müdahalesi
+  // gerekmemeli. Kapıya çıkarsaydı bu mümkün olmazdı.
+  it("ağaç temizlenince kart kendiliğinden koşar", async () => {
+    await put();
+    await tick("coder", { ...options, dirtyPaths: async () => ["kirli.ts"] });
+    expect(claude.calls).toHaveLength(0);
+
+    claude.answer = writes({ decision: "accept" });
+    const ikinci = await tick("coder", options);
+
+    expect(claude.calls).toHaveLength(1);
+    expect(ikinci.status).toBe("accepted");
+  });
+
+  // "Bilmiyorum"u "temiz" saymak kapıyı sessizce açar. Devir teslimdeki
+  // kuralın aynısı: üçüncü bir cevap yok.
+  it("ağacın durumu OKUNAMAZSA tur başlamaz", async () => {
+    await put();
+
+    const result = await tick("coder", {
+      ...options,
+      dirtyPaths: async () => { throw new Error("git yok"); },
+    });
+
+    expect(claude.calls).toHaveLength(0);
+    expect(result.status).toBe("engelli");
+    expect((result as { engeller: { message: string }[] }).engeller[0]?.message)
+      .toContain("git yok");
+  });
+
+  // Orkestratörün kendi dosyaları kirlilik SAYILMAZ — `.skein/`, verdikt
+  // dosyası ve worktree dizini her turda değişiyor. Yok sayma listesi
+  // geçirilmezse gözcü kendi ürettiği kirle kendini kilitlerdi.
+  it("orkestratör yolları yok sayma listesiyle BİRLİKTE soruluyor", async () => {
+    await put();
+    claude.answer = writes({ decision: "accept" });
+    const gorulen: string[][] = [];
+
+    await tick("coder", {
+      ...options,
+      dirtyPaths: async (_w, ignore) => { gorulen.push(ignore); return []; },
+    });
+
+    expect(gorulen.length).toBeGreaterThan(0);
+    expect(gorulen[0]).toContain(".skein");
+  });
+
+  it("ağaç temizse tur normal koşar", async () => {
+    await put();
+    claude.answer = writes({ decision: "accept" });
+
+    const result = await tick("coder", { ...options, dirtyPaths: async () => [] });
+
+    expect(claude.calls).toHaveLength(1);
+    expect(result.status).toBe("accepted");
   });
 });

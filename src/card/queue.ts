@@ -684,6 +684,30 @@ export class CardQueue {
   }
 
   /**
+   * Aktif kartı kuyruğa GERİ KOYAR — tur hiç başlamadan.
+   *
+   * `recover()` ile aynı mekanizma, farkı niyeti: orada süreç yarıda
+   * kesilmiştir ve kart arkada kalmıştır; burada tur BİLEREK başlatılmadı
+   * (ör. çalışma ağacı kirli) ve kartın bunun bedelini ödememesi gerekiyor.
+   *
+   * NİYE kapıya çıkarmıyor: ortam sorunu kartın kusuru değil. Kirli bir
+   * ağaç yüzünden kartları tek tek kapıya çıkarmak, bir tek dosya yüzünden
+   * bütün kuyruğu insana yıkardı. Kart kuyrukta kalıyor, engel ekranda
+   * görünüyor, ağaç temizlenince tur kendiliğinden koşuyor.
+   *
+   * Geri dönen kart taze kartın ÖNÜNE geçiyor (`PRIO_RETURNED`): başlamış
+   * bir iş, başlamamışın önünde gelir.
+   */
+  async requeue(card: Card, reason: string): Promise<Card> {
+    const { role, path } = this.#requireActive(card);
+    const geri = {
+      ...this.#push(card, { at: now(), event: "requeued", role: role.id, reason }),
+      state: "queued" as const,
+    };
+    return this.#move(geri, this.#queueDir(role.id), this.#queueName(geri, PRIO_RETURNED), path);
+  }
+
+  /**
    * Kartı insan kararıyla kapatır — iş bitmeden.
    *
    * Tek kullanımı: akışta karşılığı kalmamış kart (bkz. `src/card/orphan.ts`).
