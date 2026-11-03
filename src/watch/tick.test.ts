@@ -335,6 +335,85 @@ describe("tick — ret", () => {
     expect(claude.calls[0]?.taskText).not.toContain("Önceki tur reddedildi");
   });
 
+  /**
+   * KAPI GEREKÇESİ DE AJANA GİDER.
+   *
+   * `reject` ve `handoff` aktarılıyordu, `gate` AKTARILMIYORDU: kapıdan
+   * geri verilen rol neden durdurulduğunu bilmeden baştan koşuyordu.
+   * Bedeli doğrudan para — ajan aynı duvara ikinci kez koşuyor, ve
+   * sebebi insanın gördüğü ekranda duruyor ama ajanın metninde yok.
+   */
+  it("kapı gerekçesi geri verilen turda AJANA gider", async () => {
+    await put();
+    claude.answer = async () => {}; // verdikt yok: kart kaçış kapısına çıkar
+
+    await tick("coder", options);
+    const gated = (await queue.list())[0] as Card;
+    await queue.release(gated.id, { decision: "retry" });
+
+    claude.answer = writes({ decision: "accept" });
+    await tick("coder", options);
+
+    const ikinci = claude.calls[1]?.taskText as string;
+    expect(ikinci).toContain("Bu kart kapıda durdurulmuştu");
+    expect(ikinci).toContain("verdikt yazmadı");
+    // Kaçış kapısı ile politika kapısı aynı şey değil; metin hangisi
+    // olduğunu söylemeli, yoksa ajan "kod taşındı mı" sorusunu yanlış
+    // cevaplar.
+    expect(ikinci).toContain("TAMAMLANAMADI");
+  });
+
+  // Kapı BİR ROLÜN kapısı. Denetçi kendi turunu tamamlayamayıp kapıya
+  // çıktıysa ve insan kartı üreticiye geri verdiyse, üreticinin görev
+  // metnine "denetçi zaman aşımına uğradı" yazmak ona ELİNDEN GELMEYEN
+  // bir iş vermektir — ve kartın ömrü boyunca her turun başına yapışırdı.
+  // `lastRejectTo` da aynı şeyi yapıyor: yalnızca BANA yönelen kayıt.
+  it("başka rolün kapısı bu role TAŞINMAZ", async () => {
+    await put();
+    claude.answer = writes({ decision: "accept" });
+    await tick("coder", options);                       // devretti
+    codex.answer = async () => {};                      // denetçi verdikt yazmadı
+    await tick("reviewer", options);                    // denetçi kapıya çıktı
+
+    const gated = (await queue.list())[0] as Card;
+    expect(gated.role).toBe("reviewer");
+    await queue.release(gated.id, { decision: "back" }); // insan üreticiye verdi
+
+    claude.answer = writes({ decision: "accept" });
+    await tick("coder", options);
+
+    const ikinci = claude.calls[1]?.taskText as string;
+    expect(ikinci).not.toContain("Bu kart kapıda durdurulmuştu");
+  });
+
+  it("ilk turda kapı kaydı yoktur", async () => {
+    await put();
+    claude.answer = writes({ decision: "accept" });
+    await tick("coder", options);
+    expect(claude.calls[0]?.taskText).not.toContain("Bu kart kapıda durdurulmuştu");
+  });
+
+  // Rol işi BAŞARIYLA devrettiyse eski kapı kapanmıştır. Bu durma
+  // noktası olmadan, kartın ömrü boyunca her turun başına bayat bir kapı
+  // gerekçesi yapışırdı.
+  it("başarılı devirden sonra eski kapı gerekçesi TAŞINMAZ", async () => {
+    await put();
+    claude.answer = async () => {};
+    await tick("coder", options);
+    const gated = (await queue.list())[0] as Card;
+    await queue.release(gated.id, { decision: "retry" });
+
+    claude.answer = writes({ decision: "accept" });
+    await tick("coder", options);          // kapıyı görür, devreder
+    codex.answer = writes({ decision: "reject", reason: "testi yok" });
+    await tick("reviewer", options);       // ret: kart coder'a döner
+    await tick("coder", options);          // bu turda kapı GEÇMİŞTE kaldı
+
+    const ucuncu = claude.calls[2]?.taskText as string;
+    expect(ucuncu).toContain("Önceki tur reddedildi");
+    expect(ucuncu).not.toContain("Bu kart kapıda durdurulmuştu");
+  });
+
   it("gerekçesiz reject verdikti geçersizdir — kart kapıya çıkar", async () => {
     await put();
     claude.answer = writes({ decision: "accept" });

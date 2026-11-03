@@ -22,6 +22,28 @@ function lastRejectTo(card: Card, roleId: string): Extract<Card["history"][numbe
 }
 
 /**
+ * Kartı BU rolde durduran kapıyı bulur — insan geri verdiyse.
+ *
+ * `reject` ve `handoff` ajana aktarılıyordu, `gate` AKTARILMIYORDU: kapıdan
+ * `retry` ile geri verilen bir rol, neden durdurulduğunu BİLMEDEN baştan
+ * koşuyordu. Sistem sebebi biliyor (kartın geçmişinde yazılı) ve işi
+ * yapacak olana söylemiyordu — bildiğinden azını söyleyen bir yol, ve
+ * buradaki bedeli doğrudan para: ajan aynı duvara ikinci kez koşuyor.
+ *
+ * `lastRejectTo` ile aynı duruş noktası: bu rol işi başarıyla devrettiyse
+ * öncesi kapanmıştır, daha geriye bakılmaz — yoksa eski bir kapı, yeni bir
+ * turun başına yapışırdı.
+ */
+function lastGateTo(card: Card, roleId: string): Extract<Card["history"][number], { event: "gate" }> | null {
+  for (let i = card.history.length - 1; i >= 0; i -= 1) {
+    const entry = card.history[i];
+    if (entry?.event === "gate" && entry.role === roleId) return entry;
+    if (entry?.event === "handoff" && entry.from === roleId) return null;
+  }
+  return null;
+}
+
+/**
  * Kartı BU role teslim eden devri bulur.
  *
  * Yalnızca en sonuncusu: zincir boyunca biriken özetler, altı rollü bir
@@ -295,6 +317,28 @@ export function buildTaskText(card: Card, role: SnapshotRole): string {
       "",
       "Bu itirazı ele al. Katılmıyorsan da sessizce görmezden gelme — ne",
       "yaptığını özetinde söyle.",
+    );
+  }
+
+  // Kapı bölümü retten SONRA: ikisi birden varsa önce "denetçi ne dedi",
+  // sonra "insan neden durdurdu" okunur — kronolojik sıra bu.
+  const gate = lastGateTo(card, role.id);
+  if (gate !== null) {
+    parts.push(
+      "",
+      "## Bu kart kapıda durdurulmuştu",
+      "",
+      gate.kind === "escalation"
+        ? "Önceki tur TAMAMLANAMADI ve kart insana çıktı; insan onu sana geri verdi."
+        : "Kart politika gereği durdu ve insan onu sana geri verdi.",
+      "",
+      "Durduran sebep:",
+      "",
+      gate.reason,
+      "",
+      "Aynı duvara ikinci kez koşma: işe başlamadan önce bu sebebin hâlâ",
+      "geçerli olup olmadığına BAK. Ortadan kalkmışsa (ör. iş zaten",
+      "işlenmiş) bunu özetinde söyle; duruyorsa önce onu gider.",
     );
   }
 
