@@ -119,14 +119,15 @@ async function main(argv: string[]): Promise<number> {
       ? {}
       : {
           gozcu: {
-            argv: [
+            // Akış adı BURADA YOK: ekran hangi akışa bakıyorsa gözcü onu
+            // koşuyor. Yoksa ekrandan akış değiştirince düğme hâlâ
+            // eskisini başlatırdı.
+            komut: [
               process.execPath,
               join(root, "node_modules", "tsx", "dist", "cli.mjs"),
               join(root, "src", "watch", "cli.ts"),
-              flowName,
-              "--serve",
-              ...gozcuBayraklari,
             ],
+            bayraklar: gozcuBayraklari,
           },
         }),
   });

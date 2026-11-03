@@ -655,7 +655,10 @@ describe("serveUi — ekrandan kart açmak", () => {
  * pinlemek.
  */
 describe("serveUi — ekrandan gözcü", () => {
-  const ARGV = ["node", "tsx", "watch/cli.ts", "test", "--serve", "--model", "claude:m"];
+  const KOMUT = ["node", "tsx", "watch/cli.ts"];
+  const BAYRAKLAR = ["--model", "claude:m"];
+  /** Sunucunun kurması BEKLENEN tam komut. */
+  const BEKLENEN = [...KOMUT, "test", "--serve", ...BAYRAKLAR];
 
   /** Başlatılan sahte süreçleri kaydeder. */
   function sahte() {
@@ -684,7 +687,7 @@ describe("serveUi — ekrandan gözcü", () => {
     const s = sahte();
     const srv = await serveUi({
       root, queue, topology, flowName: "test", flowHash: gercekFlow.hash,
-      gozcu: { argv: ARGV, spawn: s.spawn as never },
+      gozcu: { komut: KOMUT, bayraklar: BAYRAKLAR, spawn: s.spawn as never },
     });
     return { srv, s };
   }
@@ -697,9 +700,10 @@ describe("serveUi — ekrandan gözcü", () => {
         headers: { "x-skein-token": srv.token },
       });
       expect(res.status).toBe(200);
-      // Tam olarak verilen argv — ekran ona bir şey EKLEMİYOR, çıkarmıyor.
-      // Düğmenin model seçebilmesi, ekranın yetkisini sessizce büyütmek olurdu.
-      expect(s.cagrilar).toEqual([ARGV]);
+      // Akış adı ekranın baktığı akıştan, BAYRAKLAR terminalden —
+      // düğme bayrakları ne seçiyor ne değiştiriyor. Düğmenin model
+      // seçebilmesi, ekranın yetkisini sessizce büyütmek olurdu.
+      expect(s.cagrilar).toEqual([BEKLENEN]);
     } finally {
       await srv.close();
     }

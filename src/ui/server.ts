@@ -16,6 +16,14 @@ import { snapshot, type TopologySnapshot } from "../flow/snapshot.js";
 import { buildDetail, buildModel, type DetailOptions, type UiModel } from "./model.js";
 import { renderPage } from "./page.js";
 
+/** Ekranın baktığı akışın yaşayan hâli. */
+export interface CanliAkis {
+  topology: TopologySnapshot;
+  flow: Flow;
+  error: string | null;
+  refresh: () => Promise<unknown>;
+}
+
 export interface UiServer {
   port: number;
   url: string;
@@ -30,11 +38,23 @@ export interface ServeUiOptions extends DetailOptions {
    * dosyası değiştiyse ekran yeni sütunları çiziyor, geçersizse eskisiyle
    * çizmeye devam edip gerekçeyi gösteriyor.
    */
-  live?: {
-    topology: TopologySnapshot;
-    flow: Flow;
-    error: string | null;
-    refresh: () => Promise<unknown>;
+  live?: CanliAkis;
+  /**
+   * Akışı EKRANDAN değiştirmek.
+   *
+   * Ekran bugüne kadar açılışta verilen TEK akışa bağlıydı: başka akışa
+   * bakmak için ekranı kapatıp komutu yeniden yazmak gerekiyordu. "Her
+   * şeyi önyüzden" hedefinde bu, kabuğu ne seçersek seçelim duran bir
+   * engel — masaüstü uygulaması da olsa akış seçimi arka uçta olmalı.
+   *
+   * Verilmezse `GET /akislar` boş liste, `POST /akis/sec` 404 döner:
+   * ekranın yetkisi, onu açan komutun verdiği kadar.
+   */
+  akisSecimi?: {
+    /** Seçilebilecek akış adları. */
+    listele: () => Promise<string[]>;
+    /** Adı verilen akışı açar. Başarısızsa FIRLATIR ve eskisi durur. */
+    ac: (ad: string) => Promise<{ live: CanliAkis; flowPath: string }>;
   };
   /**
    * Akış dosyasının yolu ve yükleme seçenekleri — ekrandan düzenleme için.
@@ -67,8 +87,18 @@ export interface ServeUiOptions extends DetailOptions {
    * gözcü düğmesi de o sınırın içinde kalmalı.
    */
   gozcu?: {
-    /** Çalıştırılacak tam komut: `[komut, ...argümanlar]`. */
-    argv: string[];
+    /** Gözcüyü çalıştıran komut, akış adından ÖNCEKİ kısım. */
+    komut: string[];
+    /**
+     * Gözcüye geçirilecek bayraklar — model, araçlar, izin modu.
+     *
+     * AKIŞ ADI burada YOK: onu ekranın o an baktığı akış belirliyor, yoksa
+     * akış değiştirince düğme hâlâ eskisini koştururdu. Güvenlik özelliği
+     * bozulmuyor: para harcatan parametreler (model, araç listesi) hâlâ
+     * yalnızca bu listede ve onu terminal kuruyor. Akış ise zaten ekranın
+     * seçebildiği, deponun kendi dosyalarından biri.
+     */
+    bayraklar: string[];
     /** Test edilebilirlik için; varsayılan gerçek süreç başlatma. */
     spawn?: (argv: string[]) => GozcuSurec;
   };
@@ -230,7 +260,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
 
   /** Yaşayan akış varsa yoklar ve o anki topolojiyle seçenekleri kurar. */
   const guncel = async (): Promise<ServeUiOptions> => {
-    const live = options.live;
+    const live = aktif.live;
     if (live === undefined) return options;
     await live.refresh();
     return {
@@ -249,6 +279,19 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
    * ekran kapanırken bunu da kapatıyoruz: ekranı kapatıp arkada para
    * harcayan bir süreç bırakmak, "ekrandan yönet" sözünün tersi olurdu.
    */
+  /**
+   * Ekranın O AN baktığı akış — çalışırken değişebilir.
+   *
+   * `options.live`/`options.flowPath` artık yalnızca BAŞLANGIÇ değeri;
+   * `POST /akis/sec` bunları değiştiriyor. Değişiklik ATOMİK: yeni akış
+   * açılamazsa fırlatır ve eskisi aynen durur — `LiveFlow`'un kendi
+   * kuralının aynısı, "yarı yüklenmiş akış" diye bir durum yok.
+   */
+  let aktif: { live: CanliAkis | undefined; flowPath: string | undefined } = {
+    live: options.live,
+    flowPath: options.flowPath,
+  };
+
   let cocuk: GozcuSurec | null = null;
 
   /**
@@ -346,7 +389,9 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
             );
           }
           const spawn = ayar.spawn ?? gercekSpawn(o.root);
-          const baslayan = spawn(ayar.argv);
+          // Akış adı EKRANIN o an baktığı akıştan geliyor; bayraklar
+          // terminalden. Akış değiştirince düğme doğru akışı koşturuyor.
+          const baslayan = spawn([...ayar.komut, o.flowName, "--serve", ...ayar.bayraklar]);
           cocuk = baslayan;
           // Referans, süreç GERÇEKTEN bitince bırakılıyor — "durdur"
           // dediğimizde değil. İkisi aynı an değil.
@@ -459,7 +504,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
         res.end(JSON.stringify({ hata }));
         return;
       }
-      const flowPath = options.flowPath;
+      const flowPath = aktif.flowPath;
       const loadOptions = options.loadOptions;
       if (flowPath === undefined || loadOptions === undefined) {
         res.writeHead(404, { "content-type": "application/json; charset=utf-8" });
@@ -581,9 +626,9 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
         async (o) => {
           // Taslak yaşayan AKIŞTAN kuruluyor, dondurulmuş topolojiden değil:
           // kapı mesajları ve yol biçimi yalnızca akışta tam.
-          const draft = options.flowPath === undefined || options.live === undefined
+          const draft = aktif.flowPath === undefined || aktif.live === undefined
             ? null
-            : fromFlow(options.live.flow);
+            : fromFlow(aktif.live.flow);
           res.writeHead(200, {
             "content-type": "application/json; charset=utf-8",
             "cache-control": "no-store",
