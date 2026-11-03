@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
 import { createRequire } from "node:module";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { knownProviderSet } from "../adapters/factory.js";
@@ -309,6 +309,49 @@ roles:
         Array.from(document.querySelectorAll(".col .colhead")).map((e) => e.textContent ?? ""));
       expect(basliklar.some((b) => b.includes("digerrol"))).toBe(true);
       expect(basliklar.some((b) => b.includes("coder"))).toBe(false);
+      expect(hatalar).toEqual([]);
+    } finally {
+      await page.close();
+      await s.close();
+    }
+  }, 60_000);
+
+  /**
+   * ROL PROMPTLARINI EKRANDAN DÜZENLEMEK — gerçek tarayıcıda.
+   *
+   * `server.test.ts` uçları birim sınıyor ama "panelden dosya seçip metni
+   * değiştirip kaydedince disk GERÇEKTEN değişiyor mu" sorusu yalnızca
+   * sayfayı gerçekten açınca görünür — akış seçicideki ve kart formundaki
+   * aynı boşluğun aynısı.
+   */
+  it("promptlar panelinden metni değiştirip kaydedince dosya gerçekten değişiyor", async () => {
+    const live = await LiveFlow.open(join(root, "hub", "flows", "test.yaml"), {
+      root, providers: knownProviderSet(),
+    });
+    const s = await serveUi({
+      root, queue, topology, flowName: "test", flowHash: live.flow.hash, live,
+      flowPath: live.flow.path,
+      loadOptions: { root, providers: knownProviderSet() },
+    });
+
+    const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+    const hatalar: string[] = [];
+    page.on("pageerror", (e) => hatalar.push(String(e)));
+    try {
+      await page.goto(s.url, { waitUntil: "networkidle" });
+      await page.waitForSelector("#bar .pill", { timeout: 15_000 });
+      await page.click('button:has-text("Promptları düzenle")');
+      await page.waitForSelector(".promptListe button", { timeout: 10_000 });
+      // İki dosya listelenir (anayasa:1, rol:coder); rol dosyasını seçiyoruz.
+      await page.click('.promptListe button:has-text("rol:coder")');
+      await page.waitForTimeout(500);
+      await page.fill("#promptMetin", "# coder\ntarayıcıdan değişti\n");
+      await page.click("#promptKaydet");
+      await page.waitForTimeout(500);
+
+      // İDDİA sunucunun söylediği değil, DİSKTE GERÇEKTEN ne olduğu.
+      expect(await readFile(join(root, "roles", "coder.prompt"), "utf8"))
+        .toBe("# coder\ntarayıcıdan değişti\n");
       expect(hatalar).toEqual([]);
     } finally {
       await page.close();

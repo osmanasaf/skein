@@ -4,12 +4,14 @@ import { randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { createWriteStream } from "node:fs";
+import { readFile, writeFile } from "node:fs/promises";
 import { newCard } from "../card/card.js";
 import { QueueError, type ReleaseDecision } from "../card/queue.js";
 import { checkDraft, fromFlow, writeDraft, type FlowDraft } from "../flow/draft.js";
 import { loadFlow, type Flow, type LoadOptions } from "../flow/load.js";
 import { closeOrphan } from "../card/orphan.js";
 import { releaseCard } from "../card/release.js";
+import { LAYER_MARK } from "../prompt/assemble.js";
 import { spawnPortable } from "../proc/process.js";
 import { liveLock } from "../watch/lock.js";
 import { snapshot, type TopologySnapshot } from "../flow/snapshot.js";
@@ -57,8 +59,9 @@ export interface ServeUiOptions extends DetailOptions {
     ac: (ad: string) => Promise<{ live: CanliAkis; flowPath: string }>;
   };
   /**
-   * Akış dosyasının yolu ve yükleme seçenekleri — ekrandan düzenleme için.
-   * Verilmezse düzenleme uçları 404 döner (ekran salt okunur kalır).
+   * Akış dosyasının yolu ve yükleme seçenekleri — ekrandan düzenleme için
+   * (akış YAML'ı ve rol promptları). Verilmezse düzenleme uçları 404 döner
+   * (ekran salt okunur kalır).
    */
   flowPath?: string;
   loadOptions?: LoadOptions;
@@ -133,6 +136,56 @@ async function readBody(req: IncomingMessage): Promise<string> {
     parts.push(buf);
   }
   return Buffer.concat(parts).toString("utf8");
+}
+
+/** `?ad=deger` sorgu dizgisinden bir alanı okur; yoksa boş metin. */
+function queryParam(req: IncomingMessage, name: string): string {
+  const raw = req.url ?? "/";
+  const i = raw.indexOf("?");
+  if (i === -1) return "";
+  return new URLSearchParams(raw.slice(i + 1)).get(name) ?? "";
+}
+
+/**
+ * Akışın BİLDİRDİĞİ prompt dosyaları: her rolün promptu + anayasa katmanları.
+ *
+ * Liste TOPOLOJİDEN türetilir, depodaki her .md dosyasından değil — akış
+ * değişince (constitution ya da roller) liste de değişir. Bu liste aynı
+ * zamanda yazma ve okuma uçlarının YOL BEYAZ LİSTESİ: `yol` istemciden
+ * geliyor ve burada AYNEN var olup olmadığına bakılıyor, dizgi temizlenerek
+ * değil — temizleme kuralı bir gün eksik kalır, üyelik kalmaz.
+ *
+ * Etiketler `promptLayers`in (flow/snapshot.ts) kullandığı adlandırmayla
+ * aynı: "anayasa:N" ve "rol:<id>".
+ */
+function promptListesi(topology: TopologySnapshot): { etiket: string; yol: string }[] {
+  const liste: { etiket: string; yol: string }[] = [];
+  topology.constitution.forEach((yol, i) => liste.push({ etiket: `anayasa:${i + 1}`, yol }));
+  topology.roles.forEach((rol) => liste.push({ etiket: `rol:${rol.id}`, yol: rol.prompt }));
+  return liste;
+}
+
+/**
+ * Yazılacak prompt metni, akışın kendi kurallarını ihlal ediyor mu — bkz.
+ * `flow/load.ts` `checkPromptFile` (kural 9, 11) ve `prompt/assemble.ts`
+ * `assemblePrompt`.
+ *
+ * Aynı iki kontrol ORADA da var ama HİÇBİRİ bu yazmayı yakalamaz: akış
+ * dosyasının METNİ değişmediği sürece `LiveFlow.refresh()` prompt
+ * dosyalarına hiç bakmıyor (bkz. flow/live.ts), `assemblePrompt` ise
+ * yalnızca bir ajan GERÇEKTEN çağrılırken diskten okur. Burada kontrol
+ * etmeseydik, boş bırakılan bir prompt ancak parası ödenmiş bir
+ * aktivasyon çökünce fark edilirdi.
+ */
+function promptIcerigiSorunu(metin: string): string | null {
+  if (metin.trim() === "") {
+    return "Prompt dosyası boş olamaz. Sessizce etkisiz kalan bir katman, olmayandan kötüdür.";
+  }
+  if (metin.includes(LAYER_MARK)) {
+    return `Prompt dosyası katman sınırı işareti (${LAYER_MARK}) içeremez — ` +
+      "bir katman kendi sınırlarını uyduramaz.";
+  }
+  return null;
 }
 
 /**
@@ -243,6 +296,9 @@ function yetkili(
  *   POST /akis/yaz            geçerli taslağı atomik yazar
  *   GET  /akislar             seçilebilecek akış adları + o an aktif olan
  *   POST /akis/sec            ekranın baktığı akışı değiştirir (atomik)
+ *   GET  /promptlar           akışın bildirdiği düzenlenebilir prompt dosyaları
+ *   GET  /prompt?yol=...      bir prompt dosyasının metni
+ *   POST /prompt/yaz          prompt dosyasını YENİDEN YAZAR
  *
  * Yazan uç noktalar KOMUT gönderiyor: yüzey kendi kopyasını
  * güncellemiyor, `queue.release()` çağırıyor ve cevabı çekirdeğin ürettiği
@@ -589,6 +645,59 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
       return;
     }
 
+    if (req.method === "POST" && path === "/prompt/yaz") {
+      const hata = yetkili(req, token, adlar, portu());
+      if (hata !== null) {
+        res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ hata }));
+        return;
+      }
+      // Aynı kapı akış düzenlemeyle: `flowPath`/`loadOptions` verilmediyse
+      // bu ekranın yetkisi yoktur — "ekranın yetkisi, onu açan komutun
+      // verdiği kadar" kuralının aynısı, rol promptları için de geçerli.
+      const flowPath = aktif.flowPath;
+      const loadOptions = options.loadOptions;
+      if (flowPath === undefined || loadOptions === undefined) {
+        res.writeHead(404, { "content-type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ hata: "Bu ekran prompt düzenlemeye açık değil." }));
+        return;
+      }
+      readBody(req)
+        .then(async (body) => {
+          const istek = JSON.parse(body === "" ? "{}" : body) as { yol?: unknown; metin?: unknown };
+          const yol = typeof istek.yol === "string" ? istek.yol : "";
+          const metin = typeof istek.metin === "string" ? istek.metin : "";
+
+          const o = await guncel();
+          // ÜYELİK: yol, akışın bildirdiği listede AYNEN var mı. `../` ya da
+          // mutlak yol, şekli ne olursa olsun, listede olmadığı için burada
+          // aynen reddedilir — dizgi temizlenerek değil.
+          const liste = promptListesi(o.topology);
+          if (!liste.some((p) => p.yol === yol)) {
+            throw new Error(`Bilinmeyen prompt yolu: ${yol}`);
+          }
+          const sorun = promptIcerigiSorunu(metin);
+          if (sorun !== null) throw new Error(sorun);
+
+          await writeFile(join(o.root, yol), metin, "utf8");
+
+          // Topoloji HASH'İ prompt İÇERİĞİNİ KAPSAMIYOR (flow/load.ts,
+          // topologyHash) ve bu KASITLI — bu yazma onu bozmuyor, kapsamaya
+          // da başlatmıyor. Model yine de tazeleniyor: akış dosyası arada
+          // elle değişmiş olabilir.
+          return buildModel(await guncel());
+        })
+        .then((model) => {
+          res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ model }));
+        })
+        .catch((error: unknown) => {
+          res.writeHead(400, { "content-type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ hata: (error as Error).message }));
+        });
+      return;
+    }
+
     if (req.method === "POST" && kapat !== null) {
       const hata = yetkili(req, token, adlar, portu());
       if (hata !== null) {
@@ -685,6 +794,53 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
           res.end(JSON.stringify({ hata: (error as Error).message }));
         },
       );
+      return;
+    }
+
+    if (path === "/promptlar") {
+      // OKUMA UCU, gözcü/kart uçları gibi jetonsuz: liste TOPOLOJİDEN
+      // türüyor, yazma yetkisine bağlı değil — ekran salt okunur açılsa
+      // bile hangi dosyaların akışa ait olduğu görülebilir olmalı.
+      guncel().then(
+        (o) => {
+          res.writeHead(200, {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "no-store",
+          });
+          res.end(JSON.stringify({ promptlar: promptListesi(o.topology) }));
+        },
+        (error: unknown) => {
+          res.writeHead(500, { "content-type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ hata: (error as Error).message }));
+        },
+      );
+      return;
+    }
+
+    if (path === "/prompt") {
+      const yol = queryParam(req, "yol");
+      guncel()
+        .then(async (o) => {
+          // ÜYELİK — `/prompt/yaz` ile aynı kapı: yol listede AYNEN var mı.
+          const liste = promptListesi(o.topology);
+          if (!liste.some((p) => p.yol === yol)) {
+            throw new Error(`Bilinmeyen prompt yolu: ${yol}`);
+          }
+          return readFile(join(o.root, yol), "utf8");
+        })
+        .then(
+          (metin) => {
+            res.writeHead(200, {
+              "content-type": "application/json; charset=utf-8",
+              "cache-control": "no-store",
+            });
+            res.end(JSON.stringify({ metin }));
+          },
+          (error: unknown) => {
+            res.writeHead(400, { "content-type": "application/json; charset=utf-8" });
+            res.end(JSON.stringify({ hata: (error as Error).message }));
+          },
+        );
       return;
     }
 

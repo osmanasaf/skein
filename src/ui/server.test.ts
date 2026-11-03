@@ -426,6 +426,187 @@ describe("serveUi — akış düzenleme", () => {
   });
 });
 
+/**
+ * ROL PROMPTLARI EKRANDAN DÜZENLEME.
+ *
+ * "Her şeyi önyüzden" listesinin son maddesi: akış YAML'ı ekrandan
+ * düzenlenebiliyordu, ajanın gördüğü METİN (anayasa + rol promptu)
+ * düzenlenemiyordu. Asıl sınanan şey YOL BEYAZ LİSTESİ: `yol` istemciden
+ * geliyor ve burada ÜYELİKLE doğrulanıyor — dizgi temizlenerek değil,
+ * çünkü temizleme kuralı bir gün eksik kalır, üyelik kalmaz.
+ */
+describe("serveUi — rol promptları", () => {
+  let s: UiServer;
+  const opts = () => ({ root, providers: knownProviderSet() });
+
+  beforeEach(async () => {
+    s = await serveUi({
+      root, queue, topology, flowName: "test", flowHash: gercekFlow.hash,
+      live: { topology, flow: gercekFlow, error: null, refresh: async () => {} },
+      flowPath: gercekFlow.path,
+      loadOptions: opts(),
+    });
+  });
+  afterEach(async () => {
+    await s.close();
+  });
+
+  const promptGonder = (govde: unknown, jeton?: string) =>
+    fetch(`${s.url}prompt/yaz`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-skein-token": jeton ?? s.token },
+      body: JSON.stringify(govde),
+    });
+
+  // Liste TOPOLOJİDEN türüyor: akıştaki tek rolün promptu + tek anayasa
+  // katmanı, test.yaml'daki SIRAYLA.
+  it("GET /promptlar akışın bildirdiği dosyaları listeler", async () => {
+    const v = (await (await fetch(`${s.url}promptlar`)).json()) as {
+      promptlar: { etiket: string; yol: string }[];
+    };
+    expect(v.promptlar).toEqual([
+      { etiket: "anayasa:1", yol: "hub/prompts/base.md" },
+      { etiket: "rol:coder", yol: "roles/coder.prompt" },
+    ]);
+  });
+
+  it("GET /prompt dosyanın gerçek metnini döner", async () => {
+    const v = (await (await fetch(`${s.url}prompt?yol=roles/coder.prompt`)).json()) as {
+      metin: string;
+    };
+    expect(v.metin).toBe("# coder\n");
+  });
+
+  // ÜYELİK: dosya diskte GERÇEKTEN var (test.yaml) ama listede değil —
+  // listede olmayan HİÇBİR yol, var olsa da, okunamaz.
+  it("GET /prompt listede olmayan yolu reddeder", async () => {
+    const res = await fetch(`${s.url}prompt?yol=${encodeURIComponent("hub/flows/test.yaml")}`);
+    const v = (await res.json()) as { hata: string };
+    expect(res.status).toBe(400);
+    expect(v.hata).toContain("Bilinmeyen prompt yolu");
+  });
+
+  it("GET /prompt '../' içeren yolu reddeder", async () => {
+    const res = await fetch(`${s.url}prompt?yol=${encodeURIComponent("../../../etc/passwd")}`);
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { hata: string }).hata).toContain("Bilinmeyen prompt yolu");
+  });
+
+  it("GET /prompt mutlak yolu reddeder", async () => {
+    const res = await fetch(`${s.url}prompt?yol=${encodeURIComponent("/etc/passwd")}`);
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { hata: string }).hata).toContain("Bilinmeyen prompt yolu");
+  });
+
+  it("POST /prompt/yaz dosyayı gerçekten değiştirir ve yeni modeli döner", async () => {
+    const res = await promptGonder({ yol: "roles/coder.prompt", metin: "# coder\nyeni satır\n" });
+    const v = (await res.json()) as { model: { flow: { name: string } } };
+
+    expect(res.status).toBe(200);
+    expect(v.model.flow.name).toBe("test");
+    // İDDİA sunucunun söylediği değil, DİSKTE GERÇEKTEN ne olduğu.
+    expect(await readFile(join(root, "roles", "coder.prompt"), "utf8")).toBe("# coder\nyeni satır\n");
+  });
+
+  // ÜYELİK yazmada da aynı kapı: listede olmayan bir yola GERÇEKTEN var
+  // olsa da yazılamaz, ve denemenin kendisi dosyaya DOKUNMAZ.
+  it("POST /prompt/yaz listede olmayan yolu reddeder, dosya DEĞİŞMEZ", async () => {
+    const once = await readFile(join(root, "hub", "flows", "test.yaml"), "utf8");
+    const res = await promptGonder({ yol: "hub/flows/test.yaml", metin: "name: ele-gecirildi\n" });
+    const v = (await res.json()) as { hata: string };
+
+    expect(res.status).toBe(400);
+    expect(v.hata).toContain("Bilinmeyen prompt yolu");
+    expect(await readFile(join(root, "hub", "flows", "test.yaml"), "utf8")).toBe(once);
+  });
+
+  it("POST /prompt/yaz '../' içeren yolu reddeder, akışın GERÇEK dosyaları DEĞİŞMEZ", async () => {
+    const once = await readFile(join(root, "roles", "coder.prompt"), "utf8");
+    const res = await promptGonder({ yol: "../../../etc/passwd", metin: "ele geçirildi" });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { hata: string }).hata).toContain("Bilinmeyen prompt yolu");
+    expect(await readFile(join(root, "roles", "coder.prompt"), "utf8")).toBe(once);
+  });
+
+  it("POST /prompt/yaz mutlak yolu reddeder, akışın GERÇEK dosyaları DEĞİŞMEZ", async () => {
+    const once = await readFile(join(root, "roles", "coder.prompt"), "utf8");
+    const res = await promptGonder({ yol: "/etc/passwd", metin: "ele geçirildi" });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { hata: string }).hata).toContain("Bilinmeyen prompt yolu");
+    expect(await readFile(join(root, "roles", "coder.prompt"), "utf8")).toBe(once);
+  });
+
+  // Sessizce etkisiz kalan bir katman olmayandan kötü (bkz. flow/load.ts
+  // kural 9/11) — bu kural burada da geçerli, çünkü `LiveFlow.refresh()`
+  // akış dosyası değişmediği sürece prompt dosyalarına hiç bakmıyor.
+  it("POST /prompt/yaz boş metni reddeder, dosya DEĞİŞMEZ", async () => {
+    const once = await readFile(join(root, "roles", "coder.prompt"), "utf8");
+    const res = await promptGonder({ yol: "roles/coder.prompt", metin: "   \n" });
+    const v = (await res.json()) as { hata: string };
+
+    expect(res.status).toBe(400);
+    expect(v.hata).toContain("boş olamaz");
+    expect(await readFile(join(root, "roles", "coder.prompt"), "utf8")).toBe(once);
+  });
+
+  it("jetonsuz yazma reddedilir, dosya DEĞİŞMEZ", async () => {
+    const once = await readFile(join(root, "roles", "coder.prompt"), "utf8");
+    const res = await fetch(`${s.url}prompt/yaz`, {
+      method: "POST",
+      body: JSON.stringify({ yol: "roles/coder.prompt", metin: "ele geçirildi" }),
+    });
+    expect(res.status).toBe(403);
+    expect(await readFile(join(root, "roles", "coder.prompt"), "utf8")).toBe(once);
+  });
+
+  it("başka kaynaktan gelen yazma isteği reddedilir, dosya DEĞİŞMEZ", async () => {
+    const once = await readFile(join(root, "roles", "coder.prompt"), "utf8");
+    const res = await fetch(`${s.url}prompt/yaz`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-skein-token": s.token,
+        origin: "https://kotu-site.example",
+      },
+      body: JSON.stringify({ yol: "roles/coder.prompt", metin: "ele geçirildi" }),
+    });
+    expect(res.status).toBe(403);
+    expect(await readFile(join(root, "roles", "coder.prompt"), "utf8")).toBe(once);
+  });
+});
+
+/**
+ * Akış düzenlemeyle AYNI yetki kapısı: `flowPath`/`loadOptions` verilmeyen
+ * salt okunur bir ekranda rol promptları da yazılamaz. "Ekranın yetkisi,
+ * onu açan komutun verdiği kadar" kuralının aynısı.
+ */
+describe("serveUi — rol promptları, salt okunur ekran", () => {
+  it("düzenleme kapalıysa POST /prompt/yaz 404, dosya DEĞİŞMEZ", async () => {
+    const once = await readFile(join(root, "roles", "coder.prompt"), "utf8");
+    const res = await fetch(`${server.url}prompt/yaz`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-skein-token": server.token },
+      body: JSON.stringify({ yol: "roles/coder.prompt", metin: "ele geçirildi" }),
+    });
+    expect(res.status).toBe(404);
+    expect(await readFile(join(root, "roles", "coder.prompt"), "utf8")).toBe(once);
+  });
+
+  // OKUMA UÇLARI gatelenmiyor: liste ve metin salt okunur ekranda da
+  // görülebilir, yetki yalnızca YAZMAYI kapatıyor.
+  it("düzenleme kapalıyken GET /promptlar ve GET /prompt yine çalışır", async () => {
+    const liste = (await (await fetch(`${server.url}promptlar`)).json()) as {
+      promptlar: { yol: string }[];
+    };
+    expect(liste.promptlar.map((p) => p.yol)).toContain("roles/coder.prompt");
+
+    const okuma = (await (await fetch(`${server.url}prompt?yol=roles/coder.prompt`)).json()) as {
+      metin: string;
+    };
+    expect(okuma.metin).toBe("# coder\n");
+  });
+});
+
 describe("serveUi — salt okunur ekran", () => {
   it("düzenleme kapalıysa uçlar 404", async () => {
     const res = await fetch(`${server.url}akis/yaz`, {

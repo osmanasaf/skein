@@ -218,6 +218,22 @@ const PAGE = `<!doctype html>
   }
   .kaydet:disabled { opacity: .5; cursor: not-allowed; }
 
+  /* prompt düzenleyici — soldan dosya seç, sağda metin alanı */
+  .promptEd { display: flex; gap: 12px; align-items: flex-start; }
+  .promptListe {
+    flex: 0 0 150px; display: flex; flex-direction: column; gap: 4px;
+    max-height: 64vh; overflow-y: auto;
+  }
+  .promptListe button { text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .promptListe button.secili { border-color: var(--accent); color: var(--accent-ink); background: var(--accent-soft); }
+  .promptAlan { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+  .promptAlan textarea {
+    font: inherit; font-family: var(--mono); font-size: 12.5px; line-height: 1.5;
+    min-height: 44vh; padding: 10px 12px; border: 1px solid var(--line); border-radius: 3px;
+    background: var(--surface-2); color: var(--ink); resize: vertical;
+  }
+  .promptAlan textarea:disabled { opacity: .6; }
+
   footer { margin-top: 22px; font-family: var(--mono); font-size: 11px; color: var(--ink-3); }
 </style>
 </head>
@@ -667,6 +683,7 @@ function hashOku() {
   const h = decodeURIComponent(location.hash.replace(/^#/, ""));
   if (h.startsWith("kart/")) detayAc(h.slice("kart/".length));
   else if (h === "akis") void akisAc();
+  else if (h === "prompt") void promptAc();
   else if (h === "yeni") yeniKartAc();
   else document.getElementById("panel").replaceChildren();
 }
@@ -748,6 +765,10 @@ function ciz(m) {
   duzenle.type = "button";
   duzenle.addEventListener("click", () => { location.hash = "akis"; });
   bar.append(duzenle);
+  const promptlarDugme = el("button", "mini", "Promptları düzenle");
+  promptlarDugme.type = "button";
+  promptlarDugme.addEventListener("click", () => { location.hash = "prompt"; });
+  bar.append(promptlarDugme);
   [["Açık", m.totals.open], ["Bitti", m.totals.done], ["Aktivasyon", m.totals.activations], ["Maliyet", para(m.totals.costUsd)]]
     .forEach(([ad, deger]) => {
       const s = el("div", "stat");
@@ -1214,6 +1235,143 @@ async function yaz() {
     kapat();
   } catch (e) {
     document.getElementById("onizleme").replaceChildren(el("div", "err", e.message));
+  }
+}
+
+// --- Rol promptları düzenleyici ---
+//
+// Akış YAML'ı ekrandan düzenlenebiliyordu, ajanın gördüğü METİN (anayasa +
+// rol promptu) düzenlenemiyordu. Liste sunucudaki /promptlar ucundan geliyor
+// ve TOPOLOJİDEN türüyor — depodaki her dosya değil, yalnızca akışın
+// bildirdikleri. Seçilen dosyanın yolu burada, istemcide, uydurulmuyor:
+// sunucu her okuma ve yazmada aynı listeye karşı üyelik soruyor.
+let PROMPTLAR = [];
+let PROMPT_SEC = null;
+
+async function promptAc() {
+  const kap = document.getElementById("panel");
+  try {
+    const cevap = await fetch("/promptlar", { cache: "no-store" });
+    const veri = await cevap.json();
+    if (!cevap.ok) throw new Error(veri.hata || cevap.status);
+    PROMPTLAR = veri.promptlar || [];
+    if (!PROMPTLAR.length) throw new Error("Bu akışta düzenlenebilir prompt yok.");
+    if (!PROMPTLAR.some((p) => p.yol === PROMPT_SEC)) PROMPT_SEC = PROMPTLAR[0].yol;
+    kap.replaceChildren(promptEditorCiz());
+    await promptYukle(PROMPT_SEC);
+  } catch (e) {
+    kap.replaceChildren(el("div", "err", "Prompt listesi okunamadı: " + e.message));
+  }
+}
+
+function promptEditorCiz() {
+  const ust = el("div", "ust");
+  ust.addEventListener("click", (e) => { if (e.target === ust) kapat(); });
+  const p = el("div", "panel");
+
+  const kapatDugme = el("button", "kapat", "Kapat");
+  kapatDugme.type = "button";
+  kapatDugme.addEventListener("click", kapat);
+  p.append(kapatDugme);
+
+  p.append(el("h2", null, "Rol promptları"));
+  p.append(el("div", "cid", "akışın bildirdiği dosyalar — kaydetmek dosyayı YENİDEN YAZAR"));
+
+  const ed = el("div", "promptEd");
+
+  const liste = el("div", "promptListe");
+  PROMPTLAR.forEach((pr) => {
+    const b = el("button", "mini" + (pr.yol === PROMPT_SEC ? " secili" : ""), pr.etiket);
+    b.type = "button";
+    b.title = pr.yol;
+    b.addEventListener("click", () => { void promptSec(pr.yol); });
+    liste.append(b);
+  });
+  ed.append(liste);
+
+  const alan = el("div", "promptAlan");
+  alan.append(el("div", "cid", PROMPT_SEC || ""));
+  const metinKutusu = el("textarea");
+  metinKutusu.id = "promptMetin";
+  metinKutusu.rows = 20;
+  alan.append(metinKutusu);
+
+  const altSatir = el("div", "exits");
+  const kaydet = el("button", "kaydet", "Dosyaya yaz");
+  kaydet.type = "button";
+  kaydet.id = "promptKaydet";
+  kaydet.addEventListener("click", () => { void promptYaz(); });
+  altSatir.append(kaydet);
+  alan.append(altSatir);
+
+  const hataKutu = el("div", "err");
+  hataKutu.id = "promptHata";
+  hataKutu.style.cssText = "display:none";
+  alan.append(hataKutu);
+
+  ed.append(alan);
+  p.append(ed);
+
+  ust.append(p);
+  return ust;
+}
+
+/** Seçilen dosyayı değiştirir ve panoyu yeniden çizer — eski seçimi kaybetmeden. */
+async function promptSec(yol) {
+  PROMPT_SEC = yol;
+  document.getElementById("panel").replaceChildren(promptEditorCiz());
+  await promptYukle(yol);
+}
+
+async function promptYukle(yol) {
+  const alan = document.getElementById("promptMetin");
+  if (!alan) return;
+  alan.disabled = true;
+  try {
+    const cevap = await fetch("/prompt?yol=" + encodeURIComponent(yol), { cache: "no-store" });
+    const veri = await cevap.json();
+    if (!cevap.ok) throw new Error(veri.hata || cevap.status);
+    alan.value = veri.metin;
+  } catch (e) {
+    alan.value = "";
+    const hataKutu = document.getElementById("promptHata");
+    if (hataKutu) {
+      hataKutu.textContent = "Okunamadı: " + e.message;
+      hataKutu.style.cssText = "display:block;white-space:pre-wrap";
+    }
+  } finally {
+    alan.disabled = false;
+  }
+}
+
+/**
+ * Prompt dosyasını YAZAR — KOMUT göndererek.
+ *
+ * Ekran kendi kopyasını güncellemiyor: çekirdek yazıyor, cevaptaki yeni
+ * model çiziliyor. Çekirdek reddederse (bilinmeyen yol, boş metin, yetki
+ * yok) mesaj kullanıcıya aynen gider — akış düzenleyicideki "yaz"ın aynısı.
+ */
+async function promptYaz() {
+  const alan = document.getElementById("promptMetin");
+  const kaydet = document.getElementById("promptKaydet");
+  const hataKutu = document.getElementById("promptHata");
+  if (!alan || !PROMPT_SEC) return;
+  kaydet.disabled = true;
+  hataKutu.style.cssText = "display:none";
+  try {
+    const cevap = await fetch("/prompt/yaz", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-skein-token": JETON },
+      body: JSON.stringify({ yol: PROMPT_SEC, metin: alan.value }),
+    });
+    const veri = await cevap.json();
+    if (!cevap.ok) throw new Error(veri.hata || cevap.status);
+    ciz(veri.model);
+  } catch (e) {
+    hataKutu.textContent = e.message;
+    hataKutu.style.cssText = "display:block;white-space:pre-wrap";
+  } finally {
+    kaydet.disabled = false;
   }
 }
 
