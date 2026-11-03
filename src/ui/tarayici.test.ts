@@ -56,7 +56,10 @@ roles:
 declare const document: {
   querySelector: (s: string) => { textContent: string | null; style: { display: string } } | null;
   querySelectorAll: (s: string) => ArrayLike<{ textContent: string | null }>;
+  body: unknown;
 };
+/** Yalnızca zemin rengini okumak için — gökyüzü paleti sınamasının ihtiyacı kadar. */
+declare function getComputedStyle(el: unknown): { backgroundColor: string };
 
 type Tarayici = { newPage: (o?: unknown) => Promise<Sayfa>; close: () => Promise<void> };
 type Sayfa = {
@@ -160,6 +163,33 @@ async function ac(): Promise<{ page: Sayfa; hatalar: string[] }> {
   return { page, hatalar };
 }
 
+/**
+ * Sayfayı BELİRLİ bir renk şemasıyla açar ve konsol hatalarını da toplar.
+ *
+ * "Gökyüzü paleti" kartı iki temayı da (açık/koyu) ölçülebilir kılmayı
+ * istiyor; `prefers-color-scheme` test makinesinin ayarına bağlı kalırsa
+ * hangi temanın koştuğu BELİRSİZ olur. Playwright'a şemayı açıkça
+ * vererek bu belirsizliği kaldırıyoruz.
+ */
+async function acTema(sema: "light" | "dark"): Promise<{ page: Sayfa; hatalar: string[] }> {
+  const page = await (browser as Tarayici).newPage({
+    viewport: { width: 1280, height: 900 },
+    colorScheme: sema,
+  });
+  const hatalar: string[] = [];
+  page.on("pageerror", (e) => hatalar.push(String(e)));
+  // KONSOL HATASI YOK iddiası page error'dan AYRI: bir `console.error`
+  // çağrısı sayfayı çökertmez ama sessizce yutulan bir kusur olurdu.
+  page.on("console", (m) => {
+    const mesaj = m as { type?: () => string; text?: () => string };
+    if (mesaj.type && mesaj.type() === "error") {
+      hatalar.push("konsol: " + (mesaj.text ? mesaj.text() : String(m)));
+    }
+  });
+  await page.goto(server.url, { waitUntil: "networkidle" });
+  return { page, hatalar };
+}
+
 describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
   it("sayfa çiziliyor ve betik hata vermiyor", async () => {
     const { page, hatalar } = await ac();
@@ -177,6 +207,44 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
       expect(basliklar).toHaveLength(2);
       expect(basliklar[0]).toContain("coder");
       expect(basliklar[1]).toContain("bitti");
+      expect(hatalar).toEqual([]);
+    } finally {
+      await page.close();
+    }
+  }, 60_000);
+
+  /**
+   * GÖKYÜZÜ PALETİ — hesaplanan zemin rengi ve konsol temiz.
+   *
+   * `page.test.ts` yalnızca KAYNAK METNİ sınıyor: `:root` bloğunda doğru
+   * hex yazdığını görür ama tarayıcının o CSS'i GERÇEKTEN uyguladığını
+   * göremez (yanlış seçici, atlanmış bir blok, vb. kaynak metinde de
+   * dururdu). Bu sınama `getComputedStyle` ile GERÇEK çizimi ölçüyor —
+   * hem açık hem koyu temada, token-kontrast.test.ts'teki değerlerle
+   * AYNI token'lara karşı (bu dosyadaki hex'ler o testteki hex'lerin
+   * kopyası DEĞİL, page.ts'teki --bg'nin rgb karşılığı; ikisi birlikte
+   * aynı kaynağı iki açıdan doğruluyor).
+   */
+  it("gökyüzü paleti: açık temada zemin doğru rgb, konsol temiz", async () => {
+    const { page, hatalar } = await acTema("light");
+    try {
+      await page.waitForSelector("#bar .pill", { timeout: 15_000 });
+      const zemin = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+      // --bg: #E7ECF2 → rgb(231, 236, 242)
+      expect(zemin).toBe("rgb(231, 236, 242)");
+      expect(hatalar).toEqual([]);
+    } finally {
+      await page.close();
+    }
+  }, 60_000);
+
+  it("gökyüzü paleti: koyu temada zemin doğru rgb, konsol temiz", async () => {
+    const { page, hatalar } = await acTema("dark");
+    try {
+      await page.waitForSelector("#bar .pill", { timeout: 15_000 });
+      const zemin = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+      // --bg (koyu): #0B1118 → rgb(11, 17, 24)
+      expect(zemin).toBe("rgb(11, 17, 24)");
       expect(hatalar).toEqual([]);
     } finally {
       await page.close();
