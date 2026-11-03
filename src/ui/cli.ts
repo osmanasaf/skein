@@ -20,9 +20,11 @@ kurulumuyla ilgilenmeden çalışır.
 AKIŞ VERİLMEZSE \`hub/flows/\` altındaki ilk akış açılır (ada göre sıralı).
 Ekrandaki seçiciden başka bir akışa her an geçilebilir.
 
-Ekranı açar. YALNIZCA OKUR: kartların yerini \`.skein/\` dizininden, ne
-olduğunu \`.skein/olaylar.jsonl\` dosyasından, gözcünün açık olup olmadığını
-\`.skein/daemon.json\` kilidinden okur. Hiçbir şey yazmaz.
+Ekranı açar. KARTLARA VE OLAY GÜNLÜĞÜNE DOKUNMAZ: kartların yerini
+\`.skein/\` dizininden, ne olduğunu \`.skein/olaylar.jsonl\` dosyasından,
+gözcünün açık olup olmadığını \`.skein/daemon.json\` kilidinden YALNIZCA
+OKUR. Tek yazdığı şey kendi penceresinin hafızası (\`.skein/ekran.json\`,
+aşağıda) — ölçüme giren hiçbir kaydı üretmez ya da değiştirmez.
 
 Açılınca bastığı adresi TARAYICIDA KENDİLİĞİNDEN açar (\`--tarayici-yok\` ile
 kapatılır — uzaktan/konteyner koşumunda açacak tarayıcı yoktur). Dinlenen

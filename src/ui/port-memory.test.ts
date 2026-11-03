@@ -35,10 +35,40 @@ describe("sonPortuOku", () => {
     expect(await sonPortuOku(root)).toBeUndefined();
   });
 
-  it("port alanı aralık dışıysa yok sayılır", async () => {
+  /**
+   * ARALIK SINIRI, SINIRIN KENDİSİNDE SINANIR.
+   *
+   * Bu kural neden önemli: `listen()` aralık dışı ya da kesirli bir portta
+   * SENKRON `ERR_SOCKET_BAD_PORT` fırlatıyor ve bu `EADDRINUSE` DEĞİL, yani
+   * `portuHatirlayarakAc` onu örtmez, olduğu gibi fırlatır. Doğrulama
+   * gevşerse elle bozulmuş bir `ekran.json` ekranın HİÇ açılmamasına yol
+   * açar — kartın D kısıtının ("bozuk kayıt engel olmasın") tam tersi.
+   *
+   * 99999 gibi sınırdan UZAK bir değer bu kuralı pinlemiyordu: üst sınır
+   * 70000'e çekilse de 99999 yine reddedilirdi. Sınır sınamaları sınırın
+   * İKİ yanında durmak zorunda.
+   */
+  const reddedilmeli: [string, unknown][] = [
+    ["üst sınırın bir fazlası", 65536],
+    ["sınırdan uzak", 99999],
+    ["sıfır — 0 ayrılmış, 'hatırlanmadı' ile aynı şey değil", 0],
+    ["negatif", -1],
+    ["kesirli", 8080.5],
+  ];
+  for (const [ad, deger] of reddedilmeli) {
+    it(`port alanı geçersizse yok sayılır: ${ad}`, async () => {
+      await mkdir(join(root, ".skein"), { recursive: true });
+      await writeFile(join(root, ".skein", "ekran.json"), JSON.stringify({ port: deger }), "utf8");
+      expect(await sonPortuOku(root)).toBeUndefined();
+    });
+  }
+
+  // Sınırın DİĞER yanı: yalnızca "reddediyor" sınamaları olsa sınırı
+  // daraltan bir mutasyon (ör. 65535'i dışarıda bırakmak) ayakta kalırdı.
+  it("üst sınır DAHİL — 65535 geçerli bir porttur", async () => {
     await mkdir(join(root, ".skein"), { recursive: true });
-    await writeFile(join(root, ".skein", "ekran.json"), JSON.stringify({ port: 99999 }), "utf8");
-    expect(await sonPortuOku(root)).toBeUndefined();
+    await writeFile(join(root, ".skein", "ekran.json"), JSON.stringify({ port: 65535 }), "utf8");
+    expect(await sonPortuOku(root)).toBe(65535);
   });
 
   it("JSON dizi (nesne değil) ise yok sayılır", async () => {
@@ -146,6 +176,27 @@ describe("portuHatirlayarakAc", () => {
         return { port: p ?? 0 };
       }),
     ).rejects.toBe(baskaHata);
+  });
+
+  /**
+   * "Bozuk kayıt" yalnızca bozuk JSON değil — GEÇERLİ JSON içinde GEÇERSİZ
+   * port da bozuk kayıttır, ve sonucu daha kötü olurdu: bozuk JSON'da
+   * `JSON.parse` fırlatıp yutuluyor, aralık dışı portta ise değer kapıdan
+   * geçip `listen()`e gidiyor ve ORADA fırlıyor — EADDRINUSE olmadığı için
+   * de örtülmüyor. Yukarıdaki birim sınamaları doğrulayıcıyı pinliyor; bu
+   * sınama D kısıtının KENDİSİNİ pinliyor: ekran yine açılıyor.
+   */
+  it("aralık dışı hatırlanan port engel olmuyor — boş port ile açılmaya devam eder", async () => {
+    await mkdir(join(root, ".skein"), { recursive: true });
+    await writeFile(join(root, ".skein", "ekran.json"), JSON.stringify({ port: 70000 }), "utf8");
+    const gorulenler: (number | undefined)[] = [];
+    const sonuc = await portuHatirlayarakAc(root, undefined, async (p) => {
+      gorulenler.push(p);
+      return { port: 4040 };
+    });
+    // 70000 HİÇ denenmemeli: denenirse `listen` fırlatır ve ekran açılmaz.
+    expect(gorulenler).toEqual([undefined]);
+    expect(sonuc).toEqual({ port: 4040 });
   });
 
   it("bozuk hafıza dosyası engel olmuyor — boş port ile açılmaya devam eder", async () => {
