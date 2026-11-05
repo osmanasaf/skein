@@ -13,10 +13,19 @@ import { kontrastOrani, NORMAL_METIN_ESIGI, IKINCIL_ETIKET_ESIGI } from "./kontr
  * değerle kıyaslayan bir ikinci kaynak hiç yok.
  */
 
-/** ":root { ... }" gövdesindeki "--ad: #HEX;" çiftlerini bir haritaya çıkarır. */
+/**
+ * ":root { ... }" gövdesindeki "--ad: #HEX;" ya da "--ad: var(--baska);"
+ * çiftlerini bir haritaya çıkarır.
+ *
+ * var() formu Modernist token katmanı için gerekli: SAPMALAR.md'nin beş
+ * düzeltmesi (örn. `--label-ink: var(--color-neutral-700);`) ham hex'i
+ * BURADA tekrar etmiyor, ramptaki tek kaynağa işaret ediyor. Değer yine de
+ * sayfanın gerçek CSS metninden okunuyor — `cozumle()` zinciri izleyip asıl
+ * hex'e iniyor, ikinci bir kaynak hiç açılmıyor.
+ */
 function tokenlariAyristir(gövdeMetni: string): Map<string, string> {
   const harita = new Map<string, string>();
-  const desen = /--([a-z0-9-]+):\s*(#[0-9A-Fa-f]{6})\s*;/g;
+  const desen = /--([a-z0-9-]+):\s*(#[0-9A-Fa-f]{6}|var\(--[a-z0-9-]+\))\s*;/g;
   let eslesme: RegExpExecArray | null;
   while ((eslesme = desen.exec(gövdeMetni)) !== null) {
     const ad = eslesme[1];
@@ -52,12 +61,28 @@ function temaTokenlari(html: string): { acik: Map<string, string>; koyu: Map<str
   return { acik, koyu };
 }
 
+/**
+ * Bir token adını, var() zincirini izleyerek gerçek hex değerine indirir.
+ * Zincir derinliği sınırlı: döngü ya da bozuk bir referans sessizce
+ * yutulmasın, açık hata versin.
+ */
+function cozumle(harita: Map<string, string>, ad: string, derinlik = 0): string {
+  if (derinlik > 8) throw new Error("var() zinciri cok derin (dongu?): " + ad);
+  const deger = harita.get(ad);
+  if (deger === undefined) throw new Error("token bulunamadi: " + ad);
+  const esle = /^var\(--([a-z0-9-]+)\)$/.exec(deger);
+  if (esle) {
+    const ic = esle[1];
+    if (ic === undefined) throw new Error("gecersiz var() referansi: " + deger);
+    return cozumle(harita, ic, derinlik + 1);
+  }
+  return deger;
+}
+
 /** Haritadan bir token okur; yoksa (örn. "#fff" gibi sabit bir renk) hex'i aynen döndürür. */
 function renk(harita: Map<string, string>, adVeyaHex: string): string {
   if (adVeyaHex.startsWith("#")) return adVeyaHex;
-  const deger = harita.get(adVeyaHex);
-  if (deger === undefined) throw new Error("token bulunamadi: " + adVeyaHex);
-  return deger;
+  return cozumle(harita, adVeyaHex);
 }
 
 type Esik = typeof NORMAL_METIN_ESIGI | typeof IKINCIL_ETIKET_ESIGI;
@@ -96,6 +121,67 @@ const CIFTLER: [string, string, string, Esik][] = [
   ["ink-3/gate-bg — kapı kartında sayaç", "ink-3", "gate-bg", IKINCIL_ETIKET_ESIGI],
   ["accent-ink/surface — çalışıyor etiketi", "accent-ink", "surface", IKINCIL_ETIKET_ESIGI],
   ["gate/gate-bg — kapı etiketi kendi kartında", "gate", "gate-bg", IKINCIL_ETIKET_ESIGI],
+
+  // --- Modernist token katmanı (c-20261105-fc7a36) ---
+  // Bu çiftler henüz hiçbir seçicide kullanılmıyor — ekranın görünüşü bu
+  // kartla değişmiyor. Buradaki sayılar, bir sonraki kart Modernist
+  // ekranı gerçekten kurduğunda hangi token'ı hangi zeminle eşleyeceğini
+  // ÖNCEDEN kilitliyor; token'lardan biri yanlışlıkla düzeltme-öncesi
+  // değere dönerse bu takım kırmızıya döner.
+  //
+  // normal metin
+  ["Modernist gövde metni — zemin üstünde", "color-text", "color-bg", NORMAL_METIN_ESIGI],
+  ["Modernist gövde metni — yüzey üstünde", "color-text", "color-surface", NORMAL_METIN_ESIGI],
+  [
+    "SAPMALAR §1 — 11-12px/600 etiket, zemin üstünde (neutral-700, neutral-600 DEĞİL)",
+    "label-ink",
+    "color-bg",
+    NORMAL_METIN_ESIGI,
+  ],
+  ["Modernist lejant metni — zemin üstünde", "label-ink", "color-bg", NORMAL_METIN_ESIGI],
+  [
+    "Modernist kapı gerekçesi — kapı kartında (accent-800/accent-100)",
+    "color-accent-800",
+    "color-accent-100",
+    NORMAL_METIN_ESIGI,
+  ],
+  [
+    "Modernist rozet — tag-accent (accent-800/accent-100)",
+    "color-accent-800",
+    "color-accent-100",
+    NORMAL_METIN_ESIGI,
+  ],
+  [
+    "Modernist rozet — tag-neutral (neutral-800/neutral-100)",
+    "color-neutral-800",
+    "color-neutral-100",
+    NORMAL_METIN_ESIGI,
+  ],
+  // büyük metin ve grafik (durum göstergeleri, simgeler)
+  [
+    "SAPMALAR §2 — kuyruk kart karesi kenarı, zemin üstünde (kenar artık --color-text)",
+    "queue-square-border",
+    "color-bg",
+    IKINCIL_ETIKET_ESIGI,
+  ],
+  [
+    "SAPMALAR §3 — gözcü noktası (kapalı/elle) kenarı, zemin üstünde",
+    "daemon-dot-off-border",
+    "color-bg",
+    IKINCIL_ETIKET_ESIGI,
+  ],
+  [
+    "SAPMALAR §4 — gözcü noktası (duruyor) kenarı, zemin üstünde",
+    "daemon-dot-stopping-border",
+    "color-bg",
+    IKINCIL_ETIKET_ESIGI,
+  ],
+  [
+    "SAPMALAR §5 — boş rol kuşu, zemin üstünde (neutral-600, neutral-400 DEĞİL)",
+    "empty-bird-ink",
+    "color-bg",
+    IKINCIL_ETIKET_ESIGI,
+  ],
 ];
 
 describe("token kontrastı — açık tema", () => {

@@ -63,6 +63,62 @@ const PAGE = `<!doctype html>
     /* boşluk ölçeği — kart içi dolgu ve boşluklar TEK yerden */
     --sp-1: 4px; --sp-2: 6px; --sp-3: 8px; --sp-4: 10px; --sp-5: 12px;
     --sp-6: 14px; --sp-7: 16px; --sp-8: 18px; --sp-9: 20px; --sp-10: 24px;
+
+    /* ------------------------------------------------------------------
+     * MODERNİST TOKEN KATMANI — kart c-20261105-fc7a36.
+     *
+     * tasarim/DEVIR.md + tasarim/ds/modernist.css'teki yeni tasarım
+     * sisteminin token'ları. Değerler modernist.css'ten BİREBİR alındı
+     * (SAPMALAR.md: "hiçbir düzeltme yeni renk icat etmiyor"). Yukarıdaki
+     * --bg/--ink/--accent/... HÂLÂ GEÇERLİ EKRANI çiziyor; bu blok hiçbir
+     * seçici tarafından KULLANILMIYOR henüz — bir sonraki kart (Modernist
+     * ekranı gerçekten kurmak) bu token'ları tüketecek. Bu kart ekranın
+     * görünüşünü değiştirmiyor, yalnızca bu katmanı ve kapısını kuruyor.
+     * Kapı: src/ui/token-kontrast.test.ts.
+     * ------------------------------------------------------------------ */
+    --color-bg: #f3f2f2; --color-surface: #eae9e9; --color-text: #201e1d;
+    --color-accent: #ec3013;
+    --color-divider: color-mix(in srgb, #201e1d 40%, transparent);
+
+    --color-neutral-100: #f8f4f4; --color-neutral-200: #eae7e7; --color-neutral-300: #d7d3d3;
+    --color-neutral-400: #bab6b6; --color-neutral-500: #9b9797; --color-neutral-600: #7d7979;
+    --color-neutral-700: #605d5d; --color-neutral-800: #444141; --color-neutral-900: #2d2b2b;
+
+    --color-accent-100: #fff2ef; --color-accent-200: #ffe0d9; --color-accent-300: #ffc4b8;
+    --color-accent-400: #ff9783; --color-accent-500: #ff563c; --color-accent-600: #dd2b0f;
+    --color-accent-700: #ae1800; --color-accent-800: #7c1405; --color-accent-900: #4d170e;
+
+    /* tipografi ölçeği — DEVIR.md'nin düz listesi, semantik ad yok */
+    --fs-40: 40px; --fs-36: 36px; --fs-30: 30px; --fs-26: 26px; --fs-22: 22px; --fs-20: 20px;
+    --fs-17: 17px; --fs-15: 15px; --fs-14: 14px; --fs-13-5: 13.5px; --fs-13: 13px;
+    --fs-12-5: 12.5px; --fs-12: 12px; --fs-11-5: 11.5px; --fs-11: 11px; --fs-10: 10px;
+
+    /* boşluk ölçeği — 4px'in katları */
+    --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 20px;
+    --space-6: 24px; --space-8: 32px;
+
+    /* köşe yarıçapı — HER YERDE sıfır */
+    --radius: 0;
+
+    /* çizgi kalınlıkları */
+    --border-section: 2px; /* bölüm ayırıcı */
+    --border-row: 1px;     /* satır ayırıcı */
+    --border-accent: 4px;  /* vurgu çizgisi (aktif sekme, kapı kutusu üstü) */
+
+    /* ------------------------------------------------------------------
+     * SAPMALAR.md § 1 — beş kontrast düzeltmesi, token katmanında kilitli.
+     * Ham renkler DEĞİŞMEDİ; her biri var() ile yukarıdaki ramptan
+     * işaretlendi ki bir sonraki kart yanlış adımı SEÇEMESİN — doğru
+     * token'ın adı zaten bu. Ölçüm: token-kontrast.test.ts.
+     * ------------------------------------------------------------------ */
+    --label-ink: var(--color-neutral-700);              /* 11-12px/600 etiket — neutral-600 DEĞİL */
+    --queue-square-fill: var(--color-neutral-500);
+    --queue-square-border: var(--color-text);            /* kenar artık dolguyla AYNI DEĞİL */
+    --daemon-dot-off-fill: var(--color-neutral-400);
+    --daemon-dot-off-border: var(--color-text);          /* off/unmanaged: kenarsızdı, şimdi var */
+    --daemon-dot-stopping-fill: var(--color-neutral-500);
+    --daemon-dot-stopping-border: var(--color-text);     /* stopping: kenarsızdı, şimdi var */
+    --empty-bird-ink: var(--color-neutral-600);          /* neutral-400 DEĞİL */
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
