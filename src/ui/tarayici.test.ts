@@ -313,6 +313,44 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
     }
   }, 60_000);
 
+  /**
+   * ÜST ÇUBUK KOYU TEMADA — reviewer'ın reddi (0f75e74, bu kenarda 2. ret).
+   *
+   * token-kontrast.test.ts kaynak METNİ ayrıştırıp var() zincirini izliyor;
+   * önceki halde dark `:root:not(...)` bloğu Modernist token'larını hiç
+   * EZMİYORDU, yani o sınamanın "koyu" haritası otomatik olarak AÇIK
+   * değerlere düşüyordu — ayrıştırıcı doğru çalışıyordu ama ezecek hiçbir
+   * şey yoktu, yani kusuru YAKALAYAMAZDI (aynı sınıf: ezilmemiş bir token
+   * kaynak metinde "tanımlı" görünür ama gerçek çizimde yanlış değere
+   * çözülür). Reviewer gerçek tarayıcıda `acTema('dark')` ile ölçtü:
+   * document.body rgb(11, 17, 24) (doğru koyu) ama #bar rgb(243, 242, 242)
+   * (AÇIK — hiç değişmemiş) kaldı. Bu sınama tam o ölçümü pinliyor.
+   */
+  it("#bar koyu temada document.body ile BİRLİKTE koyulaşıyor, açık kalmıyor", async () => {
+    const { page, hatalar } = await acTema("dark");
+    try {
+      await page.waitForSelector("#bar .pill", { timeout: 15_000 });
+      const barZemin = await page.evaluate(() =>
+        getComputedStyle(document.querySelector("#bar")).backgroundColor);
+      const govdeZemin = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+      const sekmeMetni = await page.evaluate(() =>
+        getComputedStyle(document.querySelector(".navSekme")).color);
+      // --color-bg'nin koyu ezmesi: #1A1817 → rgb(26, 24, 23).
+      expect(barZemin).toBe("rgb(26, 24, 23)");
+      // KARŞIT İDDİA: açık temanın --color-bg'si (#f3f2f2 → rgb(243, 242,
+      // 242)) DEĞİL — reddedilen halde #bar tam olarak bu değerde donup
+      // kalıyordu.
+      expect(barZemin).not.toBe("rgb(243, 242, 242)");
+      // --bg'nin (eski aile) koyu ezmesi: #0B1118 → rgb(11, 17, 24).
+      expect(govdeZemin).toBe("rgb(11, 17, 24)");
+      // --color-text'in koyu ezmesi: #F2EFEE → rgb(242, 239, 238).
+      expect(sekmeMetni).toBe("rgb(242, 239, 238)");
+      expect(hatalar).toEqual([]);
+    } finally {
+      await page.close();
+    }
+  }, 60_000);
+
   it("formdan açılan kart panoya düşüyor", async () => {
     const { page, hatalar } = await ac();
     try {
@@ -685,10 +723,13 @@ roles:
    * metnin YERİNE geçen tek-çizgili simgeydi). Yeni üst çubuk tasarımı
    * (DEVIR.md) markayı "40x26 üç kuş SVG'si, vurgu renginde" yapıyor —
    * simge artık "Skein" sözcüğünün YANINDA, --ink'e değil --color-accent'e
-   * bağlı. Modernist katmanının koyu tema token'ı YOK (bkz. page.ts'teki
-   * token bloğu yorumu), yani iki temada da AYNI kırmızı çözülmeli — bu,
-   * eski simgenin "iki temada iki ayrı renk" davranışının BİLİNÇLİ tersi,
-   * kaynak metinde durmaz, yalnızca gerçek çizimde görünür.
+   * bağlı. --color-accent'in koyu tema ezmesi BİLİNÇLİ OLARAK yok (bkz.
+   * page.ts'teki @media (prefers-color-scheme: dark) bloğu — diğer
+   * Modernist token'lar orada ezildi, bu biri hariç: accent kendi dolgulu
+   * bileşenlerinde kendi zeminine karşı ölçülüyor, sayfa zeminine değil),
+   * yani iki temada da AYNI kırmızı çözülmeli — bu, eski simgenin "iki
+   * temada iki ayrı renk" davranışının BİLİNÇLİ tersi, kaynak metinde
+   * durmaz, yalnızca gerçek çizimde görünür.
    */
   it("marka simgesi bardaki svg olarak çiziliyor, iki temada da currentColor --color-accent'e eşit", async () => {
     const { page: acik, hatalar: hatalarAcik } = await acTema("light");

@@ -144,6 +144,57 @@ const PAGE = `<!doctype html>
       --accept: #6FBE86;
       --reject: #7A2222; --reject-ink: #E08585;
       --gate: #9A6A1E; --gate-bg: #241A0D; --gate-line: #4A3620; --gate-ink: #E8D3A8;
+
+      /*
+       * MODERNİST KOYU TEMA EZMESİ — reviewer'ın reddi (0f75e74, bu kenarda
+       * 2. ret). modernist.css'in KENDİSİ koyu tema tanımlamıyor (kaynak
+       * dosyada "dark" hiç geçmiyor) — bu yüzden burada beş token için
+       * YENİ hex değerleri var; SAPMALAR.md §1'in "yeni renk icat edilmeyecek"
+       * kısıtı yalnızca o bölümün BEŞ kontrast düzeltmesini kapsıyor (bkz.
+       * görev metni: "Kontrast düzeltmeleri uygulanacak ...; Yeni renk icat
+       * edilmeyecek"), Modernist'in hiç var olmayan koyu paletini kapsamıyor.
+       * Üstteki eski --bg/--ink ailesi için de aynı emsal zaten var: #0B1118
+       * gibi değerler de modernist.css'te YOK, bu kart ÖNCESİNDE icat edilmiş.
+       *
+       * Hangi beş token: .bar ve altındakiler GERÇEKTEN bunları tüketiyor
+       * (bkz. .bar/.marka/.navRozet-notr/.sayac kuralları, yukarıda). Diğer
+       * Modernist token'lar (color-surface hariç — o da gerekti, aşağıda)
+       * henüz hiçbir seçicide KULLANILMIYOR (örn. color-neutral-100/800,
+       * color-accent-100..900, queue-square-*, daemon-dot-stopping-*,
+       * empty-bird-ink) — SAPMALAR'daki "token var, seçici yok" deseninin
+       * aynısı, bu kart onları tüketmiyor, koyu ezmesi de onlara eklenmedi;
+       * ekleyen kart bu sorumluluğu üstlenecek. queue-square-border ve
+       * daemon-dot-off/stopping-border zaten var(--color-text) ÜZERİNDEN
+       * geliyor (satır 131/133/135), yani color-text'in bu ezmesi onları da
+       * otomatik düzeltiyor — ayrıca tanımlamaya gerek yok.
+       *
+       * color-text LIGHT olunca (koyu zeminde okunsun diye), ona bağlı
+       * ZEMİN rolündeki iki token da TERS çevrilmek zorunda — yoksa açık
+       * metin açık zeminin üstüne biner (okunmaz): color-surface (gövde
+       * metni "yüzey üstünde" çifti, token-kontrast.test.ts) ve
+       * color-neutral-200 (nötr rozet zemini, aynı sınama). label-ink da
+       * aynı sebepten light-ish: o bir METİN rolü (etiket/sayaç), açık
+       * zeminde okunabilsin diye neutral-700'ün koyu-tema karşılığı artık
+       * açık bir gri — ad "700" kaldı ama rolü ışık-koyu eksenine göre
+       * tersine döndü, modernist.css'te adlandırılmış bir "koyu ramp" hiç
+       * olmadığı için bu kartın kendi icadı.
+       *
+       * Ölçüldü (token-kontrast.test.ts "koyu tema" takımı, kontrast.ts
+       * formülüyle): text/bg 15.47:1, text/surface 13.98:1, label-ink/bg
+       * 10.24:1, text/neutral-200 11.25:1 — hepsi NORMAL_METIN_ESIGI'ni
+       * (4.5) rahatça geçiyor. color-accent (#ec3013, DEĞİŞMEDİ) kendi
+       * zemininin yeni koyu değeriyle 4.21:1 — IKINCIL_ETIKET_ESIGI'yi (3,
+       * marka ikonu büyük grafik) geçiyor. color-accent-700 de DEĞİŞMEDİ
+       * (beyaz metinle zaten 7.17:1, kendi dolgusu — sayfa zeminine değil
+       * kendi rengine bağlı, tema değişse de aynı kalması marka tutarlılığı).
+       *
+       * Kapı: tarayici.test.ts "#bar koyu temada koyulaşıyor" sınaması —
+       * gerçek tarayıcıda getComputedStyle(#bar) ölçer, document.body'yi
+       * değil (reviewer'ın yakaladığı kusur tam burada: document.body
+       * doğru koyulaşırken #bar hep açık kalıyordu).
+       */
+      --color-bg: #1A1817; --color-surface: #242120; --color-text: #F2EFEE;
+      --color-neutral-200: #35312F; --color-neutral-700: #C9C4C2;
     }
   }
   * { box-sizing: border-box; }
@@ -180,9 +231,13 @@ const PAGE = `<!doctype html>
    * MARKA: üç kuş SVG'si + "Skein" sözcüğü. Eski kararın tersi (bkz.
    * markaSvg yorumu, eski "KUS ISARETI" yalnızca simge kullanıyordu) —
    * yeni tasarım ikisini birlikte istiyor. İkon currentColor ile burada
-   * --color-accent'e bağlı: Modernist katmanının koyu tema token'ı yok
-   * (üstteki token bloğu yorumuna bak), yani simge açık/koyu temada AYNI
-   * kırmızıyı gösterir — eski --ink çift-tema deseni burada YOK.
+   * --color-accent'e bağlı: bu TEK token'ın koyu tema ezmesi BİLİNÇLİ
+   * OLARAK yok (diğer Modernist token'lar için koyu ezmesi var, üstteki
+   * @media (prefers-color-scheme: dark) bloğuna bak) — accent kendi
+   * dolgulu bileşenlerinde (rozet/düğme) zaten kendi zeminine karşı
+   * ölçülüyor, sayfa zeminine değil, o yüzden marka simgesi açık/koyu
+   * temada AYNI kırmızıyı gösterir — eski --ink çift-tema deseni burada
+   * YOK.
    */
   .marka { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--color-accent); }
   .marka svg { width: 40px; height: 26px; display: block; }
@@ -586,8 +641,10 @@ const UCKUS_D = "M2,16 L9,8 L16,16 M13,13 L20,5 L27,13 M24,16 L31,8 L38,16";
  *
  * "renk" parametre: bardaki kullanım "currentColor" veriyor — karar
  * burada değil, ".marka" kuralının CSS 'color'ında (--color-accent).
- * Modernist katmanının koyu tema token'ı yok (üstteki token bloğu
- * yorumuna bak), yani simge açık/koyu temada AYNI kırmızıyı gösterir.
+ * --color-accent'in koyu tema ezmesi BİLİNÇLİ OLARAK yok (üstteki
+ * @media (prefers-color-scheme: dark) bloğuna bak — diğer Modernist
+ * token'lar orada ezildi, bu biri hariç), yani simge açık/koyu temada
+ * AYNI kırmızıyı gösterir.
  *
  * NOT: bu dosya gömülü istemci betiğini bir ŞABLON DİZESİ içinde taşıyor
  * — yorumda ters tırnak dizgiyi kapatır ve derleme kırılır.
