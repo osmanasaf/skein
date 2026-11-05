@@ -1,0 +1,1175 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/modernist-a4be89c2-947c-4acb-b011-a57fc858192d/styles.css">
+<script src="_ds/modernist-a4be89c2-947c-4acb-b011-a57fc858192d/_ds_bundle.js"></script>
+<style>body{margin:0;background:var(--color-bg)} a{color:var(--color-accent)} a:hover{color:var(--color-accent-600)}
+@keyframes skein-flap{from{transform:scaleY(1)}to{transform:scaleY(.4) translateY(3px)}}</style>
+</helmet>
+<div style="min-height:100vh;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body);font-variant-numeric:tabular-nums;">
+
+  <header style="display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;padding:12px 24px;border-bottom:2px solid var(--color-text);">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <svg width="40" height="26" viewBox="0 0 40 26" fill="none" stroke="var(--color-accent)" stroke-width="2.5" stroke-linejoin="miter" aria-hidden="true">
+        <polyline points="1,3 4,4 7,7 10,4 13,3"></polyline>
+        <polyline points="14,17 17,18 20,21 23,18 26,17"></polyline>
+        <polyline points="27,3 30,4 33,7 36,4 39,3"></polyline>
+      </svg>
+      <span style="font-weight:800;font-size:22px;letter-spacing:-0.03em;">Skein</span>
+    </div>
+    <nav aria-label="Bölümler" style="display:flex;align-self:stretch;margin:-12px 0;">
+      <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="4">
+        <button type="button" onClick="{{ t.go }}" style="display:flex;align-items:center;gap:8px;min-height:44px;padding:0 14px;border:0;border-bottom:4px solid {{ t.edge }};background:transparent;color:{{ t.ink }};font:inherit;font-size:14px;font-weight:700;cursor:pointer;" style-hover="background:var(--color-neutral-200);">
+          {{ t.label }}
+          <sc-if value="{{ t.badge }}"><span style="min-width:18px;padding:1px 5px;background:{{ t.badgeBg }};color:{{ t.badgeInk }};font-size:11px;font-weight:700;">{{ t.badge }}</span></sc-if>
+        </button>
+      </sc-for>
+    </nav>
+    <button type="button" onClick="{{ openDaemon }}" style="display:flex;align-items:center;gap:8px;min-height:40px;padding:4px 12px;border:2px solid {{ daemonEdge }};background:transparent;color:inherit;font:inherit;font-size:13px;font-weight:600;cursor:pointer;" style-hover="background:var(--color-neutral-200);">
+      <span style="width:10px;height:10px;background:{{ daemonDot }};"></span>{{ daemonLabel }}
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="square"><path d="m9 18 6-6-6-6"></path></svg>
+    </button>
+    <div style="flex:1 1 auto;"></div>
+    <div style="display:flex;gap:16px;font-size:13px;color:var(--color-neutral-700);">
+      <span><b style="color:var(--color-text);">{{ openCount }}</b> açık</span>
+      <span><b style="color:var(--color-text);">{{ doneCount }}</b> bitti</span>
+      <span><b style="color:var(--color-text);">{{ totalCost }}</b></span>
+    </div>
+    <button class="btn btn-primary" type="button" onClick="{{ openNew }}" style="min-height:40px;min-width:128px;justify-content:flex-start;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="square"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>Yeni kart
+    </button>
+  </header>
+
+  <sc-if value="{{ tabPano }}" hint-placeholder-val="{{ true }}">
+  <div style="display:flex;flex-wrap:wrap;min-height:calc(100vh - 66px);">
+
+    <!-- formasyon -->
+    <section style="flex:1 1 620px;min-width:0;display:flex;flex-direction:column;gap:8px;padding:24px 24px 16px;">
+      <div style="display:flex;align-items:baseline;flex-wrap:wrap;gap:6px 16px;">
+        <h1 style="margin:0;font-size:40px;letter-spacing:-0.03em;">{{ flowName }}</h1>
+        <sc-if value="{{ draftTag }}"><span class="tag tag-accent">taslak · kaydedilmedi</span></sc-if>
+        <div style="font-size:14px;color:var(--color-neutral-700);max-width:58ch;text-wrap:pretty;">{{ flowDesc }}</div>
+        <div style="display:flex;gap:6px;margin-left:auto;">
+          <button class="btn btn-secondary" type="button" onClick="{{ startEdit }}" style="min-height:36px;font-size:13px;justify-content:flex-start;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="square"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>Rolleri düzenle
+          </button>
+          <button class="btn btn-ghost" type="button" onClick="{{ openFlows }}" style="min-height:36px;font-size:13px;">Akış değiştir</button>
+        </div>
+      </div>
+      <div style="flex:1 1 auto;display:flex;align-items:center;justify-content:center;min-height:0;">
+        <div style="position:relative;width:min(100%, calc((100vh - 210px) * 1.5625));aspect-ratio:1000 / 640;">
+          {{ diagram }}
+
+          <div style="position:absolute;left:4%;top:17.1875%;width:0;height:0;">
+            <div style="position:absolute;left:-18px;bottom:26px;font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700);white-space:nowrap;">giriş</div>
+            <button class="btn btn-primary btn-icon" type="button" aria-label="Yeni kart" onClick="{{ openNew }}" style="position:absolute;left:-18px;top:-18px;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="square"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>
+            </button>
+          </div>
+
+          <div style="position:absolute;left:95%;top:17.1875%;width:0;height:0;">
+            <div style="position:absolute;left:-22px;bottom:30px;font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700);">bitti</div>
+            <button type="button" aria-label="Biten kartlar" onClick="{{ openDone }}" style="position:absolute;left:-22px;top:-22px;width:44px;height:44px;display:flex;align-items:center;justify-content:flex-start;padding:0 8px;border:2px solid {{ doneEdge }};background:var(--color-bg);color:var(--color-text);font:inherit;font-weight:800;font-size:17px;cursor:pointer;" style-hover="background:var(--color-neutral-200);">{{ doneCount }}</button>
+          </div>
+
+          <sc-for list="{{ nodes }}" as="n" hint-placeholder-count="5">
+            <div style="position:absolute;left:{{ n.left }};top:{{ n.top }};width:0;height:0;">
+              <button type="button" aria-label="{{ n.id }} rolü" onClick="{{ n.select }}" style="position:absolute;left:-32px;top:-22px;width:64px;height:44px;display:flex;align-items:center;justify-content:center;padding:0;background:{{ n.boxBg }};border:2px solid {{ n.boxEdge }};cursor:pointer;" style-hover="border-color:var(--color-text);">{{ n.bird }}</button>
+              <div onClick="{{ n.select }}" style="position:absolute;left:{{ n.lx }};right:{{ n.rx }};top:{{ n.ly }};width:150px;display:flex;flex-direction:column;gap:3px;cursor:pointer;">
+                <div style="display:flex;align-items:baseline;gap:6px;">
+                  <span style="font-size:11px;font-weight:600;color:var(--color-neutral-600);">{{ n.num }}</span>
+                  <span style="font-size:17px;font-weight:800;line-height:1.1;color:{{ n.ink }};">{{ n.id }}</span>
+                </div>
+                <div style="font-size:11px;color:var(--color-neutral-700);">{{ n.sub }}</div>
+                <div style="display:flex;align-items:center;gap:3px;min-height:12px;">
+                  <sc-for list="{{ n.dots }}" as="d" hint-placeholder-count="2">
+                    <span style="width:10px;height:10px;background:{{ d.bg }};border:2px solid {{ d.edge }};"></span>
+                  </sc-for>
+                  <sc-if value="{{ n.empty }}"><span style="font-size:11px;color:var(--color-neutral-500);">boş</span></sc-if>
+                </div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px 20px;font-size:11.5px;color:var(--color-neutral-700);">
+        <span style="display:flex;align-items:center;gap:6px;"><span style="width:10px;height:10px;background:var(--color-accent);border:2px solid var(--color-accent);"></span>çalışıyor</span>
+        <span style="display:flex;align-items:center;gap:6px;"><span style="width:10px;height:10px;border:2px solid var(--color-accent);"></span>kapıda</span>
+        <span style="display:flex;align-items:center;gap:6px;"><span style="width:10px;height:10px;background:var(--color-neutral-500);border:2px solid var(--color-neutral-500);"></span>kuyrukta</span>
+        <span style="display:flex;align-items:center;gap:6px;"><span style="width:16px;height:2px;background:var(--color-accent);"></span>ret yolu</span>
+        <span style="margin-left:auto;">okundu {{ readAt }} · bu yüzey yalnızca okur</span>
+      </div>
+    </section>
+
+    <!-- yan panel -->
+    <aside style="flex:0 1 380px;min-width:300px;max-height:calc(100vh - 66px);overflow-y:auto;border-left:2px solid var(--color-text);display:flex;flex-direction:column;">
+
+      <sc-if value="{{ railOverview }}" hint-placeholder-val="{{ true }}">
+        <div style="padding:20px 20px 14px;border-bottom:2px solid var(--color-divider);display:flex;align-items:baseline;gap:12px;">
+          <div style="font-size:44px;font-weight:800;line-height:1;letter-spacing:-0.03em;color:{{ gateInk }};">{{ gateCount }}</div>
+          <div style="font-size:15px;font-weight:600;line-height:1.3;">kart kararını bekliyor</div>
+        </div>
+        <sc-if value="{{ noGates }}"><div style="padding:16px 20px;font-size:13.5px;color:var(--color-neutral-700);">Kapıda kart yok — sürü kendi uçuyor.</div></sc-if>
+        <sc-for list="{{ gateCards }}" as="g" hint-placeholder-count="3">
+          <article style="padding:16px 20px;border-bottom:1px solid var(--color-divider);display:flex;flex-direction:column;gap:8px;">
+            <div style="display:flex;gap:6px;font-size:10.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--color-accent-700);">
+              <span>{{ g.gateLabel }}</span><span style="color:var(--color-neutral-700);">· {{ g.role }}</span>
+            </div>
+            <button type="button" onClick="{{ g.open }}" style="padding:0;border:0;background:transparent;color:inherit;font:inherit;font-weight:800;font-size:15.5px;line-height:1.3;text-align:left;cursor:pointer;" style-hover="color:var(--color-accent-700);">{{ g.title }}</button>
+            <div style="font-size:13px;line-height:1.45;color:var(--color-accent-800);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;">{{ g.gateReason }}</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;">
+              <sc-for list="{{ g.exits }}" as="x" hint-placeholder-count="2">
+                <button class="{{ x.cls }}" type="button" onClick="{{ x.go }}" style="min-height:40px;justify-content:flex-start;font-size:13px;">{{ x.label }}</button>
+              </sc-for>
+            </div>
+          </article>
+        </sc-for>
+        <div style="padding:20px 20px 8px;font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700);">Uçuşta · {{ activeCount }}</div>
+        <sc-for list="{{ activeCards }}" as="c" hint-placeholder-count="3">
+          <button type="button" onClick="{{ c.open }}" style="display:grid;grid-template-columns:12px minmax(0,1fr);gap:10px;align-items:start;width:100%;padding:10px 20px;border:0;border-top:1px solid var(--color-divider);background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer;" style-hover="background:var(--color-neutral-200);">
+            <span style="width:10px;height:10px;margin-top:5px;background:{{ c.sqBg }};border:2px solid {{ c.sqEdge }};"></span>
+            <span style="display:flex;flex-direction:column;gap:2px;min-width:0;">
+              <span style="font-weight:600;font-size:14px;line-height:1.3;">{{ c.title }}</span>
+              <span style="font-size:11.5px;color:var(--color-neutral-700);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ c.sub }}</span>
+            </span>
+          </button>
+        </sc-for>
+      </sc-if>
+
+      <sc-if value="{{ railRole }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:12px 12px 0;"><button class="btn btn-ghost" type="button" onClick="{{ toOverview }}" style="min-height:40px;padding-inline:8px;">← Genel bakış</button></div>
+        <div style="padding:8px 20px 16px;border-bottom:2px solid var(--color-divider);display:flex;flex-direction:column;gap:4px;">
+          <div style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700);">{{ role.kicker }}</div>
+          <h2 style="margin:0;font-size:30px;">{{ role.id }}</h2>
+          <div style="font-size:12.5px;color:var(--color-neutral-700);">{{ role.meta }}</div>
+          <sc-if value="{{ role.hasPrompt }}">
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+              <button class="btn btn-secondary" type="button" onClick="{{ role.openPrompt }}" style="min-height:36px;font-size:13px;justify-content:flex-start;">Prompt · {{ role.prompt }}</button>
+              <button class="btn btn-ghost" type="button" onClick="{{ role.watch }}" style="min-height:36px;font-size:13px;">Ajanı izle →</button>
+            </div>
+          </sc-if>
+        </div>
+        <sc-if value="{{ role.empty }}"><div style="padding:16px 20px;font-size:13.5px;color:var(--color-neutral-700);">Bu rolde kart yok.</div></sc-if>
+        <sc-for list="{{ role.cards }}" as="c" hint-placeholder-count="2">
+          <button type="button" onClick="{{ c.open }}" style="display:grid;grid-template-columns:12px minmax(0,1fr);gap:10px;align-items:start;width:100%;padding:12px 20px;border:0;border-bottom:1px solid var(--color-divider);background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer;" style-hover="background:var(--color-neutral-200);">
+            <span style="width:10px;height:10px;margin-top:5px;background:{{ c.sqBg }};border:2px solid {{ c.sqEdge }};"></span>
+            <span style="display:flex;flex-direction:column;gap:2px;min-width:0;">
+              <span style="font-weight:600;font-size:14px;line-height:1.3;">{{ c.title }}</span>
+              <span style="font-size:11.5px;color:var(--color-neutral-700);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ c.sub }}</span>
+            </span>
+          </button>
+        </sc-for>
+      </sc-if>
+
+      <sc-if value="{{ railCard }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:12px 12px 0;"><button class="btn btn-ghost" type="button" onClick="{{ cardBack }}" style="min-height:40px;padding-inline:8px;">← {{ cardBackLabel }}</button></div>
+        <div style="padding:8px 20px 16px;display:flex;flex-direction:column;gap:6px;">
+          <div style="display:flex;align-items:center;gap:8px;font-size:10.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:{{ card.tagInk }};">
+            <span style="width:10px;height:10px;background:{{ card.sqBg }};border:2px solid {{ card.sqEdge }};"></span>{{ card.tagLabel }}
+          </div>
+          <h2 style="margin:0;font-size:22px;line-height:1.2;text-wrap:pretty;">{{ card.title }}</h2>
+          <div style="font-size:11.5px;color:var(--color-neutral-700);">{{ card.id }} · {{ card.role }} · {{ card.turns }} tur · {{ card.durLabel }} · {{ card.costLabel }}</div>
+        </div>
+        <sc-if value="{{ card.gate }}">
+          <div style="margin:0 20px 16px;padding:14px;background:var(--color-accent-100);border-top:4px solid var(--color-accent);display:flex;flex-direction:column;gap:10px;">
+            <div style="font-size:13.5px;line-height:1.5;color:var(--color-accent-800);">{{ card.gateReason }}</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;">
+              <sc-for list="{{ card.exits }}" as="x" hint-placeholder-count="2">
+                <button class="{{ x.cls }}" type="button" onClick="{{ x.go }}" style="min-height:40px;justify-content:flex-start;font-size:13px;">{{ x.label }}</button>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ card.lastReject }}">
+          <div style="margin:0 20px 16px;font-size:13px;line-height:1.45;padding-left:12px;border-left:2px solid var(--color-accent);">{{ card.lastReject }}</div>
+        </sc-if>
+        <sc-if value="{{ card.live }}">
+          <div style="margin:0 20px 16px;display:flex;gap:8px;font-size:12px;padding:8px 0;border-top:1px solid var(--color-divider);border-bottom:1px solid var(--color-divider);">
+            <b style="font-weight:600;">{{ card.live.name }}</b><span style="flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--color-neutral-700);">{{ card.live.detail }}</span><span style="color:var(--color-neutral-600);">adım {{ card.live.seq }}</span>
+          </div>
+        </sc-if>
+        <div style="padding:4px 20px 0;border-top:2px solid var(--color-divider);">
+          <div style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700);margin:12px 0 10px;">Kartın izi</div>
+          <sc-for list="{{ card.history }}" as="h" hint-placeholder-count="4">
+            <div style="display:grid;grid-template-columns:52px 12px minmax(0,1fr);column-gap:10px;">
+              <div style="font-size:11px;color:var(--color-neutral-700);padding-top:1px;">{{ h.t }}</div>
+              <div style="display:flex;flex-direction:column;align-items:center;">
+                <span style="width:10px;height:10px;margin-top:4px;flex:none;background:{{ h.bg }};border:2px solid {{ h.edge }};"></span>
+                <sc-if value="{{ h.rail }}"><span style="width:2px;flex:1 1 auto;min-height:10px;background:var(--color-neutral-300);"></span></sc-if>
+              </div>
+              <div style="padding-bottom:10px;min-width:0;">
+                <div style="display:flex;flex-wrap:wrap;gap:2px 8px;align-items:baseline;">
+                  <b style="font-size:13px;color:{{ h.ink }};">{{ h.label }}</b>
+                  <span style="font-size:11.5px;color:var(--color-neutral-700);">{{ h.who }}</span>
+                </div>
+                <sc-if value="{{ h.note }}"><div style="font-size:12px;line-height:1.4;color:var(--color-neutral-800);margin-top:2px;overflow-wrap:anywhere;">{{ h.note }}</div></sc-if>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <sc-if value="{{ card.diff }}">
+          <div style="padding:4px 20px 32px;">
+            <div style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700);margin:8px 0;">Kodda ne değişti</div>
+            <sc-for list="{{ card.diff }}" as="f" hint-placeholder-count="3">
+              <div style="display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:10px;padding:5px 0;border-bottom:1px solid var(--color-divider);font-size:12px;">
+                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ f.path }}</span>
+                <b style="font-weight:600;">+{{ f.add }}</b>
+                <b style="font-weight:600;color:var(--color-accent-700);">-{{ f.del }}</b>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+      </sc-if>
+      <sc-if value="{{ railDaemon }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:12px 12px 0;"><button class="btn btn-ghost" type="button" onClick="{{ toOverview }}" style="min-height:40px;padding-inline:8px;">← Genel bakış</button></div>
+        <div style="padding:8px 20px 16px;display:flex;flex-direction:column;gap:6px;">
+          <div style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700);">Gözcü</div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="width:14px;height:14px;background:{{ dm.dot }};"></span>
+            <h2 style="margin:0;font-size:30px;">{{ dm.title }}</h2>
+          </div>
+          <div style="font-size:13.5px;line-height:1.5;color:var(--color-neutral-800);text-wrap:pretty;">{{ dm.explain }}</div>
+        </div>
+        <sc-if value="{{ dm.topoWarn }}">
+          <div style="margin:0 20px 16px;padding:14px;background:var(--color-accent-100);border-top:4px solid var(--color-accent);display:flex;flex-direction:column;gap:10px;">
+            <div style="font-size:13.5px;line-height:1.5;color:var(--color-accent-800);">Akış gözcü açıldıktan sonra değişti. Gözcü eski rol listesini taşıyor — yeni roller kuyruğa bakılmadan kalır.</div>
+            <button class="btn btn-primary" type="button" onClick="{{ restartDaemon }}" style="min-height:40px;justify-content:flex-start;align-self:flex-start;">Yeniden başlat</button>
+          </div>
+        </sc-if>
+        <div style="padding:0 20px 16px;display:flex;flex-direction:column;gap:8px;">
+          <sc-if value="{{ dm.canStart }}"><button class="btn btn-primary btn-block" type="button" onClick="{{ startDaemon }}" style="min-height:44px;justify-content:flex-start;">{{ dm.startLabel }}</button></sc-if>
+          <sc-if value="{{ dm.canStop }}"><button class="btn btn-secondary btn-block" type="button" onClick="{{ stopDaemon }}" style="min-height:44px;justify-content:flex-start;">Gözcüyü durdur</button></sc-if>
+          <sc-if value="{{ dm.stopping }}"><button class="btn btn-secondary btn-block" type="button" disabled="{{ true }}" style="min-height:44px;justify-content:flex-start;">Süren tur bitiyor…</button></sc-if>
+          <sc-if value="{{ dm.unmanaged }}">
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              <div style="font-size:11.5px;color:var(--color-neutral-700);">Ayrı kabukta:</div>
+              <code style="display:block;padding:10px 12px;background:var(--color-surface);font-size:12px;overflow-wrap:anywhere;">{{ dm.cmd }}</code>
+              <div style="font-size:11.5px;color:var(--color-neutral-700);">ya da ekranı bayraklarla aç, düğme çıkar:</div>
+              <code style="display:block;padding:10px 12px;background:var(--color-surface);font-size:12px;overflow-wrap:anywhere;">{{ dm.cmd2 }}</code>
+            </div>
+          </sc-if>
+        </div>
+        <sc-if value="{{ dm.hasInfo }}">
+          <div style="border-top:2px solid var(--color-divider);padding:4px 20px 12px;">
+            <sc-for list="{{ dm.rows }}" as="r" hint-placeholder-count="5">
+              <div style="display:grid;grid-template-columns:84px minmax(0,1fr);gap:10px;padding:7px 0;border-bottom:1px solid var(--color-divider);font-size:13px;">
+                <span style="color:var(--color-neutral-700);">{{ r.k }}</span><b style="font-weight:600;overflow-wrap:anywhere;">{{ r.v }}</b>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+        <div style="padding:8px 20px 12px;display:flex;flex-direction:column;gap:6px;">
+          <div style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700);">Gözcüye geçen bayraklar</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;">
+            <sc-for list="{{ dm.flags }}" as="f" hint-placeholder-count="3"><span class="tag tag-outline">{{ f }}</span></sc-for>
+          </div>
+        </div>
+        <div style="padding:8px 20px 32px;">
+          <div style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700);margin-bottom:6px;">.skein/gozcu.log · son satırlar</div>
+          <sc-for list="{{ dm.log }}" as="l" hint-placeholder-count="5">
+            <div style="display:grid;grid-template-columns:44px minmax(0,1fr);gap:10px;padding:5px 0;border-bottom:1px solid var(--color-divider);font-size:12px;line-height:1.4;">
+              <span style="color:var(--color-neutral-700);">{{ l.t }}</span><span style="color:{{ l.ink }};overflow-wrap:anywhere;">{{ l.m }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ railEdit }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:16px 20px 14px;border-bottom:2px solid var(--color-divider);display:flex;flex-direction:column;gap:4px;">
+          <div style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700);">hub/flows/{{ flowName }}.yaml</div>
+          <h2 style="margin:0;font-size:28px;">Roller</h2>
+          <div style="font-size:12.5px;line-height:1.45;color:var(--color-neutral-700);text-wrap:pretty;">Sıra formasyondur: her rol bir sonrakine devreder, sonuncusu bitirir. Diyagram taslağı canlı gösterir; kaydedene kadar diske bir şey yazılmaz.</div>
+        </div>
+        <sc-for list="{{ roleEdits }}" as="r" hint-placeholder-count="4">
+          <div style="padding:14px 20px 16px;border-bottom:1px solid var(--color-divider);background:{{ r.focusBg }};display:flex;flex-direction:column;gap:10px;">
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span style="font-size:12px;font-weight:600;color:var(--color-neutral-600);width:20px;">{{ r.num }}</span>
+              <input class="input" type="text" aria-label="Rol adı" value="{{ r.id }}" onChange="{{ r.setId }}" style="flex:1 1 auto;min-width:0;min-height:36px;font-weight:800;font-size:15px;">
+              <button class="btn btn-ghost btn-icon" type="button" aria-label="Yukarı taşı" disabled="{{ r.noUp }}" onClick="{{ r.up }}" style="width:36px;height:36px;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="square"><path d="m5 12 7-7 7 7"></path><path d="M12 19V5"></path></svg>
+              </button>
+              <button class="btn btn-ghost btn-icon" type="button" aria-label="Aşağı taşı" disabled="{{ r.noDown }}" onClick="{{ r.down }}" style="width:36px;height:36px;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="square"><path d="M12 5v14"></path><path d="m19 12-7 7-7-7"></path></svg>
+              </button>
+              <button class="btn btn-ghost btn-icon" type="button" aria-label="Rolü sil" disabled="{{ r.noRemove }}" onClick="{{ r.remove }}" style="width:36px;height:36px;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="square"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg>
+              </button>
+            </div>
+            <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;">
+              <div style="display:flex;flex-direction:column;gap:4px;">
+                <span style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700);">Sağlayıcı</span>
+                <select class="input" aria-label="Sağlayıcı" value="{{ r.provider }}" onChange="{{ r.setProvider }}" style="min-height:36px;padding:0 8px;">
+                  <sc-for list="{{ providers }}" as="p" hint-placeholder-count="4"><option value="{{ p }}">{{ p }}</option></sc-for>
+                </select>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:4px;">
+                <span style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700);">Çalışma alanı</span>
+                <input class="input" type="text" aria-label="Çalışma alanı" value="{{ r.workspace }}" onChange="{{ r.setWorkspace }}" style="min-height:36px;">
+              </div>
+              <div style="display:flex;flex-direction:column;gap:4px;">
+                <span style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700);">Alım</span>
+                <div style="display:grid;grid-template-columns:1fr 1fr;border:2px solid var(--color-text);">
+                  <button type="button" onClick="{{ r.setTask }}" style="min-height:32px;padding:0 8px;border:0;background:{{ r.taskBg }};color:{{ r.taskInk }};font:inherit;font-size:12.5px;font-weight:600;text-align:left;cursor:pointer;">tekil</button>
+                  <button type="button" onClick="{{ r.setBatch }}" style="min-height:32px;padding:0 8px;border:0;background:{{ r.batchBg }};color:{{ r.batchInk }};font:inherit;font-size:12.5px;font-weight:600;text-align:left;cursor:pointer;">toplu</button>
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:4px;">
+                <span style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--color-accent-700);">Ret yolu</span>
+                <select class="input" aria-label="Ret yolu" value="{{ r.reject }}" onChange="{{ r.setReject }}" style="min-height:36px;padding:0 8px;">
+                  <sc-for list="{{ r.rejectOpts }}" as="o" hint-placeholder-count="2"><option value="{{ o.v }}">{{ o.l }}</option></sc-for>
+                </select>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:4px;">
+              <span style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700);">Prompt</span>
+              <div style="display:flex;gap:6px;">
+                <select class="input" aria-label="Prompt" value="{{ r.prompt }}" onChange="{{ r.setPrompt }}" style="flex:1 1 auto;min-width:0;min-height:36px;padding:0 8px;">
+                  <sc-for list="{{ rolePromptOpts }}" as="p" hint-placeholder-count="5"><option value="{{ p }}">{{ p }}</option></sc-for>
+                </select>
+                <button class="btn btn-secondary" type="button" onClick="{{ r.openPrompt }}" style="min-height:36px;font-size:13px;">Aç</button>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;font-size:12.5px;">
+              <button type="button" onClick="{{ r.togglePlan }}" style="display:flex;align-items:center;gap:8px;min-height:32px;padding:0;border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;">
+                <span style="width:14px;height:14px;border:2px solid var(--color-text);background:{{ r.planFill }};"></span>{{ r.planLabel }}
+              </button>
+              <span style="margin-left:auto;color:var(--color-neutral-700);">devreder → <b style="color:var(--color-text);">{{ r.next }}</b></span>
+            </div>
+          </div>
+        </sc-for>
+        <div style="padding:12px 20px 16px;border-bottom:2px solid var(--color-divider);">
+          <button class="btn btn-secondary btn-block" type="button" onClick="{{ addRole }}" style="min-height:40px;justify-content:flex-start;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="square"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>Rol ekle
+          </button>
+        </div>
+
+        <div style="padding:16px 20px;border-bottom:2px solid var(--color-divider);display:flex;flex-direction:column;gap:10px;">
+          <div style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700);">Planlama</div>
+          <div style="font-size:13px;line-height:1.45;">{{ planSummary }}</div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-size:13px;flex:1 1 auto;">En çok tur</span>
+            <button class="btn btn-secondary btn-icon" type="button" aria-label="Azalt" onClick="{{ turDown }}" disabled="{{ planOff }}" style="width:36px;height:36px;">−</button>
+            <b style="font-size:18px;width:24px;">{{ tur }}</b>
+            <button class="btn btn-secondary btn-icon" type="button" aria-label="Artır" onClick="{{ turUp }}" disabled="{{ planOff }}" style="width:36px;height:36px;">+</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-size:13px;flex:1 1 auto;">Yükümlülük denetçisi</span>
+            <select class="input" aria-label="Denetçi" value="{{ denetci }}" onChange="{{ setDenetci }}" style="width:150px;min-height:36px;padding:0 8px;">
+              <sc-for list="{{ denetciOpts }}" as="o" hint-placeholder-count="3"><option value="{{ o.v }}">{{ o.l }}</option></sc-for>
+            </select>
+          </div>
+        </div>
+
+        <div style="padding:16px 20px;border-bottom:2px solid var(--color-divider);display:flex;flex-direction:column;gap:10px;">
+          <div style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--color-accent-700);">Ret</div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-size:13px;flex:1 1 auto;">Limit dolunca kart kapıya düşer</span>
+            <button class="btn btn-secondary btn-icon" type="button" aria-label="Azalt" onClick="{{ limitDown }}" style="width:36px;height:36px;">−</button>
+            <b style="font-size:18px;width:24px;">{{ rejectLimit }}</b>
+            <button class="btn btn-secondary btn-icon" type="button" aria-label="Artır" onClick="{{ limitUp }}" style="width:36px;height:36px;">+</button>
+          </div>
+        </div>
+
+        <sc-if value="{{ hasNotes }}">
+          <div style="padding:14px 20px;border-bottom:2px solid var(--color-divider);display:flex;flex-direction:column;gap:6px;">
+            <sc-for list="{{ editNotes }}" as="e" hint-placeholder-count="1">
+              <div style="font-size:13px;line-height:1.45;color:{{ e.ink }};padding-left:10px;border-left:2px solid {{ e.ink }};">{{ e.text }}</div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <div style="padding:12px 20px 20px;">
+          <button class="btn btn-ghost" type="button" onClick="{{ toggleYaml }}" style="min-height:36px;padding-inline:0;">{{ yamlLabel }}</button>
+          <sc-if value="{{ showYaml }}">
+            <pre style="margin:8px 0 0;padding:12px;background:var(--color-surface);font-size:11.5px;line-height:1.5;overflow-x:auto;">{{ yaml }}</pre>
+          </sc-if>
+        </div>
+
+        <div style="position:sticky;bottom:0;margin-top:auto;background:var(--color-bg);border-top:2px solid var(--color-text);padding:12px 20px;display:flex;align-items:center;gap:8px;">
+          <span style="font-size:12.5px;color:var(--color-neutral-700);flex:1 1 auto;">{{ dirtyLabel }}</span>
+          <button class="btn btn-secondary" type="button" onClick="{{ cancelEdit }}" style="min-height:40px;">Vazgeç</button>
+          <button class="btn btn-primary" type="button" onClick="{{ saveEdit }}" disabled="{{ saveDisabled }}" style="min-height:40px;min-width:96px;justify-content:flex-start;">Kaydet</button>
+        </div>
+      </sc-if>
+    </aside>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ tabFlows }}" hint-placeholder-val="{{ false }}">
+    <main style="padding:28px 24px 48px;display:flex;flex-direction:column;gap:20px;">
+      <div style="display:flex;align-items:flex-end;flex-wrap:wrap;gap:12px 24px;">
+        <div style="display:flex;flex-direction:column;gap:4px;flex:1 1 360px;">
+          <h1 style="margin:0;font-size:40px;letter-spacing:-0.03em;">Akışlar</h1>
+          <div style="font-size:14px;line-height:1.45;color:var(--color-neutral-700);max-width:64ch;text-wrap:pretty;">Her akış bir formasyon: hangi ajanların, hangi sırayla, hangi promptla çalışacağı. Dosyalar hub/flows/ altında; panoda aynı anda bir akış görünür.</div>
+        </div>
+        <button class="btn btn-primary" type="button" onClick="{{ openNewFlow }}" style="min-height:40px;min-width:132px;justify-content:flex-start;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="square"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>Yeni akış
+        </button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));border-top:2px solid var(--color-text);">
+        <sc-for list="{{ flowList }}" as="f" hint-placeholder-count="6">
+          <article style="display:flex;flex-direction:column;gap:10px;padding:18px 20px 20px;border-right:2px solid var(--color-divider);border-bottom:2px solid var(--color-divider);background:{{ f.bg }};">
+            {{ f.mini }}
+            <div style="display:flex;align-items:baseline;gap:8px;">
+              <b style="font-size:20px;font-weight:800;letter-spacing:-0.02em;">{{ f.name }}</b>
+              <sc-if value="{{ f.isCurrent }}"><span class="tag tag-accent">panoda</span></sc-if>
+              <span style="margin-left:auto;font-size:12px;color:var(--color-neutral-700);">{{ f.count }} rol</span>
+            </div>
+            <div style="font-size:13px;line-height:1.45;color:var(--color-neutral-800);text-wrap:pretty;">{{ f.desc }}</div>
+            <div style="font-size:12px;line-height:1.5;color:var(--color-neutral-700);">{{ f.chain }}</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:auto;padding-top:6px;">
+              <button class="btn btn-secondary" type="button" onClick="{{ f.open }}" style="min-height:36px;font-size:13px;">Panoda aç</button>
+              <button class="btn btn-ghost" type="button" onClick="{{ f.edit }}" style="min-height:36px;font-size:13px;">Rolleri düzenle</button>
+              <button class="btn btn-ghost" type="button" onClick="{{ f.copy }}" style="min-height:36px;font-size:13px;">Kopyala</button>
+            </div>
+          </article>
+        </sc-for>
+      </div>
+    </main>
+  </sc-if>
+
+  <sc-if value="{{ tabPrompts }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;flex-wrap:wrap;min-height:calc(100vh - 66px);">
+      <aside style="flex:0 1 320px;min-width:260px;border-right:2px solid var(--color-text);display:flex;flex-direction:column;">
+        <div style="padding:22px 20px 14px;display:flex;flex-direction:column;gap:4px;">
+          <h1 style="margin:0;font-size:32px;letter-spacing:-0.03em;">Promptlar</h1>
+          <div style="font-size:12.5px;color:var(--color-neutral-700);">hub/prompts/ · ajanın okuduğu metin</div>
+        </div>
+        <sc-for list="{{ promptGroups }}" as="g" hint-placeholder-count="2">
+          <div style="padding:14px 20px 8px;border-top:2px solid var(--color-divider);">
+            <div style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700);">{{ g.title }}</div>
+            <div style="font-size:12px;line-height:1.4;color:var(--color-neutral-700);margin-top:3px;">{{ g.note }}</div>
+          </div>
+          <sc-for list="{{ g.items }}" as="p" hint-placeholder-count="3">
+            <button type="button" onClick="{{ p.pick }}" style="display:flex;flex-direction:column;gap:2px;width:100%;padding:9px 20px 9px 16px;border:0;border-left:4px solid {{ p.edge }};background:{{ p.bg }};color:inherit;font:inherit;text-align:left;cursor:pointer;" style-hover="background:var(--color-neutral-200);">
+              <span style="display:flex;align-items:center;gap:8px;"><b style="font-size:14px;font-weight:700;">{{ p.name }}</b><sc-if value="{{ p.dirty }}"><span style="width:8px;height:8px;background:var(--color-accent);"></span></sc-if></span>
+              <span style="font-size:11.5px;color:var(--color-neutral-700);">{{ p.usage }}</span>
+            </button>
+          </sc-for>
+        </sc-for>
+        <div style="padding:16px 20px;margin-top:auto;border-top:2px solid var(--color-divider);">
+          <button class="btn btn-secondary btn-block" type="button" onClick="{{ newPrompt }}" style="min-height:40px;justify-content:flex-start;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="square"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>Yeni rol promptu
+          </button>
+        </div>
+      </aside>
+      <section style="flex:1 1 560px;min-width:0;display:flex;flex-direction:column;">
+        <div style="padding:22px 24px 14px;border-bottom:2px solid var(--color-divider);display:flex;flex-direction:column;gap:10px;">
+          <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;">
+            <h2 style="margin:0;font-size:26px;">{{ ps.name }}</h2>
+            <span style="font-size:12px;color:var(--color-neutral-700);">hub/prompts/{{ ps.path }}</span>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+            <span style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700);margin-right:4px;">Kullanan</span>
+            <sc-for list="{{ ps.usage }}" as="u" hint-placeholder-count="2">
+              <button class="tag tag-outline" type="button" onClick="{{ u.go }}" style="cursor:pointer;font:inherit;font-size:12px;">{{ u.label }}</button>
+            </sc-for>
+            <sc-if value="{{ ps.unused }}"><span style="font-size:12px;color:var(--color-neutral-700);">Henüz hiçbir rol kullanmıyor — Rolleri düzenle › Prompt’tan bağla.</span></sc-if>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;">
+            <span style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700);margin-right:4px;">Ajanın okuduğu sıra</span>
+            <sc-for list="{{ ps.stack }}" as="s" hint-placeholder-count="4">
+              <sc-if value="{{ s.arrow }}"><span style="color:var(--color-neutral-600);">→</span></sc-if>
+              <span style="padding:3px 8px;border:2px solid {{ s.edge }};font-weight:{{ s.w }};">{{ s.label }}</span>
+            </sc-for>
+          </div>
+        </div>
+        <textarea aria-label="Prompt metni" spellcheck="false" value="{{ ps.text }}" onChange="{{ ps.onText }}" style="flex:1 1 auto;min-height:440px;margin:0;padding:20px 24px;border:0;resize:none;background:var(--color-bg);color:var(--color-text);font-family:var(--font-mono, ui-monospace, monospace);font-size:13.5px;line-height:1.6;outline:none;"></textarea>
+        <div style="position:sticky;bottom:0;display:flex;align-items:center;gap:8px;padding:12px 24px;border-top:2px solid var(--color-text);background:var(--color-bg);">
+          <span style="font-size:12.5px;color:var(--color-neutral-700);flex:1 1 auto;">{{ ps.status }}</span>
+          <button class="btn btn-secondary" type="button" onClick="{{ ps.revert }}" disabled="{{ ps.clean }}" style="min-height:40px;">Geri al</button>
+          <button class="btn btn-primary" type="button" onClick="{{ ps.save }}" disabled="{{ ps.clean }}" style="min-height:40px;min-width:96px;justify-content:flex-start;">Kaydet</button>
+        </div>
+      </section>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ tabAgents }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;flex-wrap:wrap;min-height:calc(100vh - 66px);">
+      <aside style="flex:0 1 340px;min-width:280px;border-right:2px solid var(--color-text);">
+        <div style="padding:22px 20px 14px;display:flex;flex-direction:column;gap:4px;">
+          <h1 style="margin:0;font-size:32px;letter-spacing:-0.03em;">Ajanlar</h1>
+          <div style="font-size:12.5px;color:var(--color-neutral-700);">{{ agentsSub }}</div>
+        </div>
+        <sc-for list="{{ agents }}" as="a" hint-placeholder-count="5">
+          <button type="button" onClick="{{ a.pick }}" style="display:grid;grid-template-columns:52px minmax(0,1fr);gap:12px;align-items:center;width:100%;padding:12px 20px 12px 16px;border:0;border-top:1px solid var(--color-divider);border-left:4px solid {{ a.edge }};background:{{ a.bg }};color:inherit;font:inherit;text-align:left;cursor:pointer;" style-hover="background:var(--color-neutral-200);">
+            <span style="display:flex;justify-content:center;">{{ a.bird }}</span>
+            <span style="display:flex;flex-direction:column;gap:2px;min-width:0;">
+              <span style="display:flex;align-items:baseline;gap:8px;"><b style="font-size:15px;font-weight:800;">{{ a.id }}</b><span style="font-size:11.5px;color:var(--color-neutral-700);">{{ a.provider }}</span></span>
+              <span style="font-size:12px;color:{{ a.ink }};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ a.status }}</span>
+            </span>
+          </button>
+        </sc-for>
+      </aside>
+      <section style="flex:1 1 560px;min-width:0;padding:24px 28px 48px;display:flex;flex-direction:column;gap:22px;">
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <div style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700);">{{ ag.kicker }}</div>
+          <h2 style="margin:0;font-size:36px;letter-spacing:-0.02em;">{{ ag.id }}</h2>
+          <div style="font-size:13px;color:var(--color-neutral-700);">{{ ag.meta }}</div>
+        </div>
+        <div style="border-top:4px solid {{ ag.nowEdge }};background:var(--color-surface);padding:16px 18px;display:flex;flex-direction:column;gap:8px;">
+          <div style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700);">Şu an</div>
+          <div style="font-size:20px;font-weight:800;line-height:1.25;text-wrap:pretty;">{{ ag.nowTitle }}</div>
+          <div style="font-size:13px;line-height:1.45;color:var(--color-neutral-800);overflow-wrap:anywhere;">{{ ag.nowSub }}</div>
+          <sc-if value="{{ ag.hasCard }}"><div><button class="btn btn-secondary" type="button" onClick="{{ ag.openCard }}" style="min-height:36px;font-size:13px;">Kartı panoda aç</button></div></sc-if>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:28px;">
+          <div>
+            <div style="display:flex;align-items:center;gap:8px;padding-bottom:8px;border-bottom:2px solid var(--color-text);">
+              <span style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700);">Adımlar</span>
+              <sc-if value="{{ ag.live }}"><span style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:var(--color-accent-700);"><span style="width:8px;height:8px;background:var(--color-accent);"></span>canlı</span></sc-if>
+            </div>
+            <sc-if value="{{ ag.noSteps }}"><div style="font-size:13px;color:var(--color-neutral-700);padding:10px 0;">{{ ag.noStepsText }}</div></sc-if>
+            <sc-for list="{{ ag.steps }}" as="s" hint-placeholder-count="5">
+              <div style="display:grid;grid-template-columns:28px 48px minmax(0,1fr) auto;gap:10px;align-items:baseline;padding:8px 0;border-bottom:1px solid var(--color-divider);font-size:12.5px;">
+                <span style="color:var(--color-neutral-600);">{{ s.seq }}</span>
+                <b style="font-weight:700;color:{{ s.ink }};">{{ s.name }}</b>
+                <span style="overflow-wrap:anywhere;">{{ s.detail }}</span>
+                <span style="font-size:11px;color:var(--color-neutral-700);">{{ s.t }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div>
+            <div style="display:flex;align-items:center;gap:8px;padding-bottom:8px;border-bottom:2px solid var(--color-text);">
+              <span style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700);">Görevi · promptundan</span>
+              <button class="btn btn-ghost" type="button" onClick="{{ ag.editPrompt }}" style="margin-left:auto;min-height:30px;padding:2px 6px;font-size:12.5px;">Promptu düzenle →</button>
+            </div>
+            <sc-if value="{{ ag.intro }}"><p style="margin:10px 0 4px;font-size:14px;line-height:1.5;text-wrap:pretty;">{{ ag.intro }}</p></sc-if>
+            <sc-if value="{{ ag.heading }}"><div style="font-size:12px;font-weight:700;margin-top:10px;">{{ ag.heading }}</div></sc-if>
+            <sc-for list="{{ ag.duties }}" as="d" hint-placeholder-count="3">
+              <div style="display:grid;grid-template-columns:12px minmax(0,1fr);gap:8px;padding:6px 0;font-size:13.5px;line-height:1.45;">
+                <span style="width:6px;height:6px;margin-top:7px;background:var(--color-accent);"></span><span>{{ d }}</span>
+              </div>
+            </sc-for>
+            <div style="font-size:11.5px;color:var(--color-neutral-700);margin-top:10px;">{{ ag.promptPath }} · önce anayasa: base, engineering-ts</div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ nfOpen }}" hint-placeholder-val="{{ false }}">
+    <div class="dialog-backdrop" onClick="{{ closeNewFlow }}" style="z-index:30;">
+      <div class="dialog" onClick="{{ stop }}" style="width:min(520px,100%);border-top:4px solid var(--color-text);">
+        <div class="dialog-title">Yeni akış</div>
+        <div class="dialog-body" style="font-size:13.5px;">Var olan bir formasyondan başla; açınca rolleri, sırayı ve promptları düzenlersin.</div>
+        <div class="field">
+          <label>Ad</label>
+          <input class="input" type="text" placeholder="örn. plan-guvenlik" value="{{ nfName }}" onChange="{{ onNfName }}">
+        </div>
+        <div class="field">
+          <label>Açıklama</label>
+          <input class="input" type="text" placeholder="bu akış ne zaman seçilir" value="{{ nfDesc }}" onChange="{{ onNfDesc }}">
+        </div>
+        <div class="field">
+          <label>Şablon</label>
+          <select class="input" value="{{ nfBase }}" onChange="{{ onNfBase }}">
+            <sc-for list="{{ flowNames }}" as="n" hint-placeholder-count="5"><option value="{{ n }}">{{ n }}</option></sc-for>
+          </select>
+        </div>
+        <sc-if value="{{ nfError }}"><div style="font-size:13px;color:var(--color-accent-700);">{{ nfError }}</div></sc-if>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-primary" type="button" onClick="{{ createFlow }}" disabled="{{ nfDisabled }}" style="min-height:44px;min-width:140px;justify-content:flex-start;">Oluştur ve düzenle</button>
+          <button class="btn btn-secondary" type="button" onClick="{{ closeNewFlow }}" style="min-height:44px;">Vazgeç</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- akışlar -->
+  <sc-if value="{{ flowsOpen }}" hint-placeholder-val="{{ false }}">
+    <div class="dialog-backdrop" onClick="{{ closeFlows }}" style="z-index:30;">
+      <div onClick="{{ stop }}" style="width:min(980px,100%);max-height:calc(100vh - 48px);overflow-y:auto;background:var(--color-bg);border-top:4px solid var(--color-text);box-shadow:var(--shadow-lg);">
+        <div style="display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:2px solid var(--color-divider);">
+          <h2 style="margin:0;font-size:24px;">Akışlar</h2>
+          <span style="font-size:13px;color:var(--color-neutral-700);">her biri bir formasyon — hub/flows/*.yaml</span>
+          <button class="btn btn-secondary btn-icon" type="button" aria-label="Kapat" onClick="{{ closeFlows }}" style="margin-left:auto;width:40px;height:40px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="square"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg>
+          </button>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));">
+          <sc-for list="{{ flowCards }}" as="f" hint-placeholder-count="6">
+            <button type="button" onClick="{{ f.pick }}" style="display:flex;flex-direction:column;gap:6px;padding:16px 20px 20px;border:0;border-right:1px solid var(--color-divider);border-bottom:1px solid var(--color-divider);background:{{ f.bg }};color:inherit;font:inherit;text-align:left;cursor:pointer;" style-hover="background:var(--color-neutral-200);">
+              {{ f.mini }}
+              <span style="display:flex;align-items:baseline;gap:8px;"><b style="font-size:17px;font-weight:800;">{{ f.name }}</b><span style="font-size:11.5px;color:var(--color-neutral-700);">{{ f.count }} rol</span></span>
+              <span style="font-size:12.5px;line-height:1.4;color:var(--color-neutral-700);text-wrap:pretty;">{{ f.desc }}</span>
+            </button>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- yeni kart -->
+  <sc-if value="{{ newOpen }}" hint-placeholder-val="{{ false }}">
+    <div class="dialog-backdrop" onClick="{{ closeNew }}" style="z-index:30;">
+      <div class="dialog" onClick="{{ stop }}" style="width:min(540px,100%);border-top:4px solid var(--color-accent);">
+        <div class="dialog-title">Yeni kart</div>
+        <div class="dialog-body" style="font-size:13.5px;">Kart sürünün öncüsünden — <b>{{ leadRole }}</b> — girer. Gözcü açıksa hemen alınır; kapalıysa kuyrukta bekler.</div>
+        <div class="field">
+          <label>Başlık</label>
+          <input class="input" type="text" placeholder="kısa ve ayırt edici" value="{{ newTitle }}" onChange="{{ onNewTitle }}">
+        </div>
+        <div class="field">
+          <label>İş metni</label>
+          <textarea class="input" rows="7" placeholder="Ne yapılacak, neden, ve bittiğini nasıl anlayacağız. Ajanın göreceği tek metin bu." value="{{ newBody }}" onChange="{{ onNewBody }}"></textarea>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-primary" type="button" onClick="{{ createCard }}" disabled="{{ newDisabled }}" style="min-height:44px;min-width:140px;justify-content:flex-start;">Kartı aç</button>
+          <button class="btn btn-secondary" type="button" onClick="{{ closeNew }}" style="min-height:44px;">Vazgeç</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+    <div role="status" style="position:fixed;left:24px;bottom:24px;z-index:40;max-width:min(480px,calc(100% - 48px));background:var(--color-text);color:var(--color-bg);padding:12px 16px;font-size:13.5px;line-height:1.45;border-left:4px solid var(--color-accent);box-shadow:var(--shadow-lg);">{{ toast }}</div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;animate&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Formasyon&quot;},&quot;showArcs&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Formasyon&quot;},&quot;daemonScenario&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;açık&quot;,&quot;kapalı&quot;,&quot;bayat kilit&quot;,&quot;yönetime kapalı&quot;],&quot;default&quot;:&quot;açık&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Gözcü&quot;}}">
+const h = React.createElement;
+const R = (id, provider, workspace, next, reject, receive) => ({ id, provider, workspace, next, reject, receive });
+const FLOWS = {
+  plan4: { desc: 'Planı tartışır, kabul edilen itirazı denetçiye yükümlülük olarak bağlar.', planning: ['planner', 'architect', 'analyst'], tur: 2,
+    roles: [R('planner', 'claude', 'main', 'architect'), R('architect', 'claude', 'architect', 'analyst'), R('analyst', 'claude', 'analyst', 'coder'), R('coder', 'claude', 'coder', 'reviewer', 'planner'), R('reviewer', 'claude', 'reviewer', 'done', 'coder', 'batch')] },
+  plan3: { desc: 'Üç katılımcı iki tur boyunca planı tartışır, sonra kod yazılır.', planning: ['planner', 'architect', 'analyst'], tur: 2,
+    roles: [R('planner', 'claude', 'main', 'architect'), R('architect', 'claude', 'architect', 'analyst'), R('analyst', 'claude', 'analyst', 'coder'), R('coder', 'claude', 'coder', 'reviewer', 'planner'), R('reviewer', 'claude', 'reviewer', 'done', 'coder', 'batch')] },
+  'plan-capraz': { desc: 'Claude planı yazar; Claude ve Codex aynı turda körlemeyle itiraz eder.', planning: ['planner', 'architect', 'analyst'], tur: 2,
+    roles: [R('planner', 'claude', 'main', 'architect'), R('architect', 'claude', 'architect', 'analyst'), R('analyst', 'codex', 'analyst', 'coder'), R('coder', 'claude', 'coder', 'reviewer', 'planner'), R('reviewer', 'claude', 'reviewer', 'done', 'coder', 'batch')] },
+  plan2: { desc: 'Plan yazılır, ikinci rol itiraz eder, yazan yanıtlar. Sonra kod.', planning: ['planner', 'architect'], tur: 1,
+    roles: [R('planner', 'claude', 'main', 'architect'), R('architect', 'claude', 'architect', 'coder'), R('coder', 'claude', 'coder', 'reviewer', 'planner'), R('reviewer', 'claude', 'reviewer', 'done', 'coder')] },
+  'ab-planli': { desc: '6d deney kolu — kod yazılmadan önce plan belgesi ve ona itiraz turu.', planning: ['planner', 'architect'], tur: 1,
+    roles: [R('planner', 'claude', 'main', 'architect'), R('architect', 'claude', 'architect', 'coder'), R('coder', 'claude', 'coder', 'reviewer', 'planner'), R('reviewer', 'claude', 'reviewer', 'done', 'coder')] },
+  plan: { desc: 'Kod yazılmadan önce yazılı plan. Dokunulacak dosyalar ve korunacak sözleşmeler belgede.', planning: ['planner'], tur: 1,
+    roles: [R('planner', 'claude', 'main', 'coder'), R('coder', 'claude', 'coder', 'reviewer'), R('reviewer', 'claude', 'reviewer', 'done', 'coder')] },
+  spec: { desc: 'Yanlış şeyi inşa etme riski yüksek olduğunda. Kod yazılmadan önce insan onayı.', planning: [], gateAfter: 'analyst',
+    roles: [R('analyst', 'claude', 'analyst', 'coder'), R('coder', 'codex', 'coder', 'reviewer'), R('reviewer', 'claude', 'reviewer', 'guard', 'coder'), R('guard', 'codex', 'guard', 'done', 'coder')] },
+  daily: { desc: 'Günlük sürücü. Üretim ve denetim kasıtlı olarak farklı sağlayıcıda.', planning: [],
+    roles: [R('coder', 'claude', 'coder', 'reviewer'), R('reviewer', 'codex', 'reviewer', 'done', 'coder')] },
+  'gunluk-tek': { desc: 'Tek satıcılı üretim + denetim zinciri. Günlük iş için en kısa yol.', planning: [],
+    roles: [R('coder', 'claude', 'coder', 'reviewer'), R('reviewer', 'claude', 'reviewer', 'done', 'coder')] },
+  'ab-plansiz': { desc: '6d kontrol kolu — kod doğrudan yazılır, plan belgesi yoktur.', planning: [],
+    roles: [R('coder', 'claude', 'coder', 'reviewer'), R('reviewer', 'claude', 'reviewer', 'done', 'coder')] },
+};
+
+const CARDS = [
+  { id: 'c-20261103-7f21aa', title: 'token-bucket: patlama sınırını saniye dilimine bağla', role: 'planner', state: 'active', turns: 1, rejects: 0, durationMs: 134000, costUsd: 0.31, live: { name: 'Write', detail: 'docs/plan/c-20261103-7f21aa.md', seq: 14 }, trail: [] },
+  { id: 'c-20261103-a90c3e', title: 'async-pool: iptal edilen işleri havuzdan düşür', role: 'planner', state: 'queued', turns: 0, rejects: 0, durationMs: 0, costUsd: 0, trail: [] },
+  { id: 'c-20261102-4e18d0', title: 'outbox-flush: yarıda kalan toplu gönderimi yeniden dene', role: 'architect', state: 'gate', gate: 'deadlock', planKilidi: true, geriHedef: null, gateReason: 'Planlama 2 turda kapanmadı — 1 itiraz açık: flush sırasında satır kilidi kimde kalıyor, plan yazmıyor.', turns: 4, rejects: 0, durationMs: 541000, costUsd: 1.42, trail: ['accepted', 'accepted', 'gate'] },
+  { id: 'c-20261103-1bd552', title: 'cache-refresh: yenileme bitene kadar bayat değeri sun', role: 'analyst', state: 'active', turns: 3, rejects: 0, durationMs: 402000, costUsd: 0.88, live: { name: 'Read', detail: 'src/cache/refresh.ts', seq: 6 }, trail: ['accepted', 'accepted'] },
+  { id: 'c-20261102-c2f907', title: 'config-patch: iç içe anahtarları birleştirerek yaz', role: 'coder', state: 'gate', gate: 'escalation', planKilidi: false, geriHedef: 'planner', gateReason: 'Ajan çıkış kodu 1 — npm test 600 sn içinde bitmedi, tur yarıda kaldı.', turns: 5, rejects: 0, durationMs: 1210000, costUsd: 2.10, trail: ['accepted', 'accepted', 'accepted', 'gate'] },
+  { id: 'c-20261101-0d7e44', title: 'csv-roundtrip: tırnaklı alanlarda satır sonunu koru', role: 'coder', state: 'queued', turns: 6, rejects: 1, durationMs: 1490000, costUsd: 2.44, lastReject: 'Gizli test: "a""b" alanı yazılırken çift tırnak tekleniyor.', trail: ['accepted', 'accepted', 'accepted', 'accepted', 'rejected'] },
+  { id: 'c-20261101-e61f2b', title: 'retry-backoff: jitter üst sınırı aşmasın', role: 'reviewer', state: 'gate', gate: 'deadlock', planKilidi: false, geriHedef: 'coder', gateReason: 'Ret limiti doldu (2/2) — denetçi: en uzun bekleme 30 sn sınırını yaklaşık 1/40 olasılıkla aşıyor.', turns: 8, rejects: 2, durationMs: 2340000, costUsd: 3.05, trail: ['accepted', 'accepted', 'accepted', 'accepted', 'rejected', 'accepted', 'rejected', 'gate'] },
+  { id: 'c-20261103-55ab90', title: 'snapshot-store: yazma kesilirse eski görüntü kalsın', role: 'reviewer', state: 'active', turns: 5, rejects: 0, durationMs: 1032000, costUsd: 1.37, live: { name: 'Bash', detail: 'npx vitest run src/snapshot', seq: 22 }, trail: ['accepted', 'accepted', 'accepted', 'accepted'] },
+  { id: 'c-20261023-b34218', title: 'snapshot-store: atomik yeniden adlandırma', role: 'reviewer', state: 'done', turns: 7, rejects: 1, durationMs: 1820000, costUsd: 2.62, trail: ['accepted', 'accepted', 'accepted', 'accepted', 'rejected', 'accepted', 'done'] },
+  { id: 'c-20260918-524e4c', title: 'retry-backoff: üstel bekleme ilk sürüm', role: 'reviewer', state: 'done', turns: 5, rejects: 0, durationMs: 960000, costUsd: 1.18, trail: ['accepted', 'accepted', 'accepted', 'accepted', 'done'] },
+];
+
+FLOWS.plan4.denetci = 'reviewer';
+const PROMPT_FILES = ['constitution/base.md', 'constitution/engineering-ts.md', 'roles/planner.md', 'roles/plan-itiraz.md', 'roles/specifier.md', 'roles/coder.md', 'roles/reviewer.md', 'roles/guard.md'];
+const CONSTITUTION = ['constitution/base.md', 'constitution/engineering-ts.md'];
+const defaultPrompt = (id, fn) => (id === 'planner' ? 'roles/planner.md' : id === 'architect' || id === 'analyst' ? (fn === 'spec' ? 'roles/specifier.md' : 'roles/plan-itiraz.md') : 'roles/' + id + '.md');
+Object.keys(FLOWS).forEach((n) => FLOWS[n].roles.forEach((r) => { r.prompt = defaultPrompt(r.id, n); }));
+const POOL = {
+  planner: [['Read', 'README.md'], ['Glob', 'src/**/*.ts'], ['Read', 'src/{task}/index.ts'], ['Grep', '"limit" src/{task}'], ['Read', 'src/{task}/{task}.test.ts'], ['Write', 'docs/plan/{id}.md'], ['Bash', 'git add docs/plan/{id}.md'], ['Bash', 'git commit -m "plan: {task}"']],
+  analyst: [['Read', 'docs/plan/{id}.md'], ['Read', 'src/{task}/index.ts'], ['Grep', '"stale" src/{task}'], ['Read', 'src/{task}/store.ts'], ['Write', 'docs/plan/{id}.itiraz.md'], ['Bash', 'git add docs/plan/{id}.itiraz.md']],
+  coder: [['Read', 'docs/plan/{id}.md'], ['Read', 'src/{task}/index.ts'], ['Edit', 'src/{task}/{task}.test.ts'], ['Bash', 'npx vitest run src/{task}'], ['Edit', 'src/{task}/index.ts'], ['Bash', 'npx vitest run src/{task}'], ['Bash', 'git commit -am "{task}"']],
+  reviewer: [['Bash', 'git diff main...coder --stat'], ['Read', 'docs/plan/{id}.md'], ['Read', 'src/{task}/write.ts'], ['Read', 'src/{task}/write.test.ts'], ['Bash', 'npx vitest run src/{task}'], ['Grep', '"fsync" src/{task}'], ['Write', '.skein-verdict.json']],
+};
+const poolFor = (role) => POOL[role] || (role === 'architect' ? POOL.analyst : POOL.coder);
+const fill = (s, c) => s.split('{id}').join(c.id).split('{task}').join(c.title.split(':')[0]);
+const initSteps = (cards) => {
+  const out = {};
+  cards.filter((c) => c.state === 'active' && c.live).forEach((c) => {
+    const pool = poolFor(c.role), list = [];
+    let t = new Date('2026-11-03T09:41:00');
+    for (let seq = c.live.seq; seq > Math.max(0, c.live.seq - 6); seq--) {
+      const p = pool[(seq - 1) % pool.length];
+      const isLive = seq === c.live.seq;
+      list.push({ seq, name: isLive ? c.live.name : p[0], detail: isLive ? c.live.detail : fill(p[1], c), t: t.toTimeString().slice(0, 8) });
+      t = new Date(t.getTime() - 37000);
+    }
+    out[c.id] = list;
+  });
+  return out;
+};
+function duties(text) {
+  if (!text) return { intro: '', items: [], heading: '' };
+  const lines = text.split('\n');
+  const h2 = lines.findIndex((l) => l.startsWith('## '));
+  const clean = (s) => s.replace(/\*\*|\x60/g, '').replace(/^>\s?/, '').trim();
+  let intro = lines.slice(1, h2 < 0 ? lines.length : h2).map(clean).filter(Boolean).join(' ');
+  if (intro.length > 300) intro = intro.slice(0, 300).replace(/\s\S*$/, '') + '…';
+  const items = [];
+  if (h2 >= 0) for (let i = h2 + 1; i < lines.length && !lines[i].startsWith('## '); i++) {
+    const l = lines[i];
+    if (l.startsWith('- ')) items.push(clean(l.slice(2)));
+    else if (/^\s\s+\S/.test(l) && items.length) items[items.length - 1] += ' ' + clean(l);
+  }
+  return { intro, items: items.slice(0, 5), heading: h2 >= 0 ? lines[h2].slice(3) : '' };
+}
+const PROVIDERS = ['claude', 'codex', 'copilot', 'gemini'];
+const clone = (o) => JSON.parse(JSON.stringify(o));
+const norm = (f) => {
+  f.roles.forEach((r, i) => { r.next = f.roles[i + 1] ? f.roles[i + 1].id : 'done'; if (r.reject && !f.roles.slice(0, i).some((x) => x.id === r.reject)) delete r.reject; });
+  f.planning = f.roles.map((r) => r.id).filter((id) => f.planning.includes(id));
+  if (f.denetci && !f.roles.some((r) => r.id === f.denetci)) f.denetci = null;
+  return f;
+};
+const toYaml = (name, f) => {
+  const L = ['name: ' + name, 'description: ' + f.desc, '', 'constitution:'].concat(CONSTITUTION.map((c) => '  - ../prompts/' + c)).concat(['', 'roles:']);
+  f.roles.forEach((r) => { L.push('  - id: ' + r.id, '    provider: ' + r.provider, '    workspace: ' + r.workspace, '    prompt: ../prompts/' + r.prompt, '    receive: ' + (r.receive || 'task')); if (r.reject) L.push('    reject: ' + r.reject); L.push('    next: ' + r.next, ''); });
+  if (f.planning.length) { L.push('planlama:', '  katilimcilar: [' + f.planning.join(', ') + ']', '  tur: ' + (f.tur || 1)); if (f.denetci) L.push('  denetci: ' + f.denetci); L.push(''); }
+  L.push('reject:', '  limit: ' + (f.rejectLimit ?? 2), '  onExhausted: gate');
+  return L.join('\n');
+};
+const LOG = [
+  { t: '09:41', m: 'geçiş 212 · planner aldı c-…7f21aa' },
+  { t: '09:40', m: 'bekleme · architect, coder kuyrukları boş' },
+  { t: '09:38', m: 'analyst aldı c-…1bd552' },
+  { t: '09:36', m: 'reviewer aldı c-…55ab90 (toplu)' },
+  { t: '09:31', m: 'coder · kaçış kapısı c-…c2f907 — çıkış kodu 1', red: true },
+  { t: '09:12', m: 'gözcü açık · pid 48213 · akış plan4' },
+];
+const sure = (ms) => { if (!ms) return '—'; const s = Math.round(ms / 1000); return s < 60 ? s + ' sn' : Math.floor(s / 60) + ' dk ' + String(s % 60).padStart(2, '0') + ' sn'; };
+const para = (n) => '$' + (n || 0).toFixed(2);
+const hashOf = (s) => { let x = 0; for (const ch of s) x = (x * 31 + ch.charCodeAt(0)) >>> 0; return x.toString(16).padStart(8, '0').slice(0, 7); };
+
+// V formasyonu: sol uç → tepe (alt) → sağ uç. Koordinatlar 1000×640 kutuda.
+const TL = { x: 230, y: 110 }, AP = { x: 500, y: 480 }, TR = { x: 770, y: 110 }, IN = { x: 40, y: 110 }, OUT = { x: 950, y: 110 };
+const posAt = (f) => (f <= 0.5 ? { x: TL.x + (AP.x - TL.x) * f * 2, y: TL.y + (AP.y - TL.y) * f * 2 } : { x: AP.x + (TR.x - AP.x) * (f - 0.5) * 2, y: AP.y + (TR.y - AP.y) * (f - 0.5) * 2 });
+const place = (roles) => roles.map((r, i) => { const f = roles.length === 1 ? 0.5 : i / (roles.length - 1); const p = posAt(f); return { ...r, i, f, x: p.x, y: p.y, side: Math.abs(f - 0.5) < 1e-6 ? 'apex' : f < 0.5 ? 'left' : 'right' }; });
+
+function kapiCikislari(c) {
+  const geri = (e) => (c.geriHedef ? [e, 'back'] : ['Baştan koştur', 'retry']);
+  if (c.gate === 'escalation') return { etiket: 'kaçış kapısı', dugmeler: c.geriHedef ? [['Yeniden koş', 'retry'], ['Geri gönder', 'back']] : [['Yeniden koş', 'retry']] };
+  if (c.gate === 'deadlock') {
+    if (c.planKilidi) return { etiket: 'planlama kilidi', dugmeler: [['Planı ilerlet', 'forward'], ['Alışverişi yeniden aç', 'retry']] };
+    return { etiket: 'kilit kapısı', dugmeler: [['Üretici haklı', 'forward'], geri('Denetçi haklı')] };
+  }
+  return { etiket: 'onay kapısı', dugmeler: [['Geçir', 'forward'], geri('Geri gönder')] };
+}
+const SQ = {
+  active: { bg: 'var(--color-accent)', edge: 'var(--color-accent)' },
+  gate: { bg: 'transparent', edge: 'var(--color-accent)' },
+  queued: { bg: 'var(--color-neutral-500)', edge: 'var(--color-neutral-500)' },
+  done: { bg: 'transparent', edge: 'var(--color-neutral-500)' },
+};
+const OLAY = { created: 'açıldı', taken: 'alındı', handoff: 'devredildi', reject: 'reddedildi', gate: 'kapıda', released: 'bırakıldı', done: 'bitti', plan: 'planlama' };
+
+function bird(color, flap, w) {
+  return h('svg', { width: w || 46, height: (w || 46) / 2, viewBox: '0 0 48 24', 'aria-hidden': true,
+    style: { display: 'block', overflow: 'visible', transformOrigin: '50% 75%', animation: flap ? 'skein-flap .55s ease-in-out infinite alternate' : 'none' } },
+    h('polyline', { points: '2,5 13,9 24,19 35,9 46,5', fill: 'none', stroke: color, strokeWidth: 4, strokeLinejoin: 'miter', strokeLinecap: 'butt' }));
+}
+
+class Component extends DCLogic {
+  state = { cards: CARDS.map((c) => ({ ...c })), flow: 'plan4', rail: { mode: 'overview' }, flowsOpen: false, newOpen: false, newTitle: '', newBody: '', toast: null, daemon: null, daemonSince: '09:12', topoChanged: false, flows: clone(FLOWS), draft: null, editFocus: null, showYaml: false,
+    tab: 'pano', prompts: {}, promptDrafts: {}, promptList: PROMPT_FILES.slice(), promptSel: 'roles/coder.md', agentSel: 'reviewer', steps: initSteps(CARDS),
+    nf: { open: false, name: '', desc: '', base: 'plan4' } };
+
+  go(tab, extra) { this.setState({ tab, ...(extra || {}) }); }
+  makeFlow(name, desc, base) {
+    const f = { ...clone(this.state.flows[base]), desc: desc || this.state.flows[base].desc };
+    this.setState({ flows: { ...this.state.flows, [name]: f }, flow: name, tab: 'pano', rail: { mode: 'edit' }, draft: norm(clone(f)), editFocus: null, nf: { open: false, name: '', desc: '', base: 'plan4' } });
+    this.say('hub/flows/' + name + '.yaml oluşturuldu — rolleri düzenle, sonra kaydet.');
+  }
+
+  daemonStatus() {
+    if (this.state.daemon) return this.state.daemon;
+    return { 'açık': 'on', 'kapalı': 'off', 'bayat kilit': 'stale', 'yönetime kapalı': 'unmanaged' }[this.props.daemonScenario ?? 'açık'] || 'on';
+  }
+  stopThen(after, msg) {
+    clearTimeout(this._dt);
+    this.setState({ daemon: 'stopping' });
+    this.say(msg);
+    this._dt = setTimeout(after, 3500);
+  }
+  edit(fn) { const d = clone(this.state.draft); fn(d); norm(d); this.setState({ draft: d }); }
+
+  componentDidMount() {
+    this._key = (e) => { if (e.key === 'Escape') this.setState({ flowsOpen: false, newOpen: false }); };
+    document.addEventListener('keydown', this._key);
+    PROMPT_FILES.forEach((p) => fetch('prompts/' + p).then((r) => (r.ok ? r.text() : '')).then((t) => this.setState((s) => ({ prompts: { ...s.prompts, [p]: t } }))).catch(() => {}));
+    let n = 0;
+    this._tick = setInterval(() => {
+      if (this.daemonStatus() !== 'on') return;
+      const act = this.state.cards.filter((c) => c.state === 'active' && c.live);
+      if (!act.length) return;
+      const c = act[n++ % act.length];
+      const pool = poolFor(c.role), seq = c.live.seq + 1, p = pool[(seq - 1) % pool.length];
+      const live = { name: p[0], detail: fill(p[1], c), seq };
+      const step = { ...live, t: new Date().toTimeString().slice(0, 8) };
+      this.setState((s) => ({ cards: s.cards.map((x) => (x.id === c.id ? { ...x, live } : x)), steps: { ...s.steps, [c.id]: [step].concat(s.steps[c.id] || []).slice(0, 12) } }));
+    }, 2600);
+  }
+  componentWillUnmount() { document.removeEventListener('keydown', this._key); clearTimeout(this._tt); clearTimeout(this._dt); clearInterval(this._tick); }
+  say(m) { clearTimeout(this._tt); this.setState({ toast: m }); this._tt = setTimeout(() => this.setState({ toast: null }), 3400); }
+
+  decide(id, secim) {
+    const roles = this.state.flows.plan4.roles;
+    const c = this.state.cards.find((x) => x.id === id);
+    let role = c.role, state = 'queued';
+    if (secim === 'forward') {
+      const cur = roles.find((r) => r.id === c.role);
+      role = c.planKilidi ? 'coder' : cur ? cur.next : 'done';
+      if (role === 'done') { role = c.role; state = 'done'; }
+    } else if (secim === 'back') role = c.geriHedef;
+    const next = { ...c, role, state, gate: null, gateReason: null, planKilidi: false, live: null, trail: c.trail.concat(state === 'done' ? ['released', 'done'] : ['released']) };
+    this.setState({ cards: this.state.cards.map((x) => (x.id === id ? next : x)) });
+    this.say(state === 'done' ? 'Kart bitti — sürüden ayrıldı.' : 'Kart ' + role + ' kuyruğuna bırakıldı.');
+  }
+
+  view(c, from) {
+    const k = c.gate ? kapiCikislari(c) : null;
+    const st = c.gate ? 'gate' : c.state;
+    const sub = c.gate ? k.etiket + ' · ' + c.role
+      : c.state === 'active' ? c.role + ' · ' + (c.live ? c.live.name + ' ' + c.live.detail : 'çalışıyor')
+      : c.state === 'done' ? 'bitti · ' + c.turns + ' tur · ' + para(c.costUsd)
+      : 'kuyrukta' + (c.rejects ? ' · ' + c.rejects + ' ret' : '');
+    return { ...c, sqBg: SQ[st].bg, sqEdge: SQ[st].edge, sub,
+      tagLabel: k ? k.etiket : c.state === 'active' ? 'çalışıyor' : c.state === 'done' ? 'bitti' : 'kuyrukta',
+      tagInk: k ? 'var(--color-accent-700)' : 'var(--color-neutral-700)',
+      gateLabel: k ? k.etiket : '', durLabel: sure(c.durationMs), costLabel: para(c.costUsd),
+      exits: k ? k.dugmeler.map(([label, s], i) => ({ label, cls: i === 0 ? 'btn btn-primary' : 'btn btn-secondary', go: () => this.decide(c.id, s) })) : [],
+      open: () => this.setState({ rail: { mode: 'card', id: c.id, from: from || this.state.rail } }) };
+  }
+
+  history(c, roles) {
+    let t = new Date(c.id.includes('1103') ? '2026-11-03T08:40:00' : c.id.includes('1102') ? '2026-11-02T13:20:00' : '2026-11-01T10:05:00');
+    const out = [{ ev: 'created', who: 'insan' }];
+    if (!c.trail.length && c.state === 'queued') return out.map((x) => ({ ...x, t: t.toTimeString().slice(0, 5) }));
+    let at = 0;
+    out.push({ ev: 'taken', who: roles[0].id });
+    c.trail.forEach((tr, i) => {
+      const r = roles[at];
+      if (tr === 'accepted') { const nx = Math.min(at + 1, roles.length - 1); out.push({ ev: FLOWS.plan4.planning.includes(roles[nx].id) ? 'plan' : 'handoff', who: r.id + ' → ' + roles[nx].id }); at = nx; }
+      else if (tr === 'rejected') { const b = Math.max(0, roles.findIndex((x) => x.id === r.reject)); out.push({ ev: 'reject', who: r.id + ' → ' + roles[b].id, note: (i === c.trail.lastIndexOf('rejected') && c.lastReject) || 'Gizli kancalardan biri düştü.' }); at = b; }
+      else if (tr === 'gate') out.push({ ev: 'gate', who: c.role, note: c.gateReason });
+      else if (tr === 'released') out.push({ ev: 'released', who: 'insan' });
+      else if (tr === 'done') out.push({ ev: 'done', who: r.id });
+    });
+    return out.map((x, i) => { t = new Date(t.getTime() + (i ? 7 : 0) * 60000); return { ...x, t: t.toTimeString().slice(0, 5) }; });
+  }
+
+  diagram(nodes, flow, showArcs) {
+    const P = (p) => p.x + ' ' + p.y;
+    const ns = { vectorEffect: 'non-scaling-stroke' };
+    const els = [h('path', { key: 'main', d: 'M' + P(IN) + ' L' + P(TL) + ' L' + P(AP) + ' L' + P(TR) + ' L' + P(OUT), fill: 'none', style: { ...ns, stroke: 'var(--color-text)', strokeWidth: 2 } })];
+    const plan = nodes.filter((n) => flow.planning.includes(n.id));
+    if (plan.length > 1) {
+      const a = plan[0], b = plan[plan.length - 1];
+      const d = 'M' + P(a) + (a.f < 0.5 && b.f > 0.5 ? ' L' + P(AP) : '') + ' L' + P(b);
+      els.unshift(h('path', { key: 'planband', d, fill: 'none', style: { stroke: 'var(--color-accent-200)', strokeWidth: 22, strokeLinecap: 'butt' } }));
+      const m = { x: (a.x + b.x) / 2 + 40, y: (a.y + b.y) / 2 - 22 };
+      els.push(h('text', { key: 'plantxt', x: m.x, y: m.y, style: { fontFamily: 'var(--font-body)', fontSize: 13, fontWeight: 600, fill: 'var(--color-accent-800)' } }, 'planlama · en çok ' + flow.tur + ' tur'));
+    }
+    if (flow.gateAfter) {
+      const i = nodes.findIndex((n) => n.id === flow.gateAfter);
+      const a = nodes[i], b = nodes[i + 1] || { x: OUT.x, y: OUT.y };
+      const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      const dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy), nx = -dy / L, ny = dx / L;
+      els.push(h('line', { key: 'gate', x1: m.x - nx * 18, y1: m.y - ny * 18, x2: m.x + nx * 18, y2: m.y + ny * 18, style: { stroke: 'var(--color-accent)', strokeWidth: 6 } }));
+      els.push(h('text', { key: 'gatetxt', x: m.x + 22, y: m.y + 4, style: { fontFamily: 'var(--font-body)', fontSize: 13, fontWeight: 600, fill: 'var(--color-accent-700)' } }, 'insan onayı'));
+    }
+    if (showArcs) {
+      nodes.forEach((n) => {
+        const to = nodes.find((x) => x.id === n.reject);
+        if (!to) return;
+        const mid = { x: (n.x + to.x) / 2, y: (n.y + to.y) / 2 }, c = { x: mid.x + (500 - mid.x) * 0.6, y: mid.y + (170 - mid.y) * 0.6 };
+        const lab = { x: 0.25 * n.x + 0.5 * c.x + 0.25 * to.x, y: 0.25 * n.y + 0.5 * c.y + 0.25 * to.y };
+        els.push(h('path', { key: 'r' + n.id, d: 'M' + P(n) + ' Q' + P(c) + ' ' + P(to), fill: 'none', markerEnd: 'url(#skein-ok)', style: { ...ns, stroke: 'var(--color-accent)', strokeWidth: 2 } }));
+        els.push(h('text', { key: 'rt' + n.id, x: lab.x + 6, y: lab.y - 6, style: { fontFamily: 'var(--font-body)', fontSize: 12, fontWeight: 600, fill: 'var(--color-accent-700)' } }, 'ret → ' + to.id));
+      });
+    }
+    return h('svg', { viewBox: '0 0 1000 640', style: { position: 'absolute', inset: 0, width: '100%', height: '100%', overflow: 'visible' }, 'aria-hidden': true },
+      h('defs', null, h('marker', { id: 'skein-ok', viewBox: '0 0 10 10', refX: 30, refY: 5, markerWidth: 12, markerHeight: 12, markerUnits: 'userSpaceOnUse', orient: 'auto-start-reverse' }, h('path', { d: 'M0 0 L10 5 L0 10 z', style: { fill: 'var(--color-accent)' } }))),
+      ...els);
+  }
+
+  mini(name, sel) {
+    const nodes = place(this.state.flows[name].roles);
+    const k = (p) => ({ x: p.x / 5, y: p.y / 5 + 4 });
+    const pts = [IN, TL, AP, TR, OUT].map(k).map((p) => p.x + ',' + p.y).join(' ');
+    return h('svg', { width: '100%', viewBox: '0 0 200 110', style: { display: 'block', maxWidth: 200 }, 'aria-hidden': true },
+      h('polyline', { points: pts, fill: 'none', style: { stroke: 'var(--color-neutral-400)', strokeWidth: 1.5 } }),
+      ...nodes.map((n) => { const p = k(n); return h('polyline', { key: n.id, points: [[p.x - 11, p.y - 7], [p.x - 5, p.y - 5], [p.x, p.y], [p.x + 5, p.y - 5], [p.x + 11, p.y - 7]].map((q) => q.join(',')).join(' '), fill: 'none', style: { stroke: sel ? 'var(--color-accent)' : 'var(--color-text)', strokeWidth: 3 } }); }));
+  }
+
+  renderVals() {
+    const animate = this.props.animate ?? true;
+    const showArcs = this.props.showArcs ?? true;
+    const rail = this.state.rail;
+    const editing = rail.mode === 'edit' && !!this.state.draft;
+    const flow = editing ? this.state.draft : this.state.flows[this.state.flow];
+    const roles = flow.roles;
+    const all = this.state.flow === 'plan4' ? this.state.cards : [];
+    const ds = this.daemonStatus();
+    const nodes = place(roles);
+
+    const nodeVals = nodes.map((n) => {
+      const mine = all.filter((c) => c.role === n.id && c.state !== 'done');
+      const hasActive = mine.some((c) => c.state === 'active');
+      const hasGate = mine.some((c) => c.gate);
+      const sel = editing ? this.state.editFocus === n.id : rail.mode === 'role' && rail.id === n.id;
+      const color = hasGate || hasActive ? 'var(--color-accent)' : mine.length ? 'var(--color-text)' : 'var(--color-neutral-400)';
+      const L = { left: { lx: 'auto', rx: '22px', ly: '28px' }, right: { lx: '22px', rx: 'auto', ly: '28px' }, apex: { lx: '-32px', rx: 'auto', ly: '30px' } }[n.side];
+      return { ...L, id: n.id, num: String(n.i + 1).padStart(2, '0'),
+        sub: n.provider + ' · ' + n.workspace + (n.i === 0 ? ' · öncü' : ''),
+        left: (n.x / 10) + '%', top: (n.y / 6.4) + '%',
+        ink: mine.length ? 'var(--color-text)' : 'var(--color-neutral-600)',
+        boxBg: sel ? 'var(--color-accent-100)' : 'var(--color-bg)', boxEdge: sel ? 'var(--color-accent)' : 'transparent',
+        bird: bird(color, animate && hasActive && ds === 'on'),
+        dots: mine.map((c) => SQ[c.gate ? 'gate' : c.state]), empty: !mine.length,
+        select: () => (editing ? this.setState({ editFocus: n.id }) : this.setState({ rail: { mode: 'role', id: n.id } })) };
+    });
+
+    const gates = all.filter((c) => c.gate).map((c) => this.view(c, { mode: 'overview' }));
+    const active = all.filter((c) => c.state === 'active').map((c) => this.view(c, { mode: 'overview' }));
+    const done = all.filter((c) => c.state === 'done');
+    const openCount = all.filter((c) => c.state !== 'done').length;
+
+    let role = null;
+    if (rail.mode === 'role') {
+      const isDone = rail.id === 'bitti';
+      const r = roles.find((x) => x.id === rail.id);
+      const list = isDone ? done : all.filter((c) => c.role === rail.id && c.state !== 'done');
+      role = { id: isDone ? 'bitti' : rail.id,
+        kicker: isDone ? 'zincirin sonu' : 'rol ' + String(roles.indexOf(r) + 1).padStart(2, '0') + (roles.indexOf(r) === 0 ? ' · öncü' : ''),
+        meta: isDone ? done.length + ' kart sürüden ayrıldı' : r.provider + ' · ' + r.workspace + ' · sonraki: ' + r.next + (r.reject ? ' · ret: ' + r.reject : '') + (r.receive === 'batch' ? ' · toplu' : ''),
+        cards: list.map((c) => this.view(c, rail)), empty: !list.length,
+        hasPrompt: !isDone && !!r, prompt: r ? r.prompt : '',
+        openPrompt: () => this.go('prompts', { promptSel: r.prompt }), watch: () => this.go('agents', { agentSel: rail.id }) };
+    }
+    let card = null;
+    const cc = rail.mode === 'card' && this.state.cards.find((c) => c.id === rail.id);
+    if (cc) {
+      const v = this.view(cc, rail.from);
+      const hist = this.history(cc, FLOWS.plan4.roles);
+      const task = cc.title.split(':')[0];
+      card = { ...v, lastReject: cc.state !== 'done' && !cc.gate ? cc.lastReject || null : null, live: cc.state === 'active' ? cc.live : null,
+        diff: cc.trail.includes('accepted') ? [{ path: 'src/' + task + '/index.ts', add: 48 + cc.turns * 7, del: 12 + cc.rejects * 9 }, { path: 'src/' + task + '/' + task + '.test.ts', add: 61 + cc.turns * 3, del: 4 }, { path: 'docs/plan/' + cc.id + '.md', add: 34, del: 0 }] : null,
+        history: hist.map((x, i) => { const red = x.ev === 'reject' || x.ev === 'gate'; return { t: x.t, label: OLAY[x.ev], who: x.who, note: x.note || null, rail: i < hist.length - 1,
+          ink: red ? 'var(--color-accent-700)' : 'var(--color-text)', bg: x.ev === 'reject' ? 'var(--color-accent)' : red || x.ev === 'taken' ? 'transparent' : 'var(--color-text)', edge: red ? 'var(--color-accent)' : 'var(--color-text)' }; }) };
+    }
+    const from = rail.from || { mode: 'overview' };
+
+    const DT = { on: ['gözcü açık', 'var(--color-accent)', 'Açık'], off: ['gözcü kapalı', 'var(--color-neutral-400)', 'Kapalı'], stopping: ['gözcü duruyor…', 'var(--color-neutral-500)', 'Duruyor'],
+      stale: ['gözcü çökmüş', 'var(--color-text)', 'Bayat kilit'], unmanaged: ['gözcü · elle', 'var(--color-neutral-400)', 'Ekrandan yönetilmiyor'] }[ds];
+    const topoWarn = this.state.topoChanged && ds === 'on';
+    const dm = {
+      title: DT[2], dot: DT[1], topoWarn,
+      explain: {
+        on: 'Kuyrukları izliyor; kart gördüğü rolü koşturuyor. Kuyruk boşalınca uyur, ölmez.',
+        off: 'Hiçbir rol koşmuyor. Açılan kartlar kuyrukta bekler.',
+        stopping: 'Durdurma sinyali gitti. Gözcü süren ajan turunu bitirip çıkacak — anlık değil.',
+        stale: '.skein/daemon.json duruyor ama pid 48213 yaşamıyor: gözcü çökmüş. Başlatınca kilit devralınır.',
+        unmanaged: 'Ekran gözcü bayrakları olmadan açıldı, o yüzden buradan başlatılamaz. Gözcüyü ayrı bir kabukta koşturabilirsin.' }[ds],
+      canStart: ds === 'off' || ds === 'stale', canStop: ds === 'on', stopping: ds === 'stopping', unmanaged: ds === 'unmanaged',
+      startLabel: ds === 'stale' ? 'Kilidi devral ve başlat' : 'Gözcüyü başlat',
+      hasInfo: ds === 'on' || ds === 'stopping' || ds === 'stale',
+      rows: [{ k: 'pid', v: ds === 'stale' ? '48213 · yaşamıyor' : '48213' }, { k: 'akış', v: this.state.flow }, { k: 'mod', v: 'serve · uzun ömürlü' }, { k: 'açıldı', v: this.state.daemonSince }, { k: 'kilit', v: '.skein/daemon.json' }],
+      flags: ['--model sonnet', '--tools Read,Write,Edit,Bash', '--permission-mode acceptEdits'],
+      cmd: 'npx tsx src/watch/cli.ts --serve ' + this.state.flow + ' --model sonnet',
+      cmd2: 'npx tsx src/ui/cli.ts --model sonnet',
+      log: LOG.map((l) => ({ ...l, ink: l.red ? 'var(--color-accent-700)' : 'var(--color-text)' })),
+    };
+
+    let ev = { roleEdits: [], editNotes: [], planSummary: '', tur: 0, rejectLimit: 0, denetci: '', denetciOpts: [], yaml: '', dirty: false, errs: 0 };
+    if (editing) {
+      const d = this.state.draft, base = this.state.flows[this.state.flow];
+      const ids = d.roles.map((r) => r.id);
+      const notes = [];
+      if (ids.some((x) => !x)) notes.push({ text: 'Adı boş bir rol var.', err: true });
+      const dup = ids.find((x, i) => x && ids.indexOf(x) !== i);
+      if (dup) notes.push({ text: 'İki rol aynı adı taşıyor: ' + dup + '.', err: true });
+      const orphan = this.state.flow === 'plan4' ? [...new Set(this.state.cards.filter((c) => c.state !== 'done' && !ids.includes(c.role)).map((c) => c.role))] : [];
+      if (orphan.length) notes.push({ text: 'Açık kartlar silinen rolde bekliyor (' + orphan.join(', ') + '). Kaydedersen hiçbir role gitmezler — önce kapat ya da taşı.' });
+      const set = (i, k) => (e) => { const v = e.target.value; this.edit((x) => { x.roles[i][k] = v; }); };
+      ev = {
+        roleEdits: d.roles.map((r, i) => {
+          const batch = r.receive === 'batch';
+          const inPlan = d.planning.includes(r.id);
+          return { num: String(i + 1).padStart(2, '0'), id: r.id, provider: r.provider, workspace: r.workspace, reject: r.reject || '', next: r.next,
+            focusBg: this.state.editFocus === r.id ? 'var(--color-accent-100)' : 'transparent',
+            noUp: i === 0, noDown: i === d.roles.length - 1, noRemove: d.roles.length === 1,
+            taskBg: batch ? 'transparent' : 'var(--color-text)', taskInk: batch ? 'var(--color-text)' : 'var(--color-bg)',
+            batchBg: batch ? 'var(--color-text)' : 'transparent', batchInk: batch ? 'var(--color-bg)' : 'var(--color-text)',
+            planFill: inPlan ? 'var(--color-accent)' : 'transparent',
+            planLabel: inPlan ? (d.planning[0] === r.id ? 'planlamada · yazar' : 'planlamada · itiraz eder') : 'planlamaya kat',
+            rejectOpts: [{ v: '', l: 'yok' }].concat(d.roles.slice(0, i).map((x) => ({ v: x.id, l: '→ ' + x.id }))),
+            setId: (e) => { const v = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''); this.edit((x) => { const old = x.roles[i].id; x.roles[i].id = v; x.roles.forEach((y) => { if (y.reject === old) y.reject = v; }); x.planning = x.planning.map((p) => (p === old ? v : p)); if (x.denetci === old) x.denetci = v; }); this.setState({ editFocus: v }); },
+            setProvider: set(i, 'provider'), setWorkspace: set(i, 'workspace'), setReject: set(i, 'reject'),
+            prompt: r.prompt || '', setPrompt: set(i, 'prompt'), openPrompt: () => this.go('prompts', { promptSel: r.prompt }),
+            setTask: () => this.edit((x) => { x.roles[i].receive = 'task'; }), setBatch: () => this.edit((x) => { x.roles[i].receive = 'batch'; }),
+            togglePlan: () => this.edit((x) => { x.planning = inPlan ? x.planning.filter((p) => p !== r.id) : x.planning.concat([r.id]); if (!x.tur) x.tur = 1; }),
+            up: () => this.edit((x) => { const [m] = x.roles.splice(i, 1); x.roles.splice(i - 1, 0, m); }),
+            down: () => this.edit((x) => { const [m] = x.roles.splice(i, 1); x.roles.splice(i + 1, 0, m); }),
+            remove: () => this.edit((x) => { x.roles.splice(i, 1); }),
+            focus: () => this.setState({ editFocus: r.id }) };
+        }),
+        editNotes: notes.map((n) => ({ text: n.text, ink: n.err ? 'var(--color-accent-700)' : 'var(--color-text)' })),
+        planSummary: d.planning.length ? 'Yazar: ' + d.planning[0] + (d.planning.length > 1 ? ' · itiraz: ' + d.planning.slice(1).join(', ') : ' · itiraz eden yok') : 'Planlama yok — kod doğrudan yazılır. Bir rolü “planlamaya kat” ile ekle.',
+        tur: d.tur || 1, rejectLimit: d.rejectLimit ?? 2, denetci: d.denetci || '',
+        denetciOpts: [{ v: '', l: 'yok' }].concat(d.roles.map((x) => ({ v: x.id, l: x.id }))),
+        yaml: toYaml(this.state.flow, d), dirty: JSON.stringify(d) !== JSON.stringify(base), errs: notes.filter((n) => n.err).length,
+      };
+    }
+
+    const flows = this.state.flows, tab = this.state.tab;
+    const pList = this.state.promptList;
+    const usage = (p) => { const out = []; Object.keys(flows).forEach((fn) => flows[fn].roles.forEach((r) => { if (r.prompt === p) out.push({ flow: fn, role: r.id }); })); return out; };
+    const textOf = (p) => (this.state.promptDrafts[p] ?? this.state.prompts[p]);
+    const pItem = (p) => {
+      const u = usage(p), isC = CONSTITUTION.includes(p), sel = this.state.promptSel === p;
+      return { name: p.split('/').pop(), usage: isC ? 'tüm akışlar · her rol' : u.length ? u.length + ' rol · ' + new Set(u.map((x) => x.flow)).size + ' akış' : 'kullanılmıyor',
+        edge: sel ? 'var(--color-accent)' : 'transparent', bg: sel ? 'var(--color-accent-100)' : 'transparent',
+        dirty: this.state.promptDrafts[p] !== undefined, pick: () => this.setState({ promptSel: p }) };
+    };
+    const psel = this.state.promptSel;
+    const psU = usage(psel), psIsC = CONSTITUTION.includes(psel);
+    const psText = textOf(psel);
+    const psDirty = this.state.promptDrafts[psel] !== undefined;
+    const ps = {
+      path: psel, name: psel.split('/').pop(),
+      usage: psIsC ? [{ label: 'tüm akışlar', go: () => this.go('flows') }] : psU.map((x) => ({ label: x.flow + ' · ' + x.role, go: () => this.go('pano', { flow: x.flow, rail: { mode: 'role', id: x.role }, draft: null }) })),
+      unused: !psIsC && !psU.length,
+      stack: CONSTITUTION.concat(psIsC ? ['rol promptu'] : [psel]).concat(['kart metni']).map((s, i) => ({ label: s.split('/').pop(), arrow: i > 0, edge: s === psel ? 'var(--color-accent)' : 'var(--color-divider)', w: s === psel ? '700' : '400' })),
+      text: psText === undefined ? '' : psText,
+      onText: (e) => { const v = e.target.value; this.setState((s) => ({ promptDrafts: { ...s.promptDrafts, [psel]: v } })); },
+      clean: !psDirty,
+      status: psText === undefined ? 'yükleniyor…' : psDirty ? 'Kaydedilmemiş değişiklik — kaydedince sonraki aktivasyonda geçerli' : 'Diskteki hâli · koşan tur eski metni kullanmaya devam eder',
+      revert: () => this.setState((s) => { const d = { ...s.promptDrafts }; delete d[psel]; return { promptDrafts: d }; }),
+      save: () => { this.setState((s) => { const d = { ...s.promptDrafts }; const v = d[psel]; delete d[psel]; return { promptDrafts: d, prompts: { ...s.prompts, [psel]: v } }; }); this.say('hub/prompts/' + psel + ' yazıldı — ' + (psIsC ? 'her rol' : psU.length + ' rol') + ' bir sonraki turda yeni metni okur.'); },
+    };
+
+    const agRoles = flows.plan4.roles;
+    const agentRows = agRoles.map((r) => {
+      const mine = this.state.cards.filter((c) => c.role === r.id && c.state !== 'done');
+      const act = mine.find((c) => c.state === 'active'), gate = mine.find((c) => c.gate), q = mine.filter((c) => c.state === 'queued').length;
+      const running = !!act && ds === 'on';
+      const status = act ? (ds === 'on' ? act.live.name + ' · ' + act.live.detail : 'gözcü kapalı · ' + act.title.split(':')[0] + ' yarıda') : gate ? 'kapıda bekliyor · ' + gate.title.split(':')[0] : q ? q + ' kart kuyrukta' : 'boşta';
+      return { r, act, gate, q, running, status };
+    });
+    const sel = agentRows.find((a) => a.r.id === this.state.agentSel) || agentRows[0];
+    const d0 = duties(this.state.prompts[sel.r.prompt]);
+    const stepsSel = sel.act ? (this.state.steps[sel.act.id] || []) : [];
+    const ag = {
+      kicker: 'ajan · ' + flows.plan4.roles.indexOf(sel.r) + 1 > 0 ? 'ajan ' + String(agRoles.indexOf(sel.r) + 1).padStart(2, '0') + ' · plan4' : '',
+      id: sel.r.id, meta: sel.r.provider + ' · çalışma ağacı ' + sel.r.workspace + ' · ' + (sel.r.receive === 'batch' ? 'toplu alım' : 'tekil alım') + ' · sonra ' + sel.r.next,
+      nowEdge: sel.running ? 'var(--color-accent)' : sel.gate ? 'var(--color-accent)' : 'var(--color-divider)',
+      nowTitle: sel.act ? sel.act.title : sel.gate ? sel.gate.title : sel.q ? sel.q + ' kart sırada bekliyor' : 'Boşta',
+      nowSub: sel.act ? (sel.running ? 'Adım ' + sel.act.live.seq + ' · ' + sel.act.live.name + ' ' + sel.act.live.detail + ' · ' + sure(sel.act.durationMs) + ' · ' + para(sel.act.costUsd) : 'Gözcü kapalı — tur durdu, gözcü açılınca kaldığı yerden alınır.')
+        : sel.gate ? 'Kapıda: ' + sel.gate.gateReason : sel.q ? 'Gözcü sıradaki kartı bu role verecek.' : 'Bu rolün kuyruğu boş. Önceki rol devrettiğinde uyanır.',
+      hasCard: !!(sel.act || sel.gate),
+      openCard: () => { const c = sel.act || sel.gate; this.go('pano', { flow: 'plan4', rail: { mode: 'card', id: c.id, from: { mode: 'overview' } }, draft: null }); },
+      live: sel.running, steps: stepsSel.map((s, i) => ({ ...s, ink: i === 0 && sel.running ? 'var(--color-accent-700)' : 'var(--color-text)' })),
+      noSteps: !stepsSel.length, noStepsText: sel.gate ? 'Tur kapıda bitti; yeni adım yok.' : 'Koşan tur yok.',
+      intro: d0.intro, heading: d0.items.length ? d0.heading : '', duties: d0.items,
+      promptPath: 'hub/prompts/' + sel.r.prompt,
+      editPrompt: () => this.go('prompts', { promptSel: sel.r.prompt }),
+    };
+    ag.kicker = 'ajan ' + String(agRoles.indexOf(sel.r) + 1).padStart(2, '0') + ' · plan4';
+
+    const nf = this.state.nf;
+    const nfName = nf.name.trim();
+    const nfError = nfName && flows[nfName] ? 'Bu adla bir akış zaten var.' : '';
+
+    return {
+      flowName: this.state.flow, flowDesc: flow.desc, leadRole: roles[0].id,
+      openFlows: () => this.setState({ flowsOpen: true }), closeFlows: () => this.setState({ flowsOpen: false }), flowsOpen: this.state.flowsOpen,
+      flowCards: Object.keys(FLOWS).map((name) => ({ name, desc: FLOWS[name].desc, count: FLOWS[name].roles.length, mini: this.mini(name, name === this.state.flow),
+        bg: name === this.state.flow ? 'var(--color-accent-100)' : 'transparent',
+        pick: () => { this.setState({ flow: name, flowsOpen: false, rail: { mode: 'overview' }, draft: null }); if (name !== 'plan4') this.say(name + ' formasyonu — bu önizlemede kart verisi yalnızca plan4\'te.'); } })),
+      daemonDot: DT[1], daemonLabel: topoWarn ? 'gözcü · yeniden başlat' : DT[0],
+      daemonEdge: topoWarn || ds === 'stale' ? 'var(--color-accent)' : rail.mode === 'daemon' ? 'var(--color-text)' : 'var(--color-divider)',
+      openDaemon: () => this.setState({ rail: { mode: 'daemon' } }),
+      railDaemon: rail.mode === 'daemon', dm,
+      startDaemon: () => { clearTimeout(this._dt); this.setState({ daemon: 'on', topoChanged: false, daemonSince: new Date().toTimeString().slice(0, 5) }); this.say('Gözcü açıldı · akış ' + this.state.flow + '.'); },
+      stopDaemon: () => this.stopThen(() => this.setState({ daemon: 'off' }), 'Durdurma sinyali gönderildi — süren tur bitince kapanacak.'),
+      restartDaemon: () => this.stopThen(() => this.setState({ daemon: 'on', topoChanged: false, daemonSince: new Date().toTimeString().slice(0, 5) }), 'Yeniden başlatılıyor — süren tur bitince yeni rol listesiyle açılacak.'),
+
+      tabs: [['pano', 'Pano', ev.dirty ? '•' : (gates.length || null)], ['flows', 'Akışlar', Object.keys(flows).length], ['prompts', 'Promptlar', Object.keys(this.state.promptDrafts).length || null], ['agents', 'Ajanlar', agentRows.filter((a) => a.running).length || null]].map(([k, label, badge]) => ({
+        label, badge, go: () => this.go(k), edge: tab === k ? 'var(--color-accent)' : 'transparent', ink: tab === k ? 'var(--color-text)' : 'var(--color-neutral-700)',
+        badgeBg: k === 'pano' || k === 'agents' ? 'var(--color-accent)' : 'var(--color-neutral-300)', badgeInk: k === 'pano' || k === 'agents' ? 'var(--color-bg)' : 'var(--color-text)' })),
+      tabPano: tab === 'pano', tabFlows: tab === 'flows', tabPrompts: tab === 'prompts', tabAgents: tab === 'agents',
+      flowList: Object.keys(flows).map((name) => ({ name, desc: flows[name].desc, count: flows[name].roles.length, mini: this.mini(name, name === this.state.flow), isCurrent: name === this.state.flow,
+        bg: name === this.state.flow ? 'var(--color-accent-100)' : 'transparent',
+        chain: flows[name].roles.map((r) => r.id).join(' → ') + ' → bitti',
+        open: () => this.go('pano', { flow: name, rail: { mode: 'overview' }, draft: null }),
+        edit: () => this.go('pano', { flow: name, rail: { mode: 'edit' }, draft: norm(clone(flows[name])), editFocus: null }),
+        copy: () => { let n = name + '-kopya', k = 2; while (flows[n]) n = name + '-kopya' + k++; this.makeFlow(n, null, name); } })),
+      promptGroups: [
+        { title: 'Anayasa', note: 'Her ajana, her turda, rol promptundan önce verilir.', items: pList.filter((p) => CONSTITUTION.includes(p)).map(pItem) },
+        { title: 'Rol promptları', note: 'Akış dosyasında rol başına seçilir.', items: pList.filter((p) => !CONSTITUTION.includes(p)).map(pItem) }],
+      ps, rolePromptOpts: pList.filter((p) => !CONSTITUTION.includes(p)),
+      newPrompt: () => { let n = 1; while (pList.includes('roles/yeni-rol-' + n + '.md')) n++; const p = 'roles/yeni-rol-' + n + '.md'; this.setState((s) => ({ promptList: s.promptList.concat([p]), prompts: { ...s.prompts, [p]: '' }, promptDrafts: { ...s.promptDrafts, [p]: '# Rolün: yeni-rol-' + n + '\n\n## Sahiplendiğin\n\n- \n\n## Sahiplenmediğin\n\n- \n' }, promptSel: p })); },
+      agentsSub: ds === 'on' ? 'plan4 · gözcü açık · adımlar canlı akıyor' : 'plan4 · gözcü kapalı — ajanlar koşmuyor',
+      agents: agentRows.map((a) => ({ id: a.r.id, provider: a.r.provider, status: a.status,
+        ink: a.running || a.gate ? 'var(--color-accent-700)' : 'var(--color-neutral-700)',
+        bird: bird(a.running || a.gate ? 'var(--color-accent)' : a.q ? 'var(--color-text)' : 'var(--color-neutral-400)', animate && a.running, 36),
+        edge: a.r.id === sel.r.id ? 'var(--color-accent)' : 'transparent', bg: a.r.id === sel.r.id ? 'var(--color-accent-100)' : 'transparent',
+        pick: () => this.setState({ agentSel: a.r.id }) })),
+      ag,
+      openFlows: () => this.go('flows'),
+      flowNames: Object.keys(flows), nfOpen: nf.open, nfName: nf.name, nfDesc: nf.desc, nfBase: nf.base, nfError,
+      nfDisabled: !nfName || !!nfError,
+      onNfName: (e) => { const v = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''); this.setState((s) => ({ nf: { ...s.nf, name: v } })); },
+      onNfDesc: (e) => { const v = e.target.value; this.setState((s) => ({ nf: { ...s.nf, desc: v } })); },
+      onNfBase: (e) => { const v = e.target.value; this.setState((s) => ({ nf: { ...s.nf, base: v } })); },
+      openNewFlow: () => this.setState((s) => ({ nf: { ...s.nf, open: true } })),
+      closeNewFlow: () => this.setState((s) => ({ nf: { ...s.nf, open: false } })),
+      createFlow: () => this.makeFlow(nfName, nf.desc.trim(), nf.base),
+      railEdit: editing, draftTag: editing && ev.dirty, providers: PROVIDERS, ...ev,
+      hasNotes: ev.editNotes.length > 0,
+      startEdit: () => this.setState({ rail: { mode: 'edit' }, draft: this.state.draft || norm(clone(this.state.flows[this.state.flow])), editFocus: null }),
+      addRole: () => { const n = this.state.draft.roles.length + 1; const id = 'rol-' + n; this.edit((x) => { x.roles.push({ id, provider: 'claude', workspace: id, prompt: 'roles/coder.md' }); }); this.setState({ editFocus: id }); },
+      turUp: () => this.edit((x) => { x.tur = Math.min(5, (x.tur || 1) + 1); }), turDown: () => this.edit((x) => { x.tur = Math.max(1, (x.tur || 1) - 1); }),
+      planOff: editing && !this.state.draft.planning.length,
+      limitUp: () => this.edit((x) => { x.rejectLimit = Math.min(5, (x.rejectLimit ?? 2) + 1); }), limitDown: () => this.edit((x) => { x.rejectLimit = Math.max(1, (x.rejectLimit ?? 2) - 1); }),
+      setDenetci: (e) => { const v = e.target.value; this.edit((x) => { x.denetci = v || null; }); },
+      showYaml: this.state.showYaml, yamlLabel: this.state.showYaml ? 'YAML’ı gizle' : 'YAML’ı göster',
+      toggleYaml: () => this.setState({ showYaml: !this.state.showYaml }),
+      dirtyLabel: ev.errs ? 'Kaydetmeden önce düzelt' : ev.dirty ? 'Kaydedilmemiş değişiklik var' : 'Değişiklik yok',
+      saveDisabled: !ev.dirty || ev.errs > 0,
+      cancelEdit: () => this.setState({ draft: null, rail: { mode: 'overview' }, editFocus: null }),
+      saveEdit: () => {
+        const on = this.daemonStatus() === 'on';
+        this.setState({ flows: { ...this.state.flows, [this.state.flow]: this.state.draft }, draft: null, editFocus: null, rail: on ? { mode: 'daemon' } : { mode: 'overview' }, topoChanged: on });
+        this.say('hub/flows/' + this.state.flow + '.yaml yazıldı' + (on ? ' — gözcü eski listeyle koşuyor, yeniden başlat.' : '.'));
+      },
+      openCount, doneCount: done.length, totalCost: para(all.reduce((s, c) => s + c.costUsd, 0)),
+      doneEdge: done.length ? 'var(--color-text)' : 'var(--color-neutral-400)',
+      openDone: () => this.setState({ rail: { mode: 'role', id: 'bitti' } }),
+      diagram: this.diagram(nodes, flow, showArcs), nodes: nodeVals,
+      readAt: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
+      railOverview: rail.mode === 'overview', railRole: rail.mode === 'role', railCard: !!card,
+      gateCount: gates.length, gateInk: gates.length ? 'var(--color-accent)' : 'var(--color-text)', noGates: !gates.length, gateCards: gates,
+      activeCount: active.length, activeCards: active,
+      role, card, toOverview: () => this.setState({ rail: { mode: 'overview' } }),
+      cardBack: () => this.setState({ rail: from }), cardBackLabel: from.mode === 'role' ? from.id : 'Genel bakış',
+      newOpen: this.state.newOpen, openNew: () => this.setState({ newOpen: true }), closeNew: () => this.setState({ newOpen: false }), stop: (e) => e.stopPropagation(),
+      newTitle: this.state.newTitle, newBody: this.state.newBody,
+      onNewTitle: (e) => this.setState({ newTitle: e.target.value }), onNewBody: (e) => this.setState({ newBody: e.target.value }),
+      newDisabled: !this.state.newTitle.trim() || !this.state.newBody.trim(),
+      createCard: () => {
+        const id = 'c-20261103-' + hashOf(this.state.newTitle + Date.now()).slice(0, 6);
+        const c = { id, title: this.state.newTitle.trim(), role: roles[0].id, state: 'queued', turns: 0, rejects: 0, durationMs: 0, costUsd: 0, trail: [] };
+        this.setState({ cards: [c].concat(this.state.cards), newOpen: false, newTitle: '', newBody: '', flow: 'plan4' });
+        this.say('Kart ' + roles[0].id + ' kuyruğunda' + (this.daemonStatus() === 'on' ? '.' : ' — gözcü kapalı, bekleyecek.'));
+      },
+      toast: this.state.toast,
+    };
+  }
+}
+</script>
+</body>
+</html>
