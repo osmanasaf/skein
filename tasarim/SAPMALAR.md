@@ -98,6 +98,31 @@ yazmadaki yol beyaz listesi de aynen kalmalı: liste `===` ile
 karşılaştırır, `endsWith` ile değil — gevşetilmesine karşı sınamayla
 pinlendi.
 
+### 2.5 KOYU TEMA — tasarımda yok, ekranda var
+
+`DEVIR.md` koyu temadan **hiç söz etmiyor**; verdiği palet yalnızca açık
+tema. Oysa mevcut ekranda üç `@media (prefers-color-scheme: dark)` bloğu
+var ve dokuz token orada yeniden tanımlanıyor.
+
+Bu madde sonradan eklendi, çünkü ilk boşluk listesinde ATLANMIŞTI ve
+bedelini kart 2 ödedi: üst çubuk yalnızca yeni Modernist token'larını
+kullanıyordu, o token'lar koyu blokta ezilmediği için sayfanın gövdesi
+koyulaşırken üst çubuk açık kalıyordu. Denetçi bunu gerçek tarayıcıda
+ölçtü: `body` `rgb(11, 17, 24)`, `#bar` `rgb(243, 242, 242)`.
+
+**Kural:** Modernist token'larından ekranda GÖRÜNEN her biri, koyu tema
+bloğunda da bir karşılık almalı. Yeni bir token tanımlayıp koyu bloğu
+atlamak, o öğeyi koyu temada kırmak demektir — ve kırık hâli sessizdir,
+takım yeşil kalır.
+
+`DEVIR.md` koyu değerleri vermediği için bunlar TÜRETİLECEK. Türetilen
+her çift `token-kontrast.test.ts`'te AÇIK VE KOYU için ayrı ayrı
+ölçülmeli; bu dosyanın 1. bölümündeki eşikler (metin 4.5, grafik 3) iki
+temada da geçerli. Açık temada ölçülmüş olmak koyu temada bir şey
+kanıtlamaz.
+
+---
+
 ### 2.4 Lejant iddiası YANLIŞ
 
 Tasarımın lejantı şunu yazıyor:
