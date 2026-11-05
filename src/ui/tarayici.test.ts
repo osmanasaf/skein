@@ -98,6 +98,9 @@ declare function getComputedStyle(
   /** Yalnızca diyagramın dar/geniş ekranda hangi kopyasının göründüğü
    * sınaması için — bkz. akış diyagramı describe'ı. */
   display: string;
+  /** Yalnızca başlık fontu sınaması için — bkz. "başlık fontu" describe'ı
+   * altındaki test (kart c-20261105-6d7f66, reddin gerekçesi). */
+  fontFamily: string;
 };
 
 type Tarayici = { newPage: (o?: unknown) => Promise<Sayfa>; close: () => Promise<void> };
@@ -718,6 +721,43 @@ roles:
       expect(hatalarKoyu).toEqual([]);
     } finally {
       await koyu.close();
+    }
+  }, 60_000);
+
+  /**
+   * BAŞLIK FONTU — marka sözcüğü, sekme etiketleri ve "Yeni kart" düğmesi
+   * GERÇEKTEN Archivo'ya çözülüyor, gövdenin system-ui yığınına DÜŞMÜYOR
+   * (reddedilen 03fbf8c'in kusuru: `--font-heading` hiç tanımlanmamıştı,
+   * yani üç kuraldaki `var(--font-heading)` computed-value'da geçersizdi
+   * ve font-family sessizce body'nin `system-ui, -apple-system, ...`
+   * yığınına düşüyordu — font-weight hâlâ uygulanıyordu, yalnızca aile
+   * yanlıştı). `page.test.ts` kaynak metni sınar, burada `var()`'ın
+   * tarayıcıda GERÇEKTEN çözüldüğünü ölçüyoruz: token tanımsız kalsa bu
+   * sınama DÜŞER (computed fontFamily "Archivo" içermez, body'nin
+   * system-ui'ına eşit kalır), tanımlı olunca GEÇER.
+   */
+  it("marka adı, sekme etiketleri ve 'Yeni kart' düğmesi Archivo'ya çözülüyor, gövdenin system-ui yığınına düşmüyor", async () => {
+    const { page, hatalar } = await ac();
+    try {
+      await page.waitForSelector(".marka .markaAd", { timeout: 15_000 });
+      const govdeFontu = await page.evaluate(() => getComputedStyle(document.body).fontFamily);
+      const markaFontu = await page.evaluate(() =>
+        getComputedStyle(document.querySelector(".marka .markaAd")).fontFamily);
+      const sekmeFontu = await page.evaluate(() =>
+        getComputedStyle(document.querySelector(".navSekme")).fontFamily);
+      const dugmeFontu = await page.evaluate(() =>
+        getComputedStyle(document.querySelector(".yeniKart")).fontFamily);
+      expect(markaFontu).toContain("Archivo");
+      expect(sekmeFontu).toContain("Archivo");
+      expect(dugmeFontu).toContain("Archivo");
+      // KARŞIT İDDİA: gövdenin system-ui yığınına EŞİT KALMADIKLARI —
+      // tanımsız var() tam olarak bu değere sessizce düşerdi.
+      expect(markaFontu).not.toBe(govdeFontu);
+      expect(sekmeFontu).not.toBe(govdeFontu);
+      expect(dugmeFontu).not.toBe(govdeFontu);
+      expect(hatalar).toEqual([]);
+    } finally {
+      await page.close();
     }
   }, 60_000);
 

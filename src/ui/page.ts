@@ -76,6 +76,21 @@ const PAGE = `<!doctype html>
      * görünüşünü değiştirmiyor, yalnızca bu katmanı ve kapısını kuruyor.
      * Kapı: src/ui/token-kontrast.test.ts.
      * ------------------------------------------------------------------ */
+    /*
+     * --font-heading: modernist.css'ten BİREBİR alındı ("Archivo",
+     * system-ui, sans-serif). Google Fonts'un @import'u BİLİNÇLİ OLARAK
+     * taşınmadı — --mono'nun yukarıdaki satırı da aynı deseni izliyor
+     * ("IBM Plex Mono", ui-monospace, ...): bu sayfa bağımlılıksız, tek
+     * dosyalık kalmak için ağdan hiçbir şey çekmiyor; Archivo kurulu
+     * değilse yığın sessizce system-ui'a düşer. Önceki kart (03fbf8c) bu
+     * token'ı TANIMLAMADAN üç kuralda (.marka .markaAd, .navSekme,
+     * .yeniKart) kullanmıştı — tanımsız var() computed-value'da geçersiz
+     * sayılır ve font-family (inherited) sessizce body'nin system-ui
+     * yığınına düşer; reviewer'ın yakaladığı kusur buydu. Kapı:
+     * tarayici.test.ts "başlık fontu" sınaması — getComputedStyle ile
+     * GERÇEK çözülen aileyi ölçer, kaynak metnin kendisi bunu göremez.
+     */
+    --font-heading: "Archivo", system-ui, sans-serif;
     --color-bg: #f3f2f2; --color-surface: #eae9e9; --color-text: #201e1d;
     --color-accent: #ec3013;
     --color-divider: color-mix(in srgb, #201e1d 40%, transparent);
