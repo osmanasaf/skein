@@ -182,6 +182,33 @@ const CIFTLER: [string, string, string, Esik][] = [
     "color-bg",
     IKINCIL_ETIKET_ESIGI,
   ],
+
+  // --- Üst çubuk ve sekme iskeleti (c-20261105-6d7f66) ---
+  // Bu kart Modernist katmanını İLK kez gerçekten tüketiyor, yani
+  // aşağıdaki üç çift YENİ: eski palette hiç karşılığı yok. Ölçüldü:
+  // beyaz metin düz --color-accent zemin üstünde 4.20:1 — normal metin
+  // eşiğini (4.5) GEÇMİYOR. Bu yüzden "Yeni kart" düğmesi ve dolu
+  // rozetler --color-accent-700 kullanıyor (7.17:1, aynı ramptan bir
+  // ADIM koyu) — SAPMALAR'ın kendi yönteminin aynısı: yeni renk icat
+  // etme, ramptan doğru basamağı seç.
+  [
+    "Modernist marka simgesi/açık gözcü noktası — accent, zemin üstünde (büyük grafik)",
+    "color-accent",
+    "color-bg",
+    IKINCIL_ETIKET_ESIGI,
+  ],
+  [
+    "Modernist birincil düğme ve dolu rozet — beyaz metin, accent-700 zemin",
+    "#FFFFFF",
+    "color-accent-700",
+    NORMAL_METIN_ESIGI,
+  ],
+  [
+    "Modernist nötr rozet/Pano araç satırı — metin, neutral-200 zemin üstünde",
+    "color-text",
+    "color-neutral-200",
+    NORMAL_METIN_ESIGI,
+  ],
 ];
 
 describe("token kontrastı — açık tema", () => {

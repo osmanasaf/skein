@@ -675,29 +675,33 @@ roles:
   }, 60_000);
 
   /**
-   * KUŞ İŞARETİ — bardaki metnin YERİNE çizilen SVG, GERÇEKTEN görünür ve
-   * her iki temada da kendiliğinden doğru renkte.
+   * KUŞ İŞARETİ — bardaki marka SVG'si GERÇEKTEN görünür ve her iki temada
+   * da kendiliğinden aynı vurgu renginde (kart c-20261105-6d7f66).
    *
-   * `page.test.ts` yalnızca kaynak metni (ISARET_D sabiti var mı) sınayabilir
-   * — "currentColor gerçekten --ink'e eşitleniyor mu" sorusu GERÇEK çizim
-   * olmadan görünmez: yanlış bir seçici ya da unutulmuş bir sabit renk bile
-   * kaynak metinde dururdu.
+   * Bu sınama ESKİDEN "currentColor → --ink" eşitliğini ölçüyordu (marka
+   * metnin YERİNE geçen tek-çizgili simgeydi). Yeni üst çubuk tasarımı
+   * (DEVIR.md) markayı "40x26 üç kuş SVG'si, vurgu renginde" yapıyor —
+   * simge artık "Skein" sözcüğünün YANINDA, --ink'e değil --color-accent'e
+   * bağlı. Modernist katmanının koyu tema token'ı YOK (bkz. page.ts'teki
+   * token bloğu yorumu), yani iki temada da AYNI kırmızı çözülmeli — bu,
+   * eski simgenin "iki temada iki ayrı renk" davranışının BİLİNÇLİ tersi,
+   * kaynak metinde durmaz, yalnızca gerçek çizimde görünür.
    */
-  it("kuş işareti bardaki svg olarak çiziliyor, iki temada da currentColor --ink'e eşit", async () => {
+  it("marka simgesi bardaki svg olarak çiziliyor, iki temada da currentColor --color-accent'e eşit", async () => {
     const { page: acik, hatalar: hatalarAcik } = await acTema("light");
     try {
       await acik.waitForSelector(".marka svg path", { timeout: 15_000 });
-      // İŞARET currentColor KULLANIYOR: renk kararı burada DEĞİL, gövdenin
-      // --ink'inden geliyor — bu yüzden 'stroke' özniteliğinin KENDİSİ
-      // "currentColor" dizgesi olmalı (bir hex DEĞİL).
+      // İŞARET currentColor KULLANIYOR: renk kararı burada DEĞİL, ".marka"
+      // kuralının CSS 'color'ından geliyor — bu yüzden 'stroke'
+      // özniteliğinin KENDİSİ "currentColor" dizgesi olmalı (bir hex DEĞİL).
       const stroke = await acik.evaluate(() => document.querySelector(".marka svg path")?.getAttribute("stroke"));
       expect(stroke).toBe("currentColor");
-      // currentColor'ın ÇÖZÜLMÜŞ hâli: path'in computed 'color'ı, --ink'in
-      // o temadaki gerçek değeri.
+      // currentColor'ın ÇÖZÜLMÜŞ hâli: path'in computed 'color'ı,
+      // --color-accent'in gerçek değeri.
       const ciziliRenkAcik = await acik.evaluate(() =>
         getComputedStyle(document.querySelector(".marka svg path")).color);
-      // --ink (açık): #15212C → rgb(21, 33, 44)
-      expect(ciziliRenkAcik).toBe("rgb(21, 33, 44)");
+      // --color-accent: #ec3013 → rgb(236, 48, 19)
+      expect(ciziliRenkAcik).toBe("rgb(236, 48, 19)");
       expect(hatalarAcik).toEqual([]);
     } finally {
       await acik.close();
@@ -708,8 +712,9 @@ roles:
       await koyu.waitForSelector(".marka svg path", { timeout: 15_000 });
       const ciziliRenkKoyu = await koyu.evaluate(() =>
         getComputedStyle(document.querySelector(".marka svg path")).color);
-      // --ink (koyu): #E8EEF4 → rgb(232, 238, 244)
-      expect(ciziliRenkKoyu).toBe("rgb(232, 238, 244)");
+      // --color-accent'in koyu tema EZMESİ yok (Modernist katmanı koyu
+      // tanımlamıyor) — iki temada da AYNI kırmızı çözülmeli.
+      expect(ciziliRenkKoyu).toBe("rgb(236, 48, 19)");
       expect(hatalarKoyu).toEqual([]);
     } finally {
       await koyu.close();
@@ -1581,4 +1586,43 @@ planlama:
       }
     }, 60_000);
   });
+
+  /**
+   * SEKME İSKELETİ — üst çubuktaki dört sekme hash ile yönleniyor ve
+   * GERÇEKTEN içerik değiştiriyor (kart c-20261105-6d7f66).
+   *
+   * Yalnızca kaynak metin (page.test.ts'teki sekmeAdi sınaması) "hangi
+   * sekme aktif sayılır" kararını ölçebilir; "tıklanınca board GERÇEKTEN
+   * gizleniyor mu, Pano'ya dönünce sütunlar hâlâ duruyor mu" sorusu
+   * yalnızca gerçek DOM'da görünür.
+   */
+  it("sekmeler arasında geçiş board'u gizleyip yer tutucuyu gösteriyor, Pano'ya dönünce sütunlar aynen duruyor", async () => {
+    const { page, hatalar } = await ac();
+    try {
+      await page.waitForSelector("#bar .pill", { timeout: 15_000 });
+      // Başlangıçta Pano görünür, Akışlar gizli.
+      expect(await page.evaluate(() =>
+        getComputedStyle(document.querySelector("#icerikPano")).display)).not.toBe("none");
+      expect(await page.evaluate(() =>
+        getComputedStyle(document.querySelector("#icerikAkislar")).display)).toBe("none");
+
+      await page.click('.navSekme:has-text("Akışlar")');
+      await page.waitForSelector("#icerikAkislar", { state: "visible", timeout: 10_000 });
+      expect(await page.evaluate(() =>
+        getComputedStyle(document.querySelector("#icerikPano")).display)).toBe("none");
+      expect(await page.evaluate(() =>
+        document.querySelector(".navSekme-aktif")?.textContent ?? "")).toContain("Akışlar");
+
+      // GERİ DÖNÜŞ: Pano'nun kendi board'u (sütunlar) hâlâ DOM'da —
+      // sekme değişimi onu YOK ETMEDİ, yalnızca gizledi.
+      await page.click('.navSekme:has-text("Pano")');
+      await page.waitForSelector("#icerikPano", { state: "visible", timeout: 10_000 });
+      expect(await page.evaluate(() =>
+        getComputedStyle(document.querySelector("#icerikAkislar")).display)).toBe("none");
+      expect(await page.evaluate(() => document.querySelectorAll(".col").length)).toBeGreaterThan(0);
+      expect(hatalar).toEqual([]);
+    } finally {
+      await page.close();
+    }
+  }, 60_000);
 });

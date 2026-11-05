@@ -144,40 +144,97 @@ const PAGE = `<!doctype html>
     text-transform: uppercase; color: var(--ink-3);
   }
 
-  /* koşu şeridi */
-  .bar {
-    display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-5) var(--sp-9);
-    background: var(--surface); border: 1px solid var(--line); border-radius: 4px;
-    padding: var(--sp-5) var(--sp-8); margin-bottom: var(--sp-8);
-  }
-  .brand { font-size: var(--fs-brand); font-weight: 700; letter-spacing: -.02em; }
   /*
-   * KUS ISARETI. Duz metin "Skein" yerine gecti - isim zaten iki anlami
-   * birden tasiyor (cile ipligin kivrimi / V diziliminde ucan suru) ve
-   * marka bunu SOYLEMEK yerine GOSTERMELI. svg currentColor kullaniyor,
-   * yani renk burada degil govdenin --ink'inden geliyor: iki tema icin
-   * iki ayri kopya YOK, tek govde iki temada da dogru renkte.
+   * ÜST ÇUBUK VE SEKME İSKELETİ — Modernist (kart c-20261105-6d7f66).
+   *
+   * DEVIR.md'nin üst çubuk + dört sekme tasarımı. Pano'nun KENDİ içeriği
+   * (board, kart panelleri) bu kartla DEĞİŞMİYOR; yalnızca üst çubuk ve
+   * sekme gövdeleri (#icerikPano/#icerikAkislar/#icerikPromptlar/
+   * #icerikAjanlar) yeni. Akış seçici ve "Akışı düzenle"/"Promptları
+   * düzenle" düğmeleri yeni tasarımın üst çubuğunda YOK (Akışlar/
+   * Promptlar sekmeleri onların yerini alıyor) — ama bu kart o sekmeleri
+   * KURMUYOR (yer tutucu). Yetenek kaybolmasın diye Pano'nun kendi araç
+   * satırına (.panoArac, aşağıda) taşındı, eski görünüşüyle.
    */
-  .marka { display: inline-flex; align-items: center; }
-  .marka svg { width: 26px; height: 26px; color: var(--ink); display: block; }
+  .bar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5);
+    background: var(--color-bg); border-bottom: var(--border-section) solid var(--color-text);
+    padding: var(--space-3) var(--space-6); font-variant-numeric: tabular-nums;
+  }
+  /*
+   * MARKA: üç kuş SVG'si + "Skein" sözcüğü. Eski kararın tersi (bkz.
+   * markaSvg yorumu, eski "KUS ISARETI" yalnızca simge kullanıyordu) —
+   * yeni tasarım ikisini birlikte istiyor. İkon currentColor ile burada
+   * --color-accent'e bağlı: Modernist katmanının koyu tema token'ı yok
+   * (üstteki token bloğu yorumuna bak), yani simge açık/koyu temada AYNI
+   * kırmızıyı gösterir — eski --ink çift-tema deseni burada YOK.
+   */
+  .marka { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--color-accent); }
+  .marka svg { width: 40px; height: 26px; display: block; }
+  .marka .markaAd {
+    font-family: var(--font-heading); font-weight: 800; font-size: var(--fs-22);
+    letter-spacing: -0.03em; color: var(--color-text);
+  }
+  .anaNav { display: flex; align-items: center; gap: var(--space-4); }
+  .navSekme {
+    font: inherit; font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-14);
+    min-height: 44px; display: inline-flex; align-items: center; gap: var(--space-2);
+    background: none; border: none; border-bottom: var(--border-accent) solid transparent;
+    color: var(--color-text); cursor: pointer; padding: 0;
+  }
+  .navSekme-aktif { border-bottom-color: var(--color-accent); }
+  .navRozet {
+    display: inline-flex; align-items: center; justify-content: center; min-width: 18px;
+    height: 18px; padding: 0 5px; font-size: var(--fs-11); font-weight: 700; line-height: 1;
+  }
+  .navRozet-accent { background: var(--color-accent-700); color: #fff; }
+  .navRozet-notr { background: var(--color-neutral-200); color: var(--color-text); }
   #akisSecici {
     font: inherit; font-size: var(--fs-ui); font-family: var(--mono); min-height: 34px;
     padding: 0 var(--sp-3); border: 1px solid var(--line); border-radius: 3px;
     background: var(--surface-2); color: var(--ink); cursor: pointer;
   }
   #akisSecici:disabled { cursor: progress; opacity: .6; }
+  /*
+   * GÖZCÜ ÇİPİ — SAPMALAR.md §1'in gözcü noktası düzeltmelerini TÜKETİYOR:
+   * "yok" durumunun kenarı artık --daemon-dot-off-border'dan geliyor
+   * (önceki kart bunu tanımladı ama hiçbir seçici kullanmıyordu — bkz.
+   * token-kontrast.test.ts). "açık" durumu SAPMALAR'da kusurlu sayılmadı
+   * (accent/bg zaten 3.76:1, büyük-grafik eşiğini geçiyor), o yüzden düz
+   * --color-accent.
+   *
+   * Çip TEK BAŞINA tıklanabilir DEĞİL: tasarımın "sağ ok → gözcü paneli"
+   * davranışı bu kartın kapsamında değil (sağ panel henüz yok). Ok salt
+   * görsel ipucu (aria-hidden); gerçek eylem yanındaki düğmede duruyor —
+   * "yapamayacağı şeyi vaat eden düğme" bu dosyada iki kez düzeltilmiş bir
+   * kusur sınıfı, çipi sahte bir hedefe bağlamak aynı hataya düşerdi.
+   */
   .pill {
-    display: inline-flex; align-items: center; gap: var(--sp-3);
-    border: 1px solid var(--line); border-radius: 3px; padding: var(--sp-2) var(--sp-5);
-    font-size: var(--fs-ui);
+    display: inline-flex; align-items: center; gap: var(--space-2);
+    border: 2px solid var(--color-text); padding: var(--space-1) var(--space-3);
+    font-size: var(--fs-13); color: var(--color-text);
   }
-  .pill.on { background: var(--accent-soft); border-color: var(--accent-line); }
-  .pill.off { background: var(--surface-2); color: var(--ink-2); }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: 0 0 auto; }
-  .dot.dead { background: var(--ink-3); }
+  .pill.cokmus { border-color: var(--color-accent); }
+  .pill .ok { margin-left: 2px; }
+  .dot { width: 10px; height: 10px; flex: 0 0 auto; }
+  .dot.acik { background: var(--color-accent); border: 2px solid var(--color-accent); }
+  .dot.cokmus { background: var(--color-text); border: 2px solid var(--color-text); }
+  .dot.yok { background: var(--daemon-dot-off-fill); border: 2px solid var(--daemon-dot-off-border); }
   .spacer { flex: 1 1 auto; }
-  .stat { text-align: right; }
-  .stat b { display: block; font-family: var(--mono); font-size: var(--fs-stat); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .sayac { font-size: var(--fs-13); color: var(--label-ink); }
+  .sayac b { color: var(--color-text); font-weight: 800; }
+  .yeniKart {
+    font: inherit; font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-14);
+    min-height: 40px; padding: 0 var(--space-5); border: none; cursor: pointer;
+    background: var(--color-accent-700); color: #fff;
+  }
+  .yeniKart:hover { background: var(--color-accent-800); }
+  .panoArac {
+    display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-5) var(--sp-9);
+    padding: var(--sp-6) 0;
+  }
+  .yerTutucu { padding: var(--sp-9) 0; color: var(--ink-2); max-width: 60ch; }
+  .yerTutucu h2 { margin: 0 0 var(--sp-3); font-size: var(--fs-panel-title); }
 
   /* pano */
   .board { display: grid; grid-template-columns: repeat(auto-fit, minmax(252px, 1fr)); gap: var(--sp-6) var(--sp-5); align-items: start; }
@@ -434,11 +491,31 @@ const PAGE = `<!doctype html>
 </head>
 <body>
 <div class="wrap">
-  <div class="bar" id="bar"></div>
+  <nav class="bar" id="bar"></nav>
   <div id="kopuk"></div>
-  <div id="hata"></div>
-  <div id="uyari"></div>
-  <div class="board" id="board"></div>
+  <div id="icerikPano">
+    <div class="panoArac" id="panoArac"></div>
+    <div id="hata"></div>
+    <div id="uyari"></div>
+    <div class="board" id="board"></div>
+  </div>
+  <div id="icerikAkislar" class="yerTutucu" style="display:none">
+    <h2>Akışlar</h2>
+    <p>Bu sekme henüz kurulmadı — akış listesi, "Yeni akış" ve akışlar
+    arası geçiş burada toplanacak. Şimdilik Pano'nun üst araç satırındaki
+    akış seçiciyi kullan.</p>
+  </div>
+  <div id="icerikPromptlar" class="yerTutucu" style="display:none">
+    <h2>Promptlar</h2>
+    <p>Bu sekme henüz kurulmadı — anayasa ve rol promptları burada
+    düzenlenecek. Şimdilik Pano'nun üst araç satırındaki "Promptları
+    düzenle" düğmesini kullan.</p>
+  </div>
+  <div id="icerikAjanlar" class="yerTutucu" style="display:none">
+    <h2>Ajanlar</h2>
+    <p>Bu sekme henüz kurulmadı — çalışan ajanların adım adım izi burada
+    görünecek.</p>
+  </div>
   <footer id="foot"></footer>
 </div>
 <div id="panel"></div>
@@ -460,32 +537,47 @@ let SON_MODEL = null;
 const DOT = { accepted: "var(--accept)", rejected: "var(--reject)", gate: "var(--gate)", released: "var(--gate)", done: "var(--accept)" };
 
 /*
- * KUŞ İŞARETİ — TEK ÇİZGİ, İKİ ANLAM.
+ * KUŞ İŞARETİ — TEK ÇİZGİ, İKİ ANLAM. (favicon'un yolu — bkz. aşağıda)
  *
  * "skein" hem bir çile ipliğin (yumak edilmeden gevşek sarılmış ip) hem
  * de V dizilişinde uçan bir kuş sürüsünün adı. Bu yol ("d") ikisini de
  * AYNI çizgide taşıyor kasıtlı olarak: üç köşeli zikzak (her köşe bir V
  * açısı, kuş sürüsünün önden lider izlediği dalgalı hat) ipin son ucunda
  * bir kıvrıma (küçük bir eğri) kapanıyor — gevşek sarılmış bir çilenin
- * ucu gibi. İKİ AYRI SVG YOK: hem bardaki işaret hem favicon bu TEK
- * sabitten türüyor (bkz. faviconAyarla).
+ * ucu gibi.
+ *
+ * ESKİDEN bardaki işaret de bu sabitten türüyordu ("İKİ AYRI SVG YOK").
+ * Bu kart (c-20261105-6d7f66) o iddiayı bardaki işaret için GERİ ALIYOR:
+ * DEVIR.md'nin üst çubuğu "40x26 üç kuş SVG'si, vurgu renginde, 2.5
+ * çizgi" istiyor — eskiden farklı bir şekil. Favicon kapsamda DEĞİL
+ * (DEVIR/SAPMALAR hiç adını geçirmiyor), o yüzden ISARET_D ve
+ * faviconAyarla() AYNEN kalıyor; bardaki yeni şekil AYRI bir sabitte
+ * (UCKUS_D, bkz. markaSvg). İki simge artık kasıtlı olarak farklı.
  */
 const ISARET_D = "M3 17 L8 6 L12.5 16 L17 5 L21 15 C23.5 18 21 20.8 18 19";
 
 /**
- * İşaretin bir <svg> düğümünü kurar.
+ * Bardaki marka simgesi — gevşek V biçimli üç kuş, bir sürü izlenimi.
  *
- * "renk" parametre: bardaki kullanım "currentColor" veriyor (gövdenin
- * --ink'inden gelsin, iki temada da kendiliğinden doğru renkte olsun —
- * bu yüzden burada hiçbir hex YOK). Favicon ayrı bir belge gibi
- * render edildiği için (tarayıcı sekmesinde, sayfanın CSS'i ona
- * ulaşmıyor) "currentColor" orada anlamsız; faviconAyarla() kendi sabit
- * rengini veriyor ama AYNI ISARET_D yolunu kullanıyor.
+ * Üç ayrı <path> yerine TEK path üç alt-yol taşıyor (her "M" yeni bir alt
+ * yol açar) — DOM'da ".marka svg path" hâlâ TEK düğüme karşılık geliyor,
+ * favicon'un hazırlık beklemesiyle paylaşılan seçici bu yüzden bozulmuyor
+ * (bkz. tarayici.test.ts).
+ */
+const UCKUS_D = "M2,16 L9,8 L16,16 M13,13 L20,5 L27,13 M24,16 L31,8 L38,16";
+
+/**
+ * Markanın <svg> düğümünü kurar.
+ *
+ * "renk" parametre: bardaki kullanım "currentColor" veriyor — karar
+ * burada değil, ".marka" kuralının CSS 'color'ında (--color-accent).
+ * Modernist katmanının koyu tema token'ı yok (üstteki token bloğu
+ * yorumuna bak), yani simge açık/koyu temada AYNI kırmızıyı gösterir.
  *
  * NOT: bu dosya gömülü istemci betiğini bir ŞABLON DİZESİ içinde taşıyor
  * — yorumda ters tırnak dizgiyi kapatır ve derleme kırılır.
  */
-function isaretSvg(renk) {
+function markaSvg(renk) {
   // Değer İKİYE BÖLÜNMÜŞ YAZILIYOR: sayfa "dış kaynak yüklemez" iddiasını
   // kaynak metinde bir URL şeması dizgesi aramasıyla sınıyor (bkz.
   // page.test.ts) ve bu isim uzayı hiçbir şey İNDİRMİYOR — ad alanı
@@ -493,14 +585,14 @@ function isaretSvg(renk) {
   // kaynak metinde tek parça değil.
   const NS = "http:" + "//www.w3.org/2000/svg";
   const svg = document.createElementNS(NS, "svg");
-  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("viewBox", "0 0 40 26");
   svg.setAttribute("aria-label", "Skein");
   svg.setAttribute("role", "img");
   const yol = document.createElementNS(NS, "path");
-  yol.setAttribute("d", ISARET_D);
+  yol.setAttribute("d", UCKUS_D);
   yol.setAttribute("fill", "none");
   yol.setAttribute("stroke", renk);
-  yol.setAttribute("stroke-width", "2.2");
+  yol.setAttribute("stroke-width", "2.5");
   yol.setAttribute("stroke-linecap", "round");
   yol.setAttribute("stroke-linejoin", "round");
   svg.append(yol);
@@ -825,7 +917,10 @@ async function gozcuKomut(ne, dugme) {
 async function akisSec(ad, secici) {
   const geriDon = AKTIF_AD;
   secici.disabled = true;
-  const eski = document.querySelector("#bar .redd");
+  // Hata kutusu artık #panoArac'a düşüyor: seçici de o satırda yaşıyor
+  // (bkz. ciz — "Pano araç satırı" bölümü). #bar artık GENEL üst çubuk,
+  // akışa özgü bir hata orada yersiz dururdu.
+  const eski = document.querySelector("#panoArac .redd");
   if (eski) eski.remove();
   try {
     const cevap = await fetch("/akis/sec", {
@@ -845,7 +940,7 @@ async function akisSec(ad, secici) {
     secici.value = geriDon;
     const kutu = el("div", "redd", e.message);
     kutu.style.cssText = "flex-basis:100%";
-    document.getElementById("bar").append(kutu);
+    document.getElementById("panoArac").append(kutu);
   } finally {
     secici.disabled = false;
   }
@@ -1195,7 +1290,40 @@ function kapat() {
 }
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") kapat(); });
 
+/**
+ * Hash'ten AKTİF SEKMEYİ türetir — üç sekme adı dışında kalan HER ŞEY
+ * (boş hash, ve kart/, akis, prompt, prompt/yeni, yeni gibi Pano'nun
+ * KENDİ üst üste binen panel yolları) Pano sayılır. Bu yollar ayrı bir
+ * sekme değil, Pano'nun içindeki bir panel — hashOku'nun o panelleri
+ * açan dalları bu fonksiyondan BAĞIMSIZ, aynı hash'i ayrıca okuyor.
+ */
+function sekmeAdi(h) {
+  if (h === "akislar" || h === "promptlar" || h === "ajanlar") return h;
+  return "pano";
+}
+
+/**
+ * Aktif sekmeye göre dört içerik kutusundan birini gösterir, diğerlerini
+ * gizler — VE üst çubuktaki nav düğmelerinin vurgusunu TIKLANIR TIKLANMAZ
+ * günceller (bkz. "data-sekme" yorumu, ciz). ciz() zaten her yoklamada
+ * (1 sn) aynı sınıfı doğru kurar; bu fonksiyon olmadan vurgu çizgisi bir
+ * saniyeye kadar geç kalırdı — hash değişti ama ekran henüz söylemedi.
+ */
+function sekmeUygula() {
+  const aktif = sekmeAdi(decodeURIComponent(location.hash.replace(/^#/, "")));
+  ["Pano", "Akislar", "Promptlar", "Ajanlar"].forEach((parca) => {
+    const kutu = document.getElementById("icerik" + parca);
+    if (kutu) kutu.style.display = parca.toLowerCase() === aktif ? "" : "none";
+  });
+  document.querySelectorAll(".navSekme").forEach((b) => {
+    const eslesiyor = b.dataset.sekme === aktif;
+    b.classList.toggle("navSekme-aktif", eslesiyor);
+    b.setAttribute("aria-current", eslesiyor ? "page" : "false");
+  });
+}
+
 function hashOku() {
+  sekmeUygula();
   const h = decodeURIComponent(location.hash.replace(/^#/, ""));
   if (h.startsWith("kart/")) detayAc(h.slice("kart/".length));
   else if (h === "akis") void akisAc();
@@ -1206,21 +1334,87 @@ function hashOku() {
 }
 window.addEventListener("hashchange", hashOku);
 
+/**
+ * Gözcü çipinin durum kararı — SAF, DOM yok.
+ *
+ * Üç durum da MEVCUT modelden (m.daemon) ayrılıyor, yeni bir durum
+ * UYDURULMUYOR: "stopping"/"unmanaged" (DEVIR.md'nin gözcü paneli
+ * tablosu) bugünkü /durum ucunun BİLMEDİĞİ bilgi — ekranın gözcüyü
+ * BAŞLATAN komut mu açtığını bilme yolu yok, yalnızca kilidin var/canlı
+ * olduğunu biliyor. Etiket metinleri ESKİ koddakiyle AYNEN — bu salt bir
+ * çizim/kontrast düzeltmesi, davranış değişmiyor ("bayat kilit" ibaresi
+ * tarayici.test.ts'in "#bar .pill" sınamasına bağlı, KALDIRILMADI).
+ */
+function gozcuDurum(g) {
+  if (g === null) return { durum: "yok", etiket: "gözcü yok" };
+  if (g.alive) return { durum: "acik", etiket: "gözcü açık" };
+  return { durum: "cokmus", etiket: "gözcü kapalı (bayat kilit)" };
+}
+
+/** Pano rozetinin sayısı — kapıda bekleyen kart. SAF, DOM yok. */
+function kapidaBekleyenSayisi(cards) {
+  return cards.filter((c) => Boolean(c.gate)).length;
+}
+
+/** Ajanlar rozetinin sayısı — şu an çalışan kart. SAF, DOM yok. */
+function calisanAjanSayisi(cards) {
+  return cards.filter((c) => c.state === "active").length;
+}
+
 function ciz(m) {
   AKTIF_AD = m.flow.name;
   SON_MODEL = m;
   const bar = document.getElementById("bar");
   bar.replaceChildren();
-  // KUŞ İŞARETİ bardaki "Skein" metninin YERİNE geçiyor (bkz. isaretSvg
-  // yorumu) — currentColor kullandığı için burada hiçbir renk kararı
-  // verilmiyor, gövdenin --ink'i ne ise işaret onu alıyor.
+  // MARKA: üç kuş SVG'si + "Skein" sözcüğü (bkz. markaSvg yorumu).
   const marka = el("div", "marka");
-  marka.append(isaretSvg("currentColor"));
+  marka.append(markaSvg("currentColor"));
+  marka.append(el("span", "markaAd", "Skein"));
   bar.append(marka);
+
+  // ANA SEKMELER — hash ile yönlenir (#pano/#akislar/#promptlar/#ajanlar,
+  // bkz. sekmeAdi/hashOku). Rozetler MEVCUT modelden: Pano "kapıda
+  // bekleyen kart", Ajanlar "şu an çalışan kart" — ikisi de gerçekten
+  // bilinen sayılar. Akışlar AKISLAR.length (açılışta bir kez okunan
+  // gerçek liste). Promptlar DÜZ SIFIR: ekran henüz hiçbir dosyanın
+  // kaydedilmemiş olduğunu İZLEMİYOR (Promptlar sekmesi bu kartta yer
+  // tutucu) — "0" burada UYDURULMUŞ bir rahatlık değil, sistemin bugün
+  // gerçekten bildiği şey: hiçbir taslak hiçbir yerde izlenmiyor.
+  const aktifSekme = sekmeAdi(decodeURIComponent(location.hash.replace(/^#/, "")));
+  const nav = el("div", "anaNav");
+  nav.setAttribute("aria-label", "Ana sekmeler");
+  [
+    ["pano", "Pano", kapidaBekleyenSayisi(m.cards), "accent"],
+    ["akislar", "Akışlar", AKISLAR.length, "notr"],
+    ["promptlar", "Promptlar", 0, "notr"],
+    ["ajanlar", "Ajanlar", calisanAjanSayisi(m.cards), "accent"],
+  ].forEach(([ad, etiket, sayi, renk]) => {
+    const b = el("button", "navSekme" + (ad === aktifSekme ? " navSekme-aktif" : ""));
+    b.type = "button";
+    // data-sekme: sekmeUygula() TIKLANIR TIKLANMAZ (bir sonraki saniyelik
+    // yoklamayı BEKLEMEDEN) bu düğümü bulup aktif sınıfını güncelliyor —
+    // bkz. hashOku. Bu alan olmadan vurgu çizgisi en fazla 1 sn geç kalırdı.
+    b.dataset.sekme = ad;
+    b.setAttribute("aria-current", ad === aktifSekme ? "page" : "false");
+    b.append(document.createTextNode(etiket + " "));
+    b.append(el("span", "navRozet navRozet-" + renk, String(sayi)));
+    b.addEventListener("click", () => { location.hash = ad; });
+    nav.append(b);
+  });
+  bar.append(nav);
+
+  // PANO ARAÇ SATIRI — akış adı/hash'i, akış seçici, "Akışı düzenle" ve
+  // "Promptları düzenle" düğmeleri. Yeni tasarımın üst çubuğunda bunlar
+  // YOK (Akışlar/Promptlar sekmeleri yerini alıyor, bkz. yukarıdaki nav
+  // yorumu) — bu kart o sekmeleri KURMUYOR, yani yetenek burada, Pano'nun
+  // kendi araç satırında kalıyor. İçerik ve davranış ESKİSİYLE AYNEN: bu
+  // Pano'nun "MEVCUT içeriği" sayılıyor, yalnızca taşındı.
+  const panoArac = document.getElementById("panoArac");
+  panoArac.replaceChildren();
   const akis = el("div");
   akis.append(el("div", "eyebrow", "Akış"));
   akis.append(el("div", "mono", m.flow.name + "  " + m.flow.hash.slice(0, 12) + "…"));
-  bar.append(akis);
+  panoArac.append(akis);
 
   // AKIŞ SEÇİCİ. Ekran bugüne kadar açılışta verilen TEK akışa bağlıydı;
   // başka bir akışa bakmak ekranı kapatıp komutu yeniden yazmak demekti.
@@ -1238,8 +1432,16 @@ function ciz(m) {
       secici.append(o);
     });
     secici.addEventListener("change", () => void akisSec(secici.value, secici));
-    bar.append(secici);
+    panoArac.append(secici);
   }
+  const duzenle = el("button", "mini", "Akışı düzenle");
+  duzenle.type = "button";
+  duzenle.addEventListener("click", () => { location.hash = "akis"; });
+  panoArac.append(duzenle);
+  const promptlarDugme = el("button", "mini", "Promptları düzenle");
+  promptlarDugme.type = "button";
+  promptlarDugme.addEventListener("click", () => { location.hash = "prompt"; });
+  panoArac.append(promptlarDugme);
 
   // Akış dosyası bozulduysa ekran eski topolojiyle çizmeye devam ediyor;
   // bunu söylemezse kullanıcı düzenlemesinin neden tutmadığını bilemez.
@@ -1251,11 +1453,17 @@ function ciz(m) {
     hataKabi.replaceChildren();
   }
 
+  // GÖZCÜ ÇİPİ (bkz. gozcuDurum ve .pill yorumu — SAPMALAR §1'in gözcü
+  // noktası düzeltmelerini burada TÜKETİR).
   const g = m.daemon;
-  const pill = el("span", "pill " + (g && g.alive ? "on" : "off"));
-  pill.append(el("span", "dot" + (g && g.alive ? "" : " dead")));
-  pill.append(document.createTextNode(g ? (g.alive ? "gözcü açık" : "gözcü kapalı (bayat kilit)") : "gözcü yok"));
+  const durumBilgi = gozcuDurum(g);
+  const pill = el("span", "pill " + durumBilgi.durum);
+  pill.append(el("span", "dot " + durumBilgi.durum));
+  pill.append(document.createTextNode(durumBilgi.etiket));
   if (g) pill.append(el("span", "mono", "pid " + g.info.pid));
+  const ok = el("span", "ok", "→");
+  ok.setAttribute("aria-hidden", "true");
+  pill.append(ok);
   bar.append(pill);
 
   // GÖZCÜ DÜĞMESİ. Ekrandan kart açılabiliyordu ama hiçbir şey koşmuyordu:
@@ -1270,6 +1478,12 @@ function ciz(m) {
   // vaat eden düğme — bugün "Geri gönder"de düzeltilen kusurun aynısı.
   // Hap zaten "gözcü kapalı (bayat kilit)" diyor; düğme onunla aynı
   // gerçeği okumak zorunda.
+  //
+  // Bu düğme DEVIR.md'nin üst çubuğunda YOK — tasarımda çip tıklanınca
+  // sağ panel gözcü moduna açılır ve düğme ORADA durur. Bu kart o paneli
+  // kurmuyor, o yüzden düğme ÇİPİN YANINDA bir köprü olarak kalıyor:
+  // aksi hâlde gözcüyü ekrandan başlatma/durdurma yeteneği bu karttan
+  // sonra kaybolurdu.
   const canli = Boolean(g && g.alive);
   const gozcuDugme = el("button", "mini", canli ? "Gözcüyü durdur" : "Gözcüyü başlat");
   gozcuDugme.type = "button";
@@ -1277,31 +1491,27 @@ function ciz(m) {
   bar.append(gozcuDugme);
 
   bar.append(el("div", "spacer"));
-  // Kart açmak, ekranın EN ÇOK kullanılan eylemi ve tek yolu terminaldi:
-  // "ekrandan yönet" diyen bir araçta işe başlamanın kendisi ekranda
-  // olmayan bir adımdı. İlk sırada duruyor.
-  const yeni = el("button", "mini birincil", "Yeni kart");
+  // SAYAÇLAR — açık/bitti/toplam maliyet. "Aktivasyon" eski üst çubukta
+  // vardı, DEVIR.md'nin üç sayacında YOK — o sayı bir yere kaybolmuyor,
+  // kart düzeyinde (.meta) hâlâ basılıyor.
+  [["açık", m.totals.open], ["bitti", m.totals.done]].forEach(([ad, deger]) => {
+    const s = el("div", "sayac");
+    s.append(document.createTextNode(ad + " "));
+    s.append(el("b", null, String(deger)));
+    bar.append(s);
+  });
+  // Maliyet ifadesi AYNEN eskisiyle: "≥" alt sınır işareti SAPMALAR.md
+  // §2.1'in korunacak davranışı, burada hiç değişmedi.
+  const maliyetSayac = el("div", "sayac");
+  maliyetSayac.append(document.createTextNode("toplam maliyet "));
+  maliyetSayac.append(el("b", null, (m.totals.olculmeyen ? "\u2265" : "") + para(m.totals.costUsd)));
+  bar.append(maliyetSayac);
+
+  // yeni kart dugmesi: ekranin en cok kullanilan eylemi, ust cubugun ana dugmesi.
+  const yeni = el("button", "yeniKart", "Yeni kart");
   yeni.type = "button";
   yeni.addEventListener("click", () => { location.hash = "yeni"; });
   bar.append(yeni);
-  const duzenle = el("button", "mini", "Akışı düzenle");
-  duzenle.type = "button";
-  duzenle.addEventListener("click", () => { location.hash = "akis"; });
-  bar.append(duzenle);
-  const promptlarDugme = el("button", "mini", "Promptları düzenle");
-  promptlarDugme.type = "button";
-  promptlarDugme.addEventListener("click", () => { location.hash = "prompt"; });
-  bar.append(promptlarDugme);
-  // Ust bardaki toplam da alt sinir olabilir; isaret oraya da gider,
-  // yoksa kart duzeyinde durust olup ozette yalan sorulmus olurduk.
-  [["Açık", m.totals.open], ["Bitti", m.totals.done], ["Aktivasyon", m.totals.activations],
-   ["Maliyet", (m.totals.olculmeyen ? "\u2265" : "") + para(m.totals.costUsd)]]
-    .forEach(([ad, deger]) => {
-      const s = el("div", "stat");
-      s.append(el("div", "eyebrow", ad));
-      s.append(el("b", null, String(deger)));
-      bar.append(s);
-    });
 
   // Hiçbir kart ekrandan düşmemeli. Rolü yaşayan akışta olmayan kart
   // hiçbir sütuna uymuyor; kendi şeridinde, sebebiyle birlikte duruyor.

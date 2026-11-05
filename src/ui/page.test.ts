@@ -450,3 +450,93 @@ describe("bosBittiMetni — boş 'bitti' sütununun karar noktası", () => {
       .toBe("bir rol su an kosuyor, henuz biten kart yok");
   });
 });
+
+/**
+ * SEKMEADI — hash'ten aktif sekmenin KARAR noktası (kart c-20261105-6d7f66).
+ *
+ * Üç sekme adı dışında kalan HER ŞEY (boş hash dahil) Pano sayılmalı:
+ * kart/, akis, prompt, prompt/yeni, yeni hash'leri Pano'nun KENDİ üst üste
+ * binen panelleri — ayrı bir sekme değil. Bu ayrım yanlış kurulsaydı
+ * (örn. "akis" hash'i "akislar" sekmesine düşseydi) "Akışı düzenle"
+ * düğmesi tıklanınca ekran sessizce Akışlar sekmesine atlardı.
+ */
+describe("sekmeAdi — hash'ten aktif sekme kararı", () => {
+  const sekme = (h: string): string => fonksiyon<(h: string) => string>(renderPage("t"), "sekmeAdi")(h);
+
+  it("üç sekme adını aynen döner", () => {
+    expect(sekme("akislar")).toBe("akislar");
+    expect(sekme("promptlar")).toBe("promptlar");
+    expect(sekme("ajanlar")).toBe("ajanlar");
+  });
+
+  it("boş hash ve Pano'nun kendi panel yolları 'pano' döner", () => {
+    expect(sekme("")).toBe("pano");
+    expect(sekme("kart/123")).toBe("pano");
+    expect(sekme("akis")).toBe("pano");
+    expect(sekme("prompt")).toBe("pano");
+    expect(sekme("prompt/yeni")).toBe("pano");
+    expect(sekme("yeni")).toBe("pano");
+  });
+});
+
+/**
+ * GÖZCÜDURUM — gözcü çipinin durum kararı (kart c-20261105-6d7f66).
+ *
+ * Üç durum da MEVCUT modelden (m.daemon) ayrılıyor; metinler ESKİ koddan
+ * DEĞİŞMEDİ (bu salt bir çizim/kontrast kartı). "bayat kilit" ibaresi
+ * KALMALI — tarayici.test.ts'in "#bar .pill" sınaması buna bağlı.
+ */
+describe("gozcuDurum — gözcü çipinin durum kararı", () => {
+  type Durum = { durum: string; etiket: string };
+  const durum = (g: { alive: boolean; info?: unknown } | null): Durum =>
+    fonksiyon<(g: { alive: boolean; info?: unknown } | null) => Durum>(renderPage("t"), "gozcuDurum")(g);
+
+  it("kilit yoksa 'yok' der", () => {
+    expect(durum(null)).toEqual({ durum: "yok", etiket: "gözcü yok" });
+  });
+
+  it("kilit canlıysa 'açık' der", () => {
+    expect(durum({ alive: true })).toEqual({ durum: "acik", etiket: "gözcü açık" });
+  });
+
+  // SINIR: 'alive: false' (kilit var ama pid ölü) "açık" DEĞİL. `g.alive`
+  // yerine `g !== null` yazılsaydı bu dal "açık" derdi — ÖLÇÜLMÜŞ kusurun
+  // aynısı (bkz. page.ts "GÖZCÜ DÜĞMESİ" yorumu).
+  it("kilit var ama ölüyse 'çökmüş' der, metin 'bayat kilit' içerir", () => {
+    const sonuc = durum({ alive: false });
+    expect(sonuc.durum).toBe("cokmus");
+    expect(sonuc.etiket).toContain("bayat kilit");
+  });
+});
+
+/**
+ * ROZET SAYILARI — Pano/Ajanlar sekme rozetlerinin KARAR noktaları
+ * (kart c-20261105-6d7f66). SAF, DOM yok.
+ */
+describe("kapidaBekleyenSayisi — Pano rozeti", () => {
+  const say = (cards: { gate: string | null }[]): number =>
+    fonksiyon<(c: { gate: string | null }[]) => number>(renderPage("t"), "kapidaBekleyenSayisi")(cards);
+
+  it("gate alanı dolu olanları sayar, null olanları saymaz", () => {
+    expect(say([{ gate: "approval" }, { gate: null }, { gate: "deadlock" }])).toBe(2);
+  });
+
+  it("hiç kart yoksa sıfır döner", () => {
+    expect(say([])).toBe(0);
+  });
+});
+
+describe("calisanAjanSayisi — Ajanlar rozeti", () => {
+  const say = (cards: { state: string }[]): number =>
+    fonksiyon<(c: { state: string }[]) => number>(renderPage("t"), "calisanAjanSayisi")(cards);
+
+  // SINIR: yalnızca "active" sayılır — "gate"/"done"/"queued" ÇALIŞAN
+  // ajan DEĞİL, karşı mutasyon (=== yerine !==) bu satırı KIRAR.
+  it("yalnızca state === 'active' olanları sayar", () => {
+    expect(say([{ state: "active" }, { state: "gate" }, { state: "active" }, { state: "done" }])).toBe(2);
+  });
+
+  it("hiç çalışan yoksa sıfır döner", () => {
+    expect(say([{ state: "gate" }, { state: "done" }])).toBe(0);
+  });
+});
