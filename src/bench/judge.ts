@@ -78,11 +78,25 @@ export function quoteFound(report: string, quote: string): boolean {
   return normalize(report).includes(q);
 }
 
+/*
+ * AJANIN YAZDIĞI JSON — alan adları Türkçe KALIR.
+ *
+ * `bench/prompts/judge.md` hakeme BİREBİR şunu söylüyor:
+ *   {"no": 1, "yakalandi": true, "alinti": "...", "gerekce": "..."}
+ * Bu adlar promptla SÖZLEŞME; promptlar Türkçe kalıyor (DIL-GECISI.md).
+ *
+ * BİR KEZ KIRILDI: dil geçişinin 1. partisinde alinti -> quotation ve
+ * gerekce -> rationale çevrildi. Kod ajanın HİÇ yazmadığı alanları
+ * okumaya başladı, yani her alıntı ve gerekçe sessizce undefined geldi.
+ * Sınamalar YAKALAMADI: fikstürleri de birlikte çevrildiği için kendi
+ * içinde tutarlıydılar — ısırmayan sınama. Geri alındı ve bu adlar
+ * SABİT listeye eklendi.
+ */
 interface RawVerdict {
   no?: unknown;
   yakalandi?: unknown;
-  quotation?: unknown;
-  rationale?: unknown;
+  alinti?: unknown;
+  gerekce?: unknown;
 }
 
 /**
@@ -124,8 +138,8 @@ export function applyVerdicts(
 ): JudgeVerdict[] {
   return hooks.map((hook, i) => {
     const raw = raws.find((r) => typeof r.no === "number" && r.no === i + 1) ?? raws[i];
-    const reason = typeof raw?.rationale === "string" ? raw.rationale : undefined;
-    const quote = typeof raw?.quotation === "string" ? raw.quotation : undefined;
+    const reason = typeof raw?.gerekce === "string" ? raw.gerekce : undefined;
+    const quote = typeof raw?.alinti === "string" ? raw.alinti : undefined;
     const claimed = raw?.yakalandi === true;
     if (!claimed) {
       return { hook, caught: false, ...(reason ? { reason } : {}) };

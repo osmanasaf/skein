@@ -26,11 +26,22 @@ export interface ClassifyResult {
   invoke: InvokeResult;
 }
 
+/*
+ * AJANIN YAZDIĞI JSON — alan adları Türkçe KALIR.
+ *
+ * `bench/prompts/siniflandir.md` sınıflayıcıya BİREBİR şunu söylüyor:
+ *   {"no": 1, "sinif": "gercek", "kanitli": false, "alinti": "...",
+ *    "gerekce": "..."}
+ * Bu adlar promptla SÖZLEŞME. ÇIKTI türünün (Finding) alanları
+ * İngilizce olabilir; HAM GİRDİ'nin alanları olamaz.
+ *
+ * Bkz. judge.ts'teki aynı not: bu sözleşme bir kez sessizce kırıldı.
+ */
 interface RawFinding {
   sinif?: unknown;
-  proven?: unknown;
-  quotation?: unknown;
-  rationale?: unknown;
+  kanitli?: unknown;
+  alinti?: unknown;
+  gerekce?: unknown;
 }
 
 const CLASSES: FindingClass[] = ["gercek", "nit", "yanlis", "belirsiz"];
@@ -52,16 +63,16 @@ export function applyFindings(raws: RawFinding[], report: string): {
   const findings: Finding[] = [];
   let unverified = 0;
   for (const raw of raws) {
-    const quote = typeof raw.quotation === "string" ? raw.quotation : "";
+    const quote = typeof raw.alinti === "string" ? raw.alinti : "";
     if (!quoteFound(report, quote)) {
       unverified += 1;
       continue;
     }
     const sinif = CLASSES.find((c) => c === raw.sinif) ?? "belirsiz";
-    const reason = typeof raw.rationale === "string" ? raw.rationale : undefined;
+    const reason = typeof raw.gerekce === "string" ? raw.gerekce : undefined;
     findings.push({
       sinif,
-      proven: raw.proven === true,
+      proven: raw.kanitli === true,
       quote,
       ...(reason ? { reason } : {}),
     });

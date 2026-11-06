@@ -63,8 +63,8 @@ describe("puanlama — uçtan uca", () => {
   it("raporu puanlar, kararı günlüğe yazar ve etki raporuna taşır", async () => {
     const events = await seedRun(report);
     const bin = await fakeJudge([
-      { no: 1, yakalandi: true, quotation: "havuz kalan görevleri başlatmayı sürdürüyor" },
-      { no: 2, yakalandi: false, rationale: "rapor bu davranışa değinmiyor" },
+      { no: 1, yakalandi: true, alinti: "havuz kalan görevleri başlatmayı sürdürüyor" },
+      { no: 2, yakalandi: false, gerekce: "rapor bu davranışa değinmiyor" },
     ]);
 
     const { targets } = scoreTargets(events);
@@ -122,8 +122,8 @@ describe("puanlama — uçtan uca", () => {
   it("uydurulmuş alıntı yakalama sayılmaz ve günlükte işaretlenir", async () => {
     const events = await seedRun(report);
     const bin = await fakeJudge([
-      { no: 1, yakalandi: true, quotation: "raporda hiç geçmeyen bir cümle uyduruyorum" },
-      { no: 2, yakalandi: true, quotation: "bu da raporda yok ama iddia ediyorum" },
+      { no: 1, yakalandi: true, alinti: "raporda hiç geçmeyen bir cümle uyduruyorum" },
+      { no: 2, yakalandi: true, alinti: "bu da raporda yok ama iddia ediyorum" },
     ]);
 
     await scoreAll({

@@ -250,6 +250,41 @@ parametre, yıkım) olmalı VE ad hiçbir ÖZELLİK konumunda geçmemeli.
 Özellik adları dosyalar arası sözleşme; onlar genel partilerde tutarlı
 biçimde çevriliyor.
 
+**11. EN CİDDİ KUSUR: AJAN PROMPTUYLA OLAN JSON SÖZLEŞMESİ KIRILDI.**
+
+`bench/prompts/judge.md` hakeme BİREBİR şunu söylüyor:
+
+    {"no": 1, "yakalandi": true, "alinti": "...", "gerekce": "..."}
+
+`siniflandir.md` de `sinif` / `kanitli` / `alinti` / `gerekce` diyor.
+
+Geçişin **1. partisinde** `alinti -> quotation` ve `gerekce -> rationale`
+çevrildi (3. partide `kanitli -> proven`). Kod ajanın HİÇ yazmadığı
+alanları okumaya başladı: her alıntı ve gerekçe sessizce `undefined`,
+her `kanitli` sessizce `false`. Puanlama "bildirilmedi"yi "sıfır"
+sayardı — bu depodaki adıyla **BİLDİRİLMEYEN SIFIR DEĞİLDİR**.
+
+**1654 sınamanın HİÇBİRİ düşmedi.** `judge.test.ts`,
+`classify.test.ts`, `classify.e2e.test.ts` ve `score.e2e.test.ts`'in
+fikstürleri de birlikte çevrilmişti: kendi içinde tutarlı, gerçek
+ajanla değil. Isırmayan sınamanın ders kitabı örneği.
+
+**DÜZELTME:** ham girdi arayüzleri (`RawVerdict`, `RawFinding`) Türkçe
+alan adlarına döndü; ÇIKTI türlerinin (`JudgeVerdict`, `Finding`)
+alanları İngilizce kaldı. Dört ad SABİT listeye eklendi: `alinti`,
+`gerekce`, `kanitli`, `yakalandi`.
+
+**KUSURU YAKALAYAN SINAMA:** `src/bench/prompt-sozlesmesi.test.ts`.
+Fikstür KULLANMIYOR — promptun KENDİSİNDEKİ JSON örneğini okuyup gerçek
+ayrıştırıcıdan geçiriyor. Promptla kod ayrışırsa düşer. Mutasyonla
+doğrulandı: `alinti` yerine `quotation` okutunca hem hakem hem
+sınıflandırıcı sınaması kırmızıya düşüyor, geri alınca yeşile dönüyor.
+
+**GENEL KURAL (bu kusurun dersi):** bir alan adının SABİT olup
+olmadığını anlamak için diskteki JSON'a bakmak YETMEZ. Ajana ne
+söylediğimize de bakılacak: `hub/prompts/**` ve `bench/prompts/**`
+içindeki her JSON örneği bir şemadır.
+
 **Kanıt (her iki aşama için):** Türkçe metne bakan sınamaların hepsi
 DEĞİŞMEDEN geçmeli. Değişen varsa sınır çiğnenmiştir.
 
