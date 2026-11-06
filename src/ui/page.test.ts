@@ -267,7 +267,27 @@ describe("renderPage — kuyruk engeli bandı", () => {
   it("bant modelin engeller alanına bağlı", () => {
     const src = betik(renderPage("x"));
     expect(src).toContain("m.engeller && m.engeller.length");
-    expect(src).toContain("kart kuyrukta ALINAMIYOR");
+    expect(src).toContain("kart kuyrukta alınamıyor");
+  });
+
+  /**
+   * Başlık KART sayar, ENGEL KAYDI saymaz (ÖLÇÜM, kart c-20261106-9a451b):
+   * KIRLI kodu kirli dosya başına bir kayıt üretiyor, kart sayısı modelin
+   * `totals.engelliKart`'ından gelmeli — `m.engeller.length`'ten değil,
+   * aksi hâlde sekiz kirli dosyalı tek kart yine "8 kart" basardı.
+   */
+  it("başlık kart sayısını totals.engelliKart'tan okur, engel kaydı saymaz", () => {
+    const src = betik(renderPage("x"));
+    expect(src).toContain("m.totals.engelliKart");
+    expect(src).not.toContain("m.engeller.length + \" kart");
+  });
+
+  // KIRLI engeli varken dosya sayısı da ayrıca görünür — iki büyüklük de
+  // okunabilir olmalı (hedef metin: "1 kart alınamıyor — 8 kirli dosya").
+  it("KIRLI engeli varsa dosya sayısı da ikinci bir cümlede geçiyor", () => {
+    const src = betik(renderPage("x"));
+    expect(src).toContain('e.code === "KIRLI"');
+    expect(src).toContain("kirli dosya");
   });
 
   // Kod ve yol olmadan "alınamadı" kullanıcıyı hiçbir yere götürmez.
@@ -275,6 +295,43 @@ describe("renderPage — kuyruk engeli bandı", () => {
     const src = betik(renderPage("x"));
     expect(src).toContain('e.code + "  " + e.role + "  " + e.path');
     expect(src).toContain("e.message");
+  });
+});
+
+/**
+ * `engelBandBasligi` — DAVRANIŞ sınaması (SAPMALAR §2.7: "nitelik doğru"
+ * ile "ekranda doğru" ayrı iddialardır, biri diğerini kanıtlamaz). Yukarıki
+ * "bağlantı" testleri kaynak metni sınıyor; bu blok fonksiyonu gerçekten
+ * ÇALIŞTIRIYOR ve bastığı METNİ karşılaştırıyor.
+ *
+ * ÖLÇÜM (kart c-20261106-9a451b): kırmızı bant "8 kart kuyrukta
+ * ALINAMIYOR" diyordu, gerçekte kuyrukta 1 kart vardı, sekiz dosya onu
+ * tutuyordu. Mutasyon denemesi: `kartSayisi` yerine `engeller.length`
+ * kullanırsan, ya da ternary'yi tersine çevirirsen birinci sınama düşer.
+ */
+describe("engelBandBasligi — davranış", () => {
+  const baslik = (kartSayisi: number, engeller: { code: string }[]): string =>
+    fonksiyon<(k: number, e: { code: string }[]) => string>(
+      renderPage("x"),
+      "engelBandBasligi",
+    )(kartSayisi, engeller);
+
+  it("8 kirli dosyalı tek kartta '1 kart' geçiyor, '8 kart' GEÇMİYOR", () => {
+    const sekizKirliDosya = Array.from({ length: 8 }, () => ({ code: "KIRLI" }));
+    const metin = baslik(1, sekizKirliDosya);
+    expect(metin).toBe("1 kart kuyrukta alınamıyor — 8 kirli dosya");
+    expect(metin).not.toContain("8 kart");
+  });
+
+  it("KIRLI yoksa (ör. GIT) ikinci cümle çıkmıyor, eski anlam korunuyor", () => {
+    expect(baslik(1, [{ code: "GIT" }])).toBe("1 kart kuyrukta alınamıyor");
+    expect(baslik(3, [{ code: "GIT" }, { code: "GIT" }, { code: "GIT" }])).toBe(
+      "3 kart kuyrukta alınamıyor",
+    );
+  });
+
+  it("engel yoksa (boş liste) ikinci cümle çıkmaz, çağıran dal zaten çizmiyor", () => {
+    expect(baslik(0, [])).toBe("0 kart kuyrukta alınamıyor");
   });
 });
 

@@ -2719,6 +2719,31 @@ function temaAnahtariKur() {
   return grup;
 }
 
+/**
+ * Kuyruk engeli bandının başlığı — SAF (DOM yok).
+ *
+ * NOT: bu bölge gömülü betiğin template literal'ının İÇİ — ters tırnak
+ * string'i kapatır, o yüzden bu yorumda ters tırnak YOK.
+ *
+ * KART sayar, ENGEL KAYDI saymaz: KIRLI kodu kirli dosya başına bir kayıt
+ * üretiyor (tick.ts'teki kirli.map), yani sekiz kirli dosyalı TEK kart
+ * eskiden "8 kart kuyrukta ALINAMIYOR" basıyordu (ÖLÇÜM, kart
+ * c-20261106-9a451b) — gerçekte tek kart sekiz dosya yüzünden alınamamıştı.
+ * Kart sayısı burada MODELDEN geliyor (totals.engelliKart, model.ts'teki
+ * kartSayisi() ile türetiliyor); bu fonksiyon kendi sayımını İCAT ETMİYOR.
+ *
+ * KIRLI kaydı varsa dosya sayısı ikinci bir cümlede ayrıca görünür — iki
+ * büyüklük de okunabilir olmalı. Diğer kodlarda (GIT, ve ileride
+ * eklenecekler) engeller.length ile kartSayisi zaten eşit (her kayıt ayrı
+ * bir karttı, eski anlam), o yüzden ikinci cümle gerekmiyor.
+ */
+function engelBandBasligi(kartSayisi, engeller) {
+  const kirliSayisi = engeller.filter((e) => e.code === "KIRLI").length;
+  return kirliSayisi > 0
+    ? kartSayisi + " kart kuyrukta alınamıyor — " + kirliSayisi + " kirli dosya"
+    : kartSayisi + " kart kuyrukta alınamıyor";
+}
+
 function ciz(m) {
   AKTIF_AD = m.flow.name;
   SON_MODEL = m;
@@ -2926,7 +2951,7 @@ function ciz(m) {
   // string'i kapatır.
   if (m.engeller && m.engeller.length) {
     const band = el("div", "band");
-    band.append(el("h2", null, m.engeller.length + " kart kuyrukta ALINAMIYOR"));
+    band.append(el("h2", null, engelBandBasligi(m.totals.engelliKart, m.engeller)));
     band.append(el("p", null,
       "Bu kartlar kuyrukta duruyor ama role verilemiyor ve bu bir yarış değil: " +
       "dosya kilitli, izin yok ya da yolda bir şey var. Kart kendiliğinden " +

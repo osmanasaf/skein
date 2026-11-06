@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import { al } from "../testing/queue.js";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { knownProviderSet } from "../adapters/factory.js";
@@ -11,7 +11,10 @@ import { loadFlow } from "../flow/load.js";
 import { snapshot, type TopologySnapshot } from "../flow/snapshot.js";
 import { acquireLock } from "../watch/lock.js";
 import { tick } from "../watch/tick.js";
-import { activationSteps, buildDetail, buildModel, buildSteps, type BuildOptions } from "./model.js";
+import {
+  activationSteps, buildDetail, buildModel, buildSteps, kartSayisi, kirliSuruyorMu,
+  type BuildOptions, type UiEngel,
+} from "./model.js";
 
 const FLOW = `
 name: test
@@ -892,6 +895,154 @@ describe("buildModel — kuyruk engeli", () => {
   it("hiç engel kaydı yoksa boş", async () => {
     await put();
     expect((await buildModel(base)).engeller).toEqual([]);
+  });
+});
+
+/**
+ * `kartSayisi` — başlığın KART sayması, ENGEL KAYDI saymaması (ÖLÇÜM, kart
+ * c-20261106-9a451b). Mutasyon denemesi: gruplama anahtarını KIRLI için
+ * `path`'e çevirirsen (ya da diğer kodlar için `role`'e) ilk/üçüncü sınama
+ * düşer; geri alınca yeşile döner.
+ */
+describe("kartSayisi", () => {
+  const engel = (ovr: Partial<UiEngel>): UiEngel => ({
+    path: "p", code: "KIRLI", message: "m", role: "coder", at: "2026-11-06T00:00:00.000Z", ...ovr,
+  });
+
+  it("aynı rolün birden çok KIRLI kaydı TEK kart sayılır", () => {
+    const engeller = [engel({ path: "a" }), engel({ path: "b" }), engel({ path: "c" })];
+    expect(kartSayisi(engeller)).toBe(1);
+  });
+
+  it("farklı rollerin KIRLI kayıtları ayrı kart sayılır", () => {
+    const engeller = [engel({ path: "a", role: "coder" }), engel({ path: "b", role: "reviewer" })];
+    expect(kartSayisi(engeller)).toBe(2);
+  });
+
+  it("KIRLI olmayan kodlarda yol kart sayar, eski anlam korunuyor", () => {
+    const engeller = [
+      engel({ code: "EPERM", path: "x", role: "coder" }),
+      engel({ code: "EPERM", path: "y", role: "coder" }),
+    ];
+    expect(kartSayisi(engeller)).toBe(2);
+  });
+
+  it("boş liste sıfır kart", () => {
+    expect(kartSayisi([])).toBe(0);
+  });
+});
+
+/**
+ * `kirliSuruyorMu` — ÖLÇÜM (kart c-20261106-9a451b): KIRLI'nin yolu bir
+ * KAYNAK dosyası, asla kaybolmaz; çözülme bir SONRAKİ `agent.started`a
+ * bağlı, dosyanın varlığına değil. Mutasyon denemesi: `<=`'yi `<`'ye ya da
+ * `undefined` dalını `false`'a çevirirsen ilk/son sınama düşer.
+ */
+describe("kirliSuruyorMu", () => {
+  const engel: UiEngel = {
+    path: "src/ui/server.ts", code: "KIRLI", message: "m", role: "coder",
+    at: "2026-11-06T02:29:00.000Z",
+  };
+
+  it("rol hiç tur başlatmadıysa sürüyor sayılır — bilmiyorsak çözülmüş sayma", () => {
+    expect(kirliSuruyorMu(engel, undefined)).toBe(true);
+  });
+
+  it("engelden SONRA bir agent.started varsa çözülmüş sayılır", () => {
+    expect(kirliSuruyorMu(engel, "2026-11-06T05:00:00.000Z")).toBe(false);
+  });
+
+  it("agent.started engelden ÖNCEYSE hâlâ sürüyor sayılır", () => {
+    expect(kirliSuruyorMu(engel, "2026-11-06T01:00:00.000Z")).toBe(true);
+  });
+
+  // Tam aynı an: kesinlikle SONRA değil, o yüzden temkinli taraf seçiliyor
+  // — "daha yeni" (SAPMALAR'ın "bilmiyorsak başlatma" ilkesiyle aynı).
+  it("agent.started engelle TAM AYNI anda sayılırsa hâlâ sürüyor sayılır", () => {
+    expect(kirliSuruyorMu(engel, engel.at)).toBe(true);
+  });
+});
+
+/**
+ * KIRLI engeli — ÖLÇÜM, canlı ekran (kart c-20261106-9a451b): kırmızı bant
+ * "8 kart kuyrukta ALINAMIYOR" diyordu, gerçekte kuyrukta 1 kart vardı ve
+ * son KIRLI olayı saatler önceydi. İki ayrı hata burada uçtan uca sınanıyor:
+ * birim (dosya sayısı ≠ kart sayısı) ve yaşam süresi (kaynak dosya hiç
+ * kaybolmaz, çözülme olaya bağlı olmalı).
+ */
+describe("buildModel — KIRLI engeli", () => {
+  async function kirliKaydi(yol: string): Promise<void> {
+    const log = new EventLog(logPath, "kosu-1");
+    await log.append({ type: "queue.blocked", role: "coder", path: yol, code: "KIRLI", message: "kirli ağaç" });
+  }
+
+  it("kaynak dosya hâlâ yerinde olsa da, sonraki agent.started engeli çözer", async () => {
+    const kaynak = join(root, "src", "ui", "server.ts");
+    await mkdir(dirname(kaynak), { recursive: true });
+    await writeFile(kaynak, "// kaynak\n");
+    await kirliKaydi(kaynak);
+
+    const once = await buildModel(base);
+    expect(once.engeller).toHaveLength(1);
+    expect(once.engeller[0]?.code).toBe("KIRLI");
+
+    // Rol sonradan BAŞARIYLA bir tur başlattı — runRole ajanı çağırmadan
+    // önce ağacı kontrol ediyor (tick.ts), yani bu olay ancak ağaç o anda
+    // temizse loglanabilir.
+    const log = new EventLog(logPath, "kosu-1");
+    await log.append({
+      type: "agent.started", cell: "c-sonraki:coder", role: "coder",
+      provider: "claude", model: "m", promptHash: "h",
+    });
+
+    const sonra = await buildModel(base);
+    expect(sonra.engeller).toEqual([]);
+    // Dosya HÂLÂ yerinde: çözülme varlığa değil olaya bağlı olduğunu kanıtlıyor.
+    await expect(stat(kaynak)).resolves.toBeDefined();
+  });
+
+  it("sonraki agent.started yoksa engel saatler sonra bile sürmeye devam eder", async () => {
+    const kaynak = join(root, "src", "ui", "server.ts");
+    await mkdir(dirname(kaynak), { recursive: true });
+    await writeFile(kaynak, "// kaynak\n");
+    await kirliKaydi(kaynak);
+
+    const m = await buildModel(base);
+    expect(m.engeller).toHaveLength(1);
+  });
+
+  it("8 kirli dosyalı aynı rol TEK kart sayılır (totals.engelliKart)", async () => {
+    const log = new EventLog(logPath, "kosu-1");
+    for (let i = 0; i < 8; i += 1) {
+      const yol = join(root, "src", `dosya${i}.ts`);
+      await mkdir(dirname(yol), { recursive: true });
+      await writeFile(yol, "// x\n");
+      await log.append({ type: "queue.blocked", role: "coder", path: yol, code: "KIRLI", message: "kirli ağaç" });
+    }
+
+    const m = await buildModel(base);
+    expect(m.engeller).toHaveLength(8);
+    expect(m.totals.engelliKart).toBe(1);
+  });
+
+  // KIRLI olmayan engel (kuyruk dosyası engeli) eski davranışı korumalı:
+  // dosya yerindeyse sürüyor, taşındıysa bitmiş — stat kontrolü bozulmamış.
+  it("KIRLI olmayan engel eski davranışı korur: dosya yerindeyse sürüyor", async () => {
+    const yol = join(root, ".skein", "queue", "coder", "0-x-c-eski.json");
+    await mkdir(dirname(yol), { recursive: true });
+    await writeFile(yol, "{}");
+    const log = new EventLog(logPath, "kosu-1");
+    await log.append({ type: "queue.blocked", role: "coder", path: yol, code: "EPERM", message: "izin yok" });
+    await log.append({
+      type: "agent.started", cell: "c-baska:coder", role: "coder",
+      provider: "claude", model: "m", promptHash: "h",
+    });
+
+    const m = await buildModel(base);
+    // Dosya hâlâ yerinde: sonraki agent.started KIRLI'nin kuralı, bunu
+    // ETKİLEMEMELİ — eski anlam (varlık testi) bu kod için geçerli.
+    expect(m.engeller).toHaveLength(1);
+    expect(m.engeller[0]?.code).toBe("EPERM");
   });
 });
 

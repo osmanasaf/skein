@@ -70,6 +70,15 @@ export interface UiModel {
     olculmeyen: number;
     activations: number;
     orphans: number;
+    /**
+     * Süren engellerin kaç KARTI etkilediği — `engeller.length` DEĞİL.
+     *
+     * `KIRLI` dosya başına bir kayıt ürettiği için `engeller.length`
+     * sekiz kirli dosyalı tek kartta "8" verir; bu alan `kartSayisi()`
+     * ile gerçek kart sayısını veriyor. Ekran başlığı bunu okuyor, kendi
+     * sayımını İCAT ETMİYOR (bkz. `page.ts` kuyruk engeli bandı).
+     */
+    engelliKart: number;
   };
   /**
    * Ayrıştırılamayan kart dosyalarının yolları.
@@ -348,6 +357,10 @@ export async function buildModel(options: BuildOptions): Promise<UiModel> {
     }),
   );
 
+  // `totals.engelliKart` da `engeller`'den okuyor — aynı liste, tek
+  // sayım kuralı (`kartSayisi`), iki yerde iki ayrı yorum riski yok.
+  const engeller = await surenEngeller(events);
+
   return {
     flow: {
       name: options.flowName,
@@ -369,11 +382,72 @@ export async function buildModel(options: BuildOptions): Promise<UiModel> {
       costUsd: ui.reduce((sum, c) => sum + c.costUsd, 0),
       olculmeyen: ui.reduce((sum, c) => sum + c.olculmeyen, 0),
       activations: events.filter((e) => e.type === "agent.started").length,
+      engelliKart: kartSayisi(engeller),
     },
     bozuk: await options.queue.bozuklar(),
-    engeller: await surenEngeller(events),
+    engeller,
     at: now().toISOString(),
   };
+}
+
+/**
+ * Süren engellerin kaç KARTI etkilediği (ÖLÇÜM, kart c-20261106-9a451b).
+ *
+ * `KIRLI` kodu DOSYA başına bir kayıt üretir (`tick.ts`'teki `kirli.map`,
+ * bilinçli: toplu tek satır hangi dosyayı temizleyeceğini söylemezdi) ama
+ * hepsi AYNI kartın aynı turuna ait — o turda role için tek kart alınmış,
+ * kirli ağaçta bulunmuş, kuyruğa geri konmuştur. Dosya sayısı kadar kayıt,
+ * kart sayısı HER ZAMAN bir. Sekiz kirli dosyayı "8 kart kuyrukta
+ * alınamıyor" diye basmak, tek bir kartı sekiz kart gibi göstermekti —
+ * hata üretimde değil SUNUMDA: kayıt doğru, başlık onu kart sayıyormuş
+ * gibi okuyordu.
+ *
+ * O yüzden `KIRLI` kayıtları ROLE göre gruplanır: bir role aynı anda tek
+ * kart verilir (`CardQueue#take`, tek `active/<rol>` girdisi), yani aynı
+ * rolün süren `KIRLI` kayıtları hep aynı kartın aynı engeline işaret eder.
+ *
+ * Diğer kodlarda (`GIT`, ve ileride eklenecek her yeni kod) yol GERÇEKTEN
+ * bir kart/kuyruk dosyasını işaret eder — eski anlam korunuyor: her PATH
+ * ayrı bir karttır.
+ */
+export function kartSayisi(engeller: UiEngel[]): number {
+  const gruplar = new Set<string>();
+  for (const engel of engeller) {
+    gruplar.add(engel.code === "KIRLI" ? `rol:${engel.role}` : `yol:${engel.path}`);
+  }
+  return gruplar.size;
+}
+
+/**
+ * Bir `KIRLI` engelinin hâlâ SÜRÜP sürmediğine karar verir (ÖLÇÜM, kart
+ * c-20261106-9a451b).
+ *
+ * `KIRLI`'nin yolu bir KAYNAK dosyasıdır (`src/ui/server.ts` gibi) ve asla
+ * kaybolmaz — `stat` her zaman başarır, yani varlık testi bu kod için
+ * hiçbir şey söylemez. Ölçümde ağaç saatler önce temizlenmişti ama günlükte
+ * 3155 `KIRLI` kaydı birikmişti ve ekran en yenisini sonsuza kadar
+ * "sürüyor" gösteriyordu.
+ *
+ * Gerçek soru ağacın HÂLÂ kirli olup olmadığı. Bunun en ucuz cevabı olay
+ * günlüğünden TÜRETİLEBİLİYOR, ek I/O gerekmiyor: `runRole` (tick.ts) ajanı
+ * çağırmadan ÖNCE ağacı kontrol ediyor, yani bir rol için `agent.started`
+ * ancak ağaç O ANDA temizse loglanabilir. Engelden SONRA aynı rol için daha
+ * yeni bir `agent.started` varsa, ağaç o noktada temizdi — `KIRLI` engeli
+ * çözülmüştü. (Alternatif: o çalışma ağacının git durumunu ŞU AN sormak —
+ * daha doğrudan ama her yenilemede bir `git` çağrısı demek; bu yüzden
+ * seçilmedi.)
+ *
+ * SAF: girdi engel kaydı ve rolün bilinen en yeni `agent.started` anı
+ * (yoksa `undefined`), çıktı bir boolean. DOM yok, I/O yok — `surenEngeller`
+ * günlüğü zaten okudu, bu fonksiyon sadece karar veriyor.
+ */
+export function kirliSuruyorMu(engel: UiEngel, sonTurBaslangici: string | undefined): boolean {
+  // Bu rol hiç tur başlatmamışsa (ya da engelden önce başlatılmışsa) ağacın
+  // o zamandan beri temizlendiğine dair bir kanıt yok: engel hâlâ sürüyor
+  // sayılır — bilmiyorsak çözülmüş SAYMIYORUZ, aynı projenin "bilmiyorsak
+  // başlatma" ilkesi.
+  if (sonTurBaslangici === undefined) return true;
+  return sonTurBaslangici <= engel.at;
 }
 
 /**
@@ -398,10 +472,26 @@ async function surenEngeller(events: SkeinEvent[]): Promise<UiEngel[]> {
     });
   }
 
+  // `kirliSuruyorMu`'nun ihtiyaç duyduğu tek ek bilgi: rol başına bilinen
+  // en yeni `agent.started` anı. Aynı günlükten, ek I/O yok — olaylar
+  // sırayla okunuyor, o yüzden son yazım kazanıyor.
+  const sonTurBaslangici = new Map<string, string>();
+  for (const event of events) {
+    if (event.type !== "agent.started") continue;
+    sonTurBaslangici.set(event.role, event.at);
+  }
+
   const suren: UiEngel[] = [];
   for (const engel of sonKayit.values()) {
-    // Dosya yerinde değilse engel çözülmüş: kart alındı ya da taşındı.
-    // Çözülmüş engeli basmak, operatöre olmayan bir arıza göstermek olurdu.
+    if (engel.code === "KIRLI") {
+      // Dosyanın varlığı bu kod için hiçbir şey söylemiyor (bkz.
+      // `kirliSuruyorMu`); karar olay günlüğünden türüyor.
+      if (kirliSuruyorMu(engel, sonTurBaslangici.get(engel.role))) suren.push(engel);
+      continue;
+    }
+    // Diğer kodlarda yol bir kart/kuyruk dosyası: dosya yerinde değilse
+    // engel çözülmüş (kart alındı ya da taşındı). Çözülmüş engeli basmak,
+    // operatöre olmayan bir arıza göstermek olurdu.
     try {
       await stat(engel.path);
     } catch {
