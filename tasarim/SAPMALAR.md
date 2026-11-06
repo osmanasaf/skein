@@ -226,3 +226,21 @@ ekranın görünüşüyle ilgili, akışın davranışıyla değil.
 
 Aynı şekilde `support.js` ve `.dc.html` çalışma zamanı ürüne taşınmaz:
 hedef, bağımlılıksız tek dosyalık `src/ui/page.ts` yaklaşımıdır.
+
+---
+
+## 5. Sapma — sağlayıcı listesi sabit-4 değil
+
+`DEVIR.md` §3 "Rolleri düzenle" sağlayıcı alanı için "claude / codex /
+copilot / gemini" dört seçeneğini sayıyor. Ekran bunun yerine
+`knownProviderSet()` ile GERÇEKTEN KAYITLI sağlayıcıları listeliyor
+(bugün: `claude`, `codex`) — sabit dörtlü listeyi aynen basmak,
+"yapamayacağı şeyi vaat eden düğme" kusur sınıfına girerdi: operatör
+`copilot`/`gemini` seçip Kaydet'e bassa dosya o değerle yazılır ama
+akışı hiçbir rol gerçekten koşturamaz, hata ancak gözcü çalışınca çıkar.
+
+Bu, DEVIR-DENETIM.md'nin §3 denetimi sırasında bulundu; önceden bu
+dosyada kayıtlı DEĞİLDİ (bir "bilinmiş sapma" değil, gözden kaçmıştı).
+Geri getirilmeyecek: sabit liste eklenirse yeni bir sağlayıcı
+kaydedilmeden önce de seçilebilir olurdu, bu da aynı kusuru geri
+getirir.

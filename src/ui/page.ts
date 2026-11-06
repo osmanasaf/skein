@@ -961,7 +961,7 @@ const PAGE = `<!doctype html>
    * PAYLAŞILIYOR) — burada yalnızca bu modun KENDİ yapıları.
    */
   .railGozcuBaslikSatir { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-2) 0 var(--space-3); }
-  .railGozcuNokta { width: 14px; height: 14px; flex: 0 0 auto; border: 2px solid var(--color-text); }
+  .railGozcuNokta { width: 10px; height: 10px; flex: 0 0 auto; border: 2px solid var(--color-text); }
   .railGozcuNokta.on { background: var(--color-accent); }
   .railGozcuNokta.stopping { background: var(--daemon-dot-stopping-fill); }
   .railGozcuNokta.off, .railGozcuNokta.unmanaged { background: var(--daemon-dot-off-fill); }
@@ -1149,10 +1149,18 @@ const PAGE = `<!doctype html>
     color: var(--ink-2); border-radius: 3px; cursor: pointer;
   }
   .iz { display: flex; gap: var(--sp-5); }
-  .iz .t { width: 54px; flex: 0 0 auto; font-family: var(--mono); font-size: var(--fs-label); color: var(--ink-3); padding-top: 2px; font-variant-numeric: tabular-nums; }
+  .iz .t { width: 52px; flex: 0 0 auto; font-family: var(--mono); font-size: var(--fs-label); color: var(--ink-3); padding-top: 2px; font-variant-numeric: tabular-nums; }
   .iz .rail { width: 11px; flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; }
-  .iz .rail i { width: 9px; height: 9px; border-radius: 50%; margin-top: 4px; flex: 0 0 auto; }
-  .iz .rail s { width: 1px; flex: 1 1 auto; background: var(--line); min-height: 12px; }
+  /*
+   * DEVIR.md "Kartın izi": "10px düğüm" + Interactions&Behavior'ın genel
+   * kuralı "tüm durum noktaları kare, 2px kenar; yuvarlak hiçbir şey yok" —
+   * bu düğüm SAPMALAR §2.7'nin tarif ettiği tam boşluk türüydü (DOM/CSS'e
+   * bakan hiçbir sınama yoktu): 9px YUVARLAK, kenarsızdı. Dolgu rengi
+   * (IZ_RENK, olay türüne göre) DOKUNULMADI — SAPMALAR §1'in kuyruk-kare
+   * düzeltmesiyle AYNI desen: dolgu anlamı taşır, kenar şekli sabitler.
+   */
+  .iz .rail i { width: 10px; height: 10px; border-radius: 0; border: 2px solid var(--color-text); margin-top: 4px; flex: 0 0 auto; }
+  .iz .rail s { width: 2px; flex: 1 1 auto; background: var(--line); min-height: 12px; }
   .iz .gov { flex: 1 1 auto; min-width: 0; padding-bottom: var(--sp-6); }
   .iz .gov b { font-size: var(--fs-ui-lg); }
   .iz .gov em { font-family: var(--mono); font-size: var(--fs-label); color: var(--ink-3); font-style: normal; margin-left: var(--sp-2); }
@@ -1217,7 +1225,7 @@ const PAGE = `<!doctype html>
   .rolust b { font-family: var(--mono); font-size: var(--fs-tight); }
   .mini {
     font: inherit; font-size: var(--fs-tight); min-height: 34px; padding: 0 var(--sp-4); cursor: pointer;
-    border: 1px solid var(--line); background: transparent; color: var(--ink-2); border-radius: 3px;
+    border: 1px solid var(--line); background: transparent; color: var(--ink-2); border-radius: 0;
   }
   .mini:hover { border-color: var(--accent); color: var(--accent-ink); }
   .mini.sil:hover { border-color: var(--reject); color: var(--reject-ink); }
@@ -1349,6 +1357,21 @@ const PAGE = `<!doctype html>
     border: var(--border-row) solid var(--color-text); background: var(--color-bg); color: var(--color-text);
   }
   .dialog textarea { min-height: 72px; padding: var(--space-2) var(--space-3); resize: vertical; }
+  /*
+   * ".err" (bu betiğin ESKİ, redesign-öncesi hata kutusu — ".ust/.panel"
+   * çekmecesinin paylaştığı sınıf, --gate-bg/--gate-line/--gate-ink
+   * turuncu paletiyle, 4px köşe) bu YENİ ".dialog" içinde de kullanılıyordu
+   * (yeniAkisAc). DEVIR.md Fidelity: "köşe yarıçapı: 0 (her yerde)", "tek
+   * vurgu rengi kırmızı" — eski ".err" ikisini de çiğniyordu. ".err"ün
+   * KENDİSİ değiştirilmiyor (eski ".ust/.panel" çekmecesi hâlâ ona bağlı,
+   * sökülmesi ayrı bir kart — bkz. DEVIR-DENETIM.md); bu kural yalnızca
+   * ".dialog" İÇİNDEKİ örneği Modernist'e çeviriyor, ".akisKartHata"nın
+   * ZATEN kullandığı aynı accent-100/accent-700 çiftiyle (yeni renk YOK).
+   */
+  .dialog .err {
+    border-radius: 0; background: var(--color-accent-100); border-color: var(--color-accent-700);
+    color: var(--color-accent-800);
+  }
 
   /*
    * PROMPTLAR SEKMESİ — DEVIR.md §5. Solda 320px liste (iki grup: Anayasa/

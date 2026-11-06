@@ -119,6 +119,12 @@ declare function getComputedStyle(
   /** Yalnızca başlık fontu sınaması için — bkz. "başlık fontu" describe'ı
    * altındaki test (kart c-20261105-6d7f66, reddin gerekçesi). */
   fontFamily: string;
+  /** Yalnızca DEVIR-DENETIM'in köşe yarıçapı/kenar ölçümleri için (DEVIR.md
+   * Fidelity: "köşe yarıçapı 0 her yerde" + "tüm durum noktaları kare, 2px
+   * kenar; yuvarlak hiçbir şey yok" — bkz. ".mini", ".railGozcuNokta",
+   * ".iz .rail i", ".dialog .err" sınamaları). */
+  borderRadius: string;
+  borderWidth: string;
 };
 /**
  * page.ts'in gömülü betiği MODÜL DEĞİL (düz `<script>`) — üst düzey
@@ -745,6 +751,34 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
       expect(komutlar[1]).toContain("src/ui/cli.ts");
       const dugmeVar = await page.evaluate(() => Boolean(document.querySelector(".railGozcuEylemler button")));
       expect(dugmeVar).toBe(false);
+    } finally {
+      await page.close();
+    }
+  }, 60_000);
+
+  /**
+   * DEVIR-DENETIM: DEVIR.md Interactions & Behavior — "Tüm durum noktaları
+   * kare (10px, 2px kenar); yuvarlak hiçbir şey yok." Gözcü paneli
+   * noktası (`.railGozcuNokta`, "gözcünün açık mı kapalı mı olduğunu
+   * söyleyen ANA işaret" — bkz. SAPMALAR §1 gerekçesi) 14×14px ÇİZİLİYORDU,
+   * üst çubuktaki eşdeğeri (`.dot`, 10×10) ile TUTARSIZ — hiçbir sınama bu
+   * boyutu GERÇEK TARAYICIDA ölçmüyordu (SAPMALAR §2.7 sınıfı boşluk).
+   */
+  it("gözcü panelindeki durum noktası 10×10px, 2px kenarlı (üst çubuktaki .dot ile AYNI ölçü)", async () => {
+    const { page, hatalar } = await ac();
+    try {
+      await page.waitForSelector("#bar .pill", { timeout: 15_000 });
+      await page.click("#bar .pill");
+      await page.waitForSelector(".railGozcuNokta", { timeout: 10_000 });
+      const olcu = await page.evaluate(() => {
+        const n = document.querySelector(".railGozcuNokta");
+        if (!n) return null;
+        const r = n.getBoundingClientRect();
+        const s = getComputedStyle(n);
+        return { w: r.width, h: r.height, kenar: s.borderWidth, kose: s.borderRadius };
+      });
+      expect(olcu).toEqual({ w: 10, h: 10, kenar: "2px", kose: "0px" });
+      expect(hatalar).toEqual([]);
     } finally {
       await page.close();
     }
@@ -1719,6 +1753,41 @@ reject:
         await page.waitForSelector(".railSayiSatiri", { timeout: 10_000 });
         expect(await page.evaluate(() => document.querySelector(".railKartBaslik"))).toBeNull();
 
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+      }
+    }, 60_000);
+
+    /**
+     * DEVIR-DENETIM: DEVIR.md §1 Rail mod 3 — "'Kartın izi' zaman
+     * çizelgesi: 52px saat sütunu, 10px düğüm, 2px dikey ray" + genel
+     * "tüm durum noktaları kare, yuvarlak hiçbir şey yok" kuralı.
+     *
+     * `izZamanCizelgesiKur` (eski detayCiz'den ÇIKARILIP Kart moduna
+     * TAŞINAN aynı fonksiyon) 9px YUVARLAK, kenarsız bir nokta ve 1px'lik
+     * bir ray çiziyordu — SAPMALAR §2.7'nin tam tarif ettiği boşluk:
+     * nitelik/CSS'e bakan hiçbir sınama bu GERÇEKTEN ÇİZİLEN şekli hiç
+     * ölçmüyordu. Dolgu rengi (IZ_RENK, olaya göre) kasıtlı DOKUNULMADI.
+     */
+    it("'Kartın izi' düğümü kare, 10px, 2px kenarlı (yuvarlak DEĞİL)", async () => {
+      await queue.add(newCard({ title: "iz denetimi", task: "iş", topology }));
+      const taken = await al(queue, "coder");
+      await queue.escalate(taken, "elle bakılmalı");
+
+      const { page, hatalar } = await ac();
+      try {
+        await page.waitForSelector(".railBaslikBtn", { timeout: 15_000 });
+        await page.click(".railBaslikBtn");
+        await page.waitForSelector(".iz .rail i", { timeout: 10_000 });
+        const olcu = await page.evaluate(() => {
+          const n = document.querySelector(".iz .rail i");
+          if (!n) return null;
+          const r = n.getBoundingClientRect();
+          const s = getComputedStyle(n);
+          return { w: r.width, h: r.height, kenar: s.borderWidth, kose: s.borderRadius };
+        });
+        expect(olcu).toEqual({ w: 10, h: 10, kenar: "2px", kose: "0px" });
         expect(hatalar).toEqual([]);
       } finally {
         await page.close();
@@ -2749,6 +2818,31 @@ planlama:
   }, 60_000);
 
   /**
+   * DEVIR-DENETIM: DEVIR.md Fidelity — "köşe yarıçapı: 0 (her yerde)".
+   *
+   * `.panoArac`'ın "Akışı düzenle"/"Rolleri düzenle"/"Promptları düzenle"
+   * düğmeleri `.mini` sınıfını eski akış-düzenleyici bloğuyla PAYLAŞIYOR
+   * (DEVIR-DENETIM.md §1, "ÖNEMLİ BULGU") ve bu blok `border-radius: 3px`
+   * taşıyordu — SAPMALAR §2.7'nin tarif ettiği türden bir kusur: hiçbir
+   * sınama GERÇEKTEN ÇİZİLEN köşeyi ölçmüyordu. Burada ölçülüyor.
+   */
+  it("üst araç satırındaki 'Rolleri düzenle' düğmesi köşesiz (DEVIR.md Fidelity)", async () => {
+    const { page, hatalar } = await ac();
+    try {
+      await page.waitForSelector('button:has-text("Rolleri düzenle")', { timeout: 15_000 });
+      const yaricap = await page.evaluate(() => {
+        const b = Array.from(document.querySelectorAll("#panoArac button"))
+          .find((e) => e.textContent === "Rolleri düzenle");
+        return b ? getComputedStyle(b).borderRadius : null;
+      });
+      expect(yaricap).toBe("0px");
+      expect(hatalar).toEqual([]);
+    } finally {
+      await page.close();
+    }
+  }, 60_000);
+
+  /**
    * MOD 5 — "Rolleri düzenle" (kart c-20261105-725320, DEVIR.md §3).
    *
    * page.test.ts yalnızca karar fonksiyonlarını (duzenleHatalari,
@@ -3132,6 +3226,45 @@ roles:
 
         const yeniYol = join(root, "hub", "flows", "ucuncu.yaml");
         expect(await readFile(yeniYol, "utf8")).toContain("id: coder");
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+        await s.close();
+      }
+    }, 60_000);
+
+    /**
+     * DEVIR-DENETIM: DEVIR.md Fidelity — "köşe yarıçapı: 0 (her yerde)",
+     * "tek vurgu rengi kırmızı". "Yeni akış" kutusunun hata kutusu ESKİ
+     * ".err" sınıfını (4px köşe, turuncu "gate" paleti) devralıyordu —
+     * SAPMALAR.md'de kayıtlı bir sapma DEĞİL, gözden kaçmış bir kusur.
+     * Şablon akış BOZUKSA ("draft" yok) "Oluştur ve düzenle" senkron
+     * olarak bu kutuyu gösteriyor — gerçek bir hata yolu, mock YOK.
+     */
+    it("'Yeni akış' kutusunun hata kutusu köşesiz ve tek-vurgu (accent) paletinde", async () => {
+      await writeFile(join(root, "hub", "flows", "bozuk.yaml"), "name: bozuk\nroles: []\n");
+      const s = await akislarSunucusuAc();
+      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const hatalar: string[] = [];
+      page.on("pageerror", (e) => hatalar.push(String(e)));
+      try {
+        await page.goto(s.url, { waitUntil: "networkidle" });
+        await page.click('.navSekme:has-text("Akışlar")');
+        await page.waitForSelector(".akisKart", { timeout: 10_000 });
+        await page.click('button:has-text("Yeni akış")');
+        await page.waitForSelector(".dialog", { timeout: 10_000 });
+
+        await page.fill(".dialog input", "dorduncu");
+        await page.selectOption(".dialog select", "bozuk");
+        await page.click('button:has-text("Oluştur ve düzenle")');
+
+        await page.waitForSelector(".dialog .err", { timeout: 10_000 });
+        const stil = await page.evaluate(() => {
+          const e = document.querySelector(".dialog .err");
+          return e ? { kose: getComputedStyle(e).borderRadius, metin: e.textContent } : null;
+        });
+        expect(stil?.kose).toBe("0px");
+        expect(stil?.metin).toContain("okunamıyor");
         expect(hatalar).toEqual([]);
       } finally {
         await page.close();
