@@ -6,6 +6,45 @@ baştan sona okundu ve **her maddesi** için üç olasılıktan biri verildi:
 UYGULANDI (kanıtla), BİLEREK SAPILDI (`SAPMALAR.md` madde no), EKSİK (ne
 yok + büyüklük).
 
+## Bu tur: reddedilen iddianın düzeltilmesi (reviewer itirazı, kenar 1. ret)
+
+`reviewer` bu belgenin önceki hâlini (`997adda`) reddetti: "Yeni kart" ana
+düğmesi maddesi UYGULANDI satırının içinde "üst çubukta AYRI bir 'Yeni
+kart' düğmesi bu isimle bulunamadı" diye YANLIŞ bir iddia taşıyordu —
+`page.ts:2889-2892` (`el("button", "yeniKart", "Yeni kart")`, `ciz()`
+içinde koşulsuz) ve `page.ts:566-571` (`.yeniKart{min-height:40px;...}`)
+tek bir `grep` ile bulunabiliyordu, ve düğme zaten `tarayici.test.ts:609`
+ve `:1956`'da `.yeniKart` seçiciyle sınanıyordu. İtiraz HAKLI: bu satır
+düzeltildi (aşağıda, "Genel yerleşim" tablosu).
+
+İtiraz ayrıca aynı "belirsiz/kanıt orta/bulunamadı" hedge'iyle işaretli
+diğer maddelerin (örnek verilen "Rozetler"/"Sayaçlar" dahil) aynı
+titizlikle yeniden grep'lenmesini istedi. Yapıldı — beş madde daha
+kontrol edildi, hepsinde kanıt ZATEN vardı (önceki turda sadece
+izlenmemiş), biri (`promptDrafts`) gerçekten eksik kalmıştı ve
+kavramsal-eşdeğer olarak yükseltildi:
+
+| Madde (satır) | Önce | Şimdi | Neden |
+|---|---|---|---|
+| "Yeni kart" ana düğmesi (Genel yerleşim) | UYGULANDI ama "bulunamadı" diyordu — ÇELİŞKİLİ VE YANLIŞ | UYGULANDI, net kanıt | `page.ts:2889-2892`+`566-571`+testler — bkz. aşağı |
+| Rozetler (Genel yerleşim) | UYGULANDI (kanıt orta — "iz sürülmedi") | UYGULANDI, net kanıt | `page.ts:2744-2749` dizi literali tek okumada izlenebiliyordu |
+| Sayaçlar (Genel yerleşim) | UYGULANDI (kanıt orta) | UYGULANDI, net kanıt | `--fs-13`/`--label-ink` LİTERAL tanım, tarayıcı ölçümü gerektirmiyor |
+| Kapı kartı px'leri (§1 Sağ panel) | UYGULANDI (px'ler kanıt orta) | UYGULANDI, net kanıt | `--fs-10-5`/`--fs-15-5` LİTERAL tanım |
+| Rol modu metinleri (§1 Sağ panel) | UYGULANDI (metinler kanıt orta) | UYGULANDI, net kanıt | her metin birebir `el(...)` çağrısıyla eşleşiyor |
+| `promptDrafts` (State) | EKSİK/not (değişken bulunamadı) | UYGULANDI (kavramsal eşdeğer) | `PROMPT_METIN`/`PROMPT_ORIJINAL` karşılaştırması aynı işi görüyor — `daemonSince` satırıyla aynı desen |
+
+Metodoloji notu: bu beşi GERÇEK TARAYICI ölçümü gerektirmedi çünkü
+hepsi ya (a) DOM'a doğrudan okunan bir literal string/sayı, ya da (b)
+`px` değeri hesaplanmamış bir token (`--fs-13: 13px` gibi, `calc()`
+veya `%` YOK) ve öğe hiçbir `transform`/SVG ölçeği içinde değil —
+SAPMALAR §2.7'nin ayrımı ("nitelik doğru" ≠ "ekranda doğru") yalnızca
+ÖLÇEKLENEN yüzeylerde (SVG, `vector-effect`, `viewBox`) risk taşıyor;
+düz `#bar`/`#sagPanel` DOM metni için kaynaktaki literal değer nihai
+değerdir. Formasyon diyagramındaki ölçümler (yukarıda, gerçek
+tarayıcıyla yapılmış) bu kuralın İSTİSNASI değil, TAM UYGULAMASIdır.
+
+---
+
 ## Yöntem
 
 Denetim 7 paralel ajana bölündü (her biri DEVIR.md'nin bir bölümünü
@@ -23,10 +62,14 @@ edildi — denetim aşaması repoya iz bırakmadı. Bu karttaki KALICI
 değişiklikler (4 küçük düzeltme + testleri + bir `SAPMALAR.md` maddesi)
 "Bu kartta düzeltilenler" bölümünde ayrı listeleniyor.
 
-**Sayım (ham, 7 ajanın bulduğu hal):** UYGULANDI 135 · BİLEREK SAPILDI 2
-(+ bu kartta 1 yeni kayıt) · EKSİK 27 (4'ü büyük/orta, bu kartta
-düzeltilmedi; 4'ü bu kartta düzeltildi; 19'u küçük test-boşluğu, bu
-kartta düzeltilmedi — bkz. "Düzeltilmeyen küçük boşluklar").
+**Sayım (ham, 7 ajanın bulduğu hal — İLK tur):** UYGULANDI 135 ·
+BİLEREK SAPILDI 2 (+ bu kartta 1 yeni kayıt) · EKSİK 27 (4'ü büyük/orta,
+bu kartta düzeltilmedi; 4'ü bu kartta düzeltildi; 19'u küçük
+test-boşluğu, bu kartta düzeltilmedi — bkz. "Düzeltilmeyen küçük
+boşluklar"). **Bu sayım İLK turdan kalma** — reviewer'ın ret
+itirazından sonra 6 madde yeniden doğrulandı (yukarıdaki "Bu tur"
+bölümü); GÜNCEL/NİHAİ sayım "Özet" bölümünün Toplam satırındadır
+(UYGULANDI 136, EKSİK küçük 18).
 
 ---
 
@@ -37,10 +80,10 @@ kartta düzeltilmedi — bkz. "Düzeltilmeyen küçük boşluklar").
 | `.bar`, 2px alt kenar, padding 12/24, flex/wrap, gap 12/20 | UYGULANDI | `page.ts:486-490`. Ölçüldü: `borderBottomWidth` = **2px**. |
 | Marka: 40×26 üç kuş SVG, stroke 2.5, "Skein" 800/22px/−0.03em | UYGULANDI | `page.ts:504-508`, `markaSvg()` (1662). Ölçüldü: `.marka svg` = **40×26px tam**. |
 | Sekmeler: Pano/Akışlar/Promptlar/Ajanlar, 44px, 14px/700, aktif altı 4px | UYGULANDI | `page.ts:510-516`. Ölçüldü: `.navSekme-aktif` `borderBottomWidth` = **4px**. |
-| Rozetler: Pano (accent), Akışlar (nötr), Promptlar (kaydedilmemiş), Ajanlar (accent) | UYGULANDI | `.navRozet-accent/-notr`, `kapidaBekleyenSayisi` (2589), `calisanAjanSayisi` (2594). DOM bağlantısı tek tek iz sürülmedi — kanıt orta. |
+| Rozetler: Pano (accent), Akışlar (nötr), Promptlar (kaydedilmemiş), Ajanlar (accent) | UYGULANDI | `page.ts:2744-2749` dört sekme TEK bir dizi literalinde kuruluyor: `["pano",...,kapidaBekleyenSayisi(m.cards),"accent"]`, `["akislar",...,AKISLAR.length,"notr"]`, `["promptlar",...,promptKaydedilmemisSayisi(...),"notr"]`, `["ajanlar",...,calisanAjanSayisi(m.cards),"accent"]` — DEVIR'in dört satırıyla SIRA ve RENK bakımından TAM eşleşiyor; `page.ts:2758` her birini `el("span","navRozet navRozet-"+renk,String(sayi))` ile doğrudan DOM'a yazıyor. |
 | Gözcü çipi: 2px kenar, 10px kare nokta, etiket+ok | UYGULANDI | `.pill`/`.dot` (538-549). Ölçüldü: `.dot` = **10×10px**, kenar **2px**. |
-| Sayaçlar (açık/bitti/toplam maliyet, 13px neutral-700) | UYGULANDI (kanıt orta) | DOM var, tek tek px doğrulanmadı (zaman). |
-| "Yeni kart" ana düğmesi, min-height 40px | UYGULANDI (adı/konumu belirsiz) | Formasyonun 44px accent "+" girişi (`formasyonSvgKur`) DEVIR'in "girişte +44px" maddesiyle örtüşüyor; üst çubukta AYRI bir "Yeni kart" düğmesi bu isimle bulunamadı. Davranış var (`yeniKartAc`), yerleşimi DEVIR'in tarif ettiği üst-çubuk konumuyla birebir değil — küçük, belirsiz; ayrı kart önerilir (ölçülmedi, kesin EKSİK denemez). |
+| Sayaçlar (açık/bitti/toplam maliyet, 13px neutral-700) | UYGULANDI | `page.ts:563` `.sayac{font-size:var(--fs-13);color:var(--label-ink)}`. `--fs-13` (158) LİTERAL `13px`; `--label-ink` (188) LİTERAL `var(--color-neutral-700)` — ikisi de sabit token, `#bar` düz akışında (ölçek/`transform` YOK), tarayıcı ölçümü kaynak değeri değiştirmez. Üç sayaç `page.ts:2871-2882`'de aynı `.sayac` sınıfıyla (açık/bitti döngüyle, toplam maliyet ayrı) kuruluyor. |
+| "Yeni kart" ana düğmesi, min-height 40px | UYGULANDI | `page.ts:2888-2892`: `ciz()` (üst çubuğu HER render'da koşulsuz kuran fonksiyon, 2722) `#bar`'a `el("button", "yeniKart", "Yeni kart")` ekliyor, hemen tema anahtarının ardından (DEVIR'in listesiyle AYNI sıra: sayaçlar → tema anahtarı → Yeni kart). CSS `page.ts:566-571`: `.yeniKart{min-height:40px;...;background:var(--solid-accent);color:#fff}` — madde metniyle (isim + 40px) birebir. `tarayici.test.ts:604-611` (`button.yeniKart` arka plan, koyu tema) ve `:1956` (`.yeniKart` font) bu düğmeyi DOĞRUDAN sorguluyor. (Ayrı, DOĞRU bir bulgu: düğmenin AÇTIĞI iletişim kutusu — `yeniKartAc` — hâlâ legacy `.ust/.panel` overlay'i kullanıyor, `.dialog` DEĞİL; bu "Ayrı kart gerekir" bölümünde ayrıca kayıtlı, BUTONUN KENDİSİYLE karıştırılmamalı.) |
 | Tüm sayısal metinlerde `tabular-nums` | UYGULANDI | `.bar` (490) + `.meta`/`.iz .t`/`.dosya .a/.d` (1112, 1152, 1162-63) gibi birçok yerde tekrar tekrar. |
 
 ## 1. Pano — Başlık satırı
@@ -82,10 +125,10 @@ kayıtlı bir sapma DEĞİLDİ. **Düzeltildi** (bkz. aşağı).
 | Madde | Durum | Kanıt |
 |---|---|---|
 | Genel bakış: kapıda bekleyen 44px/800 accent + "kart kararını bekliyor" | UYGULANDI | `railGenelBakisCiz` (4443), `kapidaBekleyenSayisi`. |
-| Kapı kartı: üst etiket 10.5px/600 büyük harf, başlık 15.5px/800, gerekçe en fazla 3 satır, çıkış düğmeleri | UYGULANDI (px'ler kanıt orta) | `railKapiKutu` (4405-4441). 3-satır kısıtı doğrulandı (`-webkit-line-clamp:3`); px değerleri tek tek doğrulanmadı — küçük boşluk. |
+| Kapı kartı: üst etiket 10.5px/600 büyük harf, başlık 15.5px/800, gerekçe en fazla 3 satır, çıkış düğmeleri | UYGULANDI | `railKapiKutu` (4405-4441). 3-satır kısıtı doğrulandı (`-webkit-line-clamp:3`). px'ler de kaynaktan doğrulandı: `.railKapiEtiket{font-size:var(--fs-10-5);font-weight:600;text-transform:uppercase}` (768-770), `--fs-10-5` LİTERAL `10.5px` (168); `.railBaslikBtn{font-weight:800;font-size:var(--fs-15-5)}` (772-776), `--fs-15-5` LİTERAL `15.5px` (168) — ikisi de sabit token, ölçekli bir yüzeyde değil. |
 | Kapı kutusu üstte 4px accent çizgi | UYGULANDI | `page.ts:764` `border-top: 4px`. |
 | "Uçuşta · N" + kart satırları (10px kare) | UYGULANDI | `page.ts:4460`, `railKartSatiri` (4379). |
-| Rol modu: "← Genel bakış", "rol 0N · öncü", rol adı 30px, meta, "Prompt ·"/"Ajanı izle →" | UYGULANDI | `--fs-30` = 30px ölçüldü; metinler kanıt orta (tek tek grep edilmedi). |
+| Rol modu: "← Genel bakış", "rol 0N · öncü", rol adı 30px, meta, "Prompt ·"/"Ajanı izle →" | UYGULANDI | `--fs-30` = 30px ölçüldü (`.railRolBaslik`, 846). Metinler kaynaktan tek tek doğrulandı: `railGeri`="← Genel bakış" (4526), `railUst`="rol "+no+(öncü?" · öncü":"") (4540), `railRolBaslik` h2 = rol adı (4541), `railBtn`="Prompt · "+meta.prompt (4552), "Ajanı izle →" (4559). |
 | Kart modu: geri düğmesi, başlık 22px, meta, kapı kutusu, son ret, canlı adım, "Kartın izi", "Kodda ne değişti" | UYGULANDI (bkz. aşağı önemli not) | `.railKartBaslik{font-size:22px}` DOĞRU; `railKartCiz` (4571) `izZamanCizelgesiKur`/`kodDegisikligiKur`'u PAYLAŞIYOR — bu PAYLAŞIM, aşağıdaki büyük bulgunun kaynağı. |
 
 ### Bu kartta düzeltilen bulgu — "Kartın izi" düğümü (hem eski hem YENİ Kart modunda canlı)
@@ -160,7 +203,7 @@ farkı EKSİK sayılmadı, davranış denetlendi:
 | cards / rail / tab | `SON_MODEL.cards` / `RAIL` (3880) / `sekmeAdi(hash)`'ten türetilmiş | UYGULANDI |
 | daemon / daemonSince / topoChanged | `SON_MODEL.daemon` + `gozcuTopoUyari()` (2548), türetilmiş — ayrı bayrak yok | UYGULANDI (kavramsal eşdeğer) |
 | prompts / promptSel | `PROMPTLAR` (6262) / `PROMPT_SEC` (6263) | UYGULANDI |
-| promptDrafts | ayrı bir harita bulunamadı (zaman kısıtı) | EKSİK/not — küçük, davranış (kaydedilmemiş işareti) ÇALIŞIYOR, yalnızca tekil değişken adı doğrulanamadı |
+| promptDrafts | `PROMPT_METIN` (6294, canlı taslak) vs `PROMPT_ORIJINAL` (6289, kaydedilmiş) | UYGULANDI (kavramsal eşdeğer) — `promptKirliMi`/`promptKaydedilmemisSayisi` (6460) iki haritayı karşılaştırıp "kirli" durumunu türetiyor; tek adında bir değişken YOK ama işlev TAM karşılanıyor, `daemonSince`/`topoChanged` satırıyla (yukarıda) AYNI desen. Önceki tur bunu "bulunamadı" diye EKSİK saymıştı — davranış zaten çalışıyordu, bu turda yükseltildi. |
 | steps / agentSel | `AJAN_ADIMLAR` (1613) / `AJAN_SEC` (1608) | UYGULANDI |
 
 ---
@@ -377,7 +420,7 @@ Ayrıca: `SAPMALAR.md`'ye yeni **§5** eklendi (sağlayıcı listesinin sabit
 
 Aşağıdakiler DEVIR.md maddeleri olarak UYGULANDI sayıldı (kod okunarak
 ve/veya gerçek tarayıcıda elle denenerek davranış doğrulandı) ama
-koruyucu bir otomatik sınamaları YOK. Hacim (19 madde) ve her birinin
+koruyucu bir otomatik sınamaları YOK. Hacim (18 madde) ve her birinin
 gerçek kurulum gerektirmesi ("1-2 satır" değil, genelde 10-20 satır
 test-scaffolding) nedeniyle bu kartta TOPLU olarak eklenmedi — bu bir
 ihmal değil, bilinçli bir sınır: yukarıdaki 4 gerçek DEFEKT (davranış
@@ -389,7 +432,10 @@ ayrı bir "test kapsamı tamamlama" kartı.
 - Rolleri düzenle: `duzenleAdSanitize`, `duzenleTasi` (↓), segment tıklaması, "Aç" tıklaması, "devreder→sonraki" metni, "Rol ekle" ucu, `duzenleStepper`, denetçi seçim kutusu DOM'u, boş-ad `duzenleHatalari`, "Vazgeç", önizleme-diske-yazmaz negatif-güvencesi (11).
 - Akışlar: "Kopyala" düğmesi, "(açıklama yok)" düşüş yolu (2).
 - Ajanlar: "Kartı panoda aç" tıklaması, "Promptu düzenle →" tıklaması (2, not olarak — küçük risk).
-- State: `promptDrafts` eşdeğeri tekil değişken adı doğrulanamadı (1).
+
+(State'teki `promptDrafts` maddesi bu turda "bulunamadı/EKSİK"ten
+"UYGULANDI, kavramsal eşdeğer"e yükseltildi — artık bu listede değil,
+bkz. State tablosu.)
 
 ---
 
@@ -397,18 +443,21 @@ ayrı bir "test kapsamı tamamlama" kartı.
 
 | | UYGULANDI | BİLEREK SAPILDI | EKSİK (büyük/orta, ayrı kart) | EKSİK (bu kartta düzeltildi) | EKSİK (küçük, test-boşluğu, düzeltilmedi) |
 |---|---|---|---|---|---|
-| Genel yerleşim + §1 Pano + I&B + State | 27 | 1 (lejant metni) | 2 (başlık satırı+legacy modal/dialog, kısmen) | 2 (`.mini`, `.iz` düğümü) | birkaç (px kanıtı orta) |
+| Genel yerleşim + §1 Pano + I&B + State | 28 | 1 (lejant metni) | 2 (başlık satırı+legacy modal/dialog, kısmen) | 2 (`.mini`, `.iz` düğümü) | 0 (bu turda netleştirildi — bkz. yukarı "reviewer itirazı" tablosu; `promptDrafts` buraya UYGULANDI olarak eklendi) |
 | §2 Gözcü | 19 | 0 | 0 | 1 (`.railGozcuNokta`) | 5 |
 | §3 Rolleri düzenle | 27 | 1 (sağlayıcı listesi, bu kartta SAPMALAR'a eklendi) | 0 | 0 | 11 |
 | §4 Akışlar | 14 | 0 | 0 | 1 (`.dialog .err`) | 2 |
 | §5 Promptlar | 13 | 0 | 0 | 0 | 0 |
 | §6 Ajanlar + Assets | 22 | 0 | 1 (Lucide ikonlar) | 0 | 2 |
-| Fidelity/Design Tokens (genel) | 13 | 0 | 1 (eski renk/ölçek/köşe bloğu — başlık-satırı kartıyla BİRLEŞİK) | — | 1 (promptDrafts) |
+| Fidelity/Design Tokens (genel) | 13 | 0 | 1 (eski renk/ölçek/köşe bloğu — başlık-satırı kartıyla BİRLEŞİK) | — | 0 |
 
-**Toplam:** UYGULANDI **135**, BİLEREK SAPILDI **2** (+bu kartta 1 yeni
+**Toplam:** UYGULANDI **136**, BİLEREK SAPILDI **2** (+bu kartta 1 yeni
 kayıt = SAPMALAR §5), bu kartta **4 defekt düzeltildi** (mutasyon-
-sınandı), **3 büyük** iş ayrı karta bırakıldı, **19 küçük** test-boşluğu
-kataloglandı ama eklenmedi (gerekçe yukarıda).
+sınandı), **3 büyük** iş ayrı karta bırakıldı, **18 küçük** test-boşluğu
+kataloglandı ama eklenmedi (gerekçe yukarıda). Bu turda ayrıca **6 madde**
+(önceki turda reddedilen "Yeni kart" + 5 benzer hedge) zayıf/çelişkili
+kanıttan kesin kanıta yükseltildi; biri (`promptDrafts`) EKSİK'ten
+UYGULANDI'ya taşındı (yukarıdaki iki tablo).
 
 **En önemli üç bulgu (bu denetimin kendisinden):**
 1. DEVIR.md'nin Pano başlık satırı hiç kurulmadı; "Akışı düzenle" ve
