@@ -67,11 +67,11 @@ describe("toYaml", () => {
 
 describe("checkDraft", () => {
   it("geçerli taslakta hash ve maliyet döner", async () => {
-    const sonuc = await checkDraft(path, taslak(), opts);
+    const result = await checkDraft(path, taslak(), opts);
 
-    expect(sonuc.ok).toBe(true);
-    expect(sonuc.ok && sonuc.hash).toMatch(/^[0-9a-f]{64}$/);
-    expect(sonuc.ok && sonuc.cost.base).toBe(2);
+    expect(result.ok).toBe(true);
+    expect(result.ok && result.hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(result.ok && result.cost.base).toBe(2);
   });
 
   // Kural numaraları kullanıcıya AYNEN gitmeli; ekrana ayrı bir kural
@@ -80,10 +80,10 @@ describe("checkDraft", () => {
     const corrupt = taslak();
     corrupt.roles[1]!.next = "coder"; // döngü: kimse `done`'a gitmiyor
 
-    const sonuc = await checkDraft(path, corrupt, opts);
+    const result = await checkDraft(path, corrupt, opts);
 
-    expect(sonuc.ok).toBe(false);
-    expect(!sonuc.ok && sonuc.message).toContain("kural 4");
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.message).toContain("kural 4");
   });
 
   // Rol kopyalayıp `workspace` satırını değiştirmeyi unutmak, topolojiyi
@@ -97,9 +97,9 @@ describe("checkDraft", () => {
     });
     corrupt.roles[1]!.next = "guard";
 
-    const sonuc = await checkDraft(path, corrupt, opts);
+    const result = await checkDraft(path, corrupt, opts);
 
-    expect(!sonuc.ok && sonuc.message).toContain("kural 16");
+    expect(!result.ok && result.message).toContain("kural 16");
   });
 
   it("iki rol `main` isterse kural 2 reddeder", async () => {
@@ -135,10 +135,10 @@ describe("checkDraft", () => {
       { id: "guard", provider: "codex", workspace: "guard", prompt: "../../roles/reviewer.prompt", receive: "batch", next: "done" },
     ];
 
-    const sonuc = await checkDraft(path, dortRol, opts);
+    const result = await checkDraft(path, dortRol, opts);
 
-    expect(sonuc.ok && sonuc.cost.base).toBe(4);
-    expect(sonuc.ok && sonuc.cost.rejectEdges).toHaveLength(3);
+    expect(result.ok && result.cost.base).toBe(4);
+    expect(result.ok && result.cost.rejectEdges).toHaveLength(3);
   });
 });
 
@@ -210,9 +210,9 @@ describe("ekranın modellemediği bloklar korunuyor", () => {
 
     const fresh = taslak();
     fresh.description = "ekrandan düzenlendi";
-    const sonuc = await writeDraft(path, fresh, opts);
+    const result = await writeDraft(path, fresh, opts);
 
-    expect(sonuc.ok).toBe(true);
+    expect(result.ok).toBe(true);
     const yazilan = await readFile(path, "utf8");
     expect(yazilan).toContain("deneysel:");
     expect(yazilan).toContain("ileride: eklenecek");
@@ -269,9 +269,9 @@ describe("planlama bloğu — taşıma ve round-trip", () => {
 
     const fresh = taslak();
     fresh.planlama = planBlok();
-    const sonuc = await writeDraft(path, fresh, opts);
+    const result = await writeDraft(path, fresh, opts);
 
-    expect(sonuc.ok).toBe(true);
+    expect(result.ok).toBe(true);
     const yazilan = await readFile(path, "utf8");
     expect(yazilan).toContain("planlama:");
     expect(yazilan).toContain("denetci: reviewer");
@@ -292,10 +292,10 @@ describe("planlama bloğu — taşıma ve round-trip", () => {
     (fresh.roles[0] as { id: string }).id = "yazar"; // ama rol "yazar" oldu
     (fresh.roles[1] as { reject?: string }).reject = "yazar";
     (fresh.roles[1] as { syncBack?: string[] }).syncBack = ["yazar"];
-    const sonuc = await checkDraft(path, fresh, opts);
+    const result = await checkDraft(path, fresh, opts);
 
-    expect(sonuc.ok).toBe(false);
-    expect(sonuc.ok === false && sonuc.message).toMatch(/kural 17/);
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.message).toMatch(/kural 17/);
   });
 
   // `.planlama` taşımamak — dosyada önceden var olsa bile — bloğu SİLER.
@@ -304,16 +304,16 @@ describe("planlama bloğu — taşıma ve round-trip", () => {
   it("planlama taşınmazsa dosyadan DÜŞER", async () => {
     await writeFile(path, `${toYaml(taslak())}\nplanlama:\n  katilimcilar: [coder]\n  plan: docs/plan/{kart}.md\n`);
 
-    const sonuc = await writeDraft(path, taslak(), opts);
+    const result = await writeDraft(path, taslak(), opts);
 
-    expect(sonuc.ok).toBe(true);
+    expect(result.ok).toBe(true);
     expect(await readFile(path, "utf8")).not.toContain("planlama");
   });
 
   it("planlama bloğu olmayan akışta hiçbir şey eklenmiyor", async () => {
     await writeFile(path, toYaml(taslak()));
-    const sonuc = await writeDraft(path, taslak(), opts);
-    expect(sonuc.ok).toBe(true);
+    const result = await writeDraft(path, taslak(), opts);
+    expect(result.ok).toBe(true);
     expect(await readFile(path, "utf8")).not.toContain("planlama");
   });
 
@@ -334,9 +334,9 @@ describe("writeDraft", () => {
     const fresh = taslak();
     fresh.description = "yazıldı";
 
-    const sonuc = await writeDraft(path, fresh, opts);
+    const result = await writeDraft(path, fresh, opts);
 
-    expect(sonuc.ok).toBe(true);
+    expect(result.ok).toBe(true);
     expect(await readFile(path, "utf8")).toContain("description: yazıldı");
   });
 
@@ -347,9 +347,9 @@ describe("writeDraft", () => {
     const corrupt = taslak();
     corrupt.roles[1]!.workspace = "main";
 
-    const sonuc = await writeDraft(path, corrupt, opts);
+    const result = await writeDraft(path, corrupt, opts);
 
-    expect(sonuc.ok).toBe(false);
+    expect(result.ok).toBe(false);
     expect(await readFile(path, "utf8")).toBe(once);
   });
 

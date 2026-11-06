@@ -111,8 +111,8 @@ export async function acquireLock(
       await link(tmp, path);
       return true;
     } catch (error) {
-      const kod = (error as NodeJS.ErrnoException).code;
-      if (kod === "EEXIST") return false;
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "EEXIST") return false;
       // `link` yok/yasak: eski yol, dar pencereyle.
       try {
         await writeFile(path, body, { encoding: "utf8", flag: "wx" });

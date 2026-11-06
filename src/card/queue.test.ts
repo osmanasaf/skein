@@ -400,16 +400,16 @@ describe("CardQueue — çökme ve yarış", () => {
     // Hedef adı bir dizin: rename oraya taşıyamaz.
     await mkdir(join(root, ".skein", "active", "coder", `${card.id}.json`), { recursive: true });
 
-    const sonuc = await queue.take("coder");
+    const result = await queue.take("coder");
 
-    expect(sonuc.kind).toBe("engel");
-    if (sonuc.kind !== "engel") throw new Error("engel beklendi");
-    expect(sonuc.blockages).toHaveLength(1);
+    expect(result.kind).toBe("engel");
+    if (result.kind !== "engel") throw new Error("engel beklendi");
+    expect(result.blockages).toHaveLength(1);
     // Teşhis kodu ve dosyayı İÇERMELİ: "alınamadı" tek başına hiçbir yere
     // götürmez.
-    expect(sonuc.blockages[0]?.code).not.toBe("ENOENT");
-    expect(sonuc.blockages[0]?.code).not.toBe("?");
-    expect(sonuc.blockages[0]?.path).toContain(card.id);
+    expect(result.blockages[0]?.code).not.toBe("ENOENT");
+    expect(result.blockages[0]?.code).not.toBe("?");
+    expect(result.blockages[0]?.path).toContain(card.id);
     // Kart KUYRUKTA kalmış olmalı: kaybolmadı, yalnızca alınamadı.
     expect(await queue.depth("coder")).toBe(1);
   });
@@ -426,12 +426,12 @@ describe("CardQueue — çökme ve yarış", () => {
     const saglam = await put(daily, "sağlam", new Date("2026-01-02T00:00:00Z"));
     await mkdir(join(root, ".skein", "active", "coder", `${engelli.id}.json`), { recursive: true });
 
-    const sonuc = await queue.take("coder");
+    const result = await queue.take("coder");
 
-    expect(sonuc.kind).toBe("alindi");
-    if (sonuc.kind !== "alindi") throw new Error("alindi beklendi");
-    expect(sonuc.card.id).toBe(saglam.id);
-    expect(sonuc.blockages.map((e) => e.path.includes(engelli.id))).toEqual([true]);
+    expect(result.kind).toBe("alindi");
+    if (result.kind !== "alindi") throw new Error("alindi beklendi");
+    expect(result.card.id).toBe(saglam.id);
+    expect(result.blockages.map((e) => e.path.includes(engelli.id))).toEqual([true]);
   });
 
   // Kaybolan dosya iyi huylu, BOZUK dosya değil: ikincisi veri kaybı ve
@@ -572,9 +572,9 @@ describe("kapiKarari", () => {
 
     expect(karar).toMatchObject({
       kind: "escalation",
-      istenen: "back",
+      requested: "back",
       applied: "retry",
-      hedef: "coder",
+      target: "coder",
     });
   });
 
@@ -583,13 +583,13 @@ describe("kapiKarari", () => {
 
     const karar = kapiKarari(card, "back");
 
-    expect(karar).toMatchObject({ istenen: "back", applied: "back", hedef: "coder" });
+    expect(karar).toMatchObject({ requested: "back", applied: "back", target: "coder" });
   });
 
   // Varsayılan artık tek yerde: kaçışta `retry`, diğerlerinde `forward`.
   it("karar verilmezse kapının varsayılanı kullanılır", async () => {
     const card = await atGate(daily, ["coder"]);
-    expect(kapiKarari(card)).toMatchObject({ istenen: "retry", applied: "retry" });
+    expect(kapiKarari(card)).toMatchObject({ requested: "retry", applied: "retry" });
   });
 
   // `release` ile AYNI kaynaktan okunduğunun kanıtı: hedef gerçekten
@@ -600,7 +600,7 @@ describe("kapiKarari", () => {
 
     const released = await queue.release(card.id, { decision: "back" });
 
-    expect(released.role).toBe(karar.hedef);
+    expect(released.role).toBe(karar.target);
   });
 
   it("hedefsiz back'te de hedef kartın gittiği rol", async () => {
@@ -609,7 +609,7 @@ describe("kapiKarari", () => {
 
     const released = await queue.release(card.id, { decision: "back" });
 
-    expect(released.role).toBe(karar.hedef);
+    expect(released.role).toBe(karar.target);
     expect(released.role).toBe("coder");
   });
 });
@@ -630,8 +630,8 @@ describe("close — kopya kartlar", () => {
    * Gerçekte bu, yeniden adlandırma ile unlink arasında çöken bir sürecin
    * bıraktığı hâl (bkz. recover sınaması).
    */
-  async function bayatKopya(card: Card, alan: string, rol: string): Promise<string> {
-    const yol = join(root, ".skein", alan, rol, `${card.id}.json`);
+  async function bayatKopya(card: Card, field: string, rol: string): Promise<string> {
+    const yol = join(root, ".skein", field, rol, `${card.id}.json`);
     await mkdir(dirname(yol), { recursive: true });
     await writeFile(yol, serializeCard(card));
     return yol;

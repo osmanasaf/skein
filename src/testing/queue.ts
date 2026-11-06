@@ -12,11 +12,11 @@ import type { CardQueue } from "../card/queue.js";
  * engel durumunda sebebi basılıyor.
  */
 export async function al(queue: CardQueue, role: string): Promise<Card> {
-  const sonuc = await queue.take(role);
-  if (sonuc.kind === "alindi") return sonuc.card;
-  if (sonuc.kind === "bos") throw new Error(`${role} kuyruğu boş: alınacak kart yok`);
+  const result = await queue.take(role);
+  if (result.kind === "alindi") return result.card;
+  if (result.kind === "bos") throw new Error(`${role} kuyruğu boş: alınacak kart yok`);
   throw new Error(
     `${role} kuyruğundan kart alınamadı: ` +
-      sonuc.blockages.map((e) => `${e.code} ${e.path}`).join(" · "),
+      result.blockages.map((e) => `${e.code} ${e.path}`).join(" · "),
   );
 }

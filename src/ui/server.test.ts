@@ -289,11 +289,11 @@ describe("serveUi — tema anahtarı", () => {
 });
 
 describe("serveUi — kapıyı açmak", () => {
-  const birak = (id: string, karar?: string, baslik?: Record<string, string>) =>
+  const birak = (id: string, decision?: string, baslik?: Record<string, string>) =>
     fetch(`${server.url}kart/${id}/birak`, {
       method: "POST",
       headers: { "content-type": "application/json", ...(baslik ?? { "x-skein-token": server.token }) },
-      body: JSON.stringify(karar === undefined ? {} : { karar }),
+      body: JSON.stringify(decision === undefined ? {} : { decision }),
     });
 
   async function atGate(): Promise<string> {
@@ -334,10 +334,10 @@ describe("serveUi — kapıyı açmak", () => {
     const id = await atGate();
 
     const res = await birak(id, "retry");
-    const data = (await res.json()) as { kart: { state: string; role: string }; model: { cards: unknown[] } };
+    const data = (await res.json()) as { card: { state: string; role: string }; model: { cards: unknown[] } };
 
     expect(res.status).toBe(200);
-    expect(data.kart).toMatchObject({ state: "queued", role: "coder" });
+    expect(data.card).toMatchObject({ state: "queued", role: "coder" });
     // Cevap çekirdeğin ürettiği YENİ durumdan okunuyor, ekranın kopyasından değil.
     expect(data.model.cards).toHaveLength(1);
     expect((await queue.get(id))?.state).toBe("queued");
@@ -349,11 +349,11 @@ describe("serveUi — kapıyı açmak", () => {
     const id = await atGate();
 
     const res = await birak(id, "forward");
-    const data = (await res.json()) as { hata: string };
+    const data = (await res.json()) as { error: string };
 
     expect(res.status).toBe(409);
-    expect(data.hata).toContain("kaçış kapısında");
-    expect(data.hata).toContain("README.md");
+    expect(data.error).toContain("kaçış kapısında");
+    expect(data.error).toContain("README.md");
     expect((await queue.get(id))?.state).toBe("gate");
   });
 
@@ -406,10 +406,10 @@ describe("serveUi — yetim kart", () => {
       method: "POST",
       headers: { "x-skein-token": server.token },
     });
-    const data = (await res.json()) as { kart: { state: string }; reason: string };
+    const data = (await res.json()) as { card: { state: string }; reason: string };
 
     expect(res.status).toBe(200);
-    expect(data.kart.state).toBe("done");
+    expect(data.card.state).toBe("done");
     expect(data.reason).toContain("analyst");
   });
 
@@ -774,44 +774,44 @@ describe("serveUi — rol promptları", () => {
   // katmanı, test.yaml'daki SIRAYLA.
   it("GET /promptlar akışın bildirdiği dosyaları listeler", async () => {
     const v = (await (await fetch(`${s.url}promptlar`)).json()) as {
-      prompts: { etiket: string; yol: string }[];
+      prompts: { label: string; path: string }[];
     };
     expect(v.prompts).toEqual([
-      { etiket: "anayasa:1", yol: "hub/prompts/base.md" },
-      { etiket: "rol:coder", yol: "roles/coder.prompt" },
+      { label: "anayasa:1", path: "hub/prompts/base.md" },
+      { label: "rol:coder", path: "roles/coder.prompt" },
     ]);
   });
 
   it("GET /prompt dosyanın gerçek metnini döner", async () => {
     const v = (await (await fetch(`${s.url}prompt?yol=roles/coder.prompt`)).json()) as {
-      metin: string;
+      text: string;
     };
-    expect(v.metin).toBe("# coder\n");
+    expect(v.text).toBe("# coder\n");
   });
 
   // ÜYELİK: dosya diskte GERÇEKTEN var (test.yaml) ama listede değil —
   // listede olmayan HİÇBİR yol, var olsa da, okunamaz.
   it("GET /prompt listede olmayan yolu reddeder", async () => {
     const res = await fetch(`${s.url}prompt?yol=${encodeURIComponent("hub/flows/test.yaml")}`);
-    const v = (await res.json()) as { hata: string };
+    const v = (await res.json()) as { error: string };
     expect(res.status).toBe(400);
-    expect(v.hata).toContain("Bilinmeyen prompt yolu");
+    expect(v.error).toContain("Bilinmeyen prompt yolu");
   });
 
   it("GET /prompt '../' içeren yolu reddeder", async () => {
     const res = await fetch(`${s.url}prompt?yol=${encodeURIComponent("../../../etc/passwd")}`);
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { hata: string }).hata).toContain("Bilinmeyen prompt yolu");
+    expect(((await res.json()) as { error: string }).error).toContain("Bilinmeyen prompt yolu");
   });
 
   it("GET /prompt mutlak yolu reddeder", async () => {
     const res = await fetch(`${s.url}prompt?yol=${encodeURIComponent("/etc/passwd")}`);
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { hata: string }).hata).toContain("Bilinmeyen prompt yolu");
+    expect(((await res.json()) as { error: string }).error).toContain("Bilinmeyen prompt yolu");
   });
 
   it("POST /prompt/yaz dosyayı gerçekten değiştirir ve yeni modeli döner", async () => {
-    const res = await promptGonder({ yol: "roles/coder.prompt", metin: "# coder\nyeni satır\n" });
+    const res = await promptGonder({ path: "roles/coder.prompt", text: "# coder\nyeni satır\n" });
     const v = (await res.json()) as { model: { flow: { name: string } } };
 
     expect(res.status).toBe(200);
@@ -824,27 +824,27 @@ describe("serveUi — rol promptları", () => {
   // olsa da yazılamaz, ve denemenin kendisi dosyaya DOKUNMAZ.
   it("POST /prompt/yaz listede olmayan yolu reddeder, dosya DEĞİŞMEZ", async () => {
     const once = await readFile(join(root, "hub", "flows", "test.yaml"), "utf8");
-    const res = await promptGonder({ yol: "hub/flows/test.yaml", metin: "name: ele-gecirildi\n" });
-    const v = (await res.json()) as { hata: string };
+    const res = await promptGonder({ path: "hub/flows/test.yaml", text: "name: ele-gecirildi\n" });
+    const v = (await res.json()) as { error: string };
 
     expect(res.status).toBe(400);
-    expect(v.hata).toContain("Bilinmeyen prompt yolu");
+    expect(v.error).toContain("Bilinmeyen prompt yolu");
     expect(await readFile(join(root, "hub", "flows", "test.yaml"), "utf8")).toBe(once);
   });
 
   it("POST /prompt/yaz '../' içeren yolu reddeder, akışın GERÇEK dosyaları DEĞİŞMEZ", async () => {
     const once = await readFile(join(root, "roles", "coder.prompt"), "utf8");
-    const res = await promptGonder({ yol: "../../../etc/passwd", metin: "ele geçirildi" });
+    const res = await promptGonder({ path: "../../../etc/passwd", text: "ele geçirildi" });
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { hata: string }).hata).toContain("Bilinmeyen prompt yolu");
+    expect(((await res.json()) as { error: string }).error).toContain("Bilinmeyen prompt yolu");
     expect(await readFile(join(root, "roles", "coder.prompt"), "utf8")).toBe(once);
   });
 
   it("POST /prompt/yaz mutlak yolu reddeder, akışın GERÇEK dosyaları DEĞİŞMEZ", async () => {
     const once = await readFile(join(root, "roles", "coder.prompt"), "utf8");
-    const res = await promptGonder({ yol: "/etc/passwd", metin: "ele geçirildi" });
+    const res = await promptGonder({ path: "/etc/passwd", text: "ele geçirildi" });
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { hata: string }).hata).toContain("Bilinmeyen prompt yolu");
+    expect(((await res.json()) as { error: string }).error).toContain("Bilinmeyen prompt yolu");
     expect(await readFile(join(root, "roles", "coder.prompt"), "utf8")).toBe(once);
   });
 
@@ -863,42 +863,42 @@ describe("serveUi — rol promptları", () => {
    * sınama kuralı yazmış gibi yapar, yazmaz.
    */
   const disKurban = async () => {
-    const dizin = await mkdtemp(join(tmpdir(), "skein-kurban-"));
-    await mkdir(join(dizin, "roles"), { recursive: true });
-    const dosya = join(dizin, "roles", "coder.prompt");
+    const dir = await mkdtemp(join(tmpdir(), "skein-kurban-"));
+    await mkdir(join(dir, "roles"), { recursive: true });
+    const dosya = join(dir, "roles", "coder.prompt");
     await writeFile(dosya, "KURBAN\n");
     // Köke göreli ama kökün DIŞINA çıkan yol; listedeki "roles/coder.prompt"
     // ile bitiyor, dolayısıyla gevşek bir kapıyı geçerdi.
-    return { dizin, dosya, yol: relative(root, dosya).split(sep).join("/") };
+    return { dir, dosya, path: relative(root, dosya).split(sep).join("/") };
   };
 
   it("GET /prompt listedeki yolla BİTEN ama kök dışına çıkan yolu reddeder", async () => {
     const k = await disKurban();
     try {
-      const res = await fetch(`${s.url}prompt?yol=${encodeURIComponent(k.yol)}`);
-      const v = (await res.json()) as { hata?: string; metin?: string };
+      const res = await fetch(`${s.url}prompt?yol=${encodeURIComponent(k.path)}`);
+      const v = (await res.json()) as { error?: string; text?: string };
 
       expect(res.status).toBe(400);
-      expect(v.hata).toContain("Bilinmeyen prompt yolu");
+      expect(v.error).toContain("Bilinmeyen prompt yolu");
       // Sızıntı olmadığını AYRICA iddia ediyoruz: 400 dönüp metni de
       // göndermek mümkün olurdu.
-      expect(v.metin).toBeUndefined();
+      expect(v.text).toBeUndefined();
     } finally {
-      await rm(k.dizin, { recursive: true, force: true });
+      await rm(k.dir, { recursive: true, force: true });
     }
   });
 
   it("POST /prompt/yaz listedeki yolla BİTEN dış yolu reddeder, DIŞ DOSYA DEĞİŞMEZ", async () => {
     const k = await disKurban();
     try {
-      const res = await promptGonder({ yol: k.yol, metin: "ele geçirildi\n" });
+      const res = await promptGonder({ path: k.path, text: "ele geçirildi\n" });
 
       expect(res.status).toBe(400);
-      expect(((await res.json()) as { hata: string }).hata).toContain("Bilinmeyen prompt yolu");
+      expect(((await res.json()) as { error: string }).error).toContain("Bilinmeyen prompt yolu");
       // İDDİA sunucunun söylediği değil, DİSKTE ne olduğu.
       expect(await readFile(k.dosya, "utf8")).toBe("KURBAN\n");
     } finally {
-      await rm(k.dizin, { recursive: true, force: true });
+      await rm(k.dir, { recursive: true, force: true });
     }
   });
 
@@ -907,11 +907,11 @@ describe("serveUi — rol promptları", () => {
   // akış dosyası değişmediği sürece prompt dosyalarına hiç bakmıyor.
   it("POST /prompt/yaz boş metni reddeder, dosya DEĞİŞMEZ", async () => {
     const once = await readFile(join(root, "roles", "coder.prompt"), "utf8");
-    const res = await promptGonder({ yol: "roles/coder.prompt", metin: "   \n" });
-    const v = (await res.json()) as { hata: string };
+    const res = await promptGonder({ path: "roles/coder.prompt", text: "   \n" });
+    const v = (await res.json()) as { error: string };
 
     expect(res.status).toBe(400);
-    expect(v.hata).toContain("boş olamaz");
+    expect(v.error).toContain("boş olamaz");
     expect(await readFile(join(root, "roles", "coder.prompt"), "utf8")).toBe(once);
   });
 
@@ -919,7 +919,7 @@ describe("serveUi — rol promptları", () => {
     const once = await readFile(join(root, "roles", "coder.prompt"), "utf8");
     const res = await fetch(`${s.url}prompt/yaz`, {
       method: "POST",
-      body: JSON.stringify({ yol: "roles/coder.prompt", metin: "ele geçirildi" }),
+      body: JSON.stringify({ path: "roles/coder.prompt", text: "ele geçirildi" }),
     });
     expect(res.status).toBe(403);
     expect(await readFile(join(root, "roles", "coder.prompt"), "utf8")).toBe(once);
@@ -934,7 +934,7 @@ describe("serveUi — rol promptları", () => {
         "x-skein-token": s.token,
         origin: "https://kotu-site.example",
       },
-      body: JSON.stringify({ yol: "roles/coder.prompt", metin: "ele geçirildi" }),
+      body: JSON.stringify({ path: "roles/coder.prompt", text: "ele geçirildi" }),
     });
     expect(res.status).toBe(403);
     expect(await readFile(join(root, "roles", "coder.prompt"), "utf8")).toBe(once);
@@ -952,7 +952,7 @@ describe("serveUi — rol promptları, salt okunur ekran", () => {
     const res = await fetch(`${server.url}prompt/yaz`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-skein-token": server.token },
-      body: JSON.stringify({ yol: "roles/coder.prompt", metin: "ele geçirildi" }),
+      body: JSON.stringify({ path: "roles/coder.prompt", text: "ele geçirildi" }),
     });
     expect(res.status).toBe(404);
     expect(await readFile(join(root, "roles", "coder.prompt"), "utf8")).toBe(once);
@@ -962,14 +962,14 @@ describe("serveUi — rol promptları, salt okunur ekran", () => {
   // görülebilir, yetki yalnızca YAZMAYI kapatıyor.
   it("düzenleme kapalıyken GET /promptlar ve GET /prompt yine çalışır", async () => {
     const items = (await (await fetch(`${server.url}promptlar`)).json()) as {
-      prompts: { yol: string }[];
+      prompts: { path: string }[];
     };
-    expect(items.prompts.map((p) => p.yol)).toContain("roles/coder.prompt");
+    expect(items.prompts.map((p) => p.path)).toContain("roles/coder.prompt");
 
     const okuma = (await (await fetch(`${server.url}prompt?yol=roles/coder.prompt`)).json()) as {
-      metin: string;
+      text: string;
     };
-    expect(okuma.metin).toBe("# coder\n");
+    expect(okuma.text).toBe("# coder\n");
   });
 });
 
@@ -1055,10 +1055,10 @@ describe("serveUi — yeni rol", () => {
     const res = await gonder({
       id: "reviewer", provider: "claude", workspace: "main", sonra: "coder",
     });
-    const v = (await res.json()) as { hata: string };
+    const v = (await res.json()) as { error: string };
 
     expect(res.status).toBe(409);
-    expect(v.hata).toContain("kural 2");
+    expect(v.error).toContain("kural 2");
 
     // YAML DEĞİŞMEMİŞ.
     expect(await readFile(gercekFlow.path, "utf8")).toBe(beforeYaml);
@@ -1068,10 +1068,10 @@ describe("serveUi — yeni rol", () => {
 
   it("AYNI ID reddedilir, dosya YAZILMADAN", async () => {
     const res = await gonder({ id: "coder", provider: "claude", workspace: "x", sonra: "coder" });
-    const v = (await res.json()) as { hata: string };
+    const v = (await res.json()) as { error: string };
 
     expect(res.status).toBe(400);
-    expect(v.hata).toContain("Rol zaten var");
+    expect(v.error).toContain("Rol zaten var");
     // "coder" id'si için olası prompt yolu bile hiç yazılmamış olmalı.
     await expect(readFile(join(root, "roles", "coder.md"), "utf8")).rejects.toThrow();
   });
@@ -1081,10 +1081,10 @@ describe("serveUi — yeni rol", () => {
     const res = await gonder({
       id: "reviewer", provider: "claude", workspace: "reviewer", sonra: "boyle-bir-rol-yok",
     });
-    const v = (await res.json()) as { hata: string };
+    const v = (await res.json()) as { error: string };
 
     expect(res.status).toBe(400);
-    expect(v.hata).toContain("Bilinmeyen rol");
+    expect(v.error).toContain("Bilinmeyen rol");
     expect(await readFile(gercekFlow.path, "utf8")).toBe(beforeYaml);
     await expect(readFile(yeniRolYolu(), "utf8")).rejects.toThrow();
   });
@@ -1174,7 +1174,7 @@ roles:
       root, queue, topology, flowName: "test", flowHash: gercekFlow.hash, live,
       flowChoice: {
         list: async () => ["test", "ikinci"],
-        ac: async (ad) => {
+        open: async (ad) => {
           const l = await LiveFlow.open(join(root, "hub", "flows", `${ad}.yaml`), {
             root, providers: knownProviderSet(),
           });
@@ -1208,13 +1208,13 @@ roles:
     const s = await akisSecerSunucu();
     try {
       const v = (await (await fetch(`${s.url}akislar`)).json()) as {
-        summary: { ad: string; draft: { roles: { id: string }[] } | null; hata?: string }[];
+        summary: { name: string; draft: { roles: { id: string }[] } | null; error?: string }[];
       };
-      const test = v.summary.find((o) => o.ad === "test");
-      const ikinci = v.summary.find((o) => o.ad === "ikinci");
+      const test = v.summary.find((o) => o.name === "test");
+      const ikinci = v.summary.find((o) => o.name === "ikinci");
       expect(test?.draft?.roles.map((r) => r.id)).toEqual(["coder"]);
       expect(ikinci?.draft?.roles.map((r) => r.id)).toEqual(["analiz"]);
-      expect(test?.hata).toBeUndefined();
+      expect(test?.error).toBeUndefined();
     } finally {
       await s.close();
     }
@@ -1242,7 +1242,7 @@ roles:
       root, queue, topology, flowName: "test", flowHash: gercekFlow.hash, live,
       flowChoice: {
         list: async () => ["test", "ikinci", "bozuk"],
-        ac: async (ad) => {
+        open: async (ad) => {
           const l = await LiveFlow.open(join(root, "hub", "flows", `${ad}.yaml`), {
             root, providers: knownProviderSet(),
           });
@@ -1252,12 +1252,12 @@ roles:
     });
     try {
       const v = (await (await fetch(`${s.url}akislar`)).json()) as {
-        summary: { ad: string; draft: unknown; hata?: string }[];
+        summary: { name: string; draft: unknown; error?: string }[];
       };
-      const bozukOzet = v.summary.find((o) => o.ad === "bozuk");
-      const digerleri = v.summary.filter((o) => o.ad !== "bozuk");
+      const bozukOzet = v.summary.find((o) => o.name === "bozuk");
+      const digerleri = v.summary.filter((o) => o.name !== "bozuk");
       expect(bozukOzet?.draft).toBeNull();
-      expect(bozukOzet?.hata).toContain("kural");
+      expect(bozukOzet?.error).toContain("kural");
       expect(digerleri.every((o) => o.draft !== null)).toBe(true);
     } finally {
       await s.close();
@@ -1278,7 +1278,7 @@ roles:
     const res = await fetch(`${server.url}akis/sec`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-skein-token": server.token },
-      body: JSON.stringify({ ad: "test" }),
+      body: JSON.stringify({ name: "test" }),
     });
     expect(res.status).toBe(404);
   });
@@ -1289,7 +1289,7 @@ roles:
       const res = await fetch(`${s.url}akis/sec`, {
         method: "POST",
         headers: { "content-type": "application/json", "x-skein-token": s.token },
-        body: JSON.stringify({ ad: "ikinci" }),
+        body: JSON.stringify({ name: "ikinci" }),
       });
       const v = (await res.json()) as {
         model: { flow: { name: string }; roles: { id: string }[] };
@@ -1331,7 +1331,7 @@ roles:
         // "bozuk" listede VAR, yani üyelik denetimini geçiyor — asıl
         // sınanan şey `ac()`in kendi reddi.
         list: async () => ["test", "bozuk"],
-        ac: async (ad) => {
+        open: async (ad) => {
           if (ad === "bozuk") throw new Error("[kural 4] tam olarak bir rolün next değeri done olmalı");
           const l = await LiveFlow.open(join(root, "hub", "flows", `${ad}.yaml`), {
             root, providers: knownProviderSet(),
@@ -1344,11 +1344,11 @@ roles:
       const res = await fetch(`${s.url}akis/sec`, {
         method: "POST",
         headers: { "content-type": "application/json", "x-skein-token": s.token },
-        body: JSON.stringify({ ad: "bozuk" }),
+        body: JSON.stringify({ name: "bozuk" }),
       });
-      const v = (await res.json()) as { hata: string };
+      const v = (await res.json()) as { error: string };
       expect(res.status).toBe(400);
-      expect(v.hata).toContain("kural 4");
+      expect(v.error).toContain("kural 4");
 
       // Eski akış AYNEN duruyor — "bozuk" diye yarı yüklenmiş bir hâl yok.
       const durum = (await (await fetch(`${s.url}durum`)).json()) as {
@@ -1396,7 +1396,7 @@ roles:
       root, queue, topology, flowName: "test", flowHash: gercekFlow.hash, live,
       flowChoice: {
         list: async () => ["test", "ikinci"],
-        ac: async () => {
+        open: async () => {
           throw new Error("ac() ÇAĞRILMAMALIYDI — ad listede yoktu, üyelik denetimi onu ac'e hiç ulaştırmamalı");
         },
       },
@@ -1412,13 +1412,13 @@ roles:
       const res = await fetch(`${s.url}akis/sec`, {
         method: "POST",
         headers: { "content-type": "application/json", "x-skein-token": s.token },
-        body: JSON.stringify({ ad: "boyle-bir-akis-yok" }),
+        body: JSON.stringify({ name: "boyle-bir-akis-yok" }),
       });
-      const v = (await res.json()) as { hata: string };
+      const v = (await res.json()) as { error: string };
       expect(res.status).toBe(400);
       // `ac()` çağrılsaydı kendi hatasıyla (üstteki metin) düşerdi;
       // gördüğümüz mesaj sunucunun KENDİ üyelik reddi olmalı.
-      expect(v.hata).toContain("Bilinmeyen akış");
+      expect(v.error).toContain("Bilinmeyen akış");
 
       const durum = (await (await fetch(`${s.url}durum`)).json()) as { flow: { name: string } };
       expect(durum.flow.name).toBe("test");
@@ -1435,11 +1435,11 @@ roles:
       const res = await fetch(`${s.url}akis/sec`, {
         method: "POST",
         headers: { "content-type": "application/json", "x-skein-token": s.token },
-        body: JSON.stringify({ ad: "../../../etc/passwd" }),
+        body: JSON.stringify({ name: "../../../etc/passwd" }),
       });
-      const v = (await res.json()) as { hata: string };
+      const v = (await res.json()) as { error: string };
       expect(res.status).toBe(400);
-      expect(v.hata).toContain("Bilinmeyen akış");
+      expect(v.error).toContain("Bilinmeyen akış");
 
       const durum = (await (await fetch(`${s.url}durum`)).json()) as { flow: { name: string } };
       expect(durum.flow.name).toBe("test");
@@ -1454,7 +1454,7 @@ roles:
       const res = await fetch(`${s.url}akis/sec`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ad: "ikinci" }),
+        body: JSON.stringify({ name: "ikinci" }),
       });
       expect(res.status).toBe(403);
 
@@ -1475,7 +1475,7 @@ roles:
           "x-skein-token": s.token,
           origin: "https://kotu-site.example",
         },
-        body: JSON.stringify({ ad: "ikinci" }),
+        body: JSON.stringify({ name: "ikinci" }),
       });
       expect(res.status).toBe(403);
 
@@ -1513,7 +1513,7 @@ describe("serveUi — yeni akış oluşturma (yeniAd)", () => {
       providerIds: ["claude"],
       flowChoice: {
         list: async () => ["test"],
-        ac: async () => { throw new Error("ac() bu describe'da ÇAĞRILMAMALI"); },
+        open: async () => { throw new Error("ac() bu describe'da ÇAĞRILMAMALI"); },
       },
     });
   });
@@ -1565,9 +1565,9 @@ describe("serveUi — yeni akış oluşturma (yeniAd)", () => {
   it("zaten var olan bir ad reddedilir, hiçbir dosya değişmez", async () => {
     const once = await readFile(gercekFlow.path, "utf8");
     const res = await gonder("akis/yaz", { ...yeniDraft("test"), newName: "test" });
-    const v = (await res.json()) as { hata: string };
+    const v = (await res.json()) as { error: string };
     expect(res.status).toBe(400);
-    expect(v.hata).toContain("zaten kullanılıyor");
+    expect(v.error).toContain("zaten kullanılıyor");
     expect(await readFile(gercekFlow.path, "utf8")).toBe(once);
   });
 
@@ -1576,9 +1576,9 @@ describe("serveUi — yeni akış oluşturma (yeniAd)", () => {
   // ikinci bir savunma hattı.
   it("geçersiz karakter içeren yeniAd reddedilir", async () => {
     const res = await gonder("akis/yaz", { ...yeniDraft("Kopya Adı"), newName: "Kopya Adı" });
-    const v = (await res.json()) as { hata: string };
+    const v = (await res.json()) as { error: string };
     expect(res.status).toBe(400);
-    expect(v.hata).toContain("a-z0-9-");
+    expect(v.error).toContain("a-z0-9-");
     const newPath = join(root, "hub", "flows", "Kopya Adı.yaml");
     await expect(readFile(newPath, "utf8")).rejects.toThrow();
   });
@@ -1638,7 +1638,7 @@ describe("adres kapıları", () => {
         "x-skein-token": server.token,
         Origin: `http://localhost:${server.port}`,
       },
-      body: JSON.stringify({ karar: "retry" }),
+      body: JSON.stringify({ decision: "retry" }),
     });
     expect(res.status).toBe(200);
   });
@@ -1660,7 +1660,7 @@ describe("adres kapıları", () => {
         "x-skein-token": server.token,
         Origin: "http://kotu.example:" + server.port,
       },
-      body: JSON.stringify({ karar: "retry" }),
+      body: JSON.stringify({ decision: "retry" }),
     });
     expect(res.status).toBe(403);
   });
@@ -1774,7 +1774,7 @@ describe("adres kapıları", () => {
  * terminalden giriyordu.
  */
 describe("serveUi — ekrandan kart açmak", () => {
-  const ac = (govde: unknown, baslik?: Record<string, string>) =>
+  const open = (govde: unknown, baslik?: Record<string, string>) =>
     fetch(`${server.url}kart/yeni`, {
       method: "POST",
       headers: { "content-type": "application/json", ...(baslik ?? { "x-skein-token": server.token }) },
@@ -1782,45 +1782,45 @@ describe("serveUi — ekrandan kart açmak", () => {
     });
 
   it("kart açılıyor ve zincirin ilk rolünün kuyruğuna düşüyor", async () => {
-    const res = await ac({ baslik: "jitter", gorev: "retry'a jitter ekle" });
+    const res = await open({ title: "jitter", task: "retry'a jitter ekle" });
 
     expect(res.status).toBe(200);
-    const data = await res.json() as { kart: { id: string; role: string; state: string } };
-    expect(data.kart.role).toBe("coder");
-    expect(data.kart.state).toBe("queued");
+    const data = await res.json() as { card: { id: string; role: string; state: string } };
+    expect(data.card.role).toBe("coder");
+    expect(data.card.state).toBe("queued");
     // Çekirdek gerçekten yazdı mı — cevabın kendi iddiasına değil kuyruğa bak.
-    const kart = await queue.get(data.kart.id);
+    const kart = await queue.get(data.card.id);
     expect(kart?.title).toBe("jitter");
     expect(kart?.task).toBe("retry'a jitter ekle");
     expect(kart?.role).toBe("coder");
   });
 
   it("cevaptaki model yeni kartı içeriyor", async () => {
-    const res = await ac({ baslik: "jitter", gorev: "iş" });
-    const data = await res.json() as { kart: { id: string }; model: { cards: { id: string }[] } };
+    const res = await open({ title: "jitter", task: "iş" });
+    const data = await res.json() as { card: { id: string }; model: { cards: { id: string }[] } };
     // Ekran kendi kopyasını uydurmuyor: çizdiği model çekirdekten geliyor.
-    expect(data.model.cards.map((c) => c.id)).toContain(data.kart.id);
+    expect(data.model.cards.map((c) => c.id)).toContain(data.card.id);
   });
 
   // Boş kart, ajana verilecek metni olmayan bir karttır: tur koşar ve
   // hiçbir şey üretmez. `card -- new` de bunu reddediyor.
   it("başlık ya da iş metni boşsa reddediyor", async () => {
-    expect((await ac({ baslik: "", gorev: "iş" })).status).toBe(400);
-    expect((await ac({ baslik: "başlık", gorev: "   " })).status).toBe(400);
-    expect((await ac({})).status).toBe(400);
+    expect((await open({ title: "", task: "iş" })).status).toBe(400);
+    expect((await open({ title: "başlık", task: "   " })).status).toBe(400);
+    expect((await open({})).status).toBe(400);
     // Hiçbiri kuyruğa düşmemeli.
     expect(await queue.list()).toEqual([]);
   });
 
   it("jetonsuz istek reddedilir ve kart AÇILMAZ", async () => {
-    const res = await ac({ baslik: "b", gorev: "g" }, {});
+    const res = await open({ title: "b", task: "g" }, {});
     expect(res.status).toBe(403);
     // Reddedilen bir komut hiçbir şey yazmamalı.
     expect(await queue.list()).toEqual([]);
   });
 
   it("başka kaynaktan gelen istek reddedilir", async () => {
-    const res = await ac({ baslik: "b", gorev: "g" }, {
+    const res = await open({ title: "b", task: "g" }, {
       "x-skein-token": server.token,
       origin: "https://kotu-site.example",
     });
@@ -1870,7 +1870,7 @@ describe("serveUi — ekrandan gözcü", () => {
     const s = sahte();
     const srv = await serveUi({
       root, queue, topology, flowName: "test", flowHash: gercekFlow.hash,
-      watcher: { komut: KOMUT, bayraklar: BAYRAKLAR, spawn: s.spawn as never },
+      watcher: { command: KOMUT, bayraklar: BAYRAKLAR, spawn: s.spawn as never },
     });
     return { srv, s };
   }
@@ -1923,10 +1923,10 @@ describe("serveUi — ekrandan gözcü", () => {
   it("zaten açık bir gözcü varsa reddediyor", async () => {
     const { srv, s } = await gozculu();
     try {
-      const ilk = await fetch(`${srv.url}gozcu/baslat`, {
+      const first = await fetch(`${srv.url}gozcu/baslat`, {
         method: "POST", headers: { "x-skein-token": srv.token },
       });
-      expect(ilk.status).toBe(200);
+      expect(first.status).toBe(200);
       // İlk çağrı sahte süreci başlattı ama kilit YAZILMADI (sahte süreç
       // gerçek gözcü değil), o yüzden kilidi elle kuruyoruz: ölçülen şey
       // "kilit varsa reddet" kuralının kendisi.
@@ -1938,7 +1938,7 @@ describe("serveUi — ekrandan gözcü", () => {
         method: "POST", headers: { "x-skein-token": srv.token },
       });
       expect(ikinci.status).toBe(409);
-      expect((await ikinci.json() as { hata: string }).hata).toMatch(/Zaten bir gözcü açık/);
+      expect((await ikinci.json() as { error: string }).error).toMatch(/Zaten bir gözcü açık/);
       // İkinci süreç BAŞLAMADI.
       expect(s.cagrilar).toHaveLength(1);
     } finally {
@@ -1959,8 +1959,8 @@ describe("serveUi — ekrandan gözcü", () => {
       // turu bitirip çıkıyor. Söylemezsek kullanıcı hapta hâlâ "açık"
       // görüp düğmenin çalışmadığını sanar — gerçek tarayıcıda tam olarak
       // bu oldu.
-      const data = await res.json() as { mesaj?: string };
-      expect(data.mesaj).toMatch(/KOŞAN TURU bitirip/);
+      const data = await res.json() as { message?: string };
+      expect(data.message).toMatch(/KOŞAN TURU bitirip/);
     } finally {
       await srv.close();
     }
@@ -2000,7 +2000,7 @@ describe("serveUi — ekrandan gözcü", () => {
         method: "POST", headers: { "x-skein-token": srv.token },
       });
       expect(res.status).toBe(409);
-      expect((await res.json() as { hata: string }).hata).toMatch(/Durdurulacak gözcü yok/);
+      expect((await res.json() as { error: string }).error).toMatch(/Durdurulacak gözcü yok/);
     } finally {
       await srv.close();
     }
@@ -2025,9 +2025,9 @@ describe("serveUi — ekrandan gözcü", () => {
         method: "POST", headers: { "x-skein-token": srv.token },
       });
       expect(res.status).toBe(409);
-      const data = await res.json() as { hata: string };
-      expect(data.hata).toMatch(/bu ekran başlatmadı/);
-      expect(data.hata).toMatch(/Ctrl-C/);
+      const data = await res.json() as { error: string };
+      expect(data.error).toMatch(/bu ekran başlatmadı/);
+      expect(data.error).toMatch(/Ctrl-C/);
     } finally {
       await srv.close();
     }
@@ -2111,10 +2111,10 @@ describe("GET /gozcu/log — gözcü günlüğü", () => {
     const srv = await serveUi({ root, queue, topology, flowName: "test", flowHash: gercekFlow.hash });
     try {
       const res = await fetch(`${srv.url}gozcu/log`);
-      const data = await res.json() as { lines: { at: string; mesaj: string; hata: boolean }[] };
+      const data = await res.json() as { lines: { at: string; message: string; error: boolean }[] };
       expect(data.lines).toEqual([
-        { at: "09:12", mesaj: "gözcü açık · pid 48213", hata: false },
-        { at: "09:13", mesaj: "✗ kaçak döngü", hata: true },
+        { at: "09:12", message: "gözcü açık · pid 48213", error: false },
+        { at: "09:13", message: "✗ kaçak döngü", error: true },
       ]);
     } finally {
       await srv.close();
@@ -2128,14 +2128,14 @@ describe("GET /gozcu/log — gözcü günlüğü", () => {
 describe("gozcuLogSatiriAyristir — tek satır ayrıştırma", () => {
   it("'HH:MM mesaj' biçimini ayırır", () => {
     expect(gozcuLogSatiriAyristir("14:05 kuyruk boş, bekleniyor")).toEqual({
-      at: "14:05", mesaj: "kuyruk boş, bekleniyor", hata: false,
+      at: "14:05", message: "kuyruk boş, bekleniyor", error: false,
     });
   });
 
   // SINIR: mesaj "✗" ile başlıyorsa hata:true — bu tek işaret
   // satirYaziciKur'un STDERR'den gelen satırlara EKLEDİĞİ işaret.
   it("mesaj '✗' ile başlıyorsa hata:true", () => {
-    expect(gozcuLogSatiriAyristir("14:06 ✗ kaçak döngü").hata).toBe(true);
+    expect(gozcuLogSatiriAyristir("14:06 ✗ kaçak döngü").error).toBe(true);
   });
 
   // BİÇİME UYMAYAN satır SESSİZCE ATILMIYOR: saat boş, mesaj ham satırın
@@ -2143,7 +2143,7 @@ describe("gozcuLogSatiriAyristir — tek satır ayrıştırma", () => {
   // de aynı kusur sınıfı.
   it("biçime uymayan satırı ham hâliyle gösterir", () => {
     expect(gozcuLogSatiriAyristir("saatsiz ham satır")).toEqual({
-      at: "", mesaj: "saatsiz ham satır", hata: false,
+      at: "", message: "saatsiz ham satır", error: false,
     });
   });
 });
@@ -2158,8 +2158,8 @@ describe("gozcuLogKuyruk — dosyadan son satırlar", () => {
     const yol = join(root, "cok-satirli.log");
     const lines = Array.from({ length: 5 }, (_, i) => `09:${String(i).padStart(2, "0")} satır ${i}`);
     await writeFile(yol, lines.join("\n") + "\n");
-    const sonuc = await gozcuLogKuyruk(yol, 2);
-    expect(sonuc.map((s) => s.mesaj)).toEqual(["satır 3", "satır 4"]);
+    const result = await gozcuLogKuyruk(yol, 2);
+    expect(result.map((s) => s.message)).toEqual(["satır 3", "satır 4"]);
   });
 });
 

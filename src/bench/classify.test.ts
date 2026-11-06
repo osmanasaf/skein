@@ -11,8 +11,8 @@ describe("applyFindings", () => {
 
   it("alıntısı raporda bulunan bulguları sayar", () => {
     const { findings, unverified } = applyFindings([
-      { sinif: "gercek", kanitli: true, quotation: "kuyruğu beslemeye devam ediyor" },
-      { sinif: "nit", kanitli: false, quotation: "ayrıca değişken adı kısa" },
+      { sinif: "gercek", proven: true, quotation: "kuyruğu beslemeye devam ediyor" },
+      { sinif: "nit", proven: false, quotation: "ayrıca değişken adı kısa" },
     ], report);
     expect(findings).toHaveLength(2);
     expect(unverified).toBe(0);
@@ -24,7 +24,7 @@ describe("applyFindings", () => {
   // denetçinin yanlış pozitifi diye yazmak olurdu.
   it("alıntısı bulunmayan bulguyu sayıya katmaz, ayrı sayar", () => {
     const { findings, unverified } = applyFindings([
-      { sinif: "yanlis", kanitli: false, quotation: "raporda olmayan bir cümle burada" },
+      { sinif: "yanlis", proven: false, quotation: "raporda olmayan bir cümle burada" },
     ], report);
     expect(findings).toHaveLength(0);
     expect(unverified).toBe(1);
@@ -32,7 +32,7 @@ describe("applyFindings", () => {
 
   it("tanınmayan sınıfı belirsiz sayar", () => {
     const { findings } = applyFindings([
-      { sinif: "kritik", kanitli: false, quotation: "ayrıca değişken adı kısa" },
+      { sinif: "kritik", proven: false, quotation: "ayrıca değişken adı kısa" },
     ], report);
     expect(findings[0]?.sinif).toBe("belirsiz");
   });
@@ -89,8 +89,8 @@ describe("classifyReport — uçtan uca", () => {
 
   it("bulguları sınıflar, sayar ve dosyaya yazar", async () => {
     const r = await run([
-      { sinif: "nit", kanitli: false, quotation: "değişken adı kısa seçilmiş" },
-      { sinif: "yanlis", kanitli: false, quotation: "sonuç hiçbir zaman döndürülmüyor" },
+      { sinif: "nit", proven: false, quotation: "değişken adı kısa seçilmiş" },
+      { sinif: "yanlis", proven: false, quotation: "sonuç hiçbir zaman döndürülmüyor" },
     ], "GPT-5.5 raporu: değişken adı kısa seçilmiş. Ayrıca sonuç hiçbir zaman döndürülmüyor.");
 
     expect(r.counts).toMatchObject({ findings: 2, nit: 1, wrong: 1, real: 0, proven: 0 });

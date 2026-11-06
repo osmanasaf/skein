@@ -45,8 +45,8 @@ class RoleAdapter implements Adapter {
     // Katman işareti rolün KİMLİĞİNİ taşıyor (`rol:architect`), prompt
     // dosyasının adını değil — ilk hâli dosya adına bakıyordu ve itiraz
     // eden rolü hiç tanımıyordu.
-    const metin = await readFile(req.promptFile, "utf8");
-    const rol = /rol:([a-z-]+)/.exec(metin)?.[1] ?? "?";
+    const text = await readFile(req.promptFile, "utf8");
+    const rol = /rol:([a-z-]+)/.exec(text)?.[1] ?? "?";
     this.seen.push(rol);
 
     if (rol === "planner") {
@@ -131,37 +131,37 @@ const kos = async (arm: Arm, adapter: Adapter) =>
 describe("6d koşum takımı", () => {
   it("kontrol kolu: kart biter, gizli süit üretilen koda karşı koşar", async () => {
     const adapter = new RoleAdapter();
-    const sonuc = await kos("plansiz", adapter);
+    const result = await kos("plansiz", adapter);
 
-    expect(sonuc.cardState).toBe("done");
+    expect(result.cardState).toBe("done");
     expect(adapter.seen).toEqual(["coder", "reviewer"]);
     // Gizli süit GERÇEKTEN koştu: bu, "kusur yok" demenin ön koşulu.
-    expect(sonuc.ran).toBe(true);
-    expect(sonuc.total).toBeGreaterThan(0);
-    expect(sonuc.red).toEqual([]);
-    expect(sonuc.activations).toBe(2);
-    expect(sonuc.planning).toBeUndefined();
+    expect(result.ran).toBe(true);
+    expect(result.total).toBeGreaterThan(0);
+    expect(result.red).toEqual([]);
+    expect(result.activations).toBe(2);
+    expect(result.planning).toBeUndefined();
   });
 
   it("deney kolu: planlama turu koşar ve sayıları kayda geçer", async () => {
     const adapter = new RoleAdapter();
-    const sonuc = await kos("planli", adapter);
-    expect(sonuc.cardState).toBe("done");
+    const result = await kos("planli", adapter);
+    expect(result.cardState).toBe("done");
     expect(adapter.seen).toEqual(["planner", "architect", "coder", "reviewer"]);
-    expect(sonuc.ran).toBe(true);
-    expect(sonuc.planning).toEqual({ rounds: 1, objections: 0, accepted: 0, invalid: 0 });
+    expect(result.ran).toBe(true);
+    expect(result.planning).toEqual({ rounds: 1, objections: 0, accepted: 0, invalid: 0 });
     // Planlama iki aktivasyon ekliyor: ölçümün bedeli bu.
-    expect(sonuc.activations).toBe(4);
+    expect(result.activations).toBe(4);
   });
 
   // Kusurlu çözüm kırmızı kanca üretmeli; yoksa ölçümün ölçüm gücü yok.
   it("kusurlu çözümde kırmızı kanca çıkar", async () => {
     const adapter = new RoleAdapter();
     adapter.cozum = "export function topla(n: number[]): number {\n  return n.length;\n}\n";
-    const sonuc = await kos("plansiz", adapter);
+    const result = await kos("plansiz", adapter);
 
-    expect(sonuc.ran).toBe(true);
-    expect(sonuc.red.length).toBeGreaterThan(0);
+    expect(result.ran).toBe(true);
+    expect(result.red.length).toBeGreaterThan(0);
   });
 
   // Kapıda kalan kolun sebebi sonuca taşınmak zorunda: kampanyada
@@ -175,8 +175,8 @@ describe("6d koşum takımı", () => {
       id: "claude",
       model: "sahte-1",
       async invoke(req) {
-        const metin = await readFile(req.promptFile, "utf8");
-        if (/rol:coder/.test(metin)) {
+        const text = await readFile(req.promptFile, "utf8");
+        if (/rol:coder/.test(text)) {
           await mkdir(join(req.workdir, "src"), { recursive: true });
           await writeFile(join(req.workdir, "src/toplam.ts"), adapter.cozum);
           await writeFile(join(req.workdir, VERDICT_FILE), JSON.stringify({
@@ -187,9 +187,9 @@ describe("6d koşum takımı", () => {
         return adapter.invoke(req);
       },
     };
-    const sonuc = await kos("plansiz", commitsiz);
-    expect(sonuc.cardState).not.toBe("done");
-    expect(sonuc.escalation).toMatch(/işlenmemiş/);
+    const result = await kos("plansiz", commitsiz);
+    expect(result.cardState).not.toBe("done");
+    expect(result.escalation).toMatch(/işlenmemiş/);
   });
 
   it("kol kimliği günlüğe açıkça yazılır", async () => {
@@ -355,7 +355,7 @@ describe("onKontrol", () => {
     expect(karar.kind).toBe("olculemedi");
     // "Kusur yok" diye okunmaması gerektiği SÖYLENİYOR: bildirilmemiş
     // sıfır değildir.
-    expect(karar.kind === "olculemedi" && karar.neden).toMatch(/kusur yok/i);
+    expect(karar.kind === "olculemedi" && karar.reason).toMatch(/kusur yok/i);
   });
 
   it("kart done değilse ŞÜPHELİ — ÖLÇER demiyor", () => {
@@ -363,8 +363,8 @@ describe("onKontrol", () => {
     expect(karar.kind).toBe("kuskulu");
     if (karar.kind !== "kuskulu") throw new Error("kuskulu beklendi");
     // Sebep satırı insana GİDİYOR: iki zıt durumu yalnızca o ayırt ediyor.
-    expect(karar.neden).toContain("gate");
-    expect(karar.neden).toContain("işlenmemiş değişiklik var");
+    expect(karar.reason).toContain("gate");
+    expect(karar.reason).toContain("işlenmemiş değişiklik var");
     // Kancalar atılmıyor: insan onlara bakarak karar verecek.
     expect(karar.red).toEqual(["hooks/gizli.test.ts"]);
   });
@@ -384,7 +384,7 @@ describe("onKontrol", () => {
   it("iş bitti ve kanca yoksa ÖLÇEMEZ", () => {
     const karar = onKontrol(kol({ red: [] }));
     expect(karar.kind).toBe("olcemez");
-    expect(karar.kind === "olcemez" && karar.neden).toMatch(/azalma olmaz/);
+    expect(karar.kind === "olcemez" && karar.reason).toMatch(/azalma olmaz/);
   });
 
   it("iş bitti ve kanıtlanmış kusur varsa ÖLÇER", () => {
@@ -396,7 +396,7 @@ describe("onKontrol", () => {
   // "ŞÜPHELİ" tek başına operatöre hiçbir şey anlatmaz.
   it("escalation yoksa bile durum adı sebepte", () => {
     const karar = onKontrol(kol({ cardState: "active" }));
-    expect(karar.kind === "kuskulu" && karar.neden).toContain("active");
+    expect(karar.kind === "kuskulu" && karar.reason).toContain("active");
   });
 });
 

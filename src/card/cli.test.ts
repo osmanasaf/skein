@@ -146,9 +146,9 @@ describe("card CLI — hedefsiz back", () => {
     await queue.init();
     await queue.add(newCard({ title: "iş", task: "bir şey yap", topology }));
     // coder zincirin başı: ret hedefi yok.
-    const sonuc = await queue.take("coder");
-    if (sonuc.kind !== "alindi") throw new Error("kart alınamadı");
-    const atGate = await queue.escalate(sonuc.card, "verdikt yok");
+    const result = await queue.take("coder");
+    if (result.kind !== "alindi") throw new Error("kart alınamadı");
+    const atGate = await queue.escalate(result.card, "verdikt yok");
 
     const { code, out } = await card(dir, "release", atGate.id, "back");
 
@@ -172,9 +172,9 @@ describe("card CLI — hedefsiz back", () => {
     const queue = new CardQueue(join(dir, ".skein"));
     await queue.init();
     await queue.add(newCard({ title: "iş", task: "bir şey yap", topology }));
-    const ilk = await queue.take("coder");
-    if (ilk.kind !== "alindi") throw new Error("kart alınamadı");
-    await queue.handoff(ilk.card, {});
+    const first = await queue.take("coder");
+    if (first.kind !== "alindi") throw new Error("kart alınamadı");
+    await queue.handoff(first.card, {});
     const ikinci = await queue.take("reviewer");
     if (ikinci.kind !== "alindi") throw new Error("kart alınamadı");
     const atGate = await queue.escalate(ikinci.card, "verdikt yok");

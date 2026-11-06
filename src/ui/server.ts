@@ -57,7 +57,7 @@ export interface ServeUiOptions extends DetailOptions {
     /** Seçilebilecek akış adları. */
     list: () => Promise<string[]>;
     /** Adı verilen akışı açar. Başarısızsa FIRLATIR ve eskisi durur. */
-    ac: (ad: string) => Promise<{ live: CanliAkis; flowPath: string }>;
+    open: (ad: string) => Promise<{ live: CanliAkis; flowPath: string }>;
   };
   /**
    * Akış dosyasının yolu ve yükleme seçenekleri — ekrandan düzenleme için
@@ -92,7 +92,7 @@ export interface ServeUiOptions extends DetailOptions {
    */
   watcher?: {
     /** Gözcüyü çalıştıran komut, akış adından ÖNCEKİ kısım. */
-    komut: string[];
+    command: string[];
     /**
      * Gözcüye geçirilecek bayraklar — model, araçlar, izin modu.
      *
@@ -159,10 +159,10 @@ function queryParam(req: IncomingMessage, name: string): string {
  * Etiketler `promptLayers`in (flow/snapshot.ts) kullandığı adlandırmayla
  * aynı: "anayasa:N" ve "rol:<id>".
  */
-function promptListesi(topology: TopologySnapshot): { etiket: string; yol: string }[] {
-  const items: { etiket: string; yol: string }[] = [];
-  topology.constitution.forEach((yol, i) => items.push({ etiket: `anayasa:${i + 1}`, yol }));
-  topology.roles.forEach((rol) => items.push({ etiket: `rol:${rol.id}`, yol: rol.prompt }));
+function promptListesi(topology: TopologySnapshot): { label: string; path: string }[] {
+  const items: { label: string; path: string }[] = [];
+  topology.constitution.forEach((yol, i) => items.push({ label: `anayasa:${i + 1}`, path: yol }));
+  topology.roles.forEach((rol) => items.push({ label: `rol:${rol.id}`, path: rol.prompt }));
   return items;
 }
 
@@ -178,11 +178,11 @@ function promptListesi(topology: TopologySnapshot): { etiket: string; yol: strin
  * etmeseydik, boş bırakılan bir prompt ancak parası ödenmiş bir
  * aktivasyon çökünce fark edilirdi.
  */
-function promptIcerigiSorunu(metin: string): string | null {
-  if (metin.trim() === "") {
+function promptIcerigiSorunu(text: string): string | null {
+  if (text.trim() === "") {
     return "Prompt dosyası boş olamaz. Sessizce etkisiz kalan bir katman, olmayandan kötüdür.";
   }
-  if (metin.includes(LAYER_MARK)) {
+  if (text.includes(LAYER_MARK)) {
     return `Prompt dosyası katman sınırı işareti (${LAYER_MARK}) içeremez — ` +
       "bir katman kendi sınırlarını uyduramaz.";
   }
@@ -226,13 +226,13 @@ function rolPromptSablonu(id: string): string {
  */
 async function akisOzetiYukle(
   root: string, ad: string, loadOptions: LoadOptions | undefined,
-): Promise<{ ad: string; draft: FlowDraft | null; hata?: string }> {
+): Promise<{ name: string; draft: FlowDraft | null; error?: string }> {
   const secenekler = loadOptions ?? { root, providers: knownProviderSet() };
   try {
     const flow = await loadFlow(join(root, "hub", "flows", `${ad}.yaml`), secenekler);
-    return { ad, draft: fromFlow(flow) };
+    return { name: ad, draft: fromFlow(flow) };
   } catch (error) {
-    return { ad, draft: null, hata: (error as Error).message };
+    return { name: ad, draft: null, error: (error as Error).message };
   }
 }
 
@@ -291,9 +291,9 @@ function goreliYol(flowDir: string, abs: string): string {
 /** Gözcü günlüğünün ekrana giden hâli — `GET /gozcu/log` (kart c-20261105-92d731). */
 export interface GozcuLogSatiri {
   at: string;
-  mesaj: string;
+  message: string;
   /** DEVIR.md §2: "hatalar accent-700" — kaynak STDERR'se true (bkz. satirYaziciKur). */
-  hata: boolean;
+  error: boolean;
 }
 
 /**
@@ -307,8 +307,8 @@ export interface GozcuLogSatiri {
  */
 export function gozcuLogSatiriAyristir(ham: string): GozcuLogSatiri {
   const match = /^(\d{2}:\d{2}) (.*)$/.exec(ham);
-  const mesaj = match ? (match[2] ?? "") : ham;
-  return { at: match ? (match[1] ?? "") : "", mesaj, hata: mesaj.startsWith("✗") };
+  const message = match ? (match[2] ?? "") : ham;
+  return { at: match ? (match[1] ?? "") : "", message, error: message.startsWith("✗") };
 }
 
 /**
@@ -320,13 +320,13 @@ export function gozcuLogSatiriAyristir(ham: string): GozcuLogSatiri {
  * hatası değil, "henüz günlük yok" demek.
  */
 export async function gozcuLogKuyruk(path: string, n = 20): Promise<GozcuLogSatiri[]> {
-  let metin: string;
+  let text: string;
   try {
-    metin = await readFile(path, "utf8");
+    text = await readFile(path, "utf8");
   } catch {
     return [];
   }
-  const lines = metin.split("\n").filter((s) => s !== "");
+  const lines = text.split("\n").filter((s) => s !== "");
   return lines.slice(-n).map(gozcuLogSatiriAyristir);
 }
 
@@ -347,9 +347,9 @@ export function satirYaziciKur(log: NodeJS.WritableStream, hataKaynagi: boolean)
     kalan += chunk.toString("utf8");
     const parcalar = kalan.split("\n");
     kalan = parcalar.pop() ?? "";
-    for (const satir of parcalar) {
+    for (const line of parcalar) {
       const saat = new Date().toTimeString().slice(0, 5);
-      const gosterim = hataKaynagi && !satir.startsWith("✗") ? `✗ ${satir}` : satir;
+      const gosterim = hataKaynagi && !line.startsWith("✗") ? `✗ ${line}` : line;
       log.write(`${saat} ${gosterim}\n`);
     }
   };
@@ -389,10 +389,10 @@ export function bizeAit(
   raw: string | undefined, names: Set<string>, port: number,
 ): boolean {
   if (typeof raw !== "string" || raw === "") return false;
-  const metin = raw.includes("://") ? raw : `http://${raw}`;
+  const text = raw.includes("://") ? raw : `http://${raw}`;
   let url: URL;
   try {
-    url = new URL(metin);
+    url = new URL(text);
   } catch {
     return false;
   }
@@ -540,8 +540,8 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
    * (gozcuLogKuyruk) bunu "hata" sayıp accent-700 gösterir.
    */
   const gercekSpawn = (root: string) => (argv: string[]): GozcuSurec => {
-    const [komut, ...args] = argv;
-    const child = spawnPortable(komut as string, args, { cwd: root });
+    const [command, ...args] = argv;
+    const child = spawnPortable(command as string, args, { cwd: root });
     const log = createWriteStream(join(root, ".skein", "gozcu.log"), { flags: "a" });
     child.stdout?.on("data", satirYaziciKur(log, false));
     child.stderr?.on("data", satirYaziciKur(log, true));
@@ -607,12 +607,12 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
       if (ayar === undefined) {
         res.writeHead(404, { "content-type": "application/json; charset=utf-8" });
         res.end(JSON.stringify({
-          hata: "Bu ekran gözcü yönetimine açık değil — ekranı gözcü bayraklarıyla aç.",
+          error: "Bu ekran gözcü yönetimine açık değil — ekranı gözcü bayraklarıyla aç.",
         }));
         return;
       }
       const basla = path === "/gozcu/baslat";
-      let mesaj: string | null = null;
+      let message: string | null = null;
       (async () => {
         const o = await current();
         const kilitYolu = join(o.root, ".skein", "daemon.json");
@@ -630,7 +630,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
           const spawn = ayar.spawn ?? gercekSpawn(o.root);
           // Akış adı EKRANIN o an baktığı akıştan geliyor; bayraklar
           // terminalden. Akış değiştirince düğme doğru akışı koşturuyor.
-          const baslayan = spawn([...ayar.komut, o.flowName, "--serve", ...ayar.bayraklar]);
+          const baslayan = spawn([...ayar.command, o.flowName, "--serve", ...ayar.bayraklar]);
           cocuk = baslayan;
           // Referans, süreç GERÇEKTEN bitince bırakılıyor — "durdur"
           // dediğimizde değil. İkisi aynı an değil.
@@ -659,7 +659,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
           // unutuyordu. Çekirdek ikinci sinyali "hemen çık" sayıyor, yani
           // ikinci basışın ÇALIŞMASI gerekiyor.
           cocuk.kill("SIGTERM");
-          mesaj = "Durdurma sinyali gönderildi — gözcü KOŞAN TURU bitirip " +
+          message = "Durdurma sinyali gönderildi — gözcü KOŞAN TURU bitirip " +
             "çıkacak. Yarıda kesmek, parası ödenmiş bir turu çöpe atardı. " +
             "Tekrar basmak hemen durdurur.";
         }
@@ -669,12 +669,12 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
       })()
         .then((model) => {
           res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
-          res.end(JSON.stringify({ model, ...(mesaj === null ? {} : { mesaj }) }));
+          res.end(JSON.stringify({ model, ...(message === null ? {} : { message }) }));
         })
         .catch((error: unknown) => {
-          const kod = error instanceof QueueError ? 409 : 400;
-          res.writeHead(kod, { "content-type": "application/json; charset=utf-8" });
-          res.end(JSON.stringify({ hata: (error as Error).message }));
+          const code = error instanceof QueueError ? 409 : 400;
+          res.writeHead(code, { "content-type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: (error as Error).message }));
         });
       return;
     }
@@ -695,8 +695,13 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
           // değiştirmediğini gösterdi — aynı kural iki yerde, bu deponun en
           // sık tekrarlayan kusur sınıfı. Çekirdeğin hatası 400 ile aynen
           // kullanıcıya gidiyor.
-          const baslik = typeof request["baslik"] === "string" ? request["baslik"] : "";
-          const gorev = typeof request["gorev"] === "string" ? request["gorev"] : "";
+          // TEL ALAN ADLARI da İngilizceye geçti: istemcinin gönderdiği
+          // nesne alanı artık "title"/"task". Bu uç YALNIZCA bizim
+          // istemcimiz tarafından çağrılıyor ve gövde HİÇBİR YERDE
+          // saklanmıyor, o yüzden tel adı çevrilebilir — olay günlüğü
+          // ve kart dosyalarının alan adları gibi SABİT değil.
+          const baslik = typeof request["title"] === "string" ? request["title"] : "";
+          const gorev = typeof request["task"] === "string" ? request["task"] : "";
 
           // Topoloji YAŞAYAN dosyadan: kart açılırken donan hash budur.
           const o = await current();
@@ -724,14 +729,14 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
         .then(({ card, model }) => {
           res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
           res.end(JSON.stringify({
-            kart: { id: card.id, title: card.title, role: card.role, state: card.state },
+            card: { id: card.id, title: card.title, role: card.role, state: card.state },
             model,
           }));
         })
         .catch((error: unknown) => {
-          const kod = error instanceof QueueError ? 409 : 400;
-          res.writeHead(kod, { "content-type": "application/json; charset=utf-8" });
-          res.end(JSON.stringify({ hata: (error as Error).message }));
+          const code = error instanceof QueueError ? 409 : 400;
+          res.writeHead(code, { "content-type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: (error as Error).message }));
         });
       return;
     }
@@ -747,7 +752,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
       const loadOptions = options.loadOptions;
       if (flowPath === undefined || loadOptions === undefined) {
         res.writeHead(404, { "content-type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({ hata: "Bu ekran akış düzenlemeye açık değil." }));
+        res.end(JSON.stringify({ error: "Bu ekran akış düzenlemeye açık değil." }));
         return;
       }
       const yaz = path === "/akis/yaz";
@@ -769,15 +774,15 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
           // taşıyor — benzersizlik/karakter kümesi hatası burada da ERKEN
           // yakalanır, ama dosyaya hiçbir koşulda dokunulmaz.
           if (!yaz) {
-            const sonuc = await checkDraft(hedefYol, govde, loadOptions);
+            const result = await checkDraft(hedefYol, govde, loadOptions);
             res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
-            res.end(JSON.stringify(sonuc));
+            res.end(JSON.stringify(result));
             return;
           }
-          const sonuc = await writeDraft(hedefYol, govde, loadOptions);
-          if (!sonuc.ok) {
+          const result = await writeDraft(hedefYol, govde, loadOptions);
+          if (!result.ok) {
             res.writeHead(409, { "content-type": "application/json; charset=utf-8" });
-            res.end(JSON.stringify({ hata: sonuc.message }));
+            res.end(JSON.stringify({ error: result.message }));
             return;
           }
           // Yazdıktan sonra model YENİDEN kuruluyor: yeni topoloji zaten
@@ -788,11 +793,11 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
           // bunu ayrıca ister.
           const model = await buildModel(await current());
           res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
-          res.end(JSON.stringify({ ...sonuc, model }));
+          res.end(JSON.stringify({ ...result, model }));
         })
         .catch((error: unknown) => {
           res.writeHead(400, { "content-type": "application/json; charset=utf-8" });
-          res.end(JSON.stringify({ hata: (error as Error).message }));
+          res.end(JSON.stringify({ error: (error as Error).message }));
         });
       return;
     }
@@ -807,13 +812,13 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
       const ayar = options.flowChoice;
       if (ayar === undefined) {
         res.writeHead(404, { "content-type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({ hata: "Bu ekran akış seçimine açık değil." }));
+        res.end(JSON.stringify({ error: "Bu ekran akış seçimine açık değil." }));
         return;
       }
       readBody(req)
         .then(async (body) => {
-          const request = JSON.parse(body === "" ? "{}" : body) as { ad?: unknown };
-          const ad = typeof request.ad === "string" ? request.ad : "";
+          const request = JSON.parse(body === "" ? "{}" : body) as { name?: unknown };
+          const ad = typeof request.name === "string" ? request.name : "";
           // AD DOĞRUDAN YOLA ÇEVRİLMİYOR. `../` içeren bir ad "dizgi
           // temizleyerek" reddedilseydi, temizleme kuralı bir gün eksik
           // kalırdı — ÜYELİK asla eksik kalmaz: listede yoksa ad, hangi
@@ -825,7 +830,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
           // `ac` BAŞARISIZSA FIRLATIR (bozuk YAML, kural ihlali) ve
           // `aktif` yalnızca BAŞARIDAN SONRA değişiyor — "yarı yüklenmiş
           // akış" diye bir durum yok, `LiveFlow`'un kendi kuralının aynısı.
-          const { live, flowPath } = await ayar.ac(ad);
+          const { live, flowPath } = await ayar.open(ad);
           active = { live, flowPath };
           const model = await buildModel(await current());
           return model;
@@ -835,9 +840,9 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
           res.end(JSON.stringify({ model }));
         })
         .catch((error: unknown) => {
-          const kod = error instanceof QueueError ? 409 : 400;
-          res.writeHead(kod, { "content-type": "application/json; charset=utf-8" });
-          res.end(JSON.stringify({ hata: (error as Error).message }));
+          const code = error instanceof QueueError ? 409 : 400;
+          res.writeHead(code, { "content-type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: (error as Error).message }));
         });
       return;
     }
@@ -856,27 +861,27 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
       const loadOptions = options.loadOptions;
       if (flowPath === undefined || loadOptions === undefined) {
         res.writeHead(404, { "content-type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({ hata: "Bu ekran prompt düzenlemeye açık değil." }));
+        res.end(JSON.stringify({ error: "Bu ekran prompt düzenlemeye açık değil." }));
         return;
       }
       readBody(req)
         .then(async (body) => {
-          const request = JSON.parse(body === "" ? "{}" : body) as { yol?: unknown; metin?: unknown };
-          const yol = typeof request.yol === "string" ? request.yol : "";
-          const metin = typeof request.metin === "string" ? request.metin : "";
+          const request = JSON.parse(body === "" ? "{}" : body) as { path?: unknown; text?: unknown };
+          const yol = typeof request.path === "string" ? request.path : "";
+          const text = typeof request.text === "string" ? request.text : "";
 
           const o = await current();
           // ÜYELİK: yol, akışın bildirdiği listede AYNEN var mı. `../` ya da
           // mutlak yol, şekli ne olursa olsun, listede olmadığı için burada
           // aynen reddedilir — dizgi temizlenerek değil.
           const items = promptListesi(o.topology);
-          if (!items.some((p) => p.yol === yol)) {
+          if (!items.some((p) => p.path === yol)) {
             throw new Error(`Bilinmeyen prompt yolu: ${yol}`);
           }
-          const sorun = promptIcerigiSorunu(metin);
+          const sorun = promptIcerigiSorunu(text);
           if (sorun !== null) throw new Error(sorun);
 
-          await writeFile(join(o.root, yol), metin, "utf8");
+          await writeFile(join(o.root, yol), text, "utf8");
 
           // Topoloji HASH'İ prompt İÇERİĞİNİ KAPSAMIYOR (flow/load.ts,
           // topologyHash) ve bu KASITLI — bu yazma onu bozmuyor, kapsamaya
@@ -890,7 +895,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
         })
         .catch((error: unknown) => {
           res.writeHead(400, { "content-type": "application/json; charset=utf-8" });
-          res.end(JSON.stringify({ hata: (error as Error).message }));
+          res.end(JSON.stringify({ error: (error as Error).message }));
         });
       return;
     }
@@ -928,7 +933,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
       const canliAkis = active.live;
       if (flowPath === undefined || loadOptions === undefined || canliAkis === undefined) {
         res.writeHead(404, { "content-type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({ hata: "Bu ekran rol eklemeye açık değil." }));
+        res.end(JSON.stringify({ error: "Bu ekran rol eklemeye açık değil." }));
         return;
       }
       readBody(req)
@@ -1004,26 +1009,26 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
           const yeniTaslak: FlowDraft = { ...taslak, roles: yeniRoller };
 
           // ATOMİKLİK, adım 2: akışı DOĞRULA ve YAZ.
-          const sonuc = await writeDraft(flowPath, yeniTaslak, loadOptions);
-          if (!sonuc.ok) {
+          const result = await writeDraft(flowPath, yeniTaslak, loadOptions);
+          if (!result.ok) {
             // DOĞRULAMA BAŞARISIZ — adım 1 GERİ ALINIYOR: yarı yaratılmış
             // bir rol (dosyası var, akışta yok) bırakmıyoruz.
             if (eskiMetin === undefined) await unlink(promptAbs).catch(() => {});
             else await writeFile(promptAbs, eskiMetin, "utf8");
-            return { kod: 409 as const, hata: sonuc.message };
+            return { code: 409 as const, error: result.message };
           }
           const model = await buildModel(await current());
-          return { kod: 200 as const, model };
+          return { code: 200 as const, model };
         })
-        .then((sonuc) => {
-          res.writeHead(sonuc.kod, { "content-type": "application/json; charset=utf-8" });
+        .then((result) => {
+          res.writeHead(result.code, { "content-type": "application/json; charset=utf-8" });
           res.end(JSON.stringify(
-            sonuc.kod === 200 ? { model: sonuc.model } : { hata: sonuc.hata },
+            result.code === 200 ? { model: result.model } : { error: result.error },
           ));
         })
         .catch((error: unknown) => {
           res.writeHead(400, { "content-type": "application/json; charset=utf-8" });
-          res.end(JSON.stringify({ hata: (error as Error).message }));
+          res.end(JSON.stringify({ error: (error as Error).message }));
         });
       return;
     }
@@ -1053,12 +1058,12 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
         })
         .then(({ card, reason, model }) => {
           res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
-          res.end(JSON.stringify({ kart: { id: card.id, state: card.state }, reason, model }));
+          res.end(JSON.stringify({ card: { id: card.id, state: card.state }, reason, model }));
         })
         .catch((error: unknown) => {
-          const kod = error instanceof QueueError ? 409 : 400;
-          res.writeHead(kod, { "content-type": "application/json; charset=utf-8" });
-          res.end(JSON.stringify({ hata: (error as Error).message }));
+          const code = error instanceof QueueError ? 409 : 400;
+          res.writeHead(code, { "content-type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: (error as Error).message }));
         });
       return;
     }
@@ -1073,9 +1078,9 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
       const id = decodeURIComponent(birak[1] as string);
       readBody(req)
         .then(async (body) => {
-          const karar = (JSON.parse(body === "" ? "{}" : body) as { karar?: unknown }).karar;
-          if (karar !== undefined && !DECISIONS.includes(karar as ReleaseDecision)) {
-            throw new QueueError(`Bilinmeyen karar: ${String(karar)}`);
+          const decision = (JSON.parse(body === "" ? "{}" : body) as { decision?: unknown }).decision;
+          if (decision !== undefined && !DECISIONS.includes(decision as ReleaseDecision)) {
+            throw new QueueError(`Bilinmeyen karar: ${String(decision)}`);
           }
           // Yüzey kendi kopyasını güncellemiyor: çekirdeğe komut gidiyor ve
           // cevap, çekirdeğin ürettiği YENİ durumdan okunuyor.
@@ -1083,19 +1088,19 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
             options.root,
             options.queue,
             id,
-            karar as ReleaseDecision | undefined,
+            decision as ReleaseDecision | undefined,
             options.logPath,
           );
           const model = await buildModel(await current());
           res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
-          res.end(JSON.stringify({ kart: { id: card.id, role: card.role, state: card.state }, model }));
+          res.end(JSON.stringify({ card: { id: card.id, role: card.role, state: card.state }, model }));
         })
         .catch((error: unknown) => {
           // Çekirdeğin reddi kullanıcıya AYNEN gider: "kaçış kapısından ileri
           // bırakılamaz" mesajı gerekçesini ve çıkış yolunu zaten söylüyor.
-          const kod = error instanceof QueueError ? 409 : 400;
-          res.writeHead(kod, { "content-type": "application/json; charset=utf-8" });
-          res.end(JSON.stringify({ hata: (error as Error).message }));
+          const code = error instanceof QueueError ? 409 : 400;
+          res.writeHead(code, { "content-type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: (error as Error).message }));
         });
       return;
     }
@@ -1128,7 +1133,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
         })
         .catch((error: unknown) => {
           res.writeHead(400, { "content-type": "application/json; charset=utf-8" });
-          res.end(JSON.stringify({ hata: (error as Error).message }));
+          res.end(JSON.stringify({ error: (error as Error).message }));
         });
       return;
     }
@@ -1165,7 +1170,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
           },
           (error: unknown) => {
             res.writeHead(500, { "content-type": "application/json; charset=utf-8" });
-            res.end(JSON.stringify({ hata: (error as Error).message }));
+            res.end(JSON.stringify({ error: (error as Error).message }));
           },
         );
       return;
@@ -1185,7 +1190,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
         },
         (error: unknown) => {
           res.writeHead(500, { "content-type": "application/json; charset=utf-8" });
-          res.end(JSON.stringify({ hata: (error as Error).message }));
+          res.end(JSON.stringify({ error: (error as Error).message }));
         },
       );
       return;
@@ -1197,22 +1202,22 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
         .then(async (o) => {
           // ÜYELİK — `/prompt/yaz` ile aynı kapı: yol listede AYNEN var mı.
           const items = promptListesi(o.topology);
-          if (!items.some((p) => p.yol === yol)) {
+          if (!items.some((p) => p.path === yol)) {
             throw new Error(`Bilinmeyen prompt yolu: ${yol}`);
           }
           return readFile(join(o.root, yol), "utf8");
         })
         .then(
-          (metin) => {
+          (text) => {
             res.writeHead(200, {
               "content-type": "application/json; charset=utf-8",
               "cache-control": "no-store",
             });
-            res.end(JSON.stringify({ metin }));
+            res.end(JSON.stringify({ text }));
           },
           (error: unknown) => {
             res.writeHead(400, { "content-type": "application/json; charset=utf-8" });
-            res.end(JSON.stringify({ hata: (error as Error).message }));
+            res.end(JSON.stringify({ error: (error as Error).message }));
           },
         );
       return;
@@ -1235,7 +1240,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
         },
         (error: unknown) => {
           res.writeHead(500, { "content-type": "application/json; charset=utf-8" });
-          res.end(JSON.stringify({ hata: (error as Error).message }));
+          res.end(JSON.stringify({ error: (error as Error).message }));
         },
       );
       return;
@@ -1255,7 +1260,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
           // Okuma hatası ekranı çökertmemeli: kart dosyası bozuksa bunu
           // söyleyen bir ekran, boş bir ekrandan iyidir.
           res.writeHead(500, { "content-type": "application/json; charset=utf-8" });
-          res.end(JSON.stringify({ hata: (error as Error).message }));
+          res.end(JSON.stringify({ error: (error as Error).message }));
         },
       );
       return;
@@ -1267,7 +1272,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
         (detail) => {
           if (detail === null) {
             res.writeHead(404, { "content-type": "application/json; charset=utf-8" });
-            res.end(JSON.stringify({ hata: `Kart yok: ${id}` }));
+            res.end(JSON.stringify({ error: `Kart yok: ${id}` }));
             return;
           }
           res.writeHead(200, {
@@ -1278,7 +1283,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
         },
         (error: unknown) => {
           res.writeHead(500, { "content-type": "application/json; charset=utf-8" });
-          res.end(JSON.stringify({ hata: (error as Error).message }));
+          res.end(JSON.stringify({ error: (error as Error).message }));
         },
       );
       return;
@@ -1319,7 +1324,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
         res.end(JSON.stringify({ lines }));
       }).catch((error: unknown) => {
         res.writeHead(500, { "content-type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({ hata: (error as Error).message }));
+        res.end(JSON.stringify({ error: (error as Error).message }));
       });
       return;
     }
@@ -1345,14 +1350,14 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
       const id = queryParam(req, "kart");
       if (id === "") {
         res.writeHead(400, { "content-type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({ hata: "`kart` parametresi gerekli." }));
+        res.end(JSON.stringify({ error: "`kart` parametresi gerekli." }));
         return;
       }
       current().then((o) => buildSteps(o, id)).then(
         (steps) => {
           if (steps === null) {
             res.writeHead(404, { "content-type": "application/json; charset=utf-8" });
-            res.end(JSON.stringify({ hata: `Kart yok: ${id}` }));
+            res.end(JSON.stringify({ error: `Kart yok: ${id}` }));
             return;
           }
           res.writeHead(200, {
@@ -1363,7 +1368,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
         },
         (error: unknown) => {
           res.writeHead(500, { "content-type": "application/json; charset=utf-8" });
-          res.end(JSON.stringify({ hata: (error as Error).message }));
+          res.end(JSON.stringify({ error: (error as Error).message }));
         },
       );
       return;

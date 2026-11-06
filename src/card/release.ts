@@ -58,8 +58,8 @@ export async function releaseCard(
       decision: karar?.applied ?? "forward",
       // İstenen şey yapılamadıysa o da kaybolmamalı: insanın niyeti de
       // ölçülebilir bir olgu.
-      ...(karar !== null && karar.istenen !== karar.applied
-        ? { requested: karar.istenen }
+      ...(karar !== null && karar.requested !== karar.applied
+        ? { requested: karar.requested }
         : {}),
       kind: karar?.kind ?? "approval",
     });
@@ -71,7 +71,7 @@ export async function releaseCard(
   return {
     card,
     decision: karar?.applied ?? "forward",
-    requested: karar?.istenen ?? "forward",
+    requested: karar?.requested ?? "forward",
     kind: karar?.kind ?? "approval",
   };
 }

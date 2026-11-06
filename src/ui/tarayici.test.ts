@@ -267,9 +267,9 @@ async function acTema(sema: "light" | "dark"): Promise<{ page: Sayfa; errors: st
   // KONSOL HATASI YOK iddiası page error'dan AYRI: bir `console.error`
   // çağrısı sayfayı çökertmez ama sessizce yutulan bir kusur olurdu.
   page.on("console", (m) => {
-    const mesaj = m as { type?: () => string; text?: () => string };
-    if (mesaj.type && mesaj.type() === "error") {
-      errors.push("konsol: " + (mesaj.text ? mesaj.text() : String(m)));
+    const message = m as { type?: () => string; text?: () => string };
+    if (message.type && message.type() === "error") {
+      errors.push("konsol: " + (message.text ? message.text() : String(m)));
     }
   });
   await page.goto(server.url, { waitUntil: "networkidle" });
@@ -643,8 +643,8 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
       await page.waitForSelector('.formasyonDugum[data-rol="coder"] .kare-kuyrukta', { timeout: 10_000 });
 
       // Çekirdek GERÇEKTEN yazdı mı — sayfanın iddiasına değil kuyruğa bak.
-      const kartlar = await queue.list();
-      expect(kartlar.map((c) => c.title)).toEqual(["tarayıcıdan"]);
+      const cards = await queue.list();
+      expect(cards.map((c) => c.title)).toEqual(["tarayıcıdan"]);
       expect(errors).toEqual([]);
     } finally {
       await page.close();
@@ -660,11 +660,11 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
       await page.waitForSelector(".ust textarea", { timeout: 10_000 });
       await page.click('.ust button:has-text("Kartı aç")');
       await page.waitForTimeout(500);
-      const hata = await page.evaluate(() => {
+      const error = await page.evaluate(() => {
         const e = document.querySelector(".ust .err");
         return e && e.style.display !== "none" ? (e.textContent ?? "") : null;
       });
-      expect(hata).toMatch(/başlığı boş olamaz/);
+      expect(error).toMatch(/başlığı boş olamaz/);
       expect(await queue.list()).toEqual([]);
     } finally {
       await page.close();
@@ -819,7 +819,7 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
       // KULLANILMIYOR (model her zaman verilen fonksiyona bakıyor).
       alive: gozcuAyar.alive ?? (() => true),
       watcher: {
-        komut: ["node", "-e", ""],
+        command: ["node", "-e", ""],
         bayraklar: gozcuAyar.bayraklar ?? ["--model", "claude:m"],
         spawn: (gozcuAyar.spawn ?? (() => ({ pid: 777, kill: () => {}, onExit: () => {} }))) as never,
       },
@@ -888,9 +888,9 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
       await page.waitForTimeout(400);
       const dugme = await page.evaluate(() => {
         const b = document.querySelector(".railGozcuEylemler button") as { textContent: string | null; disabled?: boolean } | null;
-        return b ? { metin: b.textContent, devreDisi: Boolean(b.disabled) } : null;
+        return b ? { text: b.textContent, devreDisi: Boolean(b.disabled) } : null;
       });
-      expect(dugme).toEqual({ metin: "Süren tur bitiyor…", devreDisi: true });
+      expect(dugme).toEqual({ text: "Süren tur bitiyor…", devreDisi: true });
       expect(await page.textContent(".railGozcuBaslik")).toBe("gözcü duruyor…");
       // SAPMALAR §2.6 kural 3'ün TAM cümlesi: "anlık değil" açıkça
       // yazılmalı (denetim kartı c-20261105-387d01) — düğme/başlık
@@ -912,7 +912,7 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
     const flow = await loadFlow(join(root, "hub", "flows", "test.yaml"), { root, providers: knownProviderSet() });
     const s = await serveUi({
       root, queue, topology, flowName: flow.name, flowHash: flow.hash,
-      watcher: { komut: ["node"], bayraklar: [], spawn: (() => ({ pid: 1, kill: () => {}, onExit: () => {} })) as never },
+      watcher: { command: ["node"], bayraklar: [], spawn: (() => ({ pid: 1, kill: () => {}, onExit: () => {} })) as never },
     });
     // Ölü pid: "bayat kilitte gözcü düğmesi 'başlat' diyor" sınamasıyla AYNI
     // sabit (2^22 üstü Linux'ta ayrılmaz).
@@ -978,10 +978,10 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
    */
   it("gözcü GERÇEKTEN ölünce 'Yeniden başlat' otomatik olarak /gozcu/baslat'ı tetikler", async () => {
     const cagrilar: string[][] = [];
-    const canli = { deger: true };
+    const canli = { value: true };
     let counter = 0;
     const { s, flow } = await yonetilenSunucu({
-      alive: () => canli.deger,
+      alive: () => canli.value,
       spawn: (argv) => {
         cagrilar.push(argv);
         counter += 1;
@@ -1005,7 +1005,7 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
         // override'ı BURADA, aynı senkron adımda true'ya çevirmek, test
         // kodunun bunu AYRI bir zamanlamada yapmasını (yarış) gereksiz
         // kılıyor.
-        if (counter === 2) canli.deger = true;
+        if (counter === 2) canli.value = true;
         return { pid, kill: () => {}, onExit: () => {} };
       },
     });
@@ -1026,7 +1026,7 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
       expect(cagrilar.length).toBe(1);
 
       // Gözcü GERÇEKTEN ÖLDÜ — hiçbir düğmeye basılmadan.
-      canli.deger = false;
+      canli.value = false;
       // setInterval(yokla, 1000)'in EN AZ bir turunu bekle: ciz() bu turda
       // gozcuBeklemeSonucu'nun "öldü" dalına girip "/gozcu/baslat"ı
       // KENDİLİĞİNDEN tetiklemeli — test hiçbir düğmeye basmıyor.
@@ -1071,7 +1071,7 @@ roles:
       root, queue, topology, flowName: "test", flowHash: live.flow.hash, live,
       flowChoice: {
         list: async () => ["test", "ikinci"],
-        ac: async (ad) => {
+        open: async (ad) => {
           const l = await LiveFlow.open(join(root, "hub", "flows", `${ad}.yaml`), {
             root, providers: knownProviderSet(),
           });
@@ -2184,9 +2184,9 @@ gates:
      * yukarıdaki describe dışı test) AYNI kalıp.
      */
     async function akisSunucusuDuzenlenebilirAc(ad: string, metin: string) {
-      const yol = join(root, "hub", "flows", `${ad}.yaml`);
-      await writeFile(yol, metin);
-      const live = await LiveFlow.open(yol, { root, providers: knownProviderSet() });
+      const path = join(root, "hub", "flows", `${ad}.yaml`);
+      await writeFile(path, metin);
+      const live = await LiveFlow.open(path, { root, providers: knownProviderSet() });
       return serveUi({
         root, queue, topology: live.topology, flowName: live.flow.name, flowHash: live.flow.hash,
         live, flowPath: live.flow.path,
@@ -2367,9 +2367,9 @@ gates:
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
       page.on("console", (m) => {
-        const mesaj = m as { type?: () => string; text?: () => string };
-        if (mesaj.type && mesaj.type() === "error") {
-          errors.push("konsol: " + (mesaj.text ? mesaj.text() : String(m)));
+        const message = m as { type?: () => string; text?: () => string };
+        if (message.type && message.type() === "error") {
+          errors.push("konsol: " + (message.text ? message.text() : String(m)));
         }
       });
       try {
@@ -2694,8 +2694,8 @@ roles:
         });
 
         await page.waitForSelector("#onizleme .err", { timeout: 10_000 });
-        const mesaj = await page.textContent("#onizleme .err");
-        expect(mesaj).toContain("kural");
+        const message = await page.textContent("#onizleme .err");
+        expect(message).toContain("kural");
         // GEÇERSİZKEN KAYDET KAPALI — hiçbir yarım taslak dosyaya düşemez.
         expect(await page.evaluate(() =>
           (document.querySelector("#kaydet") as unknown as { disabled: boolean } | null)?.disabled)).toBe(true);
@@ -2748,7 +2748,7 @@ planlama:
   plan: docs/plan/{kart}.md
   denetci: reviewer
 `;
-      const yol = join(root, "hub", "flows", "planli.yaml");
+      const path = join(root, "hub", "flows", "planli.yaml");
       const s = await akisSunucusuDuzenlenebilirAc("planli", PLANLI_FLOW);
       const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
@@ -2768,7 +2768,7 @@ planlama:
         await page.click("#kaydet");
         await page.waitForTimeout(500);
 
-        const yazilan = await readFile(yol, "utf8");
+        const yazilan = await readFile(path, "utf8");
         // DEĞİŞEN: yeni kenar GERÇEKTEN dosyada.
         expect(yazilan).toMatch(/id: reviewer[\s\S]*syncBack:\s*\n\s*- coder/);
         // DEĞİŞMEYEN — hepsi AYNEN duruyor:
@@ -2892,9 +2892,9 @@ roles:
 
     /** "Ham YAML" sekmesinin DÜZENLENEBİLİR sunucu açılışıyla AYNI kalıp (bkz. akisSunucusuDuzenlenebilirAc). */
     async function duzenleSunucusuAc(ad: string, metin: string) {
-      const yol = join(root, "hub", "flows", `${ad}.yaml`);
-      await writeFile(yol, metin);
-      const live = await LiveFlow.open(yol, { root, providers: knownProviderSet() });
+      const path = join(root, "hub", "flows", `${ad}.yaml`);
+      await writeFile(path, metin);
+      const live = await LiveFlow.open(path, { root, providers: knownProviderSet() });
       return serveUi({
         root, queue, topology: live.topology, flowName: live.flow.name, flowHash: live.flow.hash,
         live, flowPath: live.flow.path,
@@ -2943,9 +2943,9 @@ roles:
         // ALANDAN ÇIKAR (Tab/tıkla), bu adım onu TAKLİT ediyor.
         await page.fill(".duzenleRolListe > .duzenleRol:nth-of-type(2) .duzenleAdGirisi", "coder");
         await page.evaluate(() => {
-          const girdi = document.querySelectorAll(".duzenleAdGirisi")[1];
-          girdi?.blur?.();
-          girdi?.dispatchEvent(new Event("change", { bubbles: true }));
+          const input = document.querySelectorAll(".duzenleAdGirisi")[1];
+          input?.blur?.();
+          input?.dispatchEvent(new Event("change", { bubbles: true }));
         });
         await page.waitForSelector(".duzenleHata", { timeout: 10_000 });
         expect(await page.textContent(".duzenleHata")).toContain("coder");
@@ -2963,9 +2963,9 @@ roles:
     // kartı olan bir rol SİLİNEBİLİYOR, yalnızca uyarılıyor.
     it("açık kartı olan bir rol silinince UYARI çıkar, ama silmeyi ENGELLEMEZ", async () => {
       const ad = "duzenle-test3";
-      const yol = join(root, "hub", "flows", `${ad}.yaml`);
-      await writeFile(yol, duzenleFlowYaml(ad));
-      const live = await LiveFlow.open(yol, { root, providers: knownProviderSet() });
+      const path = join(root, "hub", "flows", `${ad}.yaml`);
+      await writeFile(path, duzenleFlowYaml(ad));
+      const live = await LiveFlow.open(path, { root, providers: knownProviderSet() });
       await queue.add(newCard({ title: "açık kart", task: "iş", topology: live.topology }));
       const s = await serveUi({
         root, queue, topology: live.topology, flowName: live.flow.name, flowHash: live.flow.hash,
@@ -3134,7 +3134,7 @@ roles:
             const girdiler = await readdir(join(root, "hub", "flows"));
             return girdiler.filter((e) => e.endsWith(".yaml")).map((e) => e.slice(0, -".yaml".length)).sort();
           },
-          ac: async (ad) => {
+          open: async (ad) => {
             const l = await LiveFlow.open(join(root, "hub", "flows", `${ad}.yaml`), {
               root, providers: knownProviderSet(),
             });
@@ -3154,20 +3154,20 @@ roles:
         await page.click('.navSekme:has-text("Akışlar")');
         await page.waitForSelector(".akisKart", { timeout: 10_000 });
 
-        const kartlar = await page.evaluate(() =>
+        const cards = await page.evaluate(() =>
           Array.from(document.querySelectorAll(".akisKart")).map((k) => ({
-            ad: k.getAttribute("data-akis"),
+            name: k.getAttribute("data-akis"),
             panoda: k.classList.contains("akisKart-panoda"),
-            metin: k.textContent,
+            text: k.textContent,
           })));
-        const test = kartlar.find((k) => k.ad === "test");
-        const ikinci = kartlar.find((k) => k.ad === "ikinci");
+        const test = cards.find((k) => k.name === "test");
+        const ikinci = cards.find((k) => k.name === "ikinci");
         expect(test?.panoda).toBe(true);
         expect(ikinci?.panoda).toBe(false);
-        expect(test?.metin).toContain("coder");
-        expect(test?.metin).toContain("bitti");
-        expect(ikinci?.metin).toContain("analiz");
-        expect(ikinci?.metin).toContain("ikinci akış");
+        expect(test?.text).toContain("coder");
+        expect(test?.text).toContain("bitti");
+        expect(ikinci?.text).toContain("analiz");
+        expect(ikinci?.text).toContain("ikinci akış");
         // Her kartın mini formasyonu gerçekten çizildi (iki akış, iki SVG).
         expect(await page.evaluate(() => document.querySelectorAll(".akisKartFormasyon").length)).toBe(2);
         expect(errors).toEqual([]);
@@ -3270,10 +3270,10 @@ roles:
         await page.waitForSelector(".dialog .err", { timeout: 10_000 });
         const stil = await page.evaluate(() => {
           const e = document.querySelector(".dialog .err");
-          return e ? { corner: getComputedStyle(e).borderRadius, metin: e.textContent } : null;
+          return e ? { corner: getComputedStyle(e).borderRadius, text: e.textContent } : null;
         });
         expect(stil?.corner).toBe("0px");
-        expect(stil?.metin).toContain("okunamıyor");
+        expect(stil?.text).toContain("okunamıyor");
         expect(errors).toEqual([]);
       } finally {
         await page.close();

@@ -288,27 +288,27 @@ async function kalibre(taskId: string, modelSpec: string): Promise<void> {
   // (`onKontrol`). Eskiden bu blok `cardState`'i hiç sormuyordu: kartı
   // kapıda kalmış bir kolda da "ÖLÇER — sıradaki planab --k=3" yazıyordu
   // ve o satır para harcama kararı veriyor.
-  const karar = onKontrol(r);
-  switch (karar.kind) {
+  const decision = onKontrol(r);
+  switch (decision.kind) {
     case "olculemedi":
-      console.log(`\n  ÖLÇÜLEMEDİ — ${karar.neden}`);
+      console.log(`\n  ÖLÇÜLEMEDİ — ${decision.reason}`);
       console.log("  Kolu düşüren sebebi gider ve tekrar koş.");
       return;
     case "kuskulu":
-      console.log(`\n  ŞÜPHELİ — ${karar.neden}`);
-      console.log(`  ${karar.red.length} kırmızı kanca: ${karar.red.join("; ")}`);
+      console.log(`\n  ŞÜPHELİ — ${decision.reason}`);
+      console.log(`  ${decision.red.length} kırmızı kanca: ${decision.red.join("; ")}`);
       console.log("  İki zıt durum aynı görünür ve sebep satırı ayırt eder:");
       console.log("    · model commit atmadıysa artefakt yarım — kancalar İŞİN YOKLUĞUNU ölçüyor");
       console.log("    · ret limiti dolduysa denetçi düzeltemedi — kancalar GERÇEK kusur");
       console.log("  Sebebi oku ve karar ver; kampanyaya kör girmek parayı çöpe atar.");
       return;
     case "olcemez":
-      console.log(`\n  ÖLÇEMEZ — ${karar.neden}`);
+      console.log(`\n  ÖLÇEMEZ — ${decision.reason}`);
       console.log("  Bu hücreye harcanan her tekrar boşa gider.");
       console.log("  Daha zayıf bir üretici ya da daha zor bir görev dene.");
       return;
     case "olcer":
-      console.log(`\n  ÖLÇER — ${karar.red.length} kırmızı kanca: ${karar.red.join("; ")}`);
+      console.log(`\n  ÖLÇER — ${decision.red.length} kırmızı kanca: ${decision.red.join("; ")}`);
       console.log(`  Sıradaki: cli.ts planab ${taskId} --k=3 --model=${modelSpec}`);
       return;
   }
@@ -396,9 +396,9 @@ async function kalibre2x2(taskId: string, modelSpec: string, judgeSpec: string):
   }
 
   console.log();
-  const karar = power2x2({ ran, producerExit: p?.exitCode ?? 1, redHooks, scored, caught, missed });
-  for (const satir of powerLines(karar)) console.log(`  ${satir}`);
-  if (karar.kind === "olcer") {
+  const decision = power2x2({ ran, producerExit: p?.exitCode ?? 1, redHooks, scored, caught, missed });
+  for (const satir of powerLines(decision)) console.log(`  ${satir}`);
+  if (decision.kind === "olcer") {
     console.log(`  Sıradaki: cli.ts matrix ${taskId} ${modelSpec} <öteki-satıcı:model>`);
   }
 }
@@ -583,7 +583,9 @@ function printPlanEffect(r: PlanEffectReport): void {
       // okunuyor ama hiçbir şey karşılaştırmıyordu, ve operatör ona bakıp
       // k=3 kampanyası parası harcıyor.
       const olculenKosu = g.plansiz?.runs ?? 0;
-      const { damga } = kararlilikDamgasi(
+      // Kısayol alan açık yazıldı: özellik adı İngilizce, yerel ad
+      // olduğu gibi — gölgeleme riski yok (bkz. DIL-GECISI.md).
+      const { stamp: damga } = kararlilikDamgasi(
         olculenKosu, h.herKosudaPlansiz.length, h.plansiz.length,
       );
       console.log(`    kontrol kolu ${damga}: ` +
@@ -1099,23 +1101,23 @@ if (cmd === "report") {
   // adı olarak okunuyordu; canlı koşuda model "1" oldu. Değer artık
   // konumsallardan ÇIKARILIYOR ve model yalnızca `sağlayıcı:model`
   // biçimindeyse konumsal kabul ediliyor.
-  const deger = (ad: string): string | undefined => {
+  const value = (ad: string): string | undefined => {
     const esit = argv.find((a) => a.startsWith(`${ad}=`));
     if (esit !== undefined) return esit.slice(ad.length + 1);
     const at = argv.indexOf(ad);
     return at === -1 ? undefined : argv[at + 1];
   };
-  const tuketilen = new Set([deger("--k"), deger("--model"), deger("--kol")].filter((x) => x !== undefined));
+  const tuketilen = new Set([value("--k"), value("--model"), value("--kol")].filter((x) => x !== undefined));
   const konumsal = rest.slice(1).filter((a) => !tuketilen.has(a));
-  const kolRaw = deger("--kol");
+  const kolRaw = value("--kol");
   if (kolRaw !== undefined && kolRaw !== "planli" && kolRaw !== "plansiz") {
     console.error(`--kol yalnızca \`planli\` ya da \`plansiz\` olabilir (verilen: ${kolRaw})`);
     process.exit(2);
   }
   await planab(
     gorev,
-    Math.max(1, Number(deger("--k") ?? 3)),
-    deger("--model") ?? konumsal.find((a) => a.includes(":")) ?? "claude:claude-sonnet-5",
+    Math.max(1, Number(value("--k") ?? 3)),
+    value("--model") ?? konumsal.find((a) => a.includes(":")) ?? "claude:claude-sonnet-5",
     kolRaw as Arm | undefined,
     argv.includes("--devam"),
   );

@@ -63,10 +63,10 @@ describe("sonPortuOku", () => {
     ["negatif", -1],
     ["kesirli", 8080.5],
   ];
-  for (const [ad, deger] of reddedilmeli) {
-    it(`port alanı geçersizse yok sayılır: ${ad}`, async () => {
+  for (const [name, value] of reddedilmeli) {
+    it(`port alanı geçersizse yok sayılır: ${name}`, async () => {
       await mkdir(join(root, ".skein"), { recursive: true });
-      await writeFile(join(root, ".skein", "ekran.json"), JSON.stringify({ port: deger }), "utf8");
+      await writeFile(join(root, ".skein", "ekran.json"), JSON.stringify({ port: value }), "utf8");
       expect(await sonPortuOku(root)).toBeUndefined();
     });
   }
@@ -228,12 +228,12 @@ describe("portuHatirlayarakAc", () => {
   it("explicitPort verilmişse hatırlanan port HİÇ okunmuyor, ac AYNEN explicit ile çağrılıyor", async () => {
     await sonPortuYaz(root, 1111);
     const seenList: (number | undefined)[] = [];
-    const sonuc = await portuHatirlayarakAc(root, 9999, async (p) => {
+    const result = await portuHatirlayarakAc(root, 9999, async (p) => {
       seenList.push(p);
       return { port: 9999 };
     });
     expect(seenList).toEqual([9999]);
-    expect(sonuc).toEqual({ port: 9999 });
+    expect(result).toEqual({ port: 9999 });
   });
 
   it("explicitPort verilmişse hatırlanan kayıt EZİLİR — sonraki okuma explicit'i verir", async () => {
@@ -264,27 +264,27 @@ describe("portuHatirlayarakAc", () => {
   it("hatırlanan port DOLUYSA (EADDRINUSE) sessizce boş porta düşer", async () => {
     await sonPortuYaz(root, 7777);
     const seenList: (number | undefined)[] = [];
-    const sonuc = await portuHatirlayarakAc(root, undefined, async (p) => {
+    const result = await portuHatirlayarakAc(root, undefined, async (p) => {
       seenList.push(p);
       if (p === 7777) {
-        const hata = new Error("in use") as NodeJS.ErrnoException;
-        hata.code = "EADDRINUSE";
-        throw hata;
+        const error = new Error("in use") as NodeJS.ErrnoException;
+        error.code = "EADDRINUSE";
+        throw error;
       }
       return { port: 8080 };
     });
     // Önce hatırlanan denendi, dolu çıktı, sonra boş port istendi.
     expect(seenList).toEqual([7777, undefined]);
-    expect(sonuc).toEqual({ port: 8080 });
+    expect(result).toEqual({ port: 8080 });
   });
 
   it("düşülen boş port yeni hafıza olarak kaydedilir", async () => {
     await sonPortuYaz(root, 7777);
     await portuHatirlayarakAc(root, undefined, async (p) => {
       if (p === 7777) {
-        const hata = new Error("in use") as NodeJS.ErrnoException;
-        hata.code = "EADDRINUSE";
-        throw hata;
+        const error = new Error("in use") as NodeJS.ErrnoException;
+        error.code = "EADDRINUSE";
+        throw error;
       }
       return { port: 8080 };
     });
@@ -321,24 +321,24 @@ describe("portuHatirlayarakAc", () => {
     await mkdir(join(root, ".skein"), { recursive: true });
     await writeFile(join(root, ".skein", "ekran.json"), JSON.stringify({ port: 70000 }), "utf8");
     const seenList: (number | undefined)[] = [];
-    const sonuc = await portuHatirlayarakAc(root, undefined, async (p) => {
+    const result = await portuHatirlayarakAc(root, undefined, async (p) => {
       seenList.push(p);
       return { port: 4040 };
     });
     // 70000 HİÇ denenmemeli: denenirse `listen` fırlatır ve ekran açılmaz.
     expect(seenList).toEqual([undefined]);
-    expect(sonuc).toEqual({ port: 4040 });
+    expect(result).toEqual({ port: 4040 });
   });
 
   it("bozuk hafıza dosyası engel olmuyor — boş port ile açılmaya devam eder", async () => {
     await mkdir(join(root, ".skein"), { recursive: true });
     await writeFile(join(root, ".skein", "ekran.json"), "bozuk", "utf8");
     const seenList: (number | undefined)[] = [];
-    const sonuc = await portuHatirlayarakAc(root, undefined, async (p) => {
+    const result = await portuHatirlayarakAc(root, undefined, async (p) => {
       seenList.push(p);
       return { port: 3030 };
     });
     expect(seenList).toEqual([undefined]);
-    expect(sonuc).toEqual({ port: 3030 });
+    expect(result).toEqual({ port: 3030 });
   });
 });

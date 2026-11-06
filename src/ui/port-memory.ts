@@ -109,11 +109,11 @@ export async function sonTemaOku(root: string): Promise<Tema | undefined> {
  * atomik: `card/queue.ts`'teki kart yazma disipliniyle aynı, yarım yazılmış
  * bir dosya bir sonraki okumada "bozuk" sayılıp yok sayılır.
  */
-async function hamKaydiYaz(root: string, alan: string, deger: unknown): Promise<void> {
+async function hamKaydiYaz(root: string, field: string, deger: unknown): Promise<void> {
   const dir = join(root, ".skein");
   await mkdir(dir, { recursive: true });
   const mevcut = await hamKaydiOku(root);
-  const fresh = { ...mevcut, [alan]: deger };
+  const fresh = { ...mevcut, [field]: deger };
   const tmp = join(dir, `.tmp-${randomBytes(6).toString("hex")}`);
   await writeFile(tmp, JSON.stringify(fresh), "utf8");
   await rename(tmp, join(dir, DOSYA_ADI));
@@ -180,27 +180,27 @@ function portDolu(error: unknown): boolean {
 export async function portuHatirlayarakAc<T extends { port: number }>(
   root: string,
   explicitPort: number | undefined,
-  ac: (port: number | undefined) => Promise<T>,
+  open: (port: number | undefined) => Promise<T>,
 ): Promise<T> {
   if (explicitPort !== undefined) {
-    const sonuc = await ac(explicitPort);
-    await sonPortuYaz(root, sonuc.port);
-    return sonuc;
+    const result = await open(explicitPort);
+    await sonPortuYaz(root, result.port);
+    return result;
   }
 
   const hatirlanan = await sonPortuOku(root);
   if (hatirlanan !== undefined) {
     try {
-      const sonuc = await ac(hatirlanan);
-      await sonPortuYaz(root, sonuc.port);
-      return sonuc;
+      const result = await open(hatirlanan);
+      await sonPortuYaz(root, result.port);
+      return result;
     } catch (error) {
       if (!portDolu(error)) throw error;
       // Düş: boş port seç.
     }
   }
 
-  const sonuc = await ac(undefined);
-  await sonPortuYaz(root, sonuc.port);
-  return sonuc;
+  const result = await open(undefined);
+  await sonPortuYaz(root, result.port);
+  return result;
 }

@@ -11,19 +11,19 @@ import { spawnPortable, type PipedChild } from "../proc/process.js";
 export function tarayiciKomutu(
   platform: NodeJS.Platform,
   url: string,
-): { komut: string; args: string[] } {
-  if (platform === "darwin") return { komut: "open", args: [url] };
-  if (platform === "win32") return { komut: "cmd", args: ["/c", "start", '""', url] };
-  return { komut: "xdg-open", args: [url] };
+): { command: string; args: string[] } {
+  if (platform === "darwin") return { command: "open", args: [url] };
+  if (platform === "win32") return { command: "cmd", args: ["/c", "start", '""', url] };
+  return { command: "xdg-open", args: [url] };
 }
 
 export interface TarayiciyiAcOptions {
   /** Varsayılan: gerçek platform (`process.platform`). */
   platform?: NodeJS.Platform;
   /** Test edilebilirlik için enjekte edilir; varsayılan `spawnPortable`. */
-  spawn?: (komut: string, args: string[]) => PipedChild;
+  spawn?: (command: string, args: string[]) => PipedChild;
   /** Başarısızlık satırı nereye basılır; varsayılan `console.warn`. */
-  log?: (satir: string) => void;
+  log?: (line: string) => void;
 }
 
 const BASARISIZLIK_SATIRI = "⚠ tarayıcı açılamadı, adresi elle aç";
@@ -45,11 +45,11 @@ const BASARISIZLIK_SATIRI = "⚠ tarayıcı açılamadı, adresi elle aç";
  */
 export function tarayiciyiAc(url: string, options: TarayiciyiAcOptions = {}): void {
   const platform = options.platform ?? process.platform;
-  const spawn = options.spawn ?? ((komut, args) => spawnPortable(komut, args));
-  const log = options.log ?? ((satir) => console.warn(satir));
-  const { komut, args } = tarayiciKomutu(platform, url);
+  const spawn = options.spawn ?? ((command, args) => spawnPortable(command, args));
+  const log = options.log ?? ((line) => console.warn(line));
+  const { command, args } = tarayiciKomutu(platform, url);
   try {
-    const child = spawn(komut, args);
+    const child = spawn(command, args);
     child.on("error", () => log(BASARISIZLIK_SATIRI));
     // Kısa ömürlü bir açıcı — ebeveyn süreci ayakta tutmasın.
     child.unref?.();

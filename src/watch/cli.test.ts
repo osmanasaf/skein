@@ -126,10 +126,10 @@ describe("giriş noktası — İÇE ALMAK gözcüyü başlatmaz", () => {
    * Koruma varsa hiçbir şey olmaz ve işaret basılır.
    */
   it("ayrı bir süreçte import edilince main KOŞMAZ — temiz çıkar", async () => {
-    const dizin = await mkdtemp(join(tmpdir(), "skein-iceal-"));
+    const dir = await mkdtemp(join(tmpdir(), "skein-iceal-"));
     try {
       const modul = pathToFileURL(join(process.cwd(), "src", "watch", "cli.ts")).href;
-      const betik = join(dizin, "iceal.mjs");
+      const betik = join(dir, "iceal.mjs");
       await writeFile(
         betik,
         `const m = await import(${JSON.stringify(modul)});\n` +
@@ -141,15 +141,15 @@ describe("giriş noktası — İÇE ALMAK gözcüyü başlatmaz", () => {
       let cikti = "";
       child.stdout.on("data", (c: Buffer) => { cikti += c.toString(); });
       child.stderr.on("data", (c: Buffer) => { cikti += c.toString(); });
-      const kod = await new Promise<number | null>((res) => child.on("close", res));
+      const code = await new Promise<number | null>((res) => child.on("close", res));
 
       // İçe almak BAŞARILI olmalı ve `main`in hiçbir izi olmamalı.
       expect(cikti).toContain("ICE_ALINDI:function");
-      expect(kod).toBe(0);
+      expect(code).toBe(0);
       expect(cikti).not.toContain("✗");
       expect(cikti).not.toContain("gözcü");
     } finally {
-      await rm(dizin, { recursive: true, force: true });
+      await rm(dir, { recursive: true, force: true });
     }
   }, 60_000);
 });
@@ -164,9 +164,9 @@ describe("giriş noktası — main GERÇEKTEN koşuyor", () => {
     let cikti = "";
     child.stdout.on("data", (c: Buffer) => { cikti += c.toString(); });
     child.stderr.on("data", (c: Buffer) => { cikti += c.toString(); });
-    const kod = await new Promise<number | null>((res) => child.on("close", res));
+    const code = await new Promise<number | null>((res) => child.on("close", res));
 
-    expect(kod).toBe(1);
+    expect(code).toBe(1);
     expect(cikti).toContain("--yok-boyle");
   }, 60_000);
 });

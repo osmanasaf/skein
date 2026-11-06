@@ -81,10 +81,10 @@ describe("LiveFlow", () => {
     const previous = live.flow.hash;
     await writeFile(path, UC_ROL);
 
-    const sonuc = await live.refresh();
+    const result = await live.refresh();
 
-    expect(sonuc.kind).toBe("reloaded");
-    expect(sonuc.kind === "reloaded" && sonuc.from).toBe(previous);
+    expect(result.kind).toBe("reloaded");
+    expect(result.kind === "reloaded" && result.from).toBe(previous);
     expect(live.topology.roles.map((r) => r.id)).toEqual(["coder", "reviewer", "guard"]);
   });
 
@@ -94,9 +94,9 @@ describe("LiveFlow", () => {
     const saglam = live.flow.hash;
     await writeFile(path, "name: test\nroles:\n  - id: coder\n    provider: yok-boyle\n");
 
-    const sonuc = await live.refresh();
+    const result = await live.refresh();
 
-    expect(sonuc.kind).toBe("failed");
+    expect(result.kind).toBe("failed");
     expect(live.flow.hash).toBe(saglam);
     expect(live.topology.roles.map((r) => r.id)).toEqual(["coder", "reviewer"]);
     expect(live.error).not.toBeNull();
@@ -110,9 +110,9 @@ describe("LiveFlow", () => {
     expect(live.error).not.toBeNull();
 
     await writeFile(path, UC_ROL);
-    const sonuc = await live.refresh();
+    const result = await live.refresh();
 
-    expect(sonuc.kind).toBe("reloaded");
+    expect(result.kind).toBe("reloaded");
     expect(live.error).toBeNull();
     expect(live.topology.roles).toHaveLength(3);
   });
@@ -144,9 +144,9 @@ describe("LiveFlow", () => {
     expect(live.error).not.toBeNull();
 
     await writeFile(path, IKI_ROL);
-    const sonuc = await live.refresh();
+    const result = await live.refresh();
 
-    expect(sonuc).toEqual({ kind: "unchanged" });
+    expect(result).toEqual({ kind: "unchanged" });
     expect(live.error).toBeNull();
   });
 
@@ -154,21 +154,21 @@ describe("LiveFlow", () => {
     const live = await LiveFlow.open(path, opts);
     await rm(path);
 
-    const sonuc = await live.refresh();
+    const result = await live.refresh();
 
-    expect(sonuc.kind).toBe("failed");
+    expect(result.kind).toBe("failed");
     expect(live.topology.roles).toHaveLength(2);
   });
 
   it("yeniden yükleme atomik: başarısızlık yarım durum bırakmaz", async () => {
     const live = await LiveFlow.open(path, opts);
-    const once = { hash: live.flow.hash, roller: live.topology.roles.length, hata: live.error };
+    const once = { hash: live.flow.hash, roles: live.topology.roles.length, error: live.error };
 
     await writeFile(path, "roles: 5\n");
     await live.refresh();
 
     expect(live.flow.hash).toBe(once.hash);
-    expect(live.topology.roles).toHaveLength(once.roller);
+    expect(live.topology.roles).toHaveLength(once.roles);
     // Dosyanın metni de kaydedilmemeli; düzeltilmiş hâli yeniden denenecek.
     await writeFile(path, await readFile(join(root, "hub", "flows", "test.yaml"), "utf8"));
   });

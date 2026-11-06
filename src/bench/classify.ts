@@ -28,7 +28,7 @@ export interface ClassifyResult {
 
 interface RawFinding {
   sinif?: unknown;
-  kanitli?: unknown;
+  proven?: unknown;
   quotation?: unknown;
   rationale?: unknown;
 }
@@ -61,7 +61,7 @@ export function applyFindings(raws: RawFinding[], report: string): {
     const reason = typeof raw.rationale === "string" ? raw.rationale : undefined;
     findings.push({
       sinif,
-      proven: raw.kanitli === true,
+      proven: raw.proven === true,
       quote,
       ...(reason ? { reason } : {}),
     });

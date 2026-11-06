@@ -24,8 +24,8 @@ function fonksiyon<T>(html: string, ad: string): T {
   if (bas < 0) throw new Error(`betikte ${ad} yok`);
   const last = src.indexOf("\n}\n", bas);
   if (last < 0) throw new Error(`${ad} kapanışı bulunamadı`);
-  const metin = src.slice(bas, last + 3);
-  return new Function(`${metin}; return ${ad};`)() as T;
+  const text = src.slice(bas, last + 3);
+  return new Function(`${text}; return ${ad};`)() as T;
 }
 
 /** `fonksiyon`'un TEK bir bildirimi (fonksiyon ya da üst düzey `const`) için kullandığı çıkarma mantığı. */
@@ -57,11 +57,11 @@ function bildirim(src: string, ad: string): string {
  */
 function fonksiyonlar<T>(html: string, names: string[], donus: string): T {
   const src = betik(html);
-  const metin = names.map((ad) => bildirim(src, ad)).join("\n");
-  return new Function(`${metin}; return ${donus};`)() as T;
+  const text = names.map((ad) => bildirim(src, ad)).join("\n");
+  return new Function(`${text}; return ${donus};`)() as T;
 }
 
-type Cikis = { etiket: string; not: string; dugmeler: [string, string][] };
+type Cikis = { label: string; not: string; dugmeler: [string, string][] };
 
 /**
  * Zincirin başında "Geri gönder" düğmesi OLMAMALI.
@@ -116,7 +116,7 @@ describe("kapiCikislari — geri hedefi", () => {
     const a = cikis("deadlock", true, "coder");
     const b = cikis("deadlock", true, null);
     expect(a.dugmeler).toEqual(b.dugmeler);
-    expect(a.etiket).toBe("planlama kilidi");
+    expect(a.label).toBe("planlama kilidi");
   });
 });
 
@@ -318,9 +318,9 @@ describe("engelBandBasligi — davranış", () => {
 
   it("8 kirli dosyalı tek kartta '1 kart' geçiyor, '8 kart' GEÇMİYOR", () => {
     const sekizKirliDosya = Array.from({ length: 8 }, () => ({ code: "KIRLI" }));
-    const metin = baslik(1, sekizKirliDosya);
-    expect(metin).toBe("1 kart kuyrukta alınamıyor — 8 kirli dosya");
-    expect(metin).not.toContain("8 kart");
+    const text = baslik(1, sekizKirliDosya);
+    expect(text).toBe("1 kart kuyrukta alınamıyor — 8 kirli dosya");
+    expect(text).not.toContain("8 kart");
   });
 
   it("KIRLI yoksa (ör. GIT) ikinci cümle çıkmıyor, eski anlam korunuyor", () => {
@@ -492,9 +492,9 @@ describe("ozetle — katlı özetin kısaltması TAM METNİ etkilemiyor", () => 
   it("uzun metin yalnızca ÖZET için kısaltılır", () => {
     const ozetle = fonksiyon<(s: string) => string>(renderPage("t"), "ozetle");
     const uzun = "a".repeat(300);
-    const sonuc = ozetle(uzun);
-    expect(sonuc.length).toBeLessThan(300);
-    expect(sonuc.endsWith("…")).toBe(true);
+    const result = ozetle(uzun);
+    expect(result.length).toBeLessThan(300);
+    expect(result.endsWith("…")).toBe(true);
   });
 });
 
@@ -509,26 +509,26 @@ describe("ozetle — katlı özetin kısaltması TAM METNİ etkilemiyor", () => 
  * yalnızca gerçek uygulamada ERİŞİLEBİLEN metinleri sınıyor.
  */
 describe("bosRolMetni — boş sütun metninin karar noktası", () => {
-  const metin = (rol: { depth: number }, kartlar: unknown[]): string =>
+  const text = (rol: { depth: number }, kartlar: unknown[]): string =>
     fonksiyon<(r: { depth: number }, k: unknown[]) => string>(renderPage("t"), "bosRolMetni")(
       rol, kartlar,
     );
 
   it("kuyruk da boşsa 'kuyrukta kart yok' der", () => {
-    expect(metin({ depth: 0 }, [])).toBe("kuyrukta kart yok");
+    expect(text({ depth: 0 }, [])).toBe("kuyrukta kart yok");
   });
 
   // YARIŞ: depth kartlar listesinden büyük — ekran bunu BİLİYOR, "boş"
   // demek bildiği ama yanlış söylemek olurdu.
   it("rol.depth kartlar listesinden büyükse yarış durumunu söyler, 'boş' demez", () => {
-    expect(metin({ depth: 3 }, [])).toBe("3 kart kuyrukta, henuz yuklenmedi");
+    expect(text({ depth: 3 }, [])).toBe("3 kart kuyrukta, henuz yuklenmedi");
   });
 
   // SINIR: depth kartlar sayısına EŞİTSE (büyük DEĞİL) yarış yok — bu dal
   // `>` ile `>=` arasındaki farkı yakalıyor; `>=` yazılsaydı burada da
   // yarış cümlesi dönerdi.
   it("rol.depth kartlar sayısına eşitse (büyük değilse) normal boş cümleyi söyler", () => {
-    expect(metin({ depth: 2 }, [{}, {}])).toBe("kuyrukta kart yok");
+    expect(text({ depth: 2 }, [{}, {}])).toBe("kuyrukta kart yok");
   });
 });
 
@@ -541,26 +541,26 @@ describe("bosRolMetni — boş sütun metninin karar noktası", () => {
  * SÖYLENİR, mutasyonla korunmalı.
  */
 describe("bosBittiMetni — boş 'bitti' sütununun karar noktası", () => {
-  const metin = (cards: { state: string }[], open: number): string =>
+  const text = (cards: { state: string }[], open: number): string =>
     fonksiyon<(m: { cards: { state: string }[]; totals: { open: number } }) => string>(
       renderPage("t"), "bosBittiMetni",
     )({ cards, totals: { open } });
 
   it("hiç kart açılmamışsa bunu söyler", () => {
-    expect(metin([], 0)).toBe("henuz kart acilmadi");
+    expect(text([], 0)).toBe("henuz kart acilmadi");
   });
 
   it("bir rol şu an koşuyorsa 'iş sürüyor' der, 'hiç açılmadı' demez", () => {
-    expect(metin([{ state: "active" }], 1)).toBe("bir rol su an kosuyor, henuz biten kart yok");
+    expect(text([{ state: "active" }], 1)).toBe("bir rol su an kosuyor, henuz biten kart yok");
   });
 
   it("koşan yok ama kuyrukta/kapıda kart varsa onu söyler", () => {
-    expect(metin([{ state: "gate" }], 1)).toBe("kart kuyrukta ya da kapida bekliyor, henuz biten yok");
+    expect(text([{ state: "gate" }], 1)).toBe("kart kuyrukta ya da kapida bekliyor, henuz biten yok");
   });
 
   // ÖNCELİK: ikisi de doğruyken "koşuyor" cümlesi kazanır.
   it("hem koşan rol hem kuyrukta kart varsa 'koşuyor' cümlesi öne geçer", () => {
-    expect(metin([{ state: "active" }, { state: "gate" }], 2))
+    expect(text([{ state: "active" }, { state: "gate" }], 2))
       .toBe("bir rol su an kosuyor, henuz biten kart yok");
   });
 });
@@ -601,25 +601,25 @@ describe("sekmeAdi — hash'ten aktif sekme kararı", () => {
  * KALMALI — tarayici.test.ts'in "#bar .pill" sınaması buna bağlı.
  */
 describe("gozcuDurum — gözcü çipinin durum kararı", () => {
-  type Durum = { durum: string; etiket: string };
+  type Durum = { durum: string; label: string };
   const durum = (g: { alive: boolean; info?: unknown } | null): Durum =>
     fonksiyon<(g: { alive: boolean; info?: unknown } | null) => Durum>(renderPage("t"), "gozcuDurum")(g);
 
   it("kilit yoksa 'yok' der", () => {
-    expect(durum(null)).toEqual({ durum: "yok", etiket: "gözcü yok" });
+    expect(durum(null)).toEqual({ durum: "yok", label: "gözcü yok" });
   });
 
   it("kilit canlıysa 'açık' der", () => {
-    expect(durum({ alive: true })).toEqual({ durum: "acik", etiket: "gözcü açık" });
+    expect(durum({ alive: true })).toEqual({ durum: "acik", label: "gözcü açık" });
   });
 
   // SINIR: 'alive: false' (kilit var ama pid ölü) "açık" DEĞİL. `g.alive`
   // yerine `g !== null` yazılsaydı bu dal "açık" derdi — ÖLÇÜLMÜŞ kusurun
   // aynısı (bkz. page.ts "GÖZCÜ DÜĞMESİ" yorumu).
   it("kilit var ama ölüyse 'çökmüş' der, metin 'bayat kilit' içerir", () => {
-    const sonuc = durum({ alive: false });
-    expect(sonuc.durum).toBe("cokmus");
-    expect(sonuc.etiket).toContain("bayat kilit");
+    const result = durum({ alive: false });
+    expect(result.durum).toBe("cokmus");
+    expect(result.label).toContain("bayat kilit");
   });
 });
 
@@ -636,7 +636,7 @@ const DAEMON_INFO: DaemonInfo = { pid: 1, flow: "f", hash: "abc", mode: "serve",
  * rolKonumu/FORMASYON_GOVDE emsali, yukarıda `fonksiyonlar` yorumu).
  */
 describe("gozcuPanelDurum — gözcü panelinin beş durumu", () => {
-  type Durum = { durum: string; etiket: string };
+  type Durum = { durum: string; label: string };
   const durum = (g: Daemon, yonetiliyor: boolean, duruyor: boolean): Durum =>
     fonksiyonlar<(g: Daemon, y: boolean, d: boolean) => Durum>(
       renderPage("t"), ["gozcuDurum", "gozcuPanelDurum"], "gozcuPanelDurum",
@@ -645,23 +645,23 @@ describe("gozcuPanelDurum — gözcü panelinin beş durumu", () => {
   // ÖNCELİK: yönetilmiyorsa HER ZAMAN "unmanaged" — gözcü GERÇEKTEN
   // çalışıyor olsa BİLE (başka bir kabuktan açılmış olabilir).
   it("yönetilmiyorsa durum her zaman unmanaged", () => {
-    expect(durum(null, false, false)).toEqual({ durum: "unmanaged", etiket: "gözcü · elle" });
+    expect(durum(null, false, false)).toEqual({ durum: "unmanaged", label: "gözcü · elle" });
     expect(durum({ alive: true, info: DAEMON_INFO }, false, false))
-      .toEqual({ durum: "unmanaged", etiket: "gözcü · elle" });
+      .toEqual({ durum: "unmanaged", label: "gözcü · elle" });
   });
 
   it("yönetiliyor, kilit yok: off", () => {
-    expect(durum(null, true, false)).toEqual({ durum: "off", etiket: "gözcü kapalı" });
+    expect(durum(null, true, false)).toEqual({ durum: "off", label: "gözcü kapalı" });
   });
 
   it("yönetiliyor, kilit ölü: stale", () => {
     expect(durum({ alive: false, info: DAEMON_INFO }, true, false))
-      .toEqual({ durum: "stale", etiket: "gözcü çökmüş" });
+      .toEqual({ durum: "stale", label: "gözcü çökmüş" });
   });
 
   it("yönetiliyor, canlı, bekleyen YOK: on", () => {
     expect(durum({ alive: true, info: DAEMON_INFO }, true, false))
-      .toEqual({ durum: "on", etiket: "gözcü açık" });
+      .toEqual({ durum: "on", label: "gözcü açık" });
   });
 
   // SINIR: canlı VE durdurma bekleniyor → "stopping", "on" DEĞİL. Bayrak
@@ -670,15 +670,15 @@ describe("gozcuPanelDurum — gözcü panelinin beş durumu", () => {
   // çip bir tur boyunca "açık" demeye devam ederdi.
   it("yönetiliyor, canlı, bekleyen VAR: stopping, on DEĞİL", () => {
     expect(durum({ alive: true, info: DAEMON_INFO }, true, true))
-      .toEqual({ durum: "stopping", etiket: "gözcü duruyor…" });
+      .toEqual({ durum: "stopping", label: "gözcü duruyor…" });
   });
 
   // "duruyor" bayrağı yalnızca CANLI dalda etkili — kilit yoksa/ölüyse
   // durdurma beklemek anlamsız, off/stale olarak kalmalı.
   it("bekleyen VAR ama kilit yok/ölüyse off/stale'den ÇIKMAZ", () => {
-    expect(durum(null, true, true)).toEqual({ durum: "off", etiket: "gözcü kapalı" });
+    expect(durum(null, true, true)).toEqual({ durum: "off", label: "gözcü kapalı" });
     expect(durum({ alive: false, info: DAEMON_INFO }, true, true))
-      .toEqual({ durum: "stale", etiket: "gözcü çökmüş" });
+      .toEqual({ durum: "stale", label: "gözcü çökmüş" });
   });
 });
 
@@ -729,15 +729,15 @@ describe("gozcuKomutOrnekleri — ayrı kabuk komutları", () => {
  * SAF, DOM yok.
  */
 describe("gozcuEylemEtiketi — başlat/devral/durdur etiketi", () => {
-  const etiket = (g: Daemon): string =>
+  const label = (g: Daemon): string =>
     fonksiyon<(g: Daemon) => string>(renderPage("t"), "gozcuEylemEtiketi")(g);
 
   it("kilit yoksa 'Gözcüyü başlat'", () => {
-    expect(etiket(null)).toBe("Gözcüyü başlat");
+    expect(label(null)).toBe("Gözcüyü başlat");
   });
 
   it("canlıysa 'Gözcüyü durdur'", () => {
-    expect(etiket({ alive: true, info: DAEMON_INFO })).toBe("Gözcüyü durdur");
+    expect(label({ alive: true, info: DAEMON_INFO })).toBe("Gözcüyü durdur");
   });
 
   // SINIR: kilit VAR ama ölü (bayat) — "Gözcüyü başlat" DEĞİL, "Kilidi
@@ -745,7 +745,7 @@ describe("gozcuEylemEtiketi — başlat/devral/durdur etiketi", () => {
   // durumunda da bu dal seçilir, "Kilidi devral ve başlat" yanlış yere
   // (hiç kilit yokken) sızardı.
   it("kilit var ama ölüyse 'Kilidi devral ve başlat'", () => {
-    expect(etiket({ alive: false, info: DAEMON_INFO })).toBe("Kilidi devral ve başlat");
+    expect(label({ alive: false, info: DAEMON_INFO })).toBe("Kilidi devral ve başlat");
   });
 });
 
@@ -761,13 +761,13 @@ describe("gozcuEylemEtiketi — başlat/devral/durdur etiketi", () => {
  */
 describe("gozcuBeklemeSonucu — durdurma/yeniden başlatma bekleniyorken gözcü öldüyse", () => {
   type Sonuc = { restart: boolean } | null;
-  const sonuc = (bekleyen: string | null, g: Daemon): Sonuc =>
+  const result = (bekleyen: string | null, g: Daemon): Sonuc =>
     fonksiyon<(b: string | null, g: Daemon) => Sonuc>(renderPage("t"), "gozcuBeklemeSonucu")(bekleyen, g);
 
   it("beklenen YOK (bekleyen null): her g için null", () => {
-    expect(sonuc(null, null)).toBeNull();
-    expect(sonuc(null, { alive: true, info: DAEMON_INFO })).toBeNull();
-    expect(sonuc(null, { alive: false, info: DAEMON_INFO })).toBeNull();
+    expect(result(null, null)).toBeNull();
+    expect(result(null, { alive: true, info: DAEMON_INFO })).toBeNull();
+    expect(result(null, { alive: false, info: DAEMON_INFO })).toBeNull();
   });
 
   // SINIR: süreç HÂLÂ canlıysa (g && g.alive) beklenen iş henüz
@@ -775,15 +775,15 @@ describe("gozcuBeklemeSonucu — durdurma/yeniden başlatma bekleniyorken gözc�
   // bayrak İNDİRİLMEMELİ. `&&` yerine `||` yazılsaydı g===null iken de
   // bu dal seçilir, aşağıdaki "öldü" sınamaları yanlış geçerdi.
   it("bekleyen VAR ama süreç HÂLÂ canlı: null (henüz bitmedi)", () => {
-    expect(sonuc("durduruluyor", { alive: true, info: DAEMON_INFO })).toBeNull();
-    expect(sonuc("yenidenBaslatiliyor", { alive: true, info: DAEMON_INFO })).toBeNull();
+    expect(result("durduruluyor", { alive: true, info: DAEMON_INFO })).toBeNull();
+    expect(result("yenidenBaslatiliyor", { alive: true, info: DAEMON_INFO })).toBeNull();
   });
 
   // "durduruluyor" iken öldüyse (kilit yok YA DA ölü) yeniden başlatma
   // TETİKLENMEMELİ — normal "Gözcüyü durdur" bunu hiç vaat etmiyor.
   it("'durduruluyor' + öldü: bayrak iner, yenidenBaslat false", () => {
-    expect(sonuc("durduruluyor", null)).toEqual({ restart: false });
-    expect(sonuc("durduruluyor", { alive: false, info: DAEMON_INFO })).toEqual({ restart: false });
+    expect(result("durduruluyor", null)).toEqual({ restart: false });
+    expect(result("durduruluyor", { alive: false, info: DAEMON_INFO })).toEqual({ restart: false });
   });
 
   // ASIL DAVRANIŞ: "yenidenBaslatiliyor" iken öldüyse (kilit yok YA DA
@@ -793,8 +793,8 @@ describe("gozcuBeklemeSonucu — durdurma/yeniden başlatma bekleniyorken gözc�
   // sınaması yukarıda düşerdi; kaldırılsaydı (her zaman false) bu
   // sınama düşer.
   it("'yenidenBaslatiliyor' + öldü: bayrak iner, yenidenBaslat true", () => {
-    expect(sonuc("yenidenBaslatiliyor", null)).toEqual({ restart: true });
-    expect(sonuc("yenidenBaslatiliyor", { alive: false, info: DAEMON_INFO })).toEqual({ restart: true });
+    expect(result("yenidenBaslatiliyor", null)).toEqual({ restart: true });
+    expect(result("yenidenBaslatiliyor", { alive: false, info: DAEMON_INFO })).toEqual({ restart: true });
   });
 });
 
@@ -922,7 +922,7 @@ describe("nitelikTemaDegeri — <html data-theme> niteliğinden tema adına (ter
  * sabitine bağlı olduğu için `fonksiyonlar` ile BİRLİKTE çıkarılıyor.
  */
 describe("rolKonumu — V üzerindeki rol yerleşimi", () => {
-  type Konum = { x: number; y: number; kol: string };
+  type Konum = { x: number; y: number; arm: string };
   const konum = (i: number, n: number): Konum =>
     fonksiyonlar<(i: number, n: number) => Konum>(
       renderPage("t"), ["FORMASYON_GOVDE", "rolKonumu"], "rolKonumu",
@@ -931,7 +931,7 @@ describe("rolKonumu — V üzerindeki rol yerleşimi", () => {
   // TEK ROL VARSA TEPEDE — n===1 bir özel durum, f hesabına hiç girmez
   // (n-1===0 olurdu, bölme hatası).
   it("tek rol varsa tepede durur", () => {
-    expect(konum(0, 1)).toEqual({ x: 500, y: 480, kol: "tepe" });
+    expect(konum(0, 1)).toEqual({ x: 500, y: 480, arm: "tepe" });
   });
 
   // İLK ROL GİRİŞTE DEĞİL, SOL UÇTA (230,110) durur — giriş (40,110) "+"
@@ -941,14 +941,14 @@ describe("rolKonumu — V üzerindeki rol yerleşimi", () => {
   // (posAt/place) bu çakışmayı YAŞAMIYOR çünkü sol/sağ uçtan başlıyor.
   it("ilk rol (öncü) sol UÇTA durur, girişin kendisinde DEĞİL", () => {
     const k = konum(0, 2);
-    expect(k.kol).toBe("sol");
+    expect(k.arm).toBe("sol");
     expect(k.x).toBeCloseTo(230);
     expect(k.y).toBeCloseTo(110);
   });
 
   it("son rol sağ uçta durur, çıkışın kendisinde DEĞİL", () => {
     const k = konum(1, 2);
-    expect(k.kol).toBe("sag");
+    expect(k.arm).toBe("sag");
     expect(k.x).toBeCloseTo(770);
     expect(k.y).toBeCloseTo(110);
   });
@@ -960,7 +960,7 @@ describe("rolKonumu — V üzerindeki rol yerleşimi", () => {
   // side==="apex" ayrımıyla AYNI ilke.
   it("f===0.5 (üç rolde ortanca) tepeye düşer, 'sol' ya da 'sag' SAYILMAZ", () => {
     const k = konum(1, 3);
-    expect(k.kol).toBe("tepe");
+    expect(k.arm).toBe("tepe");
     expect(k.x).toBeCloseTo(500);
     expect(k.y).toBeCloseTo(480);
   });
@@ -980,9 +980,9 @@ describe("rolKonumu — V üzerindeki rol yerleşimi", () => {
   // ÇAKIŞMAZ — bu olmasaydı "+" düğmesi ve biten-kart kutusu ilk/son rol
   // düğümüyle aynı merkezde üst üste binerdi.
   it("roller giriş/çıkış noktalarıyla ÇAKIŞMAZ", () => {
-    const ilk = konum(0, 2);
+    const first = konum(0, 2);
     const last = konum(1, 2);
-    expect(ilk).not.toEqual(expect.objectContaining({ x: 40, y: 110 }));
+    expect(first).not.toEqual(expect.objectContaining({ x: 40, y: 110 }));
     expect(last).not.toEqual(expect.objectContaining({ x: 950, y: 110 }));
   });
 });
@@ -1104,7 +1104,7 @@ describe("kapiCizgisi — iki nokta arasındaki çizgiye dik segment", () => {
  * atlanmıyor.
  */
 describe("maliyetMetni — maliyetin ALT SINIR olduğunu söyleyen biçim", () => {
-  const metin = (tutar: number, unmeasured: number, tokens: number): string =>
+  const text = (tutar: number, unmeasured: number, tokens: number): string =>
     fonksiyonlar<(t: number, o: number, tok: number) => string>(
       renderPage("t"),
       ["para", "kisaSayi", "maliyetMetni"],
@@ -1113,21 +1113,21 @@ describe("maliyetMetni — maliyetin ALT SINIR olduğunu söyleyen biçim", () =
 
   // HİÇBİR aktivasyon ölçüsüz değilse işaret YOK — "tam rakam" dalı.
   it("olculmeyen SIFIR ise düz rakam döner, '≥' YOK", () => {
-    expect(metin(12.5, 0, 0)).toBe("$12.50");
+    expect(text(12.5, 0, 0)).toBe("$12.50");
   });
 
   // Bazı aktivasyonlar dolar bildirdi (toplam > 0) ama en az biri
   // bildirmedi: toplam GERÇEK dolarların toplamı, ama eksik olanı
   // SAKLAMIYOR — "≥" ile ALT SINIR olduğunu söylüyor.
   it("olculmeyen VAR ve dolar VAR ise '≥' + tutar döner", () => {
-    expect(metin(0.5, 1, 3_040_000)).toBe("≥$0.50");
+    expect(text(0.5, 1, 3_040_000)).toBe("≥$0.50");
   });
 
   // Zaman aşımı: dolar HİÇ yok ama akıştan token kurtarıldı (SAPMALAR
   // §2.1: "tur yarıda kesildi, dolar bildirilmedi — ALT SINIR"). Rakam
   // DEĞİL, çünkü $0.00 "bedava" ile "ölçülmedi" aynı şey değil.
   it("olculmeyen VAR, dolar YOK, token VAR ise 'ölçülmedi · ≥N token' döner", () => {
-    expect(metin(0, 1, 3_040_000)).toBe("maliyet ölçülmedi · ≥3.0M token");
+    expect(text(0, 1, 3_040_000)).toBe("maliyet ölçülmedi · ≥3.0M token");
   });
 
   // Ölçü HİÇ bildirilmedi — ne dolar ne token (SAPMALAR §2.1: "dolar yok
@@ -1135,7 +1135,7 @@ describe("maliyetMetni — maliyetin ALT SINIR olduğunu söyleyen biçim", () =
   // üretmeli: token sayısı olmadan "≥N token" yazmak uydurma bir alt
   // sınır olurdu.
   it("olculmeyen VAR, dolar YOK, token da YOK ise düz 'ölçülmedi' döner, token YOK", () => {
-    expect(metin(0, 1, 0)).toBe("maliyet ölçülmedi");
+    expect(text(0, 1, 0)).toBe("maliyet ölçülmedi");
   });
 });
 
@@ -1179,7 +1179,7 @@ describe("kanatCirpiyorMu — kanat çırpmanın koşulu", () => {
  * `rolKonumu`ya bağlı, `fonksiyonlar` ile BİRLİKTE çıkarılıyor.
  */
 describe("planlamaKatilimciKonumlari — planlama bandının noktaları", () => {
-  type Konum = { x: number; y: number; kol: string };
+  type Konum = { x: number; y: number; arm: string };
   type Rol = { id: string };
   const konumlar = (roller: Rol[], katilimcilar: string[]): Konum[] =>
     fonksiyonlar<(r: Rol[], k: string[]) => Konum[]>(
@@ -1190,9 +1190,9 @@ describe("planlamaKatilimciKonumlari — planlama bandının noktaları", () => 
 
   it("katılımcıların konumlarını ZİNCİR SIRASIYLA döner", () => {
     const roller = [{ id: "planner" }, { id: "coder" }, { id: "reviewer" }];
-    const sonuc = konumlar(roller, ["planner", "coder"]);
-    expect(sonuc).toHaveLength(2);
-    expect(sonuc[0]).toEqual({ x: 230, y: 110, kol: "sol" });
+    const result = konumlar(roller, ["planner", "coder"]);
+    expect(result).toHaveLength(2);
+    expect(result[0]).toEqual({ x: 230, y: 110, arm: "sol" });
   });
 
   // BİLİNMEYEN KATILIMCI sessizce elenir — olmayan bir rolü varmış gibi
@@ -1200,8 +1200,8 @@ describe("planlamaKatilimciKonumlari — planlama bandının noktaları", () => 
   // modu olurdu.
   it("bilinmeyen bir katılımcı (akışta olmayan rol) sessizce elenir", () => {
     const roller = [{ id: "planner" }];
-    const sonuc = konumlar(roller, ["planner", "uydurma-rol"]);
-    expect(sonuc).toHaveLength(1);
+    const result = konumlar(roller, ["planner", "uydurma-rol"]);
+    expect(result).toHaveLength(1);
   });
 
   it("katılımcı listesi boşsa boş dizi döner", () => {
@@ -1215,33 +1215,33 @@ describe("planlamaKatilimciKonumlari — planlama bandının noktaları", () => 
  * veriyor (kart c-20261105-2a8dab).
  */
 describe("planlamaBandYolu — bandın tepeden dolanması", () => {
-  type Konum = { x: number; y: number; kol: string };
-  const yol = (ilk: Konum, last: Konum): string =>
+  type Konum = { x: number; y: number; arm: string };
+  const path = (first: Konum, last: Konum): string =>
     fonksiyonlar<(a: Konum, b: Konum) => string>(
       renderPage("t"), ["FORMASYON_GOVDE", "planlamaBandYolu"], "planlamaBandYolu",
-    )(ilk, last);
+    )(first, last);
 
   // İKİ KOLA YAYILAN bant (ilk solda, son sağda) TEPE'den (500,480)
   // GEÇMEK ZORUNDA — yoksa düz çizgi iki kolun arasından kestirmeden
   // geçer, V'nin kendi hattını İZLEMEZ.
   it("ilk sol kolda, son sağ koldaysa TEPEDEN dolanır", () => {
-    const ilk = { x: 230, y: 110, kol: "sol" };
-    const last = { x: 770, y: 110, kol: "sag" };
-    expect(yol(ilk, last)).toBe("M 230 110 L 500 480 L 770 110");
+    const first = { x: 230, y: 110, arm: "sol" };
+    const last = { x: 770, y: 110, arm: "sag" };
+    expect(path(first, last)).toBe("M 230 110 L 500 480 L 770 110");
   });
 
   // AYNI KOLDAKİ (ya da biri tepedeki) iki nokta ZATEN aynı doğru
   // üzerinde — detur GEREKMİYOR, düz çizgi yeterli.
   it("ikisi de sol koldaysa düz çizgi çizer, tepeden dolanmaz", () => {
-    const ilk = { x: 230, y: 110, kol: "sol" };
-    const last = { x: 365, y: 295, kol: "sol" };
-    expect(yol(ilk, last)).toBe("M 230 110 L 365 295");
+    const first = { x: 230, y: 110, arm: "sol" };
+    const last = { x: 365, y: 295, arm: "sol" };
+    expect(path(first, last)).toBe("M 230 110 L 365 295");
   });
 
   it("son tepedeyse (örn. tek katılımcı tepeye denk gelmiş) dolanmaz", () => {
-    const ilk = { x: 230, y: 110, kol: "sol" };
-    const last = { x: 500, y: 480, kol: "tepe" };
-    expect(yol(ilk, last)).toBe("M 230 110 L 500 480");
+    const first = { x: 230, y: 110, arm: "sol" };
+    const last = { x: 500, y: 480, arm: "tepe" };
+    expect(path(first, last)).toBe("M 230 110 L 500 480");
   });
 });
 
@@ -1267,12 +1267,12 @@ describe("railGecis — sağ panelin durum geçişleri", () => {
   // formasyon düğümünün eski davranışıyla (secimDegistir) AYNI.
   it("Rol modunda AYNI role tıklamak Genel bakışa döner", () => {
     const rolAcik: Rail = { mode: "role", roleId: "coder", cardId: null, cardFrom: "overview" };
-    expect(gecis(rolAcik, { tur: "rolSec", rolId: "coder" })).toEqual(GENEL_BAKIS);
+    expect(gecis(rolAcik, { tur: "rolSec", roleId: "coder" })).toEqual(GENEL_BAKIS);
   });
 
   it("Rol modunda BAŞKA role tıklamak o role GEÇER, kapatmaz", () => {
     const rolAcik: Rail = { mode: "role", roleId: "coder", cardId: null, cardFrom: "overview" };
-    expect(gecis(rolAcik, { tur: "rolSec", rolId: "reviewer" })).toEqual({
+    expect(gecis(rolAcik, { tur: "rolSec", roleId: "reviewer" })).toEqual({
       mode: "role", roleId: "reviewer", cardId: null, cardFrom: "overview",
     });
   });
@@ -1282,7 +1282,7 @@ describe("railGecis — sağ panelin durum geçişleri", () => {
   // GENEL_BAKIS'a düşerdi.
   it("Kart modunda (roleId eşleşse de) role tıklamak Rol moduna geçer, KAPATMAZ", () => {
     const kartAcik: Rail = { mode: "card", roleId: "coder", cardId: "c-1", cardFrom: "role" };
-    expect(gecis(kartAcik, { tur: "rolSec", rolId: "coder" })).toEqual({
+    expect(gecis(kartAcik, { tur: "rolSec", roleId: "coder" })).toEqual({
       mode: "role", roleId: "coder", cardId: null, cardFrom: "overview",
     });
   });
@@ -1295,7 +1295,7 @@ describe("railGecis — sağ panelin durum geçişleri", () => {
   });
 
   it("'kartAcRol' roleId'yi KORUR, cardFrom 'role'dur", () => {
-    expect(gecis(GENEL_BAKIS, { tur: "kartAcRol", rolId: "reviewer", kartId: "c-9" })).toEqual({
+    expect(gecis(GENEL_BAKIS, { tur: "kartAcRol", roleId: "reviewer", kartId: "c-9" })).toEqual({
       mode: "card", roleId: "reviewer", cardId: "c-9", cardFrom: "role",
     });
   });
@@ -1377,22 +1377,22 @@ describe("railRolMeta — Rol modunun meta satırı", () => {
  * ÖNLÜYOR — yoksa panel her saniye "yükleniyor…"ya dönerdi.
  */
 describe("railYenidenYuklenmeliMi — Kart modunun fetch kararı", () => {
-  const karar = (g: unknown, h: unknown): boolean =>
+  const decision = (g: unknown, h: unknown): boolean =>
     fonksiyon<(g: unknown, h: unknown) => boolean>(renderPage("t"), "railYenidenYuklenmeliMi")(g, h);
 
   it("gösterilen kart hedefle AYNIYSA yeniden yüklemez", () => {
-    expect(karar("c-1", "c-1")).toBe(false);
+    expect(decision("c-1", "c-1")).toBe(false);
   });
 
   it("gösterilen kart hedeften FARKLIYSA yeniden yükler", () => {
-    expect(karar("c-1", "c-2")).toBe(true);
+    expect(decision("c-1", "c-2")).toBe(true);
   });
 
   // İlk açılış: panel hiçbir kart taşımıyor (dataset undefined) — hedef
   // her ne olursa olsun bu YÜKLEMELİ dönmek zorunda, aksi hâlde Kart modu
   // İLK kez açıldığında hiç fetch ETMEZDİ.
   it("panel hiçbir kart taşımıyorsa (ilk açılış) yeniden yükler", () => {
-    expect(karar(undefined, "c-1")).toBe(true);
+    expect(decision(undefined, "c-1")).toBe(true);
   });
 });
 
@@ -1407,29 +1407,29 @@ type DuzenleRol = {
 };
 
 describe("duzenleHatalari — boş/tekrarlanan rol adı HATA'sı", () => {
-  const errors = (roller: DuzenleRol[]): { errors: string[]; gecersiz: Set<number> } =>
-    fonksiyon<(r: DuzenleRol[]) => { errors: string[]; gecersiz: Set<number> }>(
+  const errors = (roller: DuzenleRol[]): { errors: string[]; invalid: Set<number> } =>
+    fonksiyon<(r: DuzenleRol[]) => { errors: string[]; invalid: Set<number> }>(
       renderPage("t"), "duzenleHatalari",
     )(roller);
 
   it("hepsi tekil ve doluysa hata YOK", () => {
-    const sonuc = errors([{ id: "coder" }, { id: "reviewer" }]);
-    expect(sonuc.errors).toEqual([]);
-    expect(sonuc.gecersiz.size).toBe(0);
+    const result = errors([{ id: "coder" }, { id: "reviewer" }]);
+    expect(result.errors).toEqual([]);
+    expect(result.invalid.size).toBe(0);
   });
 
   it("boş ad (ya da sadece boşluk) HATA verir ve o indeksi işaretler", () => {
-    const sonuc = errors([{ id: "coder" }, { id: "   " }]);
-    expect(sonuc.errors).toHaveLength(1);
-    expect(sonuc.gecersiz.has(1)).toBe(true);
-    expect(sonuc.gecersiz.has(0)).toBe(false);
+    const result = errors([{ id: "coder" }, { id: "   " }]);
+    expect(result.errors).toHaveLength(1);
+    expect(result.invalid.has(1)).toBe(true);
+    expect(result.invalid.has(0)).toBe(false);
   });
 
   it("aynı adı taşıyan İKİ rol HATA verir ve İKİSİNİ de işaretler", () => {
-    const sonuc = errors([{ id: "coder" }, { id: "coder" }, { id: "reviewer" }]);
-    expect(sonuc.errors).toHaveLength(1);
-    expect(sonuc.errors[0]).toContain("coder");
-    expect(sonuc.gecersiz).toEqual(new Set([0, 1]));
+    const result = errors([{ id: "coder" }, { id: "coder" }, { id: "reviewer" }]);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]).toContain("coder");
+    expect(result.invalid).toEqual(new Set([0, 1]));
   });
 
   it("boş liste için hata YOK", () => {
@@ -1449,9 +1449,9 @@ describe("duzenleSilmeUyarilari — açık kartı olan silinen rol UYARI'sı (en
   });
 
   it("silinen rolün AÇIK (done olmayan) kartı varsa uyarır", () => {
-    const sonuc = uyarilar(["coder", "reviewer"], ["coder"], [{ role: "reviewer", state: "gate" }]);
-    expect(sonuc).toHaveLength(1);
-    expect(sonuc[0]).toContain("reviewer");
+    const result = uyarilar(["coder", "reviewer"], ["coder"], [{ role: "reviewer", state: "gate" }]);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toContain("reviewer");
   });
 
   it("silinen rolün kartları hepsi 'done'sa uyarmaz", () => {
@@ -1468,8 +1468,8 @@ describe("duzenleSiradanBagla — 'next' HER ZAMAN sıradan türer, sonuncusu 'd
     fonksiyon<(r: DuzenleRol[]) => DuzenleRol[]>(renderPage("t"), "duzenleSiradanBagla")(roller);
 
   it("üç rolü sırayla zincirler, sonuncusu 'done'", () => {
-    const sonuc = bagla([{ id: "a" }, { id: "b" }, { id: "c" }]);
-    expect(sonuc.map((r) => r.next)).toEqual(["b", "c", "done"]);
+    const result = bagla([{ id: "a" }, { id: "b" }, { id: "c" }]);
+    expect(result.map((r) => r.next)).toEqual(["b", "c", "done"]);
   });
 
   it("tek rol de 'done'a bağlanır", () => {
@@ -1482,23 +1482,23 @@ describe("duzenleReddiTemizle — kural 13: reject yalnızca DAHA ÖNCEki role i
     fonksiyon<(r: DuzenleRol[]) => DuzenleRol[]>(renderPage("t"), "duzenleReddiTemizle")(roller);
 
   it("öncekine işaret eden reject KORUNUR", () => {
-    const sonuc = temizle([{ id: "a" }, { id: "b", reject: "a" }]);
-    expect(sonuc[1]?.reject).toBe("a");
+    const result = temizle([{ id: "a" }, { id: "b", reject: "a" }]);
+    expect(result[1]?.reject).toBe("a");
   });
 
   it("SONRAKİ bir role işaret eden reject TEMİZLENİR", () => {
-    const sonuc = temizle([{ id: "a", reject: "b" }, { id: "b" }]);
-    expect(sonuc[0]?.reject).toBeUndefined();
+    const result = temizle([{ id: "a", reject: "b" }, { id: "b" }]);
+    expect(result[0]?.reject).toBeUndefined();
   });
 
   it("var olmayan bir role işaret eden reject TEMİZLENİR", () => {
-    const sonuc = temizle([{ id: "a" }, { id: "b", reject: "yok" }]);
-    expect(sonuc[1]?.reject).toBeUndefined();
+    const result = temizle([{ id: "a" }, { id: "b", reject: "yok" }]);
+    expect(result[1]?.reject).toBeUndefined();
   });
 
   it("kendine işaret eden reject (hedef === i) TEMİZLENİR", () => {
-    const sonuc = temizle([{ id: "a", reject: "a" }]);
-    expect(sonuc[0]?.reject).toBeUndefined();
+    const result = temizle([{ id: "a", reject: "a" }]);
+    expect(result[0]?.reject).toBeUndefined();
   });
 });
 
@@ -1509,9 +1509,9 @@ describe("duzenleTasi — ↑/↓ ikon düğmeleri: sırayı değiştirir, next'
     )(roller, i, yon);
 
   it("ortadaki rolü YUKARI taşır", () => {
-    const sonuc = tasi([{ id: "a" }, { id: "b" }, { id: "c" }], 1, -1);
-    expect(sonuc.map((r) => r.id)).toEqual(["b", "a", "c"]);
-    expect(sonuc.map((r) => r.next)).toEqual(["a", "c", "done"]);
+    const result = tasi([{ id: "a" }, { id: "b" }, { id: "c" }], 1, -1);
+    expect(result.map((r) => r.id)).toEqual(["b", "a", "c"]);
+    expect(result.map((r) => r.next)).toEqual(["a", "c", "done"]);
   });
 
   it("İLK rolü YUKARI taşımak hiçbir şey yapmaz (sınır)", () => {
@@ -1527,16 +1527,16 @@ describe("duzenleTasi — ↑/↓ ikon düğmeleri: sırayı değiştirir, next'
   // Taşıma sırayı tersine çevirince eski bir reject GEÇERSİZ kalabilir —
   // normalizasyon (duzenleReddiTemizle) bunu TEMİZLEMELİ.
   it("taşıma SONRASI geçersiz kalan reject TEMİZLENİR", () => {
-    const sonuc = tasi([{ id: "a" }, { id: "b", reject: "a" }, { id: "c" }], 0, 1);
+    const result = tasi([{ id: "a" }, { id: "b", reject: "a" }, { id: "c" }], 0, 1);
     // yeni sıra: b, a, c — b artık a'DAN ÖNCE, b'nin a'ya reject'i geçersiz.
-    expect(sonuc.map((r) => r.id)).toEqual(["b", "a", "c"]);
-    expect(sonuc.find((r) => r.id === "b")?.reject).toBeUndefined();
+    expect(result.map((r) => r.id)).toEqual(["b", "a", "c"]);
+    expect(result.find((r) => r.id === "b")?.reject).toBeUndefined();
   });
 });
 
 describe("duzenleAdSanitize — DEVIR.md §3: ad girişi yalnızca a-z0-9-", () => {
-  const sanitize = (deger: string): string =>
-    fonksiyon<(d: string) => string>(renderPage("t"), "duzenleAdSanitize")(deger);
+  const sanitize = (value: string): string =>
+    fonksiyon<(d: string) => string>(renderPage("t"), "duzenleAdSanitize")(value);
 
   it("zaten geçerli bir ad DEĞİŞMEDEN kalır", () => {
     expect(sanitize("coder-2")).toBe("coder-2");
@@ -1565,14 +1565,14 @@ describe("duzenleAdDegis — ad değişince reject/planlama.katilimcilar/denetci
     fonksiyon<(t: Taslak, i: number, a: string) => Taslak>(renderPage("t"), "duzenleAdDegis")(taslak, i, newName);
 
   it("rolün kendi id'sini değiştirir", () => {
-    const sonuc = degis({ roles: [{ id: "coder" }] }, 0, "yazar");
-    expect(sonuc.roles[0]?.id).toBe("yazar");
+    const result = degis({ roles: [{ id: "coder" }] }, 0, "yazar");
+    expect(result.roles[0]?.id).toBe("yazar");
   });
 
   it("BAŞKA bir rolün 'reject'i eski ada işaret ediyorsa GÜNCELLENİR", () => {
     const taslak: Taslak = { roles: [{ id: "coder" }, { id: "reviewer", reject: "coder" }] };
-    const sonuc = degis(taslak, 0, "yazar");
-    expect(sonuc.roles[1]?.reject).toBe("yazar");
+    const result = degis(taslak, 0, "yazar");
+    expect(result.roles[1]?.reject).toBe("yazar");
   });
 
   it("planlama.katilimcilar İÇİNDEKİ eski ad GÜNCELLENİR", () => {
@@ -1580,8 +1580,8 @@ describe("duzenleAdDegis — ad değişince reject/planlama.katilimcilar/denetci
       roles: [{ id: "coder" }, { id: "reviewer" }],
       planlama: { katilimcilar: ["coder"] },
     };
-    const sonuc = degis(taslak, 0, "yazar");
-    expect(sonuc.planlama?.katilimcilar).toEqual(["yazar"]);
+    const result = degis(taslak, 0, "yazar");
+    expect(result.planlama?.katilimcilar).toEqual(["yazar"]);
   });
 
   it("planlama.denetci eski ada işaret ediyorsa GÜNCELLENİR", () => {
@@ -1589,25 +1589,25 @@ describe("duzenleAdDegis — ad değişince reject/planlama.katilimcilar/denetci
       roles: [{ id: "coder" }, { id: "guard" }],
       planlama: { katilimcilar: ["coder"], denetci: "guard" },
     };
-    const sonuc = degis(taslak, 1, "denetmen");
-    expect(sonuc.planlama?.denetci).toBe("denetmen");
+    const result = degis(taslak, 1, "denetmen");
+    expect(result.planlama?.denetci).toBe("denetmen");
   });
 
   it("İLGİSİZ bir rolün referansını DEĞİŞTİRMEZ", () => {
     const taslak: Taslak = { roles: [{ id: "coder" }, { id: "reviewer", reject: "coder" }, { id: "guard" }] };
-    const sonuc = degis(taslak, 2, "denetmen");
-    expect(sonuc.roles[1]?.reject).toBe("coder");
+    const result = degis(taslak, 2, "denetmen");
+    expect(result.roles[1]?.reject).toBe("coder");
   });
 
   it("BOŞ ada yeniden adlandırma YOK SAYILIR — eski ad kalır", () => {
-    const sonuc = degis({ roles: [{ id: "coder" }] }, 0, "");
-    expect(sonuc.roles[0]?.id).toBe("coder");
+    const result = degis({ roles: [{ id: "coder" }] }, 0, "");
+    expect(result.roles[0]?.id).toBe("coder");
   });
 
   it("aynı ada 'değiştirmek' hiçbir referansa dokunmaz", () => {
     const taslak: Taslak = { roles: [{ id: "coder" }, { id: "reviewer", reject: "coder" }] };
-    const sonuc = degis(taslak, 0, "coder");
-    expect(sonuc.roles[1]?.reject).toBe("coder");
+    const result = degis(taslak, 0, "coder");
+    expect(result.roles[1]?.reject).toBe("coder");
   });
 });
 
@@ -1623,42 +1623,42 @@ describe("duzenleSil — rol silinince reject/syncBack/gates/planlama referansla
     )(taslak, id);
 
   it("rolü diziden ÇIKARIR", () => {
-    const sonuc = sil({ roles: [{ id: "a" }, { id: "b" }] }, "b");
-    expect(sonuc.roles.map((r) => r.id)).toEqual(["a"]);
+    const result = sil({ roles: [{ id: "a" }, { id: "b" }] }, "b");
+    expect(result.roles.map((r) => r.id)).toEqual(["a"]);
   });
 
   it("ona 'reject' eden rolün referansını TEMİZLER", () => {
-    const sonuc = sil({ roles: [{ id: "a" }, { id: "b" }, { id: "c", reject: "b" }] }, "b");
-    expect(sonuc.roles.find((r) => r.id === "c")?.reject).toBeUndefined();
+    const result = sil({ roles: [{ id: "a" }, { id: "b" }, { id: "c", reject: "b" }] }, "b");
+    expect(result.roles.find((r) => r.id === "c")?.reject).toBeUndefined();
   });
 
   it("ona 'syncBack' eden rolün listesinden ÇIKARIR", () => {
-    const sonuc = sil({ roles: [{ id: "a", syncBack: ["b"] }, { id: "b" }] }, "b");
-    expect(sonuc.roles.find((r) => r.id === "a")?.syncBack).toEqual([]);
+    const result = sil({ roles: [{ id: "a", syncBack: ["b"] }, { id: "b" }] }, "b");
+    expect(result.roles.find((r) => r.id === "a")?.syncBack).toEqual([]);
   });
 
   it("ona ait 'gates' girdisini KALDIRIR", () => {
-    const sonuc = sil({ roles: [{ id: "a" }, { id: "b" }], gates: [{ after: "b", type: "approval" }] }, "b");
-    expect(sonuc.gates).toEqual([]);
+    const result = sil({ roles: [{ id: "a" }, { id: "b" }], gates: [{ after: "b", type: "approval" }] }, "b");
+    expect(result.gates).toEqual([]);
   });
 
   it("planlama.katilimcilar İÇİNDEN çıkarır, boşalırsa planlama TAMAMEN kalkar", () => {
-    const sonuc = sil({ roles: [{ id: "a" }, { id: "b" }], planlama: { katilimcilar: ["a"] } }, "a");
-    expect(sonuc.planlama).toBeUndefined();
+    const result = sil({ roles: [{ id: "a" }, { id: "b" }], planlama: { katilimcilar: ["a"] } }, "a");
+    expect(result.planlama).toBeUndefined();
   });
 
   it("denetçi silinirse planlama.denetci TEMİZLENİR (katılımcılar kalsa da)", () => {
-    const sonuc = sil(
+    const result = sil(
       { roles: [{ id: "a" }, { id: "b" }, { id: "c" }], planlama: { katilimcilar: ["a"], denetci: "c" } },
       "c",
     );
-    expect(sonuc.planlama?.denetci).toBeUndefined();
-    expect(sonuc.planlama?.katilimcilar).toEqual(["a"]);
+    expect(result.planlama?.denetci).toBeUndefined();
+    expect(result.planlama?.katilimcilar).toEqual(["a"]);
   });
 
   it("SON kalan rol SİLİNEMEZ", () => {
-    const sonuc = sil({ roles: [{ id: "a" }] }, "a");
-    expect(sonuc.roles).toHaveLength(1);
+    const result = sil({ roles: [{ id: "a" }] }, "a");
+    expect(result.roles).toHaveLength(1);
   });
 
   it("bilinmeyen bir id için hiçbir şey YAPMAZ", () => {
@@ -1765,21 +1765,21 @@ describe("duzenleNormallestir — kaydetmeden/önizlemeden önce uygulanan TAM n
     )(taslak);
 
   it("next'i sıradan türetir", () => {
-    const sonuc = normallestir({ roles: [{ id: "a" }, { id: "b" }] });
-    expect(sonuc.roles.map((r) => r.next)).toEqual(["b", "done"]);
+    const result = normallestir({ roles: [{ id: "a" }, { id: "b" }] });
+    expect(result.roles.map((r) => r.next)).toEqual(["b", "done"]);
   });
 
   it("geçersiz reject'i temizler", () => {
-    const sonuc = normallestir({ roles: [{ id: "a", reject: "b" }, { id: "b" }] });
-    expect(sonuc.roles[0]?.reject).toBeUndefined();
+    const result = normallestir({ roles: [{ id: "a", reject: "b" }, { id: "b" }] });
+    expect(result.roles[0]?.reject).toBeUndefined();
   });
 
   it("planlama varken geçersiz kalmış denetçiyi temizler", () => {
-    const sonuc = normallestir({
+    const result = normallestir({
       roles: [{ id: "a" }, { id: "b" }],
       planlama: { katilimcilar: ["a", "b"], denetci: "b", tur: 1, plan: "docs/plan/{kart}.md", ilkTurKor: true },
     });
-    expect(sonuc.planlama?.denetci).toBeUndefined();
+    expect(result.planlama?.denetci).toBeUndefined();
   });
 
   it("planlama yoksa denetçi adımını hiç ÇALIŞTIRMAZ (çökmez)", () => {
@@ -1794,17 +1794,17 @@ describe("duzenleNormallestir — kaydetmeden/önizlemeden önce uygulanan TAM n
  * kısım tarayici.test.ts'te (bkz. o dosyadaki "Akışlar sekmesi" describe).
  */
 describe("akisOzetBul — AKISLAR_OZET içinde ad arama", () => {
-  type Ozet = { ad: string; draft: unknown; hata?: string };
+  type Ozet = { name: string; draft: unknown; error?: string };
   const bul = (items: Ozet[], ad: string): Ozet | null =>
     fonksiyon<(l: Ozet[], a: string) => Ozet | null>(renderPage("t"), "akisOzetBul")(items, ad);
 
   it("ad listede varsa o kaydı döner", () => {
-    const items = [{ ad: "a", draft: 1 }, { ad: "b", draft: 2 }];
-    expect(bul(items, "b")).toEqual({ ad: "b", draft: 2 });
+    const items = [{ name: "a", draft: 1 }, { name: "b", draft: 2 }];
+    expect(bul(items, "b")).toEqual({ name: "b", draft: 2 });
   });
 
   it("ad listede yoksa null döner (başka bir kayıt UYDURMAZ)", () => {
-    const items = [{ ad: "a", draft: 1 }];
+    const items = [{ name: "a", draft: 1 }];
     expect(bul(items, "yok")).toBeNull();
   });
 
@@ -1888,9 +1888,9 @@ describe("yeniAkisGecerliMi — 'Oluştur ve düzenle' düğmesinin etkinlik kar
 
 // --- Promptlar sekmesi (DEVIR.md §5) ---
 
-type Prompt = { etiket: string; yol: string };
+type Prompt = { label: string; path: string };
 type OzetDraft = { constitution: string[]; roles: { id: string; prompt: string }[] };
-type Ozet = { ad: string; draft: OzetDraft | null };
+type Ozet = { name: string; draft: OzetDraft | null };
 
 /**
  * FLOWGORELIYOLKOKECEVIR — AKISLAR_OZET'in draft'ları FLOW DOSYASININ
@@ -1920,7 +1920,7 @@ describe("flowGoreliYolKokeCevir — flow-relatif yolu KÖK-relatife çevirir", 
 });
 
 describe("dosyaAdiKisa — uzantısız kısa dosya adı", () => {
-  const ad = (yol: string): string => fonksiyon<(y: string) => string>(renderPage("t"), "dosyaAdiKisa")(yol);
+  const ad = (path: string): string => fonksiyon<(y: string) => string>(renderPage("t"), "dosyaAdiKisa")(path);
 
   it("yolun son parçasından uzantıyı KALDIRIR", () => {
     expect(ad("hub/prompts/roles/coder.md")).toBe("coder");
@@ -1941,14 +1941,14 @@ describe("dosyaAdiKisa — uzantısız kısa dosya adı", () => {
  * 'fonksiyonlar' ile BİRLİKTE çıkarılıyor.
  */
 describe("promptKullananListesi — bir prompt dosyasının kullanıcıları", () => {
-  const kullananlar = (p: Prompt[], o: Ozet[], aktifAd: string, yol: string) =>
+  const kullananlar = (p: Prompt[], o: Ozet[], aktifAd: string, path: string) =>
     fonksiyonlar<(p: Prompt[], o: Ozet[], a: string, y: string) => { akis: string; rol: string | null }[]>(
       renderPage("t"), ["flowGoreliYolKokeCevir", "promptKullananListesi"], "promptKullananListesi",
-    )(p, o, aktifAd, yol);
+    )(p, o, aktifAd, path);
 
   const prompts: Prompt[] = [
-    { etiket: "anayasa:1", yol: "hub/prompts/constitution/base.md" },
-    { etiket: "rol:coder", yol: "hub/prompts/roles/coder.md" },
+    { label: "anayasa:1", path: "hub/prompts/constitution/base.md" },
+    { label: "rol:coder", path: "hub/prompts/roles/coder.md" },
   ];
 
   it("AKTİF akışta rol promptu kullanılıyorsa {akis, rol} döner", () => {
@@ -1966,7 +1966,7 @@ describe("promptKullananListesi — bir prompt dosyasının kullanıcıları", (
   it("AKISLAR_OZET'te AKTİF akış da varsa İKİ KEZ saymaz", () => {
     const summary: Ozet[] = [
       {
-        ad: "ab-planli",
+        name: "ab-planli",
         draft: { constitution: [], roles: [{ id: "coder", prompt: "../prompts/roles/coder.md" }] },
       },
     ];
@@ -1978,7 +1978,7 @@ describe("promptKullananListesi — bir prompt dosyasının kullanıcıları", (
   // karşılaştırılıyor — çevrilmeseydi bu DİĞER akış hiç bulunamazdı.
   it("DİĞER bir akış AYNI dosyayı (flow-relatif yazılmış) kullanıyorsa da bulur", () => {
     const summary: Ozet[] = [
-      { ad: "baska-akis", draft: { constitution: [], roles: [{ id: "reviewer", prompt: "../prompts/roles/coder.md" }] } },
+      { name: "baska-akis", draft: { constitution: [], roles: [{ id: "reviewer", prompt: "../prompts/roles/coder.md" }] } },
     ];
     expect(kullananlar(prompts, summary, "ab-planli", "hub/prompts/roles/coder.md"))
       .toEqual([{ akis: "ab-planli", rol: "coder" }, { akis: "baska-akis", rol: "reviewer" }]);
@@ -1986,7 +1986,7 @@ describe("promptKullananListesi — bir prompt dosyasının kullanıcıları", (
 
   it("DİĞER bir akış AYNI anayasa dosyasını kullanıyorsa rol NULL olarak eklenir", () => {
     const summary: Ozet[] = [
-      { ad: "baska-akis", draft: { constitution: ["../prompts/constitution/base.md"], roles: [] } },
+      { name: "baska-akis", draft: { constitution: ["../prompts/constitution/base.md"], roles: [] } },
     ];
     expect(kullananlar(prompts, summary, "ab-planli", "hub/prompts/constitution/base.md"))
       .toEqual([{ akis: "ab-planli", rol: null }, { akis: "baska-akis", rol: null }]);
@@ -1996,7 +1996,7 @@ describe("promptKullananListesi — bir prompt dosyasının kullanıcıları", (
   // atlanıyor — "bir akışın bozulması listenin GERİ KALANINI göstermeyi
   // engellememeli" ilkesinin bu ekrandaki karşılığı.
   it("draft'ı null olan (bozuk) bir akış çökmeden atlanır", () => {
-    const summary: Ozet[] = [{ ad: "bozuk", draft: null }];
+    const summary: Ozet[] = [{ name: "bozuk", draft: null }];
     expect(kullananlar(prompts, summary, "ab-planli", "hub/prompts/roles/coder.md"))
       .toEqual([{ akis: "ab-planli", rol: "coder" }]);
   });
@@ -2033,15 +2033,15 @@ describe("promptKullanimSayisi — 'N rol · M akış' sayımı", () => {
  * (DEVIR.md §5).
  */
 describe("promptKullanimEtiketi — kullanım metni", () => {
-  const etiket = (rol: number, akis: number): string =>
+  const label = (rol: number, akis: number): string =>
     fonksiyon<(r: number, a: number) => string>(renderPage("t"), "promptKullanimEtiketi")(rol, akis);
 
   it("ikisi de sıfırsa 'kullanılmıyor' der", () => {
-    expect(etiket(0, 0)).toBe("kullanılmıyor");
+    expect(label(0, 0)).toBe("kullanılmıyor");
   });
 
   it("rol ve akış sayısını BİRLİKTE yazar", () => {
-    expect(etiket(2, 1)).toBe("2 rol · 1 akış");
+    expect(label(2, 1)).toBe("2 rol · 1 akış");
   });
 
   // "&&" YERİNE "||" YAZILSAYDI: rol=0 ama akis>0 olan (anayasa dosyası,
@@ -2049,11 +2049,11 @@ describe("promptKullanimEtiketi — kullanım metni", () => {
   // bir dosya YANLIŞLIKLA "kullanılmıyor" derdi. Bu iki sınama TAM O
   // mutasyonu öldürür.
   it("rol sıfır ama akış sıfır DEĞİLSE (anayasa dosyası) 'kullanılmıyor' DEMEZ", () => {
-    expect(etiket(0, 2)).toBe("0 rol · 2 akış");
+    expect(label(0, 2)).toBe("0 rol · 2 akış");
   });
 
   it("akış sıfır ama rol sıfır DEĞİLSE de 'kullanılmıyor' DEMEZ", () => {
-    expect(etiket(3, 0)).toBe("3 rol · 0 akış");
+    expect(label(3, 0)).toBe("3 rol · 0 akış");
   });
 });
 
@@ -2062,22 +2062,22 @@ describe("promptKullanimEtiketi — kullanım metni", () => {
  * şeridi (DEVIR.md §5). dosyaAdiKisa'ya bağlı, BİRLİKTE çıkarılıyor.
  */
 describe("ajanOkumaSirasi — 'Ajanın okuduğu sıra' şeridi", () => {
-  type Adim = { etiket: string; vurgulu: boolean };
+  type Adim = { label: string; vurgulu: boolean };
   const sira = (p: Prompt[], secili: string | null): Adim[] =>
     fonksiyonlar<(p: Prompt[], s: string | null) => Adim[]>(
       renderPage("t"), ["dosyaAdiKisa", "ajanOkumaSirasi"], "ajanOkumaSirasi",
     )(p, secili);
 
   const prompts: Prompt[] = [
-    { etiket: "anayasa:1", yol: "hub/prompts/constitution/base.md" },
-    { etiket: "anayasa:2", yol: "hub/prompts/constitution/engineering-ts.md" },
-    { etiket: "rol:coder", yol: "hub/prompts/roles/coder.md" },
-    { etiket: "rol:reviewer", yol: "hub/prompts/roles/reviewer.md" },
+    { label: "anayasa:1", path: "hub/prompts/constitution/base.md" },
+    { label: "anayasa:2", path: "hub/prompts/constitution/engineering-ts.md" },
+    { label: "rol:coder", path: "hub/prompts/roles/coder.md" },
+    { label: "rol:reviewer", path: "hub/prompts/roles/reviewer.md" },
   ];
 
   it("anayasa sırası + seçili ROL + 'kart metni' ile biter", () => {
     const steps = sira(prompts, "hub/prompts/roles/coder.md");
-    expect(steps.map((a) => a.etiket)).toEqual(["base", "engineering-ts", "coder", "kart metni"]);
+    expect(steps.map((a) => a.label)).toEqual(["base", "engineering-ts", "coder", "kart metni"]);
   });
 
   it("seçili dosya rol promptuysa SADECE o adım 'vurgulu'", () => {
@@ -2090,19 +2090,19 @@ describe("ajanOkumaSirasi — 'Ajanın okuduğu sıra' şeridi", () => {
   // değiştirmiyor; "vurgulu" yine de doğru anayasa adımına düşmeli.
   it("anayasa dosyası seçiliyken İLK rol örnek gösterilir, O vurgulu DEĞİL", () => {
     const steps = sira(prompts, "hub/prompts/constitution/engineering-ts.md");
-    expect(steps.map((a) => a.etiket)).toEqual(["base", "engineering-ts", "coder", "kart metni"]);
+    expect(steps.map((a) => a.label)).toEqual(["base", "engineering-ts", "coder", "kart metni"]);
     expect(steps.map((a) => a.vurgulu)).toEqual([false, true, false, false]);
   });
 
   it("'kart metni' adımı HİÇBİR seçimde vurgulu olamaz (yol: null)", () => {
     const steps = sira(prompts, "hub/prompts/roles/reviewer.md");
-    expect(steps[steps.length - 1]).toEqual({ etiket: "kart metni", vurgulu: false });
+    expect(steps[steps.length - 1]).toEqual({ label: "kart metni", vurgulu: false });
   });
 
   it("akışta hiç rol yoksa ÇÖKMEZ, rol adımı eklenmeden 'kart metni' ile biter", () => {
-    const anayasaSadece = prompts.filter((p) => p.etiket.startsWith("anayasa:"));
+    const anayasaSadece = prompts.filter((p) => p.label.startsWith("anayasa:"));
     const steps = sira(anayasaSadece, null);
-    expect(steps.map((a) => a.etiket)).toEqual(["base", "engineering-ts", "kart metni"]);
+    expect(steps.map((a) => a.label)).toEqual(["base", "engineering-ts", "kart metni"]);
   });
 
   // 'yol: null' TAŞIYAN TEK adım "kart metni"; seçili yol da null OLABİLİR
@@ -2110,17 +2110,17 @@ describe("ajanOkumaSirasi — 'Ajanın okuduğu sıra' şeridi", () => {
   // "a.yol === seciliYol" yazılsaydı bu durumda null === null olup "kart
   // metni" YANLIŞLIKLA vurgulu görünürdü.
   it("seçili yol null İKEN 'kart metni' (yol: null) YİNE DE vurgulu OLMAZ", () => {
-    const anayasaSadece = prompts.filter((p) => p.etiket.startsWith("anayasa:"));
+    const anayasaSadece = prompts.filter((p) => p.label.startsWith("anayasa:"));
     const steps = sira(anayasaSadece, null);
     expect(steps.map((a) => a.vurgulu)).toEqual([false, false, false]);
   });
 });
 
 describe("promptKirliMi — editördeki metin disktekinden FARKLI mı", () => {
-  const kirli = (orijinal: Record<string, string>, metin: Record<string, string>, yol: string): boolean =>
+  const kirli = (orijinal: Record<string, string>, text: Record<string, string>, path: string): boolean =>
     fonksiyon<(o: Record<string, string>, m: Record<string, string>, y: string) => boolean>(
       renderPage("t"), "promptKirliMi",
-    )(orijinal, metin, yol);
+    )(orijinal, text, path);
 
   it("henüz YÜKLENMEMİŞ bir dosya (metin[yol] undefined) kirli SAYILMAZ", () => {
     expect(kirli({}, {}, "x")).toBe(false);
@@ -2136,10 +2136,10 @@ describe("promptKirliMi — editördeki metin disktekinden FARKLI mı", () => {
 });
 
 describe("promptKaydedilmemisSayisi — Promptlar nav rozetinin sayısı", () => {
-  const count = (orijinal: Record<string, string>, metin: Record<string, string>): number =>
+  const count = (orijinal: Record<string, string>, text: Record<string, string>): number =>
     fonksiyonlar<(o: Record<string, string>, m: Record<string, string>) => number>(
       renderPage("t"), ["promptKirliMi", "promptKaydedilmemisSayisi"], "promptKaydedilmemisSayisi",
-    )(orijinal, metin);
+    )(orijinal, text);
 
   it("hiçbir dosya düzenlenmemişse 0", () => {
     expect(count({}, {})).toBe(0);
@@ -2147,27 +2147,27 @@ describe("promptKaydedilmemisSayisi — Promptlar nav rozetinin sayısı", () =>
 
   it("yalnızca DEĞİŞTİRİLMİŞ dosyaları sayar, temiz olanları saymaz", () => {
     const orijinal = { a: "1", b: "2" };
-    const metin = { a: "1-degisti", b: "2" };
-    expect(count(orijinal, metin)).toBe(1);
+    const text = { a: "1-degisti", b: "2" };
+    expect(count(orijinal, text)).toBe(1);
   });
 
   it("birden fazla dosya aynı anda kirli olabilir", () => {
     const orijinal = { a: "1", b: "2" };
-    const metin = { a: "1-degisti", b: "2-degisti" };
-    expect(count(orijinal, metin)).toBe(2);
+    const text = { a: "1-degisti", b: "2-degisti" };
+    expect(count(orijinal, text)).toBe(2);
   });
 });
 
 describe("promptDurumMetni — sabit alt çubuğun durum metni", () => {
-  const metin = (kirli: boolean): string =>
+  const text = (kirli: boolean): string =>
     fonksiyon<(k: boolean) => string>(renderPage("t"), "promptDurumMetni")(kirli);
 
   it("kirliyse 'kaydedilmemiş değişiklik' der", () => {
-    expect(metin(true)).toBe("kaydedilmemiş değişiklik");
+    expect(text(true)).toBe("kaydedilmemiş değişiklik");
   });
 
   it("temizse 'kaydedildi' der", () => {
-    expect(metin(false)).toBe("kaydedildi");
+    expect(text(false)).toBe("kaydedildi");
   });
 });
 
@@ -2233,10 +2233,10 @@ describe("ajanDurumMetni — DEVIR.md §6'nın beş durum metni", () => {
   // (bkz. page.ts yorumu — ajanSuAnKutuKur İKİSİ aynı karardan geçsin
   // diye); o yüzden tek başına değil, ikisi BİRLİKTE çıkarılıyor
   // (rolKonumu/FORMASYON_GOVDE çiftinin aynı deseni, bkz. fonksiyonlar).
-  const durum = (role: { depth: number }, kart: AjanKart | null, daemon: unknown): string =>
+  const durum = (role: { depth: number }, card: AjanKart | null, daemon: unknown): string =>
     fonksiyonlar<(r: { depth: number }, k: AjanKart | null, d: unknown) => string>(
       renderPage("t"), ["ajanSuAnDurumu", "ajanDurumMetni"], "ajanDurumMetni",
-    )(role, kart, daemon);
+    )(role, card, daemon);
 
   it("boşta: kart yok, kuyruk boş", () => {
     expect(durum({ depth: 0 }, null, ON)).toBe("boşta");
@@ -2247,21 +2247,21 @@ describe("ajanDurumMetni — DEVIR.md §6'nın beş durum metni", () => {
   });
 
   it("kapıda bekliyor: kart kapıda, başlığıyla birlikte", () => {
-    const kart: AjanKart = { role: "coder", state: "gate", gate: "approval", title: "jitter ekle" };
-    expect(durum({ depth: 0 }, kart, ON)).toBe("kapıda bekliyor · jitter ekle");
+    const card: AjanKart = { role: "coder", state: "gate", gate: "approval", title: "jitter ekle" };
+    expect(durum({ depth: 0 }, card, ON)).toBe("kapıda bekliyor · jitter ekle");
   });
 
   it("araç · ayrıntı: koşuyor, gözcü açık, canlı adım var", () => {
-    const kart: AjanKart = {
+    const card: AjanKart = {
       role: "coder", state: "active", title: "x",
       live: { name: "Bash", kind: "tool", detail: "npx vitest run" },
     };
-    expect(durum({ depth: 0 }, kart, ON)).toBe("Bash · npx vitest run");
+    expect(durum({ depth: 0 }, card, ON)).toBe("Bash · npx vitest run");
   });
 
   it("çalışıyor: koşuyor, gözcü açık, henüz hiç adım yok", () => {
-    const kart: AjanKart = { role: "coder", state: "active", title: "x", live: null };
-    expect(durum({ depth: 0 }, kart, ON)).toBe("çalışıyor");
+    const card: AjanKart = { role: "coder", state: "active", title: "x", live: null };
+    expect(durum({ depth: 0 }, card, ON)).toBe("çalışıyor");
   });
 
   /**
@@ -2271,16 +2271,16 @@ describe("ajanDurumMetni — DEVIR.md §6'nın beş durum metni", () => {
    * göstermek olurdu.
    */
   it("gözcü kapalı · … yarıda: kart active ama gözcü ÖLÜ (bayat kilit)", () => {
-    const kart: AjanKart = {
+    const card: AjanKart = {
       role: "coder", state: "active", title: "jitter ekle",
       live: { name: "Bash", kind: "tool", detail: "npx vitest run" },
     };
-    expect(durum({ depth: 0 }, kart, KAPALI)).toBe("gözcü kapalı · jitter ekle yarıda");
+    expect(durum({ depth: 0 }, card, KAPALI)).toBe("gözcü kapalı · jitter ekle yarıda");
   });
 
   it("gözcü kapalı: daemon alive:false iken de aynı dal çalışır", () => {
-    const kart: AjanKart = { role: "coder", state: "active", title: "x" };
-    expect(durum({ depth: 0 }, kart, { alive: false })).toBe("gözcü kapalı · x yarıda");
+    const card: AjanKart = { role: "coder", state: "active", title: "x" };
+    expect(durum({ depth: 0 }, card, { alive: false })).toBe("gözcü kapalı · x yarıda");
   });
 });
 
@@ -2294,110 +2294,110 @@ describe("ajanDurumMetni — DEVIR.md §6'nın beş durum metni", () => {
  */
 describe("ajanSuAnDurumu — iki yüzeyin paylaştığı karar", () => {
   type AjanDurum = { tur: string; live?: { name?: string; kind?: string; detail?: string } };
-  const durum = (kart: AjanKart | null, daemon: unknown): AjanDurum | null =>
+  const durum = (card: AjanKart | null, daemon: unknown): AjanDurum | null =>
     fonksiyon<(k: AjanKart | null, d: unknown) => AjanDurum | null>(
       renderPage("t"), "ajanSuAnDurumu",
-    )(kart, daemon);
+    )(card, daemon);
 
   it("kart yoksa null — çağıran kendi 'boşta'/'kuyrukta' kararını verir", () => {
     expect(durum(null, { alive: true })).toBeNull();
   });
 
   it("kart kapıda (active değil) — gözcü durumu FARK ETMEZ", () => {
-    const kart: AjanKart = { role: "coder", state: "gate", gate: "approval", title: "x" };
-    expect(durum(kart, { alive: true })).toEqual({ tur: "kapida" });
-    expect(durum(kart, null)).toEqual({ tur: "kapida" });
+    const card: AjanKart = { role: "coder", state: "gate", gate: "approval", title: "x" };
+    expect(durum(card, { alive: true })).toEqual({ tur: "kapida" });
+    expect(durum(card, null)).toEqual({ tur: "kapida" });
   });
 
   // SINIR: gözcü ÖLÜYSE (daemon null YA DA alive:false) bu dal "live"dan
   // ÖNCE devreye girer — kartın "live" alanı dolu olsa BİLE.
   it("active + gözcü ÖLÜ (daemon null) — gozcuKapali, live alanı YOK SAYILIR", () => {
-    const kart: AjanKart = {
+    const card: AjanKart = {
       role: "coder", state: "active", title: "x",
       live: { name: "Bash", kind: "tool", detail: "npx vitest run" },
     };
-    expect(durum(kart, null)).toEqual({ tur: "gozcuKapali" });
+    expect(durum(card, null)).toEqual({ tur: "gozcuKapali" });
   });
 
   it("active + gözcü ÖLÜ (daemon.alive === false) — gozcuKapali", () => {
-    const kart: AjanKart = { role: "coder", state: "active", title: "x" };
-    expect(durum(kart, { alive: false })).toEqual({ tur: "gozcuKapali" });
+    const card: AjanKart = { role: "coder", state: "active", title: "x" };
+    expect(durum(card, { alive: false })).toEqual({ tur: "gozcuKapali" });
   });
 
   it("active + gözcü AÇIK + live var — live, live'ın KENDİSİ taşınır", () => {
     const live = { name: "Bash", kind: "tool", detail: "npx vitest run" };
-    const kart: AjanKart = { role: "coder", state: "active", title: "x", live };
-    expect(durum(kart, { alive: true })).toEqual({ tur: "live", live });
+    const card: AjanKart = { role: "coder", state: "active", title: "x", live };
+    expect(durum(card, { alive: true })).toEqual({ tur: "live", live });
   });
 
   it("active + gözcü AÇIK + live yok — calisiyor", () => {
-    const kart: AjanKart = { role: "coder", state: "active", title: "x", live: null };
-    expect(durum(kart, { alive: true })).toEqual({ tur: "calisiyor" });
+    const card: AjanKart = { role: "coder", state: "active", title: "x", live: null };
+    expect(durum(card, { alive: true })).toEqual({ tur: "calisiyor" });
   });
 });
 
 describe("promptGorevOzeti — 'Görevi · promptundan' bloğunun ayrıştırması", () => {
-  const summary = (metin: string): { entry: string; baslik: string | null; clauses: string[] } =>
-    fonksiyon<(m: string) => { entry: string; baslik: string | null; clauses: string[] }>(
+  const summary = (text: string): { entry: string; title: string | null; clauses: string[] } =>
+    fonksiyon<(m: string) => { entry: string; title: string | null; clauses: string[] }>(
       renderPage("t"), "promptGorevOzeti",
-    )(metin);
+    )(text);
 
   it("boş metinde boş özet döner", () => {
-    expect(summary("")).toEqual({ entry: "", baslik: null, clauses: [] });
+    expect(summary("")).toEqual({ entry: "", title: null, clauses: [] });
   });
 
   // server.ts'in rolPromptSablonu'nun TAM biçimi: başlıktan hemen sonra
   // bölüm geliyor, GİRİŞ PARAGRAFI yok.
   it("şablonun kendisi — giriş boş, ilk bölümün maddeleri alınır", () => {
-    const metin = "# Rolün: coder\n\n## Sahiplendiğin\n\n" +
+    const text = "# Rolün: coder\n\n## Sahiplendiğin\n\n" +
       "- (bu rol hangi davranışı/işi üstleniyor?)\n\n## Nasıl çalışırsın\n\n- ilgisiz\n";
-    expect(summary(metin)).toEqual({
-      entry: "", baslik: "Sahiplendiğin",
+    expect(summary(text)).toEqual({
+      entry: "", title: "Sahiplendiğin",
       clauses: ["(bu rol hangi davranışı/işi üstleniyor?)"],
     });
   });
 
   it("başlık ve ilk '##' arasındaki düz metni GİRİŞ sayar", () => {
-    const metin = "# Rolün: coder\n\nKısa bir açıklama cümlesi.\nİkinci satır.\n\n" +
+    const text = "# Rolün: coder\n\nKısa bir açıklama cümlesi.\nİkinci satır.\n\n" +
       "## Sahiplendiğin\n\n- madde 1\n";
-    expect(summary(metin).entry).toBe("Kısa bir açıklama cümlesi. İkinci satır.");
+    expect(summary(text).entry).toBe("Kısa bir açıklama cümlesi. İkinci satır.");
   });
 
   it("'* ' işaretli maddeleri de '- ' kadar madde sayar", () => {
-    const metin = "# x\n\n## Sahiplendiğin\n\n* bir\n* iki\n";
-    expect(summary(metin).clauses).toEqual(["bir", "iki"]);
+    const text = "# x\n\n## Sahiplendiğin\n\n* bir\n* iki\n";
+    expect(summary(text).clauses).toEqual(["bir", "iki"]);
   });
 
   it("madde OLMAYAN düz metin satırlarını listeye KATMAZ", () => {
-    const metin = "# x\n\n## Sahiplendiğin\n\nbu bir madde değil\n- bu bir madde\n";
-    expect(summary(metin).clauses).toEqual(["bu bir madde"]);
+    const text = "# x\n\n## Sahiplendiğin\n\nbu bir madde değil\n- bu bir madde\n";
+    expect(summary(text).clauses).toEqual(["bu bir madde"]);
   });
 
   // EN FAZLA 5 — DEVIR.md'nin kendi sınırı.
   it("ilk bölümde 5'ten fazla madde varsa yalnızca İLK 5'i alır", () => {
-    const metin = "# x\n\n## Sahiplendiğin\n\n" + [1, 2, 3, 4, 5, 6, 7].map((n) => "- madde " + n).join("\n") + "\n";
-    expect(summary(metin).clauses).toEqual(["madde 1", "madde 2", "madde 3", "madde 4", "madde 5"]);
+    const text = "# x\n\n## Sahiplendiğin\n\n" + [1, 2, 3, 4, 5, 6, 7].map((n) => "- madde " + n).join("\n") + "\n";
+    expect(summary(text).clauses).toEqual(["madde 1", "madde 2", "madde 3", "madde 4", "madde 5"]);
   });
 
   it("ilk bölümden SONRAKİ bölümlerin maddelerini saymaz", () => {
-    const metin = "# x\n\n## Sahiplendiğin\n\n- bir\n\n## Nasıl çalışırsın\n\n- iki\n- üç\n";
-    expect(summary(metin).clauses).toEqual(["bir"]);
+    const text = "# x\n\n## Sahiplendiğin\n\n- bir\n\n## Nasıl çalışırsın\n\n- iki\n- üç\n";
+    expect(summary(text).clauses).toEqual(["bir"]);
   });
 
   it("hiç '##' bölümü yoksa baslik null, maddeler boş, her şey GİRİŞ sayılır", () => {
-    const metin = "# x\n\nyalnızca düz metin, bölüm yok.\n";
-    expect(summary(metin)).toEqual({ entry: "yalnızca düz metin, bölüm yok.", baslik: null, clauses: [] });
+    const text = "# x\n\nyalnızca düz metin, bölüm yok.\n";
+    expect(summary(text)).toEqual({ entry: "yalnızca düz metin, bölüm yok.", title: null, clauses: [] });
   });
 
   it("başlık satırı ('# ...') hiç yoksa her şey yine doğru ayrıştırılır", () => {
-    const metin = "## Sahiplendiğin\n\n- tek madde\n";
-    expect(summary(metin)).toEqual({ entry: "", baslik: "Sahiplendiğin", clauses: ["tek madde"] });
+    const text = "## Sahiplendiğin\n\n- tek madde\n";
+    expect(summary(text)).toEqual({ entry: "", title: "Sahiplendiğin", clauses: ["tek madde"] });
   });
 });
 
 describe("ajanCanliMi — 'canlı' etiketi ve /adimlar yoklama kararı", () => {
-  const canli = (kart: AjanKart | null, daemon: unknown): boolean =>
-    fonksiyon<(k: AjanKart | null, d: unknown) => boolean>(renderPage("t"), "ajanCanliMi")(kart, daemon);
+  const canli = (card: AjanKart | null, daemon: unknown): boolean =>
+    fonksiyon<(k: AjanKart | null, d: unknown) => boolean>(renderPage("t"), "ajanCanliMi")(card, daemon);
 
   it("kart yoksa canlı değil", () => {
     expect(canli(null, { alive: true })).toBe(false);
@@ -2423,35 +2423,35 @@ describe("ajanCanliMi — 'canlı' etiketi ve /adimlar yoklama kararı", () => {
  * GERİYE de gidebilir, planlama bandı gibi hep zincir sırasıyla değil.
  */
 describe("govdeYolu — uçuşun gövde çizgisi üzerindeki yolu", () => {
-  type Konum = { x: number; y: number; kol: string };
-  const tepe: Konum = { x: 500, y: 480, kol: "tepe" };
-  const yol = (a: Konum, b: Konum): Konum[] =>
+  type Konum = { x: number; y: number; arm: string };
+  const tepe: Konum = { x: 500, y: 480, arm: "tepe" };
+  const path = (a: Konum, b: Konum): Konum[] =>
     fonksiyon<(a: Konum, b: Konum, t: Konum) => Konum[]>(renderPage("t"), "govdeYolu")(a, b, tepe);
 
   it("aynı koldaki iki nokta DÜZ yol alır (2 nokta), tepeden dolanmaz", () => {
-    const a = { x: 230, y: 110, kol: "sol" };
-    const b = { x: 365, y: 295, kol: "sol" };
-    expect(yol(a, b)).toEqual([a, b]);
+    const a = { x: 230, y: 110, arm: "sol" };
+    const b = { x: 365, y: 295, arm: "sol" };
+    expect(path(a, b)).toEqual([a, b]);
   });
 
   it("farklı kollardaki iki nokta TEPEDEN dolanır (3 nokta)", () => {
-    const a = { x: 230, y: 110, kol: "sol" };
-    const b = { x: 770, y: 110, kol: "sag" };
-    expect(yol(a, b)).toEqual([a, tepe, b]);
+    const a = { x: 230, y: 110, arm: "sol" };
+    const b = { x: 770, y: 110, arm: "sag" };
+    expect(path(a, b)).toEqual([a, tepe, b]);
   });
 
   // YÖNDEN BAĞIMSIZ: ret bir kartı SAĞ koldan SOL koldaki bir role
   // geri gönderebilir — planlamaBandYolu'nun "ilk sol, son sağ" varsayımı
   // burada YOK, hangisi önce verilirse verilsin aynı dolanma üretilir.
   it("YÖN TERS OLSA DA (sağdan sola) aynı dolanmayı üretir", () => {
-    const a = { x: 770, y: 110, kol: "sag" };
-    const b = { x: 230, y: 110, kol: "sol" };
-    expect(yol(a, b)).toEqual([a, tepe, b]);
+    const a = { x: 770, y: 110, arm: "sag" };
+    const b = { x: 230, y: 110, arm: "sol" };
+    expect(path(a, b)).toEqual([a, tepe, b]);
   });
 
   it("biri tepedeyse dolanmaz (zaten aynı doğru üzerinde)", () => {
-    const a = { x: 230, y: 110, kol: "sol" };
-    expect(yol(a, tepe)).toEqual([a, tepe]);
+    const a = { x: 230, y: 110, arm: "sol" };
+    expect(path(a, tepe)).toEqual([a, tepe]);
   });
 });
 
@@ -2462,8 +2462,8 @@ describe("govdeYolu — uçuşun gövde çizgisi üzerindeki yolu", () => {
  */
 describe("ucusSuresiMs — uçuşun süresi", () => {
   type Konum = { x: number; y: number };
-  const sure = (yol: Konum[]): number =>
-    fonksiyon<(y: Konum[]) => number>(renderPage("t"), "ucusSuresiMs")(yol);
+  const sure = (path: Konum[]): number =>
+    fonksiyon<(y: Konum[]) => number>(renderPage("t"), "ucusSuresiMs")(path);
 
   it("düz yol (2 nokta) KISA sürede uçar (600ms)", () => {
     expect(sure([{ x: 0, y: 0 }, { x: 10, y: 0 }])).toBe(600);
@@ -2511,29 +2511,29 @@ describe("yumusakIlerleme — ease-in/out eğrisi", () => {
  */
 describe("ucusKonumu — yol üzerindeki ara nokta", () => {
   type Nokta = { x: number; y: number };
-  const konum = (yol: Nokta[], t: number): Nokta =>
-    fonksiyon<(y: Nokta[], t: number) => Nokta>(renderPage("t"), "ucusKonumu")(yol, t);
+  const konum = (path: Nokta[], t: number): Nokta =>
+    fonksiyon<(y: Nokta[], t: number) => Nokta>(renderPage("t"), "ucusKonumu")(path, t);
 
   it("t=0 KAYNAKTA, t=1 HEDEFTE durur (2 noktalı düz yol)", () => {
-    const yol = [{ x: 0, y: 0 }, { x: 10, y: 0 }];
-    expect(konum(yol, 0)).toEqual({ x: 0, y: 0 });
-    expect(konum(yol, 1)).toEqual({ x: 10, y: 0 });
+    const path = [{ x: 0, y: 0 }, { x: 10, y: 0 }];
+    expect(konum(path, 0)).toEqual({ x: 0, y: 0 });
+    expect(konum(path, 1)).toEqual({ x: 10, y: 0 });
   });
 
   it("t=0.5 KAYNAK İLE HEDEF ARASINDA durur, İKİSİNE DE eşit DEĞİL", () => {
-    const yol = [{ x: 0, y: 0 }, { x: 10, y: 0 }];
-    const nokta = konum(yol, 0.5);
+    const path = [{ x: 0, y: 0 }, { x: 10, y: 0 }];
+    const nokta = konum(path, 0.5);
     expect(nokta).toEqual({ x: 5, y: 0 });
-    expect(nokta).not.toEqual(yol[0]);
-    expect(nokta).not.toEqual(yol[1]);
+    expect(nokta).not.toEqual(path[0]);
+    expect(nokta).not.toEqual(path[1]);
   });
 
   // EŞİT SEGMENTLİ 3 noktalı yol (tepeden dolanan bir uçuşun tipik
   // şekli): t=0.5 TAM ORTA noktaya (yol[1], "tepe") düşer — YAY UZUNLUĞU
   // eşit bölündüğü için.
   it("eşit segmentli 3 noktalı yolda t=0.5 TAM ORTA noktaya (tepeye) düşer", () => {
-    const yol = [{ x: 0, y: 0 }, { x: 0, y: 10 }, { x: 10, y: 10 }];
-    expect(konum(yol, 0.5)).toEqual({ x: 0, y: 10 });
+    const path = [{ x: 0, y: 0 }, { x: 0, y: 10 }, { x: 10, y: 10 }];
+    expect(konum(path, 0.5)).toEqual({ x: 0, y: 10 });
   });
 
   // YAY UZUNLUĞU, SEGMENT İNDEKSİ DEĞİL: segmentler FARKLI uzunlukta
@@ -2543,8 +2543,8 @@ describe("ucusKonumu — yol üzerindeki ara nokta", () => {
   // segmentin İÇİNDE (toplam*0.5=15, ilk segment 10'u geçiyor) durmalı,
   // segment sınırında (10,0) DEĞİL.
   it("FARKLI uzunluktaki segmentlerde YAY UZUNLUĞUNA göre örnekler, segment İNDEKSİNE göre DEĞİL", () => {
-    const yol = [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 30, y: 0 }];
-    const nokta = konum(yol, 0.5);
+    const path = [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 30, y: 0 }];
+    const nokta = konum(path, 0.5);
     // toplam=30, kalan=15; ilk segment(10) tükenir, ikinci segmentte
     // kalan 5/20 oranı: x = 10 + 20*0.25 = 15.
     expect(nokta.x).toBeCloseTo(15);
@@ -2611,12 +2611,12 @@ describe("kartDevirleriniBul — iki yoklama arasındaki devirler", () => {
 
   it("BİRDEN ÇOK kart aynı anda devredilirse hepsini AYRI AYRI bildirir", () => {
     const previous = new Map([["c1", "coder"], ["c2", "coder"]]);
-    const sonuc = devirler(previous, [
+    const result = devirler(previous, [
       { id: "c1", role: "reviewer", orphan: false },
       { id: "c2", role: "reviewer", orphan: false },
     ]);
-    expect(sonuc).toHaveLength(2);
-    expect(sonuc).toEqual(expect.arrayContaining([
+    expect(result).toHaveLength(2);
+    expect(result).toEqual(expect.arrayContaining([
       { cardId: "c1", from: "coder", to: "reviewer" },
       { cardId: "c2", from: "coder", to: "reviewer" },
     ]));
@@ -2630,7 +2630,7 @@ describe("kartDevirleriniBul — iki yoklama arasındaki devirler", () => {
  */
 describe("ucusPlanlariniKur — devirlerden uçuş planına", () => {
   type Rol = { id: string };
-  type Plan = { cardId: string; yol: { x: number; y: number }[]; sure: number };
+  type Plan = { cardId: string; path: { x: number; y: number }[]; sure: number };
   const planlar = (devirler: { cardId: string; from: string; to: string }[], roller: Rol[]): Plan[] =>
     fonksiyonlar<(d: typeof devirler, r: Rol[]) => Plan[]>(
       renderPage("t"),
@@ -2640,24 +2640,24 @@ describe("ucusPlanlariniKur — devirlerden uçuş planına", () => {
 
   it("farklı kollardaki (sol/sağ) iki rol arasında UZUN (900ms) bir plan üretir", () => {
     const roller = [{ id: "coder" }, { id: "reviewer" }];
-    const sonuc = planlar([{ cardId: "c1", from: "coder", to: "reviewer" }], roller);
-    expect(sonuc).toHaveLength(1);
-    expect(sonuc[0]?.cardId).toBe("c1");
-    expect(sonuc[0]?.sure).toBe(900);
-    expect(sonuc[0]?.yol).toHaveLength(3); // tepeden dolanıyor
+    const result = planlar([{ cardId: "c1", from: "coder", to: "reviewer" }], roller);
+    expect(result).toHaveLength(1);
+    expect(result[0]?.cardId).toBe("c1");
+    expect(result[0]?.sure).toBe(900);
+    expect(result[0]?.path).toHaveLength(3); // tepeden dolanıyor
   });
 
   it("aynı koldaki (sol/tepe) iki rol arasında KISA (600ms) bir plan üretir", () => {
     const roller = [{ id: "a" }, { id: "b" }, { id: "c" }]; // a=sol, b=tepe, c=sağ
-    const sonuc = planlar([{ cardId: "c1", from: "a", to: "b" }], roller);
-    expect(sonuc[0]?.sure).toBe(600);
-    expect(sonuc[0]?.yol).toHaveLength(2);
+    const result = planlar([{ cardId: "c1", from: "a", to: "b" }], roller);
+    expect(result[0]?.sure).toBe(600);
+    expect(result[0]?.path).toHaveLength(2);
   });
 
   // OLMAYAN bir role (akış değişti, rol silindi) devir SESSİZCE elenir.
   it("kaynak ya da hedef rol artık yoksa o devri ATLAR", () => {
     const roller = [{ id: "coder" }, { id: "reviewer" }];
-    const sonuc = planlar([{ cardId: "c1", from: "coder", to: "hayalet" }], roller);
-    expect(sonuc).toEqual([]);
+    const result = planlar([{ cardId: "c1", from: "coder", to: "hayalet" }], roller);
+    expect(result).toEqual([]);
   });
 });

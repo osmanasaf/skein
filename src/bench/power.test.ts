@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { power2x2, powerLines } from "./power.js";
 
-const girdi = (over: Partial<Parameters<typeof power2x2>[0]> = {}) => ({
+const input = (over: Partial<Parameters<typeof power2x2>[0]> = {}) => ({
   ran: true, producerExit: 0, redHooks: ["k1", "k2"], scored: true,
   caught: ["k1", "k2"], missed: [], ...over,
 });
@@ -11,30 +11,30 @@ const girdi = (over: Partial<Parameters<typeof power2x2>[0]> = {}) => ({
 // çıkmadı. İkinci koşul o yüzden var.
 describe("power2x2", () => {
   it("iki koşul da sağlanıyorsa ÖLÇER", () => {
-    expect(power2x2(girdi({ caught: ["k1"], missed: ["k2"] })))
+    expect(power2x2(input({ caught: ["k1"], missed: ["k2"] })))
       .toEqual({ kind: "olcer", missed: ["k2"] });
   });
 
   it("üretici kusur üretmediyse ÖLÇEMEZ (1. koşul)", () => {
-    expect(power2x2(girdi({ redHooks: [], caught: [], missed: [] })))
+    expect(power2x2(input({ redHooks: [], caught: [], missed: [] })))
       .toEqual({ kind: "olcemez-uretici" });
   });
 
   // `snapshot-store` tam olarak burada: kusuru üretmek zor, görmek kolay.
   it("aynı-satıcı denetim hepsini yakaladıysa ÖLÇEMEZ (2. koşul)", () => {
-    expect(power2x2(girdi({ caught: ["k1", "k2"], missed: [] })))
+    expect(power2x2(input({ caught: ["k1", "k2"], missed: [] })))
       .toEqual({ kind: "olcemez-denetci", caught: 2 });
   });
 
   it("süit koşmadıysa ÖLÇÜLEMEDİ — 'kusur yok' ile karıştırılmaz", () => {
-    const v = power2x2(girdi({ ran: false, redHooks: [] }));
+    const v = power2x2(input({ ran: false, redHooks: [] }));
     expect(v.kind).toBe("olculemedi");
     expect(v.kind === "olculemedi" && v.reason).toMatch(/yer gerçeği yok/);
   });
 
   // Sıra önemli: kusur yoksa "hepsini yakaladı" demek sıfırı yakalamaktır.
   it("kusur yokken denetçi koşuluna DÜŞMEZ", () => {
-    expect(power2x2(girdi({ redHooks: [], caught: [], missed: [], scored: true })).kind)
+    expect(power2x2(input({ redHooks: [], caught: [], missed: [], scored: true })).kind)
       .toBe("olcemez-uretici");
   });
 
@@ -42,13 +42,13 @@ describe("power2x2", () => {
   // kaldı ve 14 kanca kırmızı düştü: sayıya bakan ön kontrol o hücreyi
   // "ölçüm gücü yüksek" diye okudu. Çökmüş üretimin kırmızıları kusur değil.
   it("üretim çağrısı hata ile bittiyse ÖLÇÜLEMEDİ — kırmızılar kusur sayılmaz", () => {
-    const v = power2x2(girdi({ producerExit: 1, redHooks: ["k1", "k2"], caught: [], missed: ["k1"] }));
+    const v = power2x2(input({ producerExit: 1, redHooks: ["k1", "k2"], caught: [], missed: ["k1"] }));
     expect(v.kind).toBe("olculemedi");
     expect(v.kind === "olculemedi" && v.reason).toMatch(/artefaktın yokluğu/);
   });
 
   it("puanlama tamamlanmadıysa ÖLÇÜLEMEDİ", () => {
-    const v = power2x2(girdi({ scored: false }));
+    const v = power2x2(input({ scored: false }));
     expect(v.kind).toBe("olculemedi");
     expect(v.kind === "olculemedi" && v.reason).toMatch(/puanlanamadı/);
   });

@@ -58,9 +58,9 @@ describe("sınıflama — uçtan uca", () => {
         is_error: false,
         total_cost_usd: 0.03,
         result: JSON.stringify([
-          { sinif: "gercek", kanitli: true, quotation: "Limit sıfır verildiğinde senkron fırlatıyor" },
-          { sinif: "nit", kanitli: false, quotation: "daha açıklayıcı olabilirdi" },
-          { sinif: "yanlis", kanitli: false, quotation: "Sonuç hiçbir zaman döndürülmüyor" },
+          { sinif: "gercek", proven: true, quotation: "Limit sıfır verildiğinde senkron fırlatıyor" },
+          { sinif: "nit", proven: false, quotation: "daha açıklayıcı olabilirdi" },
+          { sinif: "yanlis", proven: false, quotation: "Sonuç hiçbir zaman döndürülmüyor" },
         ]),
       }),
     });

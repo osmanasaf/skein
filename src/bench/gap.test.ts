@@ -48,8 +48,8 @@ describe("layerGaps", () => {
   });
 
   it("yalnızca tek katmanı olan hücreyi atlar", () => {
-    const olaylar = kurulum({ cell: "c1", crossed: true, hooks: 2, missed: 2, proven: 1 })
+    const events = kurulum({ cell: "c1", crossed: true, hooks: 2, missed: 2, proven: 1 })
       .filter((e) => e.type !== "judge.scored");
-    expect(layerGaps(olaylar)).toEqual([]);
+    expect(layerGaps(events)).toEqual([]);
   });
 });

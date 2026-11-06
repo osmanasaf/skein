@@ -88,12 +88,12 @@ function reopenedFor(card: Card): string | null {
   // açılmış sayılsaydı, plan yazarına "itirazları yanıtla" turu
   // verilirdi.
   const kapi = card.history[i + 1];
-  const karar = card.history[i + 2];
-  if (kapi?.event !== "gate" || karar?.event !== "released") return null;
+  const decision = card.history[i + 2];
+  if (kapi?.event !== "gate" || decision?.event !== "released") return null;
   // `released.role` insanın kartı verdiği rol: `retry`de aynı rol,
   // `forward`da alışverişten sonraki rol. İkincisinde katılımcı eşleşmez
   // ve alışveriş yeniden açılmaz — istenen de bu.
-  return karar.role;
+  return decision.role;
 }
 
 /**

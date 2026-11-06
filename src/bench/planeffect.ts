@@ -273,7 +273,7 @@ function hookSets(plansizRuns: ArmRun[], planliRuns: ArmRun[]): HookSets {
   planliRuns = planliRuns.filter(teslimli);
   const birlesim = (runs: ArmRun[]): Set<string> => {
     const out = new Set<string>();
-    for (const r of runs) if (r.ran) for (const ad of r.redNames) out.add(ad);
+    for (const r of runs) if (r.ran) for (const name of r.redNames) out.add(name);
     return out;
   };
   // Her koşuda kırmızı olanlar: ölçülmüş koşu yoksa boş küme (kesişim
@@ -314,10 +314,10 @@ function hookSets(plansizRuns: ArmRun[], planliRuns: ArmRun[]): HookSets {
  */
 export function kararlilikDamgasi(
   olculenKosu: number, herKosuda: number, hepsi: number,
-): { damga: string; stable: boolean } {
-  if (olculenKosu < 2) return { damga: "TEK KOŞU — kararlılık ölçülmedi", stable: false };
+): { stamp: string; stable: boolean } {
+  if (olculenKosu < 2) return { stamp: "TEK KOŞU — kararlılık ölçülmedi", stable: false };
   const stable = hepsi > 0 && herKosuda === hepsi;
-  return { damga: stable ? "KARARLI" : "değişken", stable };
+  return { stamp: stable ? "KARARLI" : "değişken", stable };
 }
 
 function side(runs: ArmRun[]): ArmSide | null {

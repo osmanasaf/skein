@@ -37,8 +37,8 @@ export function modelTurns(stdout: string): number | undefined {
   }
   let olayli = false;
   let tur = 0;
-  for (const satir of metin.split("\n")) {
-    const text = satir.trim();
+  for (const line of metin.split("\n")) {
+    const text = line.trim();
     if (!text.startsWith("{")) continue;
     try {
       const olay = JSON.parse(text) as { type?: unknown };

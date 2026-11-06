@@ -11,7 +11,7 @@ baştan oynatma sürümü geriye düşürür.
 **Durum:** açık
 `;
 
-const present = (yol: string): boolean => yol === "src/selector.ts";
+const present = (path: string): boolean => path === "src/selector.ts";
 
 // CANLI KOŞUDA ÖLÇÜLEN KUSUR. Bir rol biçime uygun bir itiraz yazdı,
 // `**Durum:** açık` koydu ve ardından `## Kontrol ettiklerim` diye serbest
@@ -30,8 +30,8 @@ const present = (yol: string): boolean => yol === "src/selector.ts";
  * ters yönde bir kusur üretmiş olurduk.
  */
 describe("biçim toleransı", () => {
-  const govde = (durum: string, baslik = "## İtiraz 1 — architect", alan = "**Ne:** ") => `${baslik}
-${alan}Sürüm geriye düşüyor.
+  const body = (durum: string, title = "## İtiraz 1 — architect", field = "**Ne:** ") => `${title}
+${field}Sürüm geriye düşüyor.
 **Neden:** Tüketici önbelleği bozulur.
 **Neyi yanlışlar:** \`src/a.ts:1\` — orada.
 **Durum:** ${durum}
@@ -44,14 +44,14 @@ ${alan}Sürüm geriye düşüyor.
   it.each(["kabul", "kabul.", "kabul: tamam", "kabul (plan güncellendi)", "kabul — tamam"])(
     "kabul kuyruğu okunur: %s",
     (durum) => {
-      const d = coz(govde(durum));
+      const d = coz(body(durum));
       expect(d.valid).toHaveLength(1);
       expect(d.kabul).toHaveLength(1);
     },
   );
 
   it.each(["açık", "açık.", "Açık", "açık — not"])("açık kuyruğu okunur: %s", (durum) => {
-    expect(coz(govde(durum)).isOpen).toHaveLength(1);
+    expect(coz(body(durum)).isOpen).toHaveLength(1);
   });
 
   // GEVŞETMENİN SINIRI. Ayraç zorunluluğu `kabul edilemez`i elemek için
@@ -59,9 +59,9 @@ ${alan}Sürüm geriye düşüyor.
   it.each(["kabul edilemez", "açıkça yanlış", "retrospektif", "insanlar"])(
     "harfle devam eden kuyruk hâlâ elenir: %s",
     (durum) => {
-      const d = coz(govde(durum));
+      const d = coz(body(durum));
       expect(d.valid).toHaveLength(0);
-      expect(d.itirazlar[0]?.gecersiz).toMatch(/Durum/);
+      expect(d.itirazlar[0]?.invalid).toMatch(/Durum/);
     },
   );
 
@@ -71,12 +71,12 @@ ${alan}Sürüm geriye düşüyor.
     "## İtiraz 1: architect",
     "### İtiraz 1 — architect",
     "## İtiraz 1 architect",
-  ])("başlık yazımı okunur: %s", (baslik) => {
-    expect(coz(govde("açık", baslik)).valid).toHaveLength(1);
+  ])("başlık yazımı okunur: %s", (title) => {
+    expect(coz(body("açık", title)).valid).toHaveLength(1);
   });
 
-  it.each(["- **Ne:** ", "* **Ne:** ", "**Ne**: "])("alan satırı yazımı okunur: %s", (alan) => {
-    expect(coz(govde("açık", "## İtiraz 1 — architect", alan)).valid).toHaveLength(1);
+  it.each(["- **Ne:** ", "* **Ne:** ", "**Ne**: "])("alan satırı yazımı okunur: %s", (field) => {
+    expect(coz(body("açık", "## İtiraz 1 — architect", field)).valid).toHaveLength(1);
   });
 
   // İki nokta HÂLÂ zorunlu: olmasa düz bir kalın satır alan sanılırdı.
@@ -88,7 +88,7 @@ ${alan}Sürüm geriye düşüyor.
 **Durum:** açık
 `);
     expect(d.valid).toHaveLength(0);
-    expect(d.itirazlar[0]?.gecersiz).toMatch(/eksik alan/);
+    expect(d.itirazlar[0]?.invalid).toMatch(/eksik alan/);
   });
 
   // EN KÖTÜ TÜR: sessiz kayıp. Okunamayan başlık önceki itirazın gövdesine
@@ -110,11 +110,11 @@ ${alan}Sürüm geriye düşüyor.
 **Durum:** açık
 `);
     // Birinci itiraz AYAKTA: ikinci başlık onun alanlarını ezmiyor.
-    expect(d.itirazlar.some((i) => i.ne === "birinci" && i.gecersiz === undefined)).toBe(true);
+    expect(d.itirazlar.some((i) => i.ne === "birinci" && i.invalid === undefined)).toBe(true);
     // Ve okunamayan başlık GÖRÜNÜR: geçersiz sayılıyor, yani `invalid` sayacı dolu.
-    const sayilmayan = d.itirazlar.filter((i) => i.gecersiz !== undefined);
+    const sayilmayan = d.itirazlar.filter((i) => i.invalid !== undefined);
     expect(sayilmayan).toHaveLength(1);
-    expect(sayilmayan[0]?.gecersiz).toMatch(/başlığı okunamadı/);
+    expect(sayilmayan[0]?.invalid).toMatch(/başlığı okunamadı/);
   });
 
   // Dosyanın kendi başlığı itiraz başlığı DEĞİL. İlk yazımda bu daraltma
@@ -143,7 +143,7 @@ describe("alanlar — başlık bloğu bitirir", () => {
   it("başlıktan sonraki serbest bölüm `Durum`u yemiyor", () => {
     const d = parseItirazlar(GOVDE, { present: () => true });
     expect(d.itirazlar).toHaveLength(1);
-    expect(d.itirazlar[0]?.gecersiz).toBeUndefined();
+    expect(d.itirazlar[0]?.invalid).toBeUndefined();
     expect(d.itirazlar[0]?.durum).toBe("acik");
     expect(d.valid).toHaveLength(1);
   });
@@ -172,13 +172,13 @@ describe("parseItirazlar", () => {
     expect(i?.no).toBe(1);
     expect(i?.role).toBe("architect");
     expect(i?.durum).toBe("acik");
-    expect(i?.neden).toContain("önbellekliyor");
+    expect(i?.reason).toContain("önbellekliyor");
     expect(d.isOpen).toHaveLength(1);
   });
 
   it("çok satırlı alanı birleştirir", () => {
     const d = parseItirazlar(ITIRAZ, { present });
-    expect(d.valid[0]?.neden).toMatch(/baştan oynatma sürümü geriye düşürür/);
+    expect(d.valid[0]?.reason).toMatch(/baştan oynatma sürümü geriye düşürür/);
   });
 
   it("kabul ve ret durumlarını ayırır", () => {
@@ -209,14 +209,14 @@ describe("parseItirazlar", () => {
     const text = ITIRAZ.replace("**Durum:** açık", "**Durum:** ret");
     const d = parseItirazlar(text, { present });
     expect(d.valid).toHaveLength(0);
-    expect(d.itirazlar[0]?.gecersiz).toMatch(/gerekçesiz/);
+    expect(d.itirazlar[0]?.invalid).toMatch(/gerekçesiz/);
   });
 
   it("eksik alanlı itirazı geçersiz sayar", () => {
     const text = `## İtiraz 1 — architect\n**Ne:** Bir şey yanlış.\n**Durum:** açık\n`;
     const d = parseItirazlar(text, { present });
     expect(d.valid).toHaveLength(0);
-    expect(d.itirazlar[0]?.gecersiz).toMatch(/eksik alan: Neden, Neyi yanlışlar/);
+    expect(d.itirazlar[0]?.invalid).toMatch(/eksik alan: Neden, Neyi yanlışlar/);
   });
 
   // Tasarımın en keskin kuralı: genel öğüt makineyle elenir.
@@ -225,7 +225,7 @@ describe("parseItirazlar", () => {
     const d = parseItirazlar(text, { present });
     expect(d.valid).toHaveLength(0);
     expect(d.isOpen).toHaveLength(0);
-    expect(d.itirazlar[0]?.gecersiz).toMatch(/depoda olmayan/);
+    expect(d.itirazlar[0]?.invalid).toMatch(/depoda olmayan/);
   });
 
   it("hiç yol içermeyen kanıtı geçersiz sayar", () => {
@@ -233,7 +233,7 @@ describe("parseItirazlar", () => {
       "**Neyi yanlışlar:** Sınır durumlarına dikkat edilmeli.");
     const d = parseItirazlar(text, { present });
     expect(d.valid).toHaveLength(0);
-    expect(d.itirazlar[0]?.gecersiz).toMatch(/dosya yolu içermiyor/);
+    expect(d.itirazlar[0]?.invalid).toMatch(/dosya yolu içermiyor/);
   });
 
   // 1 Ekim kampanyasının hizalama analizi: iyileşen planlı koşuların
@@ -243,12 +243,12 @@ describe("parseItirazlar", () => {
   it("kanıt olarak plan belgesini gösteren itirazı geçersiz sayar", () => {
     const text = ITIRAZ.replace("`src/selector.ts:12`", "`docs/plan/c-1.md:42`");
     const d = parseItirazlar(text, {
-      present: (yol) => yol === "docs/plan/c-1.md" || present(yol),
+      present: (path) => path === "docs/plan/c-1.md" || present(path),
       ownDocs: ["docs/plan/c-1.md"],
     });
     expect(d.valid).toHaveLength(0);
     expect(d.isOpen).toHaveLength(0);
-    expect(d.itirazlar[0]?.gecersiz).toMatch(/kendi belgesine/);
+    expect(d.itirazlar[0]?.invalid).toMatch(/kendi belgesine/);
   });
 
   it("kanıt olarak bir itiraz dosyasını gösteren itirazı geçersiz sayar", () => {
@@ -258,7 +258,7 @@ describe("parseItirazlar", () => {
       ownDocs: ["docs/plan/c-1.md", "docs/plan/c-1.itiraz.reviewer.md"],
     });
     expect(d.valid).toHaveLength(0);
-    expect(d.itirazlar[0]?.gecersiz).toMatch(/kendi belgesine/);
+    expect(d.itirazlar[0]?.invalid).toMatch(/kendi belgesine/);
   });
 
   // Kural yalnızca KENDİ belgelerini kapatıyor; depodaki başka bir belge
@@ -287,7 +287,7 @@ describe("parseItirazlar", () => {
       present: () => true,
       ownDocs: ["docs/plan/c-1.md"],
     });
-    expect(d.itirazlar[0]?.gecersiz).toBeUndefined();
+    expect(d.itirazlar[0]?.invalid).toBeUndefined();
     expect(d.valid).toHaveLength(1);
   });
 
@@ -303,7 +303,7 @@ describe("parseItirazlar", () => {
       ownDocs: ["docs/plan/c-1.md", "docs/plan/c-1.itiraz.reviewer.md"],
     });
     expect(d.valid).toHaveLength(0);
-    expect(d.itirazlar[0]?.gecersiz).toMatch(/kendi belgesine/);
+    expect(d.itirazlar[0]?.invalid).toMatch(/kendi belgesine/);
   });
 
   it("boş dosyada itiraz yok", () => {
@@ -380,11 +380,11 @@ describe("Durum satırı — dört durum da gerekçe alır", () => {
   it("ayraçsız devam eden metin okunamaz sayılır — anlam tersine dönmez", () => {
     const d = parseItirazlar(ile("kabul edilemez"));
     expect(d.valid).toHaveLength(0);
-    expect(d.itirazlar[0]?.gecersiz).toMatch(/Durum. okunamadı/);
+    expect(d.itirazlar[0]?.invalid).toMatch(/Durum. okunamadı/);
   });
 
   it("gerekçesiz `ret` hâlâ geçersiz", () => {
-    expect(parseItirazlar(ile("ret")).itirazlar[0]?.gecersiz).toMatch(/gerekçesiz olamaz/);
+    expect(parseItirazlar(ile("ret")).itirazlar[0]?.invalid).toMatch(/gerekçesiz olamaz/);
   });
 });
 

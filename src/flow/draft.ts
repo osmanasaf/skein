@@ -165,9 +165,9 @@ export function toYaml(draft: FlowDraft, mevcut?: string): string {
       // Bozuk bir dosyadan düzenleme taşımak, bozukluğu yeni dosyaya
       // taşımak olurdu: o hâlde sıfırdan kuruluyor.
       if (belge.errors.length === 0 && belge.contents !== null) {
-        for (const [ad, deger] of Object.entries(alanlar)) {
-          if (deger === undefined) belge.delete(ad);
-          else belge.set(ad, deger);
+        for (const [ad, value] of Object.entries(alanlar)) {
+          if (value === undefined) belge.delete(ad);
+          else belge.set(ad, value);
         }
         return belge.toString({ lineWidth: 0 });
       }
@@ -176,8 +176,8 @@ export function toYaml(draft: FlowDraft, mevcut?: string): string {
     }
   }
   const doc: Record<string, unknown> = {};
-  for (const [ad, deger] of Object.entries(alanlar)) {
-    if (deger !== undefined) doc[ad] = deger;
+  for (const [ad, value] of Object.entries(alanlar)) {
+    if (value !== undefined) doc[ad] = value;
   }
   return `${stringify(doc, { lineWidth: 0 })}`;
 }

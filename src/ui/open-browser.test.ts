@@ -5,22 +5,22 @@ import { tarayiciKomutu, tarayiciyiAc } from "./open-browser.js";
 
 describe("tarayiciKomutu", () => {
   it("macOS'ta `open` kullanır", () => {
-    expect(tarayiciKomutu("darwin", "http://x")).toEqual({ komut: "open", args: ["http://x"] });
+    expect(tarayiciKomutu("darwin", "http://x")).toEqual({ command: "open", args: ["http://x"] });
   });
 
   it("Windows'ta kabuk yerleşiği değil, `cmd /c start` kullanır", () => {
     // `start` tek başına kabuk yerleşiği — çıplak spawn ENOENT verirdi.
     expect(tarayiciKomutu("win32", "http://x"))
-      .toEqual({ komut: "cmd", args: ["/c", "start", '""', "http://x"] });
+      .toEqual({ command: "cmd", args: ["/c", "start", '""', "http://x"] });
   });
 
   it("Linux'ta `xdg-open` kullanır", () => {
-    expect(tarayiciKomutu("linux", "http://x")).toEqual({ komut: "xdg-open", args: ["http://x"] });
+    expect(tarayiciKomutu("linux", "http://x")).toEqual({ command: "xdg-open", args: ["http://x"] });
   });
 
   it("tanınmayan bir platformda da (örn. freebsd) Linux yoluna düşer", () => {
     expect(tarayiciKomutu("freebsd" as NodeJS.Platform, "http://x"))
-      .toEqual({ komut: "xdg-open", args: ["http://x"] });
+      .toEqual({ command: "xdg-open", args: ["http://x"] });
   });
 });
 

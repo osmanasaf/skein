@@ -48,7 +48,7 @@ export class QueueError extends Error {
 export interface KapiKarari {
   kind: "approval" | "deadlock" | "escalation";
   /** İnsanın istediği karar; verilmediyse kapının varsayılanı. */
-  istenen: ReleaseDecision;
+  requested: ReleaseDecision;
   /**
    * UYGULANAN karar — istenenden farklı olabilir.
    *
@@ -61,7 +61,7 @@ export interface KapiKarari {
    */
   applied: ReleaseDecision;
   /** Kartın gittiği rol (ya da `DONE`). */
-  hedef: string;
+  target: string;
 }
 
 /**
@@ -78,7 +78,7 @@ export function kapiKarari(card: Card, istenenGiris?: ReleaseDecision): KapiKara
     throw new QueueError(`Kartın rolü topolojisinde yok: ${card.role} (kart ${card.id})`);
   }
   const kind = gateKind(card) ?? "approval";
-  const istenen = istenenGiris ?? (kind === "escalation" ? "retry" : "forward");
+  const requested = istenenGiris ?? (kind === "escalation" ? "retry" : "forward");
 
   // Planlama kilidinden ileri bırakmak, alışverişten SONRAKİ role gider:
   // zincirdeki ardıl itiraz eden roldür ve oraya dönmek, insanın "planı
@@ -92,12 +92,12 @@ export function kapiKarari(card: Card, istenenGiris?: ReleaseDecision): KapiKara
   // öyle de kaydedilir.
   const geriHedefi = role.reject;
   const applied: ReleaseDecision =
-    istenen === "back" && geriHedefi === null ? "retry" : istenen;
+    requested === "back" && geriHedefi === null ? "retry" : requested;
 
   const hedef =
     applied === "retry" ? role.id : applied === "forward" ? ileri : (geriHedefi ?? role.id);
 
-  return { kind, istenen, applied, hedef };
+  return { kind, requested, applied, target: hedef };
 }
 
 /**
@@ -235,44 +235,44 @@ export class CardQueue {
    * fırlatıyor, ve gözcü açılışta uyarı basıyor. Fark şu: artık İLGİSİZ
    * her işlemi durdurmuyor.
    */
-  async #scan(dir: string): Promise<{ kartlar: Located[]; corrupt: string[] }> {
+  async #scan(dir: string): Promise<{ cards: Located[]; corrupt: string[] }> {
     let entries;
     try {
       entries = await readdir(dir, { withFileTypes: true });
     } catch {
-      return { kartlar: [], corrupt: [] };
+      return { cards: [], corrupt: [] };
     }
-    const kartlar: Located[] = [];
+    const cards: Located[] = [];
     const corrupt: string[] = [];
     for (const entry of entries.sort((a, b) => (a.name < b.name ? -1 : 1))) {
       const path = join(dir, entry.name);
       if (entry.isDirectory()) {
         const alt = await this.#scan(path);
-        kartlar.push(...alt.kartlar);
+        cards.push(...alt.cards);
         corrupt.push(...alt.corrupt);
       } else if (entry.name.endsWith(".json") && !entry.name.startsWith(".tmp-")) {
         // Dosya tarandıktan sonra kaybolmuş olabilir: öteki koşucu aldı.
         try {
           const card = await this.#readCardIfPresent(path);
-          if (card !== null) kartlar.push({ card, path });
+          if (card !== null) cards.push({ card, path });
         } catch {
           corrupt.push(path);
         }
       }
     }
-    return { kartlar, corrupt };
+    return { cards, corrupt };
   }
 
   /** Dört alanın hepsini tarar; sağlam kartlar ve bozuk yollar. */
-  async #tara(): Promise<{ kartlar: Located[]; corrupt: string[] }> {
-    const kartlar: Located[] = [];
+  async #tara(): Promise<{ cards: Located[]; corrupt: string[] }> {
+    const cards: Located[] = [];
     const corrupt: string[] = [];
     for (const area of AREAS) {
       const r = await this.#scan(join(this.#root, area));
-      kartlar.push(...r.kartlar);
+      cards.push(...r.cards);
       corrupt.push(...r.corrupt);
     }
-    return { kartlar, corrupt };
+    return { cards, corrupt };
   }
 
   /**
@@ -285,12 +285,12 @@ export class CardQueue {
   }
 
   async #locate(id: string): Promise<Located[]> {
-    return (await this.#tara()).kartlar.filter((entry) => entry.card.id === id);
+    return (await this.#tara()).cards.filter((entry) => entry.card.id === id);
   }
 
   async get(id: string): Promise<Card | null> {
-    const { kartlar, corrupt } = await this.#tara();
-    const found = kartlar.filter((entry) => entry.card.id === id);
+    const { cards, corrupt } = await this.#tara();
+    const found = cards.filter((entry) => entry.card.id === id);
     const card = kopyaSirasi(found)[0]?.card;
     if (card !== undefined) return card;
     // Aranan kart BOZUK olanlardan biri olabilir: "böyle bir kart yok"
@@ -306,13 +306,13 @@ export class CardQueue {
   async list(): Promise<Card[]> {
     const all: Card[] = [];
     for (const area of AREAS) {
-      all.push(...(await this.#scan(join(this.#root, area))).kartlar.map((e) => e.card));
+      all.push(...(await this.#scan(join(this.#root, area))).cards.map((e) => e.card));
     }
     return all;
   }
 
   async depth(role: string): Promise<number> {
-    return (await this.#scan(this.#queueDir(role))).kartlar.length;
+    return (await this.#scan(this.#queueDir(role))).cards.length;
   }
 
   // ---- yazma ----
@@ -355,7 +355,7 @@ export class CardQueue {
     await mkdir(dir, { recursive: true });
     const blockages: KuyrukEngeli[] = [];
 
-    for (const { card, path } of (await this.#scan(this.#queueDir(role))).kartlar) {
+    for (const { card, path } of (await this.#scan(this.#queueDir(role))).cards) {
       const dest = join(dir, `${card.id}.json`);
       try {
         // TALEP: tek bir rename. Başaran kartı alır, başaramayan ENOENT alıp
@@ -645,7 +645,7 @@ export class CardQueue {
 
     const karar = kapiKarari(card, opts.decision);
     const kind = karar.kind;
-    const decision = karar.istenen;
+    const decision = karar.requested;
     // Kaçış kapısında tur TAMAMLANMADI: kod bir sonraki worktree'ye hiç
     // birleştirilmedi. İleri bırakmak, sonraki role bayat bir ağaçta
     // çalıştırmak olurdu — ve hiçbir yerde görünmezdi.
@@ -661,7 +661,7 @@ export class CardQueue {
       );
     }
 
-    const target = karar.hedef;
+    const target = karar.target;
 
     const rejects = { ...card.rejects };
     if (role.reject !== null) delete rejects[edgeKey(role.id, role.reject)];
@@ -762,7 +762,7 @@ export class CardQueue {
    */
   async recover(): Promise<Card[]> {
     const byId = new Map<string, Located[]>();
-    for (const entry of (await this.#tara()).kartlar) {
+    for (const entry of (await this.#tara()).cards) {
       const list = byId.get(entry.card.id) ?? [];
       list.push(entry);
       byId.set(entry.card.id, list);

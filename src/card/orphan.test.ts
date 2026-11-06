@@ -75,10 +75,10 @@ describe("closeOrphan — akış okunamıyorsa", () => {
   it("gerekçe akışı işaret eder", async () => {
     const card = await specKart();
 
-    const sonuc = await closeOrphan(root, queue, null, card.id, logPath);
+    const result = await closeOrphan(root, queue, null, card.id, logPath);
 
-    expect(sonuc.reason).toContain("spec");
-    expect(sonuc.card.state).toBe("done");
+    expect(result.reason).toContain("spec");
+    expect(result.card.state).toBe("done");
   });
 });
 
@@ -94,11 +94,11 @@ describe("closeOrphan", () => {
   it("yetim kartı gerekçesiyle kapatır ve günlüğe düşürür", async () => {
     const card = await specKart();
 
-    const sonuc = await closeOrphan(root, queue, daily, card.id, logPath);
+    const result = await closeOrphan(root, queue, daily, card.id, logPath);
 
-    expect(sonuc.card.state).toBe("done");
-    expect(sonuc.card.history.at(-1)).toMatchObject({ event: "done", from: "analyst" });
-    expect(sonuc.reason).toContain("analyst");
+    expect(result.card.state).toBe("done");
+    expect(result.card.history.at(-1)).toMatchObject({ event: "done", from: "analyst" });
+    expect(result.reason).toContain("analyst");
 
     const { events } = await readEvents(logPath);
     expect(events[0]).toMatchObject({ type: "card.closed", card: card.id, role: "analyst" });
@@ -135,8 +135,8 @@ describe("closeOrphan", () => {
     const gated = await queue.escalate(taken, "verdikt yok");
     expect(gated.state).toBe("gate");
 
-    const sonuc = await closeOrphan(root, queue, daily, gated.id, logPath);
+    const result = await closeOrphan(root, queue, daily, gated.id, logPath);
 
-    expect(sonuc.card.state).toBe("done");
+    expect(result.card.state).toBe("done");
   });
 });

@@ -118,13 +118,13 @@ async function varsayilanAkisAdi(
   if (hatirlanan !== undefined) adaylar.push(hatirlanan);
   adaylar.push(GUNLUK_TEK);
 
-  for (const ad of adaylar) {
+  for (const name of adaylar) {
     // YOKSA bu adım hiç denenmiyor — "bozuk" ile "hiç yok" burada aynı
     // kapıdan geçiyor, ikisi de sıradaki kurala düşüyor.
-    if (!flows.includes(ad)) continue;
+    if (!flows.includes(name)) continue;
     try {
-      await loadFlow(join(root, "hub", "flows", `${ad}.yaml`), loadOptions);
-      return ad;
+      await loadFlow(join(root, "hub", "flows", `${name}.yaml`), loadOptions);
+      return name;
     } catch {
       // BOZUKSA sıradaki kurala düş — bu adım hiç ENGEL olmuyor.
     }
@@ -250,15 +250,15 @@ async function main(argv: string[]): Promise<number> {
     // taşıyor, burada tekrar uygulanmıyor.
     flowChoice: {
       list: () => listFlowNames(root),
-      ac: async (ad: string): Promise<{ live: CanliAkis; flowPath: string }> => {
-        const newPath = join(root, "hub", "flows", `${ad}.yaml`);
+      open: async (name: string): Promise<{ live: CanliAkis; flowPath: string }> => {
+        const newPath = join(root, "hub", "flows", `${name}.yaml`);
         const yeniLive = await LiveFlow.open(newPath, loadOptions);
         // Kayıt YALNIZCA açılış BAŞARILIYSA güncelleniyor — yukarıdaki satır
         // fırlasa buraya hiç ulaşılmaz. Bu, ekrandaki seçiciden akış
         // değiştirmenin "son açılan" hafızasını da güncellediği tek yer:
         // yapmazsak seçiciyle geçilen akış ekranda görünür ama bir sonraki
         // `npm start` hâlâ eski kaydı okur — "son açılan" yalan olurdu.
-        await sonAkisiYaz(root, ad);
+        await sonAkisiYaz(root, name);
         return { live: yeniLive, flowPath: newPath };
       },
     },
@@ -280,7 +280,7 @@ async function main(argv: string[]): Promise<number> {
             // Akış adı BURADA YOK: ekran hangi akışa bakıyorsa gözcü onu
             // koşuyor. Yoksa ekrandan akış değiştirince düğme hâlâ
             // eskisini başlatırdı.
-            komut: [
+            command: [
               process.execPath,
               tsxCliYolu(root),
               join(root, "src", "watch", "cli.ts"),

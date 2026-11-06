@@ -14,7 +14,7 @@ export interface Itiraz {
   /** İtirazı yazan rol. */
   role: string;
   ne: string;
-  neden: string;
+  reason: string;
   /** "Neyi yanlışlar" — depodan bir yere işaret etmek zorunda. */
   kanit: string;
   durum: Durum;
@@ -27,7 +27,7 @@ export interface Itiraz {
    * planı durdurmaz) ne aleyhine (reddedilmiş sayılmaz). Biçimi tutmayan
    * bir itiraz, üzerine karar verilemeyecek bir metindir.
    */
-  gecersiz?: string;
+  invalid?: string;
 }
 
 export interface ItirazDosyasi {
@@ -93,11 +93,11 @@ const BASLIK_BENZERI = /^#{1,6}\s+İtiraz\s+\d/u;
  * göstermemek, kanıtın yalnızca kendi belgesini göstermesi). Biçim pazarlık
  * konusu değil ama biçimin tuzakları ölçümün kendi kusuru.
  */
-function alanlar(govde: string[]): Map<string, string> {
+function alanlar(body: string[]): Map<string, string> {
   const out = new Map<string, string>();
   let active: string | null = null;
-  for (const satir of govde) {
-    const temiz = satir.trim();
+  for (const line of body) {
+    const temiz = line.trim();
     // `**Ad:**` VE `**Ad**:`, ayrıca madde imi / numara öneki.
     //
     // Ölçüldü: `- **Ne:** …` ve `**Ne**: …` yazımlarında DÖRT alan birden
@@ -217,9 +217,9 @@ export function kanitYollari(kanit: string): string[] {
       .replace(/[.,;]+$/u, "")
       .trim();
     if (!yolGibi(temiz)) continue;
-    const yol = temiz.split(":")[0]?.trim();
-    if (yol === undefined || yol === "") continue;
-    if (!yollar.includes(yol)) yollar.push(yol);
+    const path = temiz.split(":")[0]?.trim();
+    if (path === undefined || path === "") continue;
+    if (!yollar.includes(path)) yollar.push(path);
   }
   return yollar;
 }
@@ -233,7 +233,7 @@ function yolGibi(parca: string): boolean {
 
 export interface ParseOptions {
   /** Yol depoda var mı. Verilmezse yol denetimi yapılmaz. */
-  present?: (yol: string) => boolean;
+  present?: (path: string) => boolean;
   /**
    * Dosyanın SAHİBİ; verilirse her itirazın `role` alanı buna eşitlenir.
    *
@@ -272,22 +272,22 @@ export function parseItirazlar(text: string, options: ParseOptions = {}): Itiraz
   const itirazlar: Itiraz[] = [];
   const lines = text.split(/\r?\n/u);
 
-  let basliklar: { no: number; role: string; govde: string[] } | null = null;
+  let basliklar: { no: number; role: string; body: string[] } | null = null;
   const bitir = (): void => {
     if (basliklar === null) return;
-    itirazlar.push(kur(basliklar.no, basliklar.role, alanlar(basliklar.govde), options));
+    itirazlar.push(kur(basliklar.no, basliklar.role, alanlar(basliklar.body), options));
     basliklar = null;
   };
 
-  for (const satir of lines) {
-    const m = BASLIK.exec(satir.trim());
+  for (const line of lines) {
+    const m = BASLIK.exec(line.trim());
     if (m) {
       bitir();
       // Rol adı artık isteğe bağlı; `options.owner` onu zaten eziyor.
-      basliklar = { no: Number(m[1]), role: (m[2] ?? "").trim(), govde: [] };
+      basliklar = { no: Number(m[1]), role: (m[2] ?? "").trim(), body: [] };
       continue;
     }
-    if (BASLIK_BENZERI.test(satir.trim())) {
+    if (BASLIK_BENZERI.test(line.trim())) {
       // Başlığa BENZİYOR ama ayrıştırılamadı: görünür olsun diye geçersiz
       // itiraz sayılıyor. Sessizce atlamak `invalid` sayacını 0 bırakıp
       // kaybı hiçbir yere yazmamak demekti — ölçülen kusur tam buydu.
@@ -300,13 +300,13 @@ export function parseItirazlar(text: string, options: ParseOptions = {}): Itiraz
       bitir();
       itirazlar.push({
         no: itirazlar.length + 1, role: options.owner ?? "?",
-        ne: "", neden: "", kanit: "", durum: "acik",
-        gecersiz: `itiraz başlığı okunamadı: ${satir.trim().slice(0, 80)} ` +
+        ne: "", reason: "", kanit: "", durum: "acik",
+        invalid: `itiraz başlığı okunamadı: ${line.trim().slice(0, 80)} ` +
           "(beklenen: ## İtiraz <no> — <rol>)",
       });
       continue;
     }
-    basliklar?.govde.push(satir);
+    basliklar?.body.push(line);
   }
   bitir();
 
@@ -317,7 +317,7 @@ export function parseItirazlar(text: string, options: ParseOptions = {}): Itiraz
 
 /** Sayılmış listeden türev alanları kurar. */
 function topla(itirazlar: Itiraz[]): ItirazDosyasi {
-  const valid = itirazlar.filter((i) => i.gecersiz === undefined);
+  const valid = itirazlar.filter((i) => i.invalid === undefined);
   return {
     itirazlar,
     valid,
@@ -339,32 +339,32 @@ export function birlestirItirazlar(dosyalar: ItirazDosyasi[]): ItirazDosyasi {
   return topla(dosyalar.flatMap((d) => d.itirazlar));
 }
 
-function kur(no: number, role: string, alan: Map<string, string>, options: ParseOptions): Itiraz {
-  const ne = alan.get("ne") ?? "";
-  const neden = alan.get("neden") ?? "";
-  const kanit = alan.get("neyi yanlışlar") ?? alan.get("neyi yanlislar") ?? "";
-  const durumRaw = alan.get("durum") ?? "";
+function kur(no: number, role: string, field: Map<string, string>, options: ParseOptions): Itiraz {
+  const ne = field.get("ne") ?? "";
+  const reason = field.get("neden") ?? "";
+  const kanit = field.get("neyi yanlışlar") ?? field.get("neyi yanlislar") ?? "";
+  const durumRaw = field.get("durum") ?? "";
   const cozum = durumOf(durumRaw);
 
   const baseline: Itiraz = {
-    no, role, ne, neden, kanit,
+    no, role, ne, reason, kanit,
     durum: cozum?.durum ?? "acik",
     ...(cozum?.rationale === undefined ? {} : { rationale: cozum.rationale }),
   };
 
   const eksik = [
     ne === "" ? "Ne" : null,
-    neden === "" ? "Neden" : null,
+    reason === "" ? "Neden" : null,
     kanit === "" ? "Neyi yanlışlar" : null,
   ].filter((x): x is string => x !== null);
   if (eksik.length > 0) {
-    return { ...baseline, gecersiz: `eksik alan: ${eksik.join(", ")}` };
+    return { ...baseline, invalid: `eksik alan: ${eksik.join(", ")}` };
   }
   if (cozum === null) {
-    return { ...baseline, gecersiz: `\`Durum\` okunamadı: "${durumRaw}". Beklenen: açık | kabul | ret: … | insana: …` };
+    return { ...baseline, invalid: `\`Durum\` okunamadı: "${durumRaw}". Beklenen: açık | kabul | ret: … | insana: …` };
   }
   if ((cozum.durum === "ret" || cozum.durum === "insana") && cozum.rationale === undefined) {
-    return { ...baseline, gecersiz: `\`${cozum.durum}\` gerekçesiz olamaz` };
+    return { ...baseline, invalid: `\`${cozum.durum}\` gerekçesiz olamaz` };
   }
 
   // Kanıt depodan bir yere işaret etmeli — tasarımın en keskin kuralı.
@@ -374,20 +374,20 @@ function kur(no: number, role: string, alan: Map<string, string>, options: Parse
   if (options.present !== undefined) {
     const yollar = kanitYollari(kanit);
     if (yollar.length === 0) {
-      return { ...baseline, gecersiz: "`Neyi yanlışlar` bir dosya yolu içermiyor" };
+      return { ...baseline, invalid: "`Neyi yanlışlar` bir dosya yolu içermiyor" };
     }
     const depoda = yollar.filter((y) => options.present?.(y) === true);
     if (depoda.length === 0) {
       return {
         ...baseline,
-        gecersiz: `\`Neyi yanlışlar\` depoda olmayan bir yola işaret ediyor: ${yollar.join(", ")}`,
+        invalid: `\`Neyi yanlışlar\` depoda olmayan bir yola işaret ediyor: ${yollar.join(", ")}`,
       };
     }
     const kendi = new Set(options.ownDocs ?? []);
     if (depoda.every((y) => kendi.has(y))) {
       return {
         ...baseline,
-        gecersiz: `\`Neyi yanlışlar\` alışverişin kendi belgesine işaret ediyor: ${depoda.join(", ")}. ` +
+        invalid: `\`Neyi yanlışlar\` alışverişin kendi belgesine işaret ediyor: ${depoda.join(", ")}. ` +
           `Kanıt, planın DOKUNACAĞI koda işaret etmek zorunda — "plan şöyle diyor" ` +
           `bir kanıt değil, planın tekrarı.`,
       };

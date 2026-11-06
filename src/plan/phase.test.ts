@@ -28,7 +28,7 @@ const topology = (tur: number, katilimcilar = ["planner", "architect", "analyst"
   },
 });
 
-const kart = (topo: TopologySnapshot, ...history: HistoryEntry[]): Card => {
+const card = (topo: TopologySnapshot, ...history: HistoryEntry[]): Card => {
   const base = newCard({ title: "i", task: "t", topology: topo });
   return { ...base, history: [...base.history, ...history] };
 };
@@ -59,7 +59,7 @@ describe("planPhase — alışveriş kapandıktan sonra", () => {
     ({ at: "2026-01-01T00:00:00.000Z", event: "reject", from, to, round: 1, reason: "testler kırık" });
 
   it("kod reti yazara dönünce cevap turu AÇILMAZ", () => {
-    const c = kart(t,
+    const c = card(t,
       plan("planner", "yazdi", 0),
       plan("architect", "itiraz", 1, 1),
       plan("analyst", "itiraz", 1, 1),
@@ -74,7 +74,7 @@ describe("planPhase — alışveriş kapandıktan sonra", () => {
   });
 
   it("kod reti ilk itirazcıya dönünce itiraz turu AÇILMAZ", () => {
-    const c = kart(t,
+    const c = card(t,
       plan("planner", "yazdi", 0),
       plan("architect", "itiraz", 1, 1),
       plan("analyst", "itiraz", 1, 1),
@@ -88,7 +88,7 @@ describe("planPhase — alışveriş kapandıktan sonra", () => {
   // Alışveriş İÇİNDE taşıma yalnızca `plan` kaydı bırakıyor, yani kapı
   // yürüyen alışverişi kesmemeli.
   it("alışveriş yürürken sıra bozulmuyor", () => {
-    const c = kart(t,
+    const c = card(t,
       plan("planner", "yazdi", 0),
       plan("architect", "itiraz", 1, 1),
     );
@@ -98,7 +98,7 @@ describe("planPhase — alışveriş kapandıktan sonra", () => {
   // Katılımcının kendi `taken` kaydı alışverişi kapatmamalı: gözcü her
   // turda kartı alıyor.
   it("katılımcının taken kaydı alışverişi kapatmıyor", () => {
-    const c = kart(t,
+    const c = card(t,
       plan("planner", "yazdi", 0),
       taken("architect"),
     );
@@ -110,14 +110,14 @@ describe("planPhase — turun sırası", () => {
   const t = topology(2);
 
   it("plan yazılmadan yazar yazma turunda, itirazcılar sırada değil", () => {
-    const c = kart(t);
+    const c = card(t);
     expect(planPhase(c, "planner", t)).toEqual({ kind: "yaz" });
     expect(planPhase(c, "architect", t)).toEqual({ kind: "yok" });
     expect(planPhase(c, "analyst", t)).toEqual({ kind: "yok" });
   });
 
   it("plan yazıldıysa söz İLK itirazcıda", () => {
-    const c = kart(t, plan("planner", "yazdi", 0));
+    const c = card(t, plan("planner", "yazdi", 0));
     expect(planPhase(c, "architect", t)).toEqual({ kind: "itiraz", round: 1 });
     // İkinci itirazcı sırasını beklemek zorunda: ikisi aynı anda koşarsa
     // aynı dosyaya iki ajan yazar.
@@ -126,20 +126,20 @@ describe("planPhase — turun sırası", () => {
   });
 
   it("ilk itirazcıdan sonra söz İKİNCİ itirazcıda, yazarda değil", () => {
-    const c = kart(t, plan("planner", "yazdi", 0), plan("architect", "itiraz", 1, 1));
+    const c = card(t, plan("planner", "yazdi", 0), plan("architect", "itiraz", 1, 1));
     expect(planPhase(c, "analyst", t)).toEqual({ kind: "itiraz", round: 1 });
     expect(planPhase(c, "planner", t)).toEqual({ kind: "yok" });
   });
 
   it("son itirazcıdan sonra yanıt sırası yazarda", () => {
-    const c = kart(t,
+    const c = card(t,
       plan("planner", "yazdi", 0), plan("architect", "itiraz", 1, 1), plan("analyst", "itiraz", 1, 2));
     expect(planPhase(c, "planner", t)).toEqual({ kind: "cevap", round: 1 });
     expect(planPhase(c, "architect", t)).toEqual({ kind: "yok" });
   });
 
   it("yanıttan sonra tavan dolmadıysa yeni tur, ilk itirazcıdan başlar", () => {
-    const c = kart(t,
+    const c = card(t,
       plan("planner", "yazdi", 0), plan("architect", "itiraz", 1, 1),
       plan("analyst", "itiraz", 1, 2), plan("planner", "cevap", 1, 2));
     expect(planPhase(c, "architect", t)).toEqual({ kind: "itiraz", round: 2 });
@@ -148,7 +148,7 @@ describe("planPhase — turun sırası", () => {
 
   it("tavan dolduysa kimsenin turu yok — alışveriş kapandı", () => {
     const tek = topology(1);
-    const c = kart(tek,
+    const c = card(tek,
       plan("planner", "yazdi", 0), plan("architect", "itiraz", 1, 1),
       plan("analyst", "itiraz", 1, 2), plan("planner", "cevap", 1, 2));
     for (const rol of ["planner", "architect", "analyst", "coder"]) {
@@ -157,14 +157,14 @@ describe("planPhase — turun sırası", () => {
   });
 
   it("katılımcı olmayan rol hiçbir turda yok", () => {
-    const c = kart(t, plan("planner", "yazdi", 0));
+    const c = card(t, plan("planner", "yazdi", 0));
     expect(planPhase(c, "coder", t)).toEqual({ kind: "yok" });
   });
 
   // Topolojide olmayan bir rolün itirazı: sıra hesaplanamıyor. Sessizce
   // başa dönmek itirazcıları sonsuz döndürürdü.
   it("tanınmayan rolün itirazından sonra alışveriş ilerlemez", () => {
-    const c = kart(t, plan("planner", "yazdi", 0), plan("yabanci", "itiraz", 1, 1));
+    const c = card(t, plan("planner", "yazdi", 0), plan("yabanci", "itiraz", 1, 1));
     for (const rol of ["planner", "architect", "analyst"]) {
       expect(planPhase(c, rol, t)).toEqual({ kind: "yok" });
     }
@@ -179,7 +179,7 @@ describe("planPhase — insan kapıdan yeniden açarsa", () => {
     ({ at: "2026-01-01T00:02:00.000Z", event: "released", role });
 
   it("retry yazarı AYNI cevap turuna geri koyar — tavan dolmuş olsa bile", () => {
-    const c = kart(t,
+    const c = card(t,
       plan("planner", "yazdi", 0), plan("architect", "itiraz", 1, 1),
       plan("analyst", "itiraz", 1, 2), plan("planner", "cevap", 1, 2),
       kapi("planner"), birakildi("planner"));
@@ -189,7 +189,7 @@ describe("planPhase — insan kapıdan yeniden açarsa", () => {
   });
 
   it("retry itirazcıyı AYNI itiraz turuna geri koyar", () => {
-    const c = kart(t,
+    const c = card(t,
       plan("planner", "yazdi", 0), plan("architect", "itiraz", 1, 1),
       kapi("architect"), birakildi("architect"));
     expect(planPhase(c, "architect", t)).toEqual({ kind: "itiraz", round: 1 });
@@ -202,7 +202,7 @@ describe("planPhase — insan kapıdan yeniden açarsa", () => {
   // kapısına çıkar, insan `back` der, hedef ret hedefi — yani planı yazan
   // rol. O kart plan için dönmüyor; kodla ilgili bir sebepten dönüyor.
   it("zincirin ilerisinden gelen `back` kararı planı yeniden AÇMAZ", () => {
-    const c = kart(t,
+    const c = card(t,
       plan("planner", "yazdi", 0), plan("architect", "itiraz", 1, 1),
       plan("analyst", "itiraz", 1, 2), plan("planner", "cevap", 1, 2),
       // Alışveriş kapandı, kart zincirden devam etti, coder kapıya çıktı.
@@ -215,7 +215,7 @@ describe("planPhase — insan kapıdan yeniden açarsa", () => {
   // `forward`: insan "planı olduğu gibi kabul ediyorum" dedi. Kart
   // alışverişten sonraki role gitti; alışveriş YENİDEN AÇILMAZ.
   it("ileri bırakma alışverişi yeniden açmaz", () => {
-    const c = kart(t,
+    const c = card(t,
       plan("planner", "yazdi", 0), plan("architect", "itiraz", 1, 1),
       plan("analyst", "itiraz", 1, 2), plan("planner", "cevap", 1, 2),
       kapi("planner"), birakildi("coder"));
@@ -229,12 +229,12 @@ describe("objectionBaseline", () => {
   const t = topology(3);
 
   it("ilk turun tabanı sıfır", () => {
-    const c = kart(t, plan("planner", "yazdi", 0));
+    const c = card(t, plan("planner", "yazdi", 0));
     expect(objectionBaseline(c, 1)).toBe(0);
   });
 
   it("tur başındaki taban ÖNCEKİ turun son sayısı", () => {
-    const c = kart(t,
+    const c = card(t,
       plan("planner", "yazdi", 0), plan("architect", "itiraz", 1, 1),
       plan("analyst", "itiraz", 1, 2), plan("planner", "cevap", 1, 2),
       plan("architect", "itiraz", 2, 3));
@@ -245,7 +245,7 @@ describe("objectionBaseline", () => {
   });
 
   it("sayı yazmamış kayıtlar atlanır", () => {
-    const c = kart(t, plan("planner", "yazdi", 0), plan("architect", "itiraz", 1));
+    const c = card(t, plan("planner", "yazdi", 0), plan("architect", "itiraz", 1));
     expect(objectionBaseline(c, 2)).toBe(0);
   });
 });

@@ -28,9 +28,9 @@ function tokenlariAyristir(gövdeMetni: string): Map<string, string> {
   const desen = /--([a-z0-9-]+):\s*(#[0-9A-Fa-f]{6}|var\(--[a-z0-9-]+\))\s*;/g;
   let eslesme: RegExpExecArray | null;
   while ((eslesme = desen.exec(gövdeMetni)) !== null) {
-    const ad = eslesme[1];
-    const deger = eslesme[2];
-    if (ad !== undefined && deger !== undefined) harita.set(ad, deger);
+    const name = eslesme[1];
+    const value = eslesme[2];
+    if (name !== undefined && value !== undefined) harita.set(name, value);
   }
   return harita;
 }
@@ -57,7 +57,7 @@ function temaTokenlari(html: string): { isOpen: Map<string, string>; koyu: Map<s
 
   const isOpen = tokenlariAyristir(acikGovde);
   const koyu = new Map(isOpen);
-  for (const [ad, deger] of tokenlariAyristir(koyuGovde)) koyu.set(ad, deger);
+  for (const [name, value] of tokenlariAyristir(koyuGovde)) koyu.set(name, value);
   return { isOpen, koyu };
 }
 
@@ -88,17 +88,17 @@ function zorlananKoyuTokenlari(html: string): Map<string, string> {
  * Zincir derinliği sınırlı: döngü ya da bozuk bir referans sessizce
  * yutulmasın, açık hata versin.
  */
-function cozumle(harita: Map<string, string>, ad: string, derinlik = 0): string {
-  if (derinlik > 8) throw new Error("var() zinciri cok derin (dongu?): " + ad);
-  const deger = harita.get(ad);
-  if (deger === undefined) throw new Error("token bulunamadi: " + ad);
-  const match = /^var\(--([a-z0-9-]+)\)$/.exec(deger);
+function cozumle(harita: Map<string, string>, name: string, derinlik = 0): string {
+  if (derinlik > 8) throw new Error("var() zinciri cok derin (dongu?): " + name);
+  const value = harita.get(name);
+  if (value === undefined) throw new Error("token bulunamadi: " + name);
+  const match = /^var\(--([a-z0-9-]+)\)$/.exec(value);
   if (match) {
     const ic = match[1];
-    if (ic === undefined) throw new Error("gecersiz var() referansi: " + deger);
+    if (ic === undefined) throw new Error("gecersiz var() referansi: " + value);
     return cozumle(harita, ic, derinlik + 1);
   }
-  return deger;
+  return value;
 }
 
 /** Haritadan bir token okur; yoksa (örn. "#fff" gibi sabit bir renk) hex'i aynen döndürür. */
@@ -375,11 +375,11 @@ describe("token kontrastı — koyu tema", () => {
 function parlaklikHex(hex: string): number {
   const match = /^#([0-9A-Fa-f]{6})$/.exec(hex);
   if (!match) throw new Error("gecersiz renk: " + hex);
-  const deger = match[1];
-  if (deger === undefined) throw new Error("gecersiz renk: " + hex);
-  const r = parseInt(deger.slice(0, 2), 16);
-  const g = parseInt(deger.slice(2, 4), 16);
-  const b = parseInt(deger.slice(4, 6), 16);
+  const value = match[1];
+  if (value === undefined) throw new Error("gecersiz renk: " + hex);
+  const r = parseInt(value.slice(0, 2), 16);
+  const g = parseInt(value.slice(2, 4), 16);
+  const b = parseInt(value.slice(4, 6), 16);
   return (r + g + b) / 3;
 }
 
@@ -410,15 +410,15 @@ describe("SAPMALAR §2.5 — zemin dolgusu (fill, kenar DEĞİL): gövdeden (col
     "daemon-dot-stopping-fill",
   ] as const;
 
-  it.each(FILL_TOKENLARI)("%s/color-bg — AÇIK temada", (ad) => {
+  it.each(FILL_TOKENLARI)("%s/color-bg — AÇIK temada", (name) => {
     const { isOpen } = temaTokenlari(renderPage("x"));
-    const diff = Math.abs(parlaklikHex(renk(isOpen, ad)) - parlaklikHex(renk(isOpen, "color-bg")));
+    const diff = Math.abs(parlaklikHex(renk(isOpen, name)) - parlaklikHex(renk(isOpen, "color-bg")));
     expect(diff).toBeLessThanOrEqual(100);
   });
 
-  it.each(FILL_TOKENLARI)("%s/color-bg — KOYU temada (reviewer'ın yakaladığı kusur: ÖNCEDEN hiç ezilmiyordu — neutral-400 fark 159, neutral-500 fark 128, ikisi de >100)", (ad) => {
+  it.each(FILL_TOKENLARI)("%s/color-bg — KOYU temada (reviewer'ın yakaladığı kusur: ÖNCEDEN hiç ezilmiyordu — neutral-400 fark 159, neutral-500 fark 128, ikisi de >100)", (name) => {
     const { koyu } = temaTokenlari(renderPage("x"));
-    const diff = Math.abs(parlaklikHex(renk(koyu, ad)) - parlaklikHex(renk(koyu, "color-bg")));
+    const diff = Math.abs(parlaklikHex(renk(koyu, name)) - parlaklikHex(renk(koyu, "color-bg")));
     expect(diff).toBeLessThanOrEqual(100);
   });
 
@@ -482,11 +482,11 @@ describe("tema anahtarı — :root[data-theme=\"dark\"] @media'daki koyu ezmesiy
     // kurulan haritayla yapılıyor (temaTokenlari'nin "koyu" haritasıyla
     // AYNI desen).
     const medyaCozumlu = new Map(isOpen);
-    for (const [ad, deger] of medyaEzmesi(html)) medyaCozumlu.set(ad, deger);
+    for (const [name, value] of medyaEzmesi(html)) medyaCozumlu.set(name, value);
     const zorlananCozumlu = new Map(isOpen);
-    for (const [ad, deger] of zorlanan) zorlananCozumlu.set(ad, deger);
-    for (const ad of zorlanan.keys()) {
-      expect(renk(zorlananCozumlu, ad)).toBe(renk(medyaCozumlu, ad));
+    for (const [name, value] of zorlanan) zorlananCozumlu.set(name, value);
+    for (const name of zorlanan.keys()) {
+      expect(renk(zorlananCozumlu, name)).toBe(renk(medyaCozumlu, name));
     }
   });
 });

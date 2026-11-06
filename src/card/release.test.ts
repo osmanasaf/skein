@@ -46,10 +46,10 @@ describe("releaseCard", () => {
   it("kararı olay günlüğüne düşürür", async () => {
     const card = await kacisKapisinda();
 
-    const sonuc = await releaseCard(root, queue, card.id, undefined, logPath);
+    const result = await releaseCard(root, queue, card.id, undefined, logPath);
 
-    expect(sonuc.decision).toBe("retry");
-    expect(sonuc.kind).toBe("escalation");
+    expect(result.decision).toBe("retry");
+    expect(result.kind).toBe("escalation");
     const { events } = await readEvents(logPath);
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({
@@ -75,10 +75,10 @@ describe("releaseCard", () => {
     const kilitli = await queue.reject(await al(queue, "reviewer"), { reason: "yine olmadı" });
     expect(kilitli.state).toBe("gate");
 
-    const sonuc = await releaseCard(root, queue, kilitli.id, undefined, logPath);
+    const result = await releaseCard(root, queue, kilitli.id, undefined, logPath);
 
     // Kilit kapısında tur tamamlandı ve kod yerinde: varsayılan ileri.
-    expect(sonuc).toMatchObject({ kind: "deadlock", decision: "forward" });
+    expect(result).toMatchObject({ kind: "deadlock", decision: "forward" });
     const { events } = await readEvents(logPath);
     expect(events[0]).toMatchObject({ kind: "deadlock", decision: "forward" });
   });
@@ -95,15 +95,15 @@ describe("releaseCard", () => {
   it("hedefi olmayan back, retry olarak kaydedilir", async () => {
     const card = await kacisKapisinda();
 
-    const sonuc = await releaseCard(root, queue, card.id, "back", logPath);
+    const result = await releaseCard(root, queue, card.id, "back", logPath);
 
-    expect(sonuc.decision).toBe("retry");
+    expect(result.decision).toBe("retry");
     // İnsanın NİYETİ de kaybolmamalı: ayrı ve ölçülebilir bir olgu.
-    expect(sonuc.requested).toBe("back");
+    expect(result.requested).toBe("back");
     const { events } = await readEvents(logPath);
     expect(events[0]).toMatchObject({ decision: "retry", requested: "back" });
     // Kart gerçekten aynı rolde: kayıt ile kartın yeri AYNI şeyi söylüyor.
-    expect(sonuc.card.role).toBe("coder");
+    expect(result.card.role).toBe("coder");
   });
 
   // Hedefi OLAN `back` aynen geçmeli, yoksa düzeltme ters yöne kaçar ve
@@ -114,11 +114,11 @@ describe("releaseCard", () => {
     // reviewer'ın ret hedefi coder: geri dönecek rol VAR.
     const atGate = await queue.escalate(await al(queue, "reviewer"), "verdikt yok");
 
-    const sonuc = await releaseCard(root, queue, atGate.id, "back", logPath);
+    const result = await releaseCard(root, queue, atGate.id, "back", logPath);
 
-    expect(sonuc.decision).toBe("back");
-    expect(sonuc.requested).toBe("back");
-    expect(sonuc.card.role).toBe("coder");
+    expect(result.decision).toBe("back");
+    expect(result.requested).toBe("back");
+    expect(result.card.role).toBe("coder");
     const { events } = await readEvents(logPath);
     // İstenen ile uygulanan aynıysa `requested` HİÇ yazılmamalı: her kayda
     // eklemek, ayrımı okunamaz hâle getirirdi.

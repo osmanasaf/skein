@@ -596,7 +596,7 @@ async function planStep(
    * cümle operatöre OLMAYAN bir şey söylüyordu. Teşhis, teşhis ettiği
    * şeyi doğru adlandırmak zorunda.
    */
-  karar?: "accept" | "reject",
+  decision?: "accept" | "reject",
 ): Promise<PlanAdim> {
   const phase = planPhase(card, role.id, card.topology);
   if (phase.kind === "yok") return { kind: "yok" };
@@ -650,7 +650,7 @@ async function planStep(
 
   const eksik = (yol: { role: string; path: string }, neden: string): PlanAdim => ({
     kind: "hata",
-    reason: `\`${role.id}\` ${karar === "reject" ? "ret dedi" : "kabul etti"} ` +
+    reason: `\`${role.id}\` ${decision === "reject" ? "ret dedi" : "kabul etti"} ` +
       `ama ${neden}: \`${yol.path}\`. ` +
       `İtirazın yoksa da dosyayı yaz ve bunu söyle — sessizlik anlaşma değildir.`,
   });

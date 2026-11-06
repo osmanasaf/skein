@@ -159,6 +159,55 @@ uyuşmazdı). Ölçümler:
 hatası 0, ve seçili tema düğmesi hâlâ **"Açık"** yazıyor. Tanımlayıcılar
 İngilizce, arayüz Türkçe.
 
+**6. SESSİZ GÖLGELEME — ölçüldü, `tsc` susuyor.** `src/ui/cli.ts`:
+
+    const value = argv[i]              // DIŞ, zaten İngilizce
+    ...
+    const deger = argv[++i]            // İÇ
+    if (value === "--model") ...       // BAYRAĞA bakıyor
+    gozcuBayraklari.push(value, deger)
+
+`deger -> value` çevirisi dış `value`'yu GÖLGELEDİ: koşul artık DEĞERE
+bakıyor, `modelVar` hiç `true` olmuyor, **ekran hiç açılmıyor**; push
+bayrak yerine değeri iki kez itiyor. `tsc` TAMAMEN SESSİZ kaldı.
+Yakalayan şey ekranı ayağa kaldırma denemesiydi.
+
+**KURAL:** çakışma denetimi KAPATILMAZ. Hedef ad bir dosyada
+BİLDİRİLMİŞSE o dosyada bildirim konumları çevrilmez. Ama **özellik
+konumları çevrilir** (`o.neden -> o.reason`): özellik erişiminin
+hangi değişkenin görünür olduğuyla ilgisi yok, gölgeleme İMKÂNSIZ.
+Bu ayrım tsc hatalarını 26'dan 5'e indirdi.
+
+**Araç tuzağı:** `program.getSourceFiles()` düğümlerinin `parent`
+işaretçileri dosyalar BAĞLANANA kadar atanmıyor; `program.getTypeChecker()`
+çağrılmazsa `n.parent` undefined kalır ve "özellik konumu mu" testi HİÇ
+true olmaz.
+
+**7. DÖRDÜNCÜ SINIR: HTTP TEL GÖVDELERİ.** İstemci ile sunucu arasındaki
+POST gövdelerinin alan adları da bir sözleşme:
+
+- Kart açma: istemci `{ title, task }` göndermeye başladı, sunucu hâlâ
+  `request["baslik"]` okuyordu (dize, AST dokunmaz).
+- Prompt kaydetme: istemci `{ path, metin }` gönderiyordu, sunucu `text`
+  bekliyordu — `metin` KISAYOL alan (`{ metin }`) olduğu için bildirim
+  sayılıp atlanmıştı. **Prompt kaydetme SESSİZCE yazmıyordu, `tsc`
+  temizdi**; yakalayan şey tarayıcı sınamasıydı.
+
+Bu uçlar YALNIZCA bizim istemcimiz tarafından çağrılıyor ve gövde
+hiçbir yerde saklanmıyor, o yüzden tel adları çevrilebilir — olay
+günlüğü, kart dosyaları ve ajanın verdict dosyasının alan adları gibi
+SABİT değil. Ayrım şu: **saklanan ya da ajanın gördüğü ad sabittir;
+aynı sürümde birlikte servis edilen iki parça arasındaki ad değildir.**
+
+**KISAYOL ALANLAR:** `{ x }` hem bildirim hem özellik olduğu için
+atlanıyor. Tel ya da tür sözleşmesi gerektiren yerlerde AÇIK yazılıyor
+(`{ text: metin }`): özellik adı İngilizce, yerel ad olduğu gibi,
+gölgeleme riski sıfır.
+
+**8. `page.ts` İÇİNDE BACKTICK YAZILAMAZ.** Template literal'i kapatır.
+Bu dosyaya düzeltme yorumu yazarken backtick kullanıldı ve derleme
+patladı. Yorumlarda düz tırnak kullanılacak.
+
 **Kanıt (her iki aşama için):** Türkçe metne bakan sınamaların hepsi
 DEĞİŞMEDEN geçmeli. Değişen varsa sınır çiğnenmiştir.
 

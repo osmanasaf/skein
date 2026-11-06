@@ -94,10 +94,10 @@ const put = (title = "iş"): Promise<Card> =>
 describe("buildModel — başka akışın kartı", () => {
   /** Kartın diskteki kaydını başka bir akışa çevirir. */
   async function baskaAkisaCevir(id: string): Promise<void> {
-    const dizin = join(root, ".skein", "queue", "coder");
-    for (const ad of await readdir(dizin)) {
+    const dir = join(root, ".skein", "queue", "coder");
+    for (const ad of await readdir(dir)) {
       if (!ad.includes(id)) continue;
-      const yol = join(dizin, ad);
+      const yol = join(dir, ad);
       const ham = JSON.parse(await readFile(yol, "utf8")) as Record<string, unknown>;
       const topo = ham["topology"] as Record<string, unknown>;
       topo["flow"] = "baska-akis";
@@ -1062,13 +1062,13 @@ describe("tick → model — engel sözleşmesi", () => {
     // Hedef adı bir dizin: `rename` oraya taşıyamaz.
     await mkdir(join(root, ".skein", "active", "coder", `${kart.id}.json`), { recursive: true });
 
-    const sonuc = await tick("coder", {
+    const result = await tick("coder", {
       root,
       queue,
       adapters: new Map(),
       log: new EventLog(logPath, "kosu-1"),
     });
-    expect(sonuc.status).toBe("engelli");
+    expect(result.status).toBe("engelli");
 
     const m = await buildModel(base);
 
@@ -1102,24 +1102,24 @@ describe("activationSteps", () => {
   });
 
   it("son agent.started'dan sonraki adımları ARTAN sırayla verir", () => {
-    const olaylar = [
+    const events = [
       ev({ type: "agent.started", cell: "c-1:coder", role: "coder" }),
       ev({ type: "agent.step", cell: "c-1:coder", role: "coder", seq: 1, kind: "tool", name: "Read", detail: "a.ts" }, "10:00"),
       ev({ type: "agent.step", cell: "c-1:coder", role: "coder", seq: 2, kind: "tool", name: "Edit", detail: "a.ts" }, "10:01"),
     ];
-    expect(activationSteps(olaylar)).toEqual([
+    expect(activationSteps(events)).toEqual([
       { seq: 1, kind: "tool", name: "Read", detail: "a.ts", at: "10:00" },
       { seq: 2, kind: "tool", name: "Edit", detail: "a.ts", at: "10:01" },
     ]);
   });
 
   it("bitmiş aktivasyon boş dizi döner — bitmiş bir turun adımı 'şu an' değildir", () => {
-    const olaylar = [
+    const events = [
       ev({ type: "agent.started", cell: "c-1:coder", role: "coder" }),
       ev({ type: "agent.step", cell: "c-1:coder", role: "coder", seq: 1, kind: "tool", name: "Read" }),
       ev({ type: "agent.finished", cell: "c-1:coder", exitCode: 0, durationMs: 1 }),
     ];
-    expect(activationSteps(olaylar)).toEqual([]);
+    expect(activationSteps(events)).toEqual([]);
   });
 
   /**
@@ -1128,24 +1128,24 @@ describe("activationSteps", () => {
    * operatör eski bir Bash komutunu "şu an koşuyor" sanır.
    */
   it("önceki (bitmiş) aktivasyonun adımları yeni aktivasyona sızmaz", () => {
-    const olaylar = [
+    const events = [
       ev({ type: "agent.started", cell: "c-1:coder", role: "coder" }),
       ev({ type: "agent.step", cell: "c-1:coder", role: "coder", seq: 1, kind: "tool", name: "ESKİ" }),
       ev({ type: "agent.finished", cell: "c-1:coder", exitCode: 1, durationMs: 1 }),
       ev({ type: "agent.started", cell: "c-1:coder", role: "coder" }),
       ev({ type: "agent.step", cell: "c-1:coder", role: "coder", seq: 1, kind: "tool", name: "YENİ" }),
     ];
-    const steps = activationSteps(olaylar);
+    const steps = activationSteps(events);
     expect(steps).toHaveLength(1);
     expect(steps[0]?.name).toBe("YENİ");
   });
 
   it("'text' türündeki adımları da (araç adı olmadan) taşır", () => {
-    const olaylar = [
+    const events = [
       ev({ type: "agent.started", cell: "c-1:coder", role: "coder" }),
       ev({ type: "agent.step", cell: "c-1:coder", role: "coder", seq: 1, kind: "text" }, "10:05"),
     ];
-    expect(activationSteps(olaylar)).toEqual([{ seq: 1, kind: "text", name: null, detail: null, at: "10:05" }]);
+    expect(activationSteps(events)).toEqual([{ seq: 1, kind: "text", name: null, detail: null, at: "10:05" }]);
   });
 });
 

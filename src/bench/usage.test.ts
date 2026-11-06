@@ -95,9 +95,9 @@ describe("yarım ölçü (kismi)", () => {
   });
 
   it("formatUsage yarım doları ALT SINIR olarak basar", () => {
-    const satir = formatUsage({ costUsd: 1.5, inputTokens: 10, outputTokens: 2, partial: true });
-    expect(satir).toContain("\u2265$1.5000");
-    expect(satir).toContain("\u226510\u21922 token");
+    const line = formatUsage({ costUsd: 1.5, inputTokens: 10, outputTokens: 2, partial: true });
+    expect(line).toContain("\u2265$1.5000");
+    expect(line).toContain("\u226510\u21922 token");
   });
 
   // İki ayrı "dolar yok" sebebi karıştırılmamalı: abonelik kimliği dolar

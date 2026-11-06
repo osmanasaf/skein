@@ -462,7 +462,7 @@ roles:
       const res = await fetch(`${e1.url}akis/sec`, {
         method: "POST",
         headers: { "content-type": "application/json", "x-skein-token": jeton },
-        body: JSON.stringify({ ad: "ikinci" }),
+        body: JSON.stringify({ name: "ikinci" }),
       });
       expect(res.status).toBe(200);
     } finally {

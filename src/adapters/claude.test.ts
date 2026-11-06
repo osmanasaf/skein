@@ -465,7 +465,7 @@ describe("akış birikimi", () => {
     birikimeEkle(b, rec(MESAJ(5, 2, 100)));
     // Girdi = önbelleğe girmemiş + önbellekten okunan. Tek başına
     // `input_tokens` okumak hacmi 15 gösterirdi; gerçek hacim 315.
-    expect(b).toEqual({ girdi: 315, cikti: 5, counter: 2 });
+    expect(b).toEqual({ input: 315, cikti: 5, counter: 2 });
   });
 
   it("assistant OLMAYAN kayıt sayılmaz", () => {
@@ -486,7 +486,7 @@ describe("akış birikimi", () => {
       type: "user",
       message: { content: [], usage: { input_tokens: 999, output_tokens: 9 } },
     })));
-    expect(b).toEqual({ girdi: 0, cikti: 0, counter: 0 });
+    expect(b).toEqual({ input: 0, cikti: 0, counter: 0 });
   });
 
   // Kullanım bloğu OLMAYAN bir mesaj "sıfır token" demek değil: sayacı
@@ -494,7 +494,7 @@ describe("akış birikimi", () => {
   it("kullanım bildirmeyen assistant mesajı sayacı artırmaz", () => {
     const b = yeniBirikim();
     birikimeEkle(b, rec(S_TOOL));
-    expect(b).toEqual({ girdi: 0, cikti: 0, counter: 0 });
+    expect(b).toEqual({ input: 0, cikti: 0, counter: 0 });
   });
 
   // Ve aynı kural bir adım derinde: kullanım bloğu VAR ama içi BOŞ.
@@ -506,7 +506,7 @@ describe("akış birikimi", () => {
       type: "assistant",
       message: { content: [], usage: {} },
     })));
-    expect(b).toEqual({ girdi: 0, cikti: 0, counter: 0 });
+    expect(b).toEqual({ input: 0, cikti: 0, counter: 0 });
   });
 
   it("hiç mesaj görülmediyse ÖLÇÜ YOK — sıfır token değil", () => {

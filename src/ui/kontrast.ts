@@ -21,12 +21,12 @@ function kanallaraAyir(hex: string): [number, number, number] {
   // Yakalama grubu desenin kendisinde zorunlu (altındaki alternatif yok),
   // yani eşleşme varsa bu grup da var — ama noUncheckedIndexedAccess
   // bunu bilmiyor, o yüzden açıkça doğrulanıyor.
-  const deger = match[1];
-  if (deger === undefined) throw new Error("gecersiz renk: " + hex);
+  const value = match[1];
+  if (value === undefined) throw new Error("gecersiz renk: " + hex);
   return [
-    parseInt(deger.slice(0, 2), 16),
-    parseInt(deger.slice(2, 4), 16),
-    parseInt(deger.slice(4, 6), 16),
+    parseInt(value.slice(0, 2), 16),
+    parseInt(value.slice(2, 4), 16),
+    parseInt(value.slice(4, 6), 16),
   ];
 }
 

@@ -134,7 +134,7 @@ describe("acquireLock", () => {
 
   it("geçici dosya ardında kalmaz", async () => {
     await acquireLock(path, info(100));
-    const kalanlar = (await readdir(dir)).filter((ad) => ad.endsWith(".tmp"));
+    const kalanlar = (await readdir(dir)).filter((name) => name.endsWith(".tmp"));
     expect(kalanlar).toEqual([]);
   });
 

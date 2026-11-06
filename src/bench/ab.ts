@@ -90,11 +90,11 @@ export interface ArmResult {
 /** Ön kontrolün kararı — dört sonuç, sırası önemli. */
 export type OnKontrol =
   /** Gizli süit hiç koşmadı: yer gerçeği yok, hiçbir okuma geçerli değil. */
-  | { kind: "olculemedi"; neden: string }
+  | { kind: "olculemedi"; reason: string }
   /** Kırmızı kanca var AMA iş bitmedi: hangisi olduğuna insan karar verir. */
-  | { kind: "kuskulu"; red: string[]; neden: string }
+  | { kind: "kuskulu"; red: string[]; reason: string }
   /** İş bitti ve hiç kırmızı kanca yok: sıfırdan azalma olmaz. */
-  | { kind: "olcemez"; neden: string }
+  | { kind: "olcemez"; reason: string }
   /** İş bitti ve kanıtlanmış kusur var: hücre ölçebilir. */
   | { kind: "olcer"; red: string[] };
 
@@ -128,21 +128,21 @@ export function onKontrol(
   if (!r.ran) {
     return {
       kind: "olculemedi",
-      neden: "gizli süit hiç koşmadı — bu \"kusur yok\" DEĞİLDİR, yer gerçeği yok.",
+      reason: "gizli süit hiç koşmadı — bu \"kusur yok\" DEĞİLDİR, yer gerçeği yok.",
     };
   }
   if (r.cardState !== "done") {
     return {
       kind: "kuskulu",
       red: r.red,
-      neden: `kart \`${r.cardState}\` durumunda kaldı` +
+      reason: `kart \`${r.cardState}\` durumunda kaldı` +
         (r.escalation === undefined ? "" : `: ${r.escalation}`),
     };
   }
   if (r.red.length === 0) {
     return {
       kind: "olcemez",
-      neden: "kontrol kolunda hiç kırmızı kanca yok; sıfırdan azalma olmaz.",
+      reason: "kontrol kolunda hiç kırmızı kanca yok; sıfırdan azalma olmaz.",
     };
   }
   return { kind: "olcer", red: r.red };

@@ -12,9 +12,9 @@ export function networkFailure(output: string): string | undefined {
     [/certificate|self[- ]signed|unable to verify/i, "TLS doğrulaması"],
     [/\b(401|403)\b.*(unauthorized|forbidden)|not logged in/i, "kimlik doğrulama"],
   ];
-  for (const [re, ad] of desenler) {
+  for (const [re, name] of desenler) {
     const m = re.exec(output);
-    if (m) return `${ad} (${m[0].trim().slice(0, 80)})`;
+    if (m) return `${name} (${m[0].trim().slice(0, 80)})`;
   }
   return undefined;
 }
