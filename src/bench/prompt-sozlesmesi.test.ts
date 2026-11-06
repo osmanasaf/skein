@@ -24,53 +24,54 @@ import { applyFindings } from "./classify.js";
  */
 const REPO = new URL("../../", import.meta.url).pathname;
 
-/** Promptun içindeki ```json bloğundan ilk JSON dizisini çıkarır. */
-function promptOrnegi(markdown: string): string {
+/** Promptun içindeki ```json bloğundan firstRaw JSON dizisini çıkarır. */
+function promptExample(markdown: string): string {
   const fenced = [...markdown.matchAll(/```(?:json)?\s*([\s\S]*?)```/g)].map((m) => m[1] ?? "");
-  const aday = fenced.find((f) => f.trim().startsWith("["));
-  if (aday === undefined) throw new Error("promptta JSON dizisi örneği yok");
-  return aday;
+  const candidate = fenced.find((f) => f.trim().startsWith("["));
+  if (candidate === undefined) throw new Error("promptta JSON dizisi örneği yok");
+  return candidate;
 }
 
 describe("prompt sözleşmesi — hakem", () => {
   it("promptun kendi örneği gerçek ayrıştırıcıdan GEÇİYOR ve alıntı/gerekçe TAŞINIYOR", async () => {
     const md = await readFile(join(REPO, "bench/prompts/judge.md"), "utf8");
-    const raws = extractJson(promptOrnegi(md));
+    const raws = extractJson(promptExample(md));
     expect(raws.length).toBeGreaterThan(0);
 
-    // Promptun ilk örneği "yakalandi": true ve bir alıntı taşıyor.
+    // Promptun firstRaw örneği "yakalandi": true ve bir alıntı taşıyor.
     // Kod o alanları okumuyorsa alıntı undefined gelir ve bu sınama düşer.
-    const ilk = raws[0] as Record<string, unknown>;
-    const alinti = ilk["alinti"];
-    expect(typeof alinti).toBe("string");
+    const firstRaw = raws[0] as Record<string, unknown>;
+    // Dize anahtarı "alinti" KALIYOR — ajanın alanı. Yerel ad İngilizce.
+    const quote = firstRaw["alinti"];
+    expect(typeof quote).toBe("string");
 
     // Alıntı raporda BULUNUYORSA karar "yakalandı" olmalı. Rapor olarak
     // alıntının kendisini veriyoruz: eşleşme kesin.
-    const v = applyVerdicts(["kanca-1"], raws, String(alinti));
+    const v = applyVerdicts(["hook-1"], raws, String(quote));
     expect(v[0]?.caught).toBe(true);
-    expect(v[0]?.quote).toBe(alinti);
+    expect(v[0]?.quote).toBe(quote);
   });
 });
 
 describe("prompt sözleşmesi — sınıflandırıcı", () => {
   it("promptun kendi örneği gerçek sınıflandırıcıdan GEÇİYOR ve alıntı DOĞRULANIYOR", async () => {
     const md = await readFile(join(REPO, "bench/prompts/siniflandir.md"), "utf8");
-    const ornek = promptOrnegi(md);
+    const ornek = promptExample(md);
     const raws = JSON.parse(ornek) as Record<string, unknown>[];
     expect(raws.length).toBeGreaterThan(0);
 
-    const alintilar = raws.map((r) => r["alinti"]).filter((a): a is string => typeof a === "string");
-    expect(alintilar.length).toBeGreaterThan(0);
+    const quotes = raws.map((r) => r["alinti"]).filter((a): a is string => typeof a === "string");
+    expect(quotes.length).toBeGreaterThan(0);
 
     // Promptun İLK örneği gerçek bir cümle; İKİNCİSİ "…" yer tutucusu ve
     // normalleştirmeden sonra boşalıyor, yani doğrulanamaz sayılması
-    // DOĞRU. İddia o yüzden ilk bulgu üzerinden kuruluyor.
+    // DOĞRU. İddia o yüzden firstRaw bulgu üzerinden kuruluyor.
     //
     // Kod `alinti` alanını okumuyorsa alıntı "" olur, raporda bulunamaz ve
-    // ilk bulgu da unverified'a düşer — sınama o hâlde düşer.
-    const ilkAlinti = alintilar[0] as string;
-    const sonuc = applyFindings(raws as never, ilkAlinti);
-    expect(sonuc.findings.length).toBeGreaterThan(0);
-    expect(sonuc.findings[0]?.quote).toBe(ilkAlinti);
+    // firstRaw bulgu da unverified'a düşer — sınama o hâlde düşer.
+    const firstQuote = quotes[0] as string;
+    const result = applyFindings(raws as never, firstQuote);
+    expect(result.findings.length).toBeGreaterThan(0);
+    expect(result.findings[0]?.quote).toBe(firstQuote);
   });
 });
