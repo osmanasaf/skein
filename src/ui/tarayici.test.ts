@@ -1240,13 +1240,19 @@ reject:
   describe("sağ panel — Genel bakış / Rol / Kart", () => {
     it("formasyon düğümüne tıklamak Rol modunu açar; aynı role tekrar tıklamak Genel bakışa döner", async () => {
       // NOT: tıklama hedefi "g.formasyonDugum"ın KENDİSİ DEĞİL, içindeki
-      // "rect.kutu" — ÖNCEDEN VAR OLAN bir ölçüm tuhaflığı yüzünden (gömülü
-      // kuş <svg>'si bazı tarayıcılarda getBoundingClientRect'te devasa bir
-      // kutu bildiriyor; bu kart ÖNCESİNDEKİ HEAD'de de aynı ölçüldü — bu
-      // kartın kapsamı DEĞİL), Playwright'ın "elementin ortasına tıkla"
-      // stratejisi g'nin TAMAMI için yanlış bir piksele gidip altındaki
-      // #lejant'ı buluyor. "rect.kutu" doğru/küçük bir sınır kutusu
-      // bildiriyor, tıklama orada GÜVENİLİR.
+      // "rect.kutu".
+      //
+      // DÜZELTME NOTU: bu yorum eskiden "tarayıcı ölçüm tuhaflığı, bu
+      // kartın kapsamı değil" diyordu. YANLIŞTI. Sebep gerçek bir CSS
+      // kusuruydu: ".formasyonSarmal svg" TORUN seçicisi gömülü kuş
+      // <svg>'lerine de uyuyor, width="46" niteliğini eziyor ve her kuşu
+      // 1000x640 çizdiriyordu. Kuş diyagramın üstünü kaplıyordu; "devasa
+      // sınır kutusu" bunun BELİRTİSİYDİ, tuhaflık değil. Seçici ">" ile
+      // daraltılarak düzeltildi ve çizilen boyut artık ayrı bir sınamayla
+      // pinli ("formasyon kuşu — çizilen boyut").
+      //
+      // "rect.kutu" hedefi yine de doğru ve dar bir hedef olduğu için
+      // korunuyor.
       const kutu = '.formasyonDugum[data-rol="coder"] rect.kutu';
       const { page, hatalar } = await ac();
       try {
@@ -3170,4 +3176,59 @@ roles:
       }
     }, 60_000);
   });
+});
+
+/**
+ * KUŞ ÇİZİLEN BOYUTTA DA DOĞRU OLMALI.
+ *
+ * Gerçekte şöyle patladı: ".formasyonSarmal svg" TORUN seçicisiydi ve
+ * rol düğümlerine gömülü kuş <svg>'lerine de uyuyordu. Kuş
+ * width="46" height="23" nitelikleriyle yaratılıyor ama CSS niteliği
+ * EZER — her kuş 1000x640 hesaplandı, ekranda ~983x313 çizildi ve
+ * diyagramın üstünü tamamen kapattı.
+ *
+ * On kartın hiçbirinin sınaması bunu yakalamadı, denetçi de görmedi.
+ * Sebebi tek cümlede: hepsi NİTELİĞE, SINIFA ve RENGE bakıyordu.
+ * polyline noktaları doğruydu, stroke 4'tü, sınıf yerindeydi, renk
+ * doğruydu — ve ekran kullanılamaz hâldeydi.
+ *
+ * Bu sınama ÇİZİLEN boyutu ölçer. "Nitelik doğru" ile "ekranda doğru"
+ * ayrı iddialardır; ikincisini ancak tarayıcı söyleyebilir.
+ */
+describe("formasyon kuşu — çizilen boyut", () => {
+  it("kuş kendi 46x23 kutusunda kalır, diyagramı kaplamaz", async () => {
+    const { page, hatalar } = await ac();
+    try {
+      const olcu = await page.evaluate(() => {
+        const kus = document.querySelector("svg.formasyonKus");
+        if (!kus) return null;
+        const r = kus.getBoundingClientRect();
+        return { g: r.width };
+      });
+      expect(olcu).not.toBeNull();
+      // 46x23 nominal; ölçek ve yuvarlama için geniş pay bırakıyoruz ama
+      // bir büyüklük mertebesi sapmayı yakalayacak kadar dar.
+      expect(olcu!.g).toBeLessThan(120);
+      // Sıfır da kusurdur: görünmeyen kuş da yanlış.
+      expect(olcu!.g).toBeGreaterThan(10);
+      expect(hatalar).toEqual([]);
+    } finally {
+      await page.close();
+    }
+  }, 60_000);
+
+  it("DIŞ diyagram svg'si hâlâ sarmalı dolduruyor", async () => {
+    // Düzeltme yanlış tarafa kaçarsa (dış svg de küçülürse) diyagram
+    // görünmez olur; o yön de pinli.
+    const { page } = await ac();
+    try {
+      const olcu = await page.evaluate(() => {
+        const dis = document.querySelector(".formasyonSarmal > svg");
+        return dis ? Math.round(dis.getBoundingClientRect().width) : 0;
+      });
+      expect(olcu).toBeGreaterThan(300);
+    } finally {
+      await page.close();
+    }
+  }, 60_000);
 });

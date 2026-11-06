@@ -377,7 +377,21 @@ const PAGE = `<!doctype html>
    * göre ölçekleniyor ki dar ama UZUN bir pencerede diyagram taşmasın.
    */
   .formasyonSarmal { width: min(100%, calc((100vh - 210px) * 1.5625)); margin: 0 auto; }
-  .formasyonSarmal svg { width: 100%; height: auto; display: block; aspect-ratio: 1000 / 640; }
+  /*
+   * DOĞRUDAN ÇOCUK (">"), torun DEĞİL.
+   *
+   * Torun seçicisi (".formasyonSarmal svg") sarmalın İÇİNDEKİ HER svg'ye
+   * uyuyordu — rol düğümlerine gömülü kuşlara da. Kuş <svg>'si
+   * width="46" height="23" nitelikleriyle yaratılıyor ama CSS niteliği
+   * ezer: her kuş 1000x640 hesaplanıyor, ekranda ~983x313 çiziliyordu.
+   * Yirmi bir kat büyük; diyagramın üstünü tamamen kapatıyordu.
+   *
+   * Sınamalar bunu göremedi çünkü hepsi NİTELİĞE, SINIFA ve RENGE
+   * bakıyor: polyline noktaları doğru, stroke 4, sınıf yerinde, renk
+   * doğru. Hiçbiri ÇİZİLEN BOYUTU ölçmüyordu. "Nitelik doğru" ile
+   * "ekranda doğru" ayrı şeyler.
+   */
+  .formasyonSarmal > svg { width: 100%; height: auto; display: block; aspect-ratio: 1000 / 640; }
   /*
    * İKİ SÜTUN — kart c-20261105-d500f1, DEVIR.md "İki sütun, flex ve
    * wrap". Ölçüler BİREBİR: formasyon alanı flex 1 1 620px, sağ panel

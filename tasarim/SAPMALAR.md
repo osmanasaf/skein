@@ -166,6 +166,38 @@ seçiciyi güncelle; DAVRANIŞI değiştirme.
 
 ---
 
+### 2.7 "NİTELİK DOĞRU" İLE "EKRANDA DOĞRU" AYRI İDDİALARDIR
+
+On kartın hiçbiri, on turun hiçbir denetçisi ve bütün sınama takımı
+şunu kaçırdı: rol düğümlerindeki kuşlar ekranda **21 kat** büyük
+çiziliyordu (46×23 yerine ~983×313) ve diyagramın üstünü tamamen
+kapatıyordu.
+
+Sebep tek satırdı: `.formasyonSarmal svg` TORUN seçicisi gömülü kuş
+`<svg>`'lerine de uyuyor ve `width="46"` niteliğini eziyordu. CSS
+niteliği ezer. Düzeltme `>` ile seçiciyi daraltmak.
+
+**Niye kimse görmedi:** her sınama NİTELİĞE, SINIFA ve RENGE bakıyordu.
+`polyline` noktaları doğruydu. `stroke` 4'tü. Sınıf yerindeydi. Renk
+`kusRengi` önceliğine uygundu. Kontrast çiftleri ölçülmüştü. Hepsi
+geçiyordu — ve ekran kullanılamaz hâldeydi.
+
+**Daha kötüsü:** kart 4'ün ajanı belirtiyi GÖRDÜ. `6b171a0`'daki bir
+sınama yorumu aynen şöyle diyordu: *"gömülü kuş `<svg>`'si bazı
+tarayıcılarda `getBoundingClientRect`'te devasa bir kutu bildiriyor;
+bu kart ÖNCESİNDEKİ HEAD'de de aynı ölçüldü — bu kartın kapsamı
+DEĞİL."* Teşhis doğruydu, "önceden vardı" doğrulaması da yapılmıştı —
+ama bulgu "tarayıcı tuhaflığı" diye yazıldı, kusur diye değil, ve
+etrafından dolaşıldı. Denetçi gerekçeyi kabul etti. Altı kart daha
+üstünden geçti.
+
+**Kural:** görsel bir öğe eklerken ÇİZİLEN ölçüsünü en az bir sınamada
+ölç. `getBoundingClientRect` beklenenden büyüklük mertebesi sapıyorsa
+bu bir tuhaflık değil, kusurdur — kapsam dışı olsa bile BİLDİRİLİR.
+Kapsam dışı bırakmak, görmemiş gibi yazmak demek değildir.
+
+---
+
 ---
 
 ## 3. Tasarımın "yeni" sandığı ama zaten var olan uçlar
