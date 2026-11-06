@@ -256,6 +256,21 @@ const CIFTLER: [string, string, string, Esik][] = [
     "color-accent-100",
     IKINCIL_ETIKET_ESIGI,
   ],
+
+  // --- Ajanlar sekmesi (DEVIR.md §6) — denetim kartı c-20261105-387d01 ---
+  // `.ajanSuAnSatir .bad`, "ölçülmeyen maliyet" uyarısını (SAPMALAR §2.1)
+  // `.ajanSuAn`ın `color-surface` zemini ÜSTÜNDE METİN olarak basıyor.
+  // Bu, accent-700'ün önceki tüm kullanımlarından (dolgu+beyaz metin,
+  // ya da accent-100 zemini — ikisi de "tema değişse de aynı kalır"
+  // diye BİLEREK ezilmemişti) FARKLI bir rol: burada koyu temada
+  // OKUNMUYORDU (2.23:1), bu yüzden `--bad-ink` adıyla AYRI bir token
+  // ve koyu ezmesi eklendi (bkz. page.ts :root).
+  [
+    "Ajanlar 'Şu an' kutusu — ölçülmeyen maliyet uyarısı (.bad), surface zemin üstünde",
+    "bad-ink",
+    "color-surface",
+    NORMAL_METIN_ESIGI,
+  ],
 ];
 
 describe("token kontrastı — açık tema", () => {

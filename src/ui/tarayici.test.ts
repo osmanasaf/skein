@@ -412,6 +412,41 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
   }, 60_000);
 
   /**
+   * ÜST ÇUBUK "TOPLAM MALİYET" — ALT SINIR işareti (SAPMALAR.md §2.1,
+   * denetim kartı c-20261105-387d01). `page.test.ts`'teki `maliyetMetni`
+   * sınaması kaynak metni doğruluyor ama bu DEĞER gerçekten `#bar`'a
+   * YAZILIYOR mu, `m.totals.olculmeyen` GERÇEK bir modelden mi geliyor —
+   * bunu yalnızca sayfa GERÇEKTEN çizilince görülür. Zaman aşımına
+   * uğramış (dolar YOK, token akıştan kurtarılmış) bir aktivasyonun
+   * yanına dolar bildiren normal bir aktivasyon ekleniyor: toplam SIFIR
+   * DEĞİL ama eksik — "≥" bunu söylemeli, düz rakam SAKLAMAMALI.
+   */
+  it("üst çubuk: zaman aşımına uğrayan tur varsa 'toplam maliyet' ÖNÜNDE '≥' gösterir", async () => {
+    const kart = await queue.add(newCard({ title: "zaman aşımı", task: "iş", topology }));
+    await al(queue, "coder");
+    const log = new EventLog(join(root, ".skein", "olaylar.jsonl"), "kosu-1");
+    await log.append({
+      type: "agent.finished", cell: `${kart.id}:coder`, exitCode: 0, durationMs: 1_000,
+      usage: { costUsd: 0.5 },
+    });
+    // Aynı hücreye ikinci bir aktivasyon: zaman aşımı, dolar YOK, token akıştan kurtarılmış.
+    await log.append({
+      type: "agent.finished", cell: `${kart.id}:coder`, exitCode: 137, durationMs: 1_200_000,
+      timedOut: true, usage: { inputTokens: 3_000_000, outputTokens: 40_000, kismi: true },
+    });
+
+    const { page, hatalar } = await ac();
+    try {
+      await page.waitForSelector("#bar .sayac", { timeout: 15_000 });
+      const barMetni = await page.textContent("#bar");
+      expect(barMetni).toContain("toplam maliyet ≥$0.50");
+      expect(hatalar).toEqual([]);
+    } finally {
+      await page.close();
+    }
+  }, 60_000);
+
+  /**
    * BAYAT KİLİTTE düğme "başlat" demeli.
    *
    * Ölçülmüş kusur: düğme kilidin VARLIĞINA bakıyordu, canlı olmasına
@@ -569,6 +604,12 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
       });
       expect(dugme).toEqual({ metin: "Süren tur bitiyor…", devreDisi: true });
       expect(await page.textContent(".railGozcuBaslik")).toBe("gözcü duruyor…");
+      // SAPMALAR §2.6 kural 3'ün TAM cümlesi: "anlık değil" açıkça
+      // yazılmalı (denetim kartı c-20261105-387d01) — düğme/başlık
+      // "duruyor" dese de açıklama metni GERİ ALINIP "durdu" denebilir.
+      expect(await page.textContent(".railGozcuAciklama")).toBe(
+        "Durdurma sinyali gitti. Gözcü süren ajan turunu bitirip çıkacak — anlık değil.",
+      );
     } finally {
       await page.close();
       await s.close();
@@ -2914,6 +2955,11 @@ roles:
         expect(ilkPanel).toContain("coder");
         expect(ilkPanel).toContain("claude");
         expect(ilkPanel).toContain("tekil alım");
+        // BOŞ DURUM METİNLERİ hiç kart/aktivasyon yokken kaybolmamalı
+        // (denetim kartı c-20261105-387d01) — "Şu an" kutusu ve Adımlar
+        // bölümü ikisi de "ajanPanel" içine yuvalı.
+        expect(ilkPanel).toContain("Şu an bu role atanmış bir kart yok.");
+        expect(ilkPanel).toContain("Koşan bir ajan yok.");
 
         await page.click('.ajanSatir:has-text("reviewer")');
         await page.waitForSelector(".ajanPanelAd:has-text(\"reviewer\")", { timeout: 10_000 });

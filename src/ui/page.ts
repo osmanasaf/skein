@@ -154,6 +154,19 @@ const PAGE = `<!doctype html>
     --daemon-dot-stopping-fill: var(--color-neutral-500);
     --daemon-dot-stopping-border: var(--color-text);     /* stopping: kenarsızdı, şimdi var */
     --empty-bird-ink: var(--color-neutral-600);          /* neutral-400 DEĞİL */
+
+    /*
+     * BAD-INK — Ajanlar sekmesinin "ölçülmeyen maliyet" uyarısı (denetim
+     * kartı c-20261105-387d01, token-kontrast.test.ts). ".ajanSuAnSatir
+     * .bad" DOĞRUDAN color-accent-700'ü metin olarak kullanıyordu; o
+     * token'ın dolgu/kenar rolünde (beyaz metinle, ya da accent-100
+     * zemininde) kalması "tema değişse de aynı kalır" varsayımına
+     * dayanıyordu (bkz. aşağıdaki koyu tema yorumu) — ama bu kullanım
+     * onu DOĞRUDAN color-surface zemininin üstünde METİN yaptı, o
+     * varsayımı kırdı: koyu temada ölçülen oran 2.23:1, IKINCIL_ETIKET_
+     * ESIGI'nin (3) bile altında. Yeni renk YOK — ramptan doğru adım.
+     */
+    --bad-ink: var(--color-accent-700);
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
@@ -215,6 +228,15 @@ const PAGE = `<!doctype html>
        */
       --color-bg: #1A1817; --color-surface: #242120; --color-text: #F2EFEE;
       --color-neutral-200: #35312F; --color-neutral-700: #C9C4C2;
+
+      /*
+       * BAD-INK koyu ezmesi — ramptaki #ae1800 (accent-700) koyu zeminde
+       * (#242120) 2.23:1 ölçülüyor, okunmuyor. accent-400 (#ff9783, HALA
+       * aynı Modernist ramp, YENİ renk DEĞİL) aynı zeminde 7.62:1 —
+       * NORMAL_METIN_ESIGI'yi (4.5) rahatça geçiyor. Ölçüm:
+       * token-kontrast.test.ts "bad-ink/color-surface" çifti, iki temada.
+       */
+      --bad-ink: var(--color-accent-400);
     }
   }
   * { box-sizing: border-box; }
@@ -1190,7 +1212,7 @@ const PAGE = `<!doctype html>
     display: flex; flex-wrap: wrap; gap: var(--space-3); font-size: var(--fs-13);
     align-items: center; margin: 0 0 var(--space-3); font-variant-numeric: tabular-nums;
   }
-  .ajanSuAnSatir .bad { color: var(--color-accent-700); }
+  .ajanSuAnSatir .bad { color: var(--bad-ink); } /* c-20261105-387d01: accent-700 koyu temada okunmuyordu */
 
   .ajanBolum { margin-bottom: var(--space-6); }
   .ajanCanliEtiket {
@@ -2464,7 +2486,7 @@ function ciz(m) {
   // §2.1'in korunacak davranışı, burada hiç değişmedi.
   const maliyetSayac = el("div", "sayac");
   maliyetSayac.append(document.createTextNode("toplam maliyet "));
-  maliyetSayac.append(el("b", null, (m.totals.olculmeyen ? "\u2265" : "") + para(m.totals.costUsd)));
+  maliyetSayac.append(el("b", null, (m.totals.olculmeyen ? "≥" : "") + para(m.totals.costUsd)));
   bar.append(maliyetSayac);
 
   // yeni kart dugmesi: ekranin en cok kullanilan eylemi, ust cubugun ana dugmesi.

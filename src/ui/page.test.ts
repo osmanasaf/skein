@@ -156,6 +156,30 @@ describe("renderPage", () => {
     expect(html.includes("https://")).toBe(false);
   });
 
+  /**
+   * LEJANT — "bu yüzey yalnızca okur" İDDİASI YANLIŞ (SAPMALAR.md §2.4,
+   * denetim kartı c-20261105-387d01). Tasarımın kendi lejantı bunu
+   * yazıyor ama ekran kapı kararı veriyor, kart açıyor, akış/prompt
+   * yazıyor, gözcüyü başlatıp durduruyor — "yalnızca okur" GERİ
+   * GETİRİLMEMELİ. `lejantKur` `el`/`document`'e bağlı olduğu için
+   * (bu dosyanın `fonksiyon()` yardımcısı DOM'suz çalışıyor, bkz. dosya
+   * başı yorumu) burada KAYNAK METİN sınanıyor — tıpkı "jeton gömülür"
+   * sınamasının yaptığı gibi.
+   */
+  it("lejant 'bu yüzey yalnızca okur' DEMİYOR, doğru metni taşıyor", () => {
+    const html = renderPage("x");
+    // Tasarımın KENDİ lejant metni (tasarim/skein-merkez-v3.html satır 107):
+    // "okundu {{ readAt }} · bu yüzey yalnızca okur". Bu TAM dizgi geri
+    // GELMEMELİ — ayraçtan ÖNCEki "·" ile birlikte arandığı için, aynı
+    // yanlış iddiayı açıklayan kod YORUMU (bu yorumun kendisi tırnak
+    // içinde tekrar ediyor, aşağıdaki JSDoc'ta da) burada YANLIŞ pozitif
+    // vermiyor.
+    expect(html).not.toContain("· bu yüzey yalnızca okur");
+    expect(html).toContain(
+      "· durum .skein/ ve olaylar.jsonl'dan okunuyor · değişiklik yalnızca düğmelerle",
+    );
+  });
+
   // Kart bir plana bağlıysa detay panelinde yol + sürümün ilk 12 karakteri
   // görünmeli; kısaltma ekranın kendi tüketicisinde yapılır (akış hash'iyle
   // aynı ilke), sunucudan tam hash gelir.
@@ -959,6 +983,54 @@ describe("kapiCizgisi — iki nokta arasındaki çizgiye dik segment", () => {
   it("segment UZUNLUĞU parametreyle ölçeklenir", () => {
     const s = cizgi({ x: 0, y: 0 }, { x: 10, y: 0 }, 4);
     expect(Math.hypot(s.x2 - s.x1, s.y2 - s.y1)).toBeCloseTo(4);
+  });
+});
+
+/**
+ * MALİYETMETNİ — ALT SINIR gösterimi (SAPMALAR.md §2.1, denetim kartı
+ * c-20261105-387d01).
+ *
+ * Tasarımda "≥" hiç geçmiyor; bu üç hâl bir zaman aşımı turunun dolar
+ * kaybını SESSİZCE sıfır gibi göstermemek için var (bkz. page.ts
+ * yorumu, a5392f0). Üç hâl AYRI sorular soruyor ve biri diğerine
+ * düşerse (örn. "olculmeyen var + dolar var" dalı "tam rakam" dalına
+ * düşerse) ekran gerçekte eksik olan bir turu TAM ÖLÇÜLMÜŞ gibi gösterir
+ * — bu yüzden üçü de burada AYRI AYRI sınanıyor, biri "kapsar" diye
+ * atlanmıyor.
+ */
+describe("maliyetMetni — maliyetin ALT SINIR olduğunu söyleyen biçim", () => {
+  const metin = (tutar: number, olculmeyen: number, tokens: number): string =>
+    fonksiyonlar<(t: number, o: number, tok: number) => string>(
+      renderPage("t"),
+      ["para", "kisaSayi", "maliyetMetni"],
+      "maliyetMetni",
+    )(tutar, olculmeyen, tokens);
+
+  // HİÇBİR aktivasyon ölçüsüz değilse işaret YOK — "tam rakam" dalı.
+  it("olculmeyen SIFIR ise düz rakam döner, '≥' YOK", () => {
+    expect(metin(12.5, 0, 0)).toBe("$12.50");
+  });
+
+  // Bazı aktivasyonlar dolar bildirdi (toplam > 0) ama en az biri
+  // bildirmedi: toplam GERÇEK dolarların toplamı, ama eksik olanı
+  // SAKLAMIYOR — "≥" ile ALT SINIR olduğunu söylüyor.
+  it("olculmeyen VAR ve dolar VAR ise '≥' + tutar döner", () => {
+    expect(metin(0.5, 1, 3_040_000)).toBe("≥$0.50");
+  });
+
+  // Zaman aşımı: dolar HİÇ yok ama akıştan token kurtarıldı (SAPMALAR
+  // §2.1: "tur yarıda kesildi, dolar bildirilmedi — ALT SINIR"). Rakam
+  // DEĞİL, çünkü $0.00 "bedava" ile "ölçülmedi" aynı şey değil.
+  it("olculmeyen VAR, dolar YOK, token VAR ise 'ölçülmedi · ≥N token' döner", () => {
+    expect(metin(0, 1, 3_040_000)).toBe("maliyet ölçülmedi · ≥3.0M token");
+  });
+
+  // Ölçü HİÇ bildirilmedi — ne dolar ne token (SAPMALAR §2.1: "dolar yok
+  // (abonelik kimliği)"). Bu iki hâl AYNI metni DEĞİL, farklı metni
+  // üretmeli: token sayısı olmadan "≥N token" yazmak uydurma bir alt
+  // sınır olurdu.
+  it("olculmeyen VAR, dolar YOK, token da YOK ise düz 'ölçülmedi' döner, token YOK", () => {
+    expect(metin(0, 1, 0)).toBe("maliyet ölçülmedi");
   });
 });
 
