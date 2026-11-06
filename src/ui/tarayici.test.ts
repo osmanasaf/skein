@@ -3016,5 +3016,60 @@ roles:
         await page.close();
       }
     }, 60_000);
+
+    /**
+     * KANAT ÇIRPMA Ajanlar listesinde de GERÇEKTEN oynuyor.
+     *
+     * Ölçülmüş kusur: ".kanatCirpiyor" sınıfı JS'te (kanatCirpiyorMu)
+     * ".ajanKus"a da ekleniyordu ama "@keyframes formasyonKanat" kuralı
+     * SEÇİCİ olarak yalnızca ".formasyonKus.kanatCirpiyor"u hedefliyordu —
+     * sınıf DOM'a biniyordu ama hiçbir animasyon UYGULANMIYORDU, ve bunu
+     * "sözdizimi geçerli" ya da "sınıf var mı" türünden hiçbir sınama
+     * YAKALAYAMAZDI (ikisi de doğruydu). Tek kanıt GERÇEK tarayıcının
+     * hesapladığı `animationName`.
+     */
+    it("Ajanlar listesindeki kuş da GERÇEKTEN kanat çırpıyor (koşan + gözcü açık)", async () => {
+      await acquireLock(join(root, ".skein", "daemon.json"), {
+        pid: process.pid, startedAt: new Date().toISOString(), flow: "test", hash: "abc", mode: "serve",
+      });
+      await queue.add(newCard({ title: "kanat-ajanlar", task: "iş", topology }));
+      await al(queue, "coder");
+
+      const { page, hatalar } = await ac();
+      try {
+        await page.click('.navSekme:has-text("Ajanlar")');
+        await page.waitForSelector(".ajanKus.kanatCirpiyor", { timeout: 15_000 });
+        const anim = await page.evaluate(() =>
+          getComputedStyle(document.querySelector(".ajanKus.kanatCirpiyor")).animationName);
+        expect(anim).not.toBe("none");
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+      }
+    }, 60_000);
+
+    // SAPMALAR.md §2.2: "yeni formasyon diyagramındaki kanat çırpma da
+    // AYNI korumanın arkasında olmalı" — Ajanlar listesinin kuşu da aynı
+    // koşuldan geçiyor. Yukarıdaki "formasyonKus" çiftinin (satır ~1620)
+    // Ajanlar sekmesindeki eşi.
+    it("Ajanlar listesindeki kuş prefers-reduced-motion'da ÇIRPMAZ", async () => {
+      await acquireLock(join(root, ".skein", "daemon.json"), {
+        pid: process.pid, startedAt: new Date().toISOString(), flow: "test", hash: "abc", mode: "serve",
+      });
+      await queue.add(newCard({ title: "kanat-ajanlar-azalt", task: "iş", topology }));
+      await al(queue, "coder");
+
+      const { page, hatalar } = await acHareket("reduce");
+      try {
+        await page.click('.navSekme:has-text("Ajanlar")');
+        await page.waitForSelector(".ajanKus.kanatCirpiyor", { timeout: 15_000 });
+        const anim = await page.evaluate(() =>
+          getComputedStyle(document.querySelector(".ajanKus.kanatCirpiyor")).animationName);
+        expect(anim).toBe("none");
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+      }
+    }, 60_000);
   });
 });

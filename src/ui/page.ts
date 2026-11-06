@@ -400,9 +400,18 @@ const PAGE = `<!doctype html>
    * yoksa (a)'yı (b) ile DEĞİŞTİRMEK gibi bir hataya açık kapı bırakırdı.
    */
   @keyframes formasyonKanat { from { transform: scaleY(1); } to { transform: scaleY(.4) translateY(3px); } }
-  .formasyonKus.kanatCirpiyor { transform-origin: 50% 75%; animation: formasyonKanat .55s ease-in-out infinite alternate; }
+  /*
+   * ".ajanKus" — Ajanlar sekmesinin ajan listesi (DEVIR.md §6, kart
+   * c-20261105-d304ed) AYNI kanatCirpiyorMu kararını AYNI "kanatCirpiyor"
+   * sınıfıyla işaretliyor (bkz. page.ts JS tarafı, ajanSatirKur); seçici
+   * burada formasyonKus'un YANINA eklendi, İKİNCİ bir animasyon kuralı
+   * (ve ikinci bir prefers-reduced-motion bloğu) İCAT EDİLMEDEN.
+   */
+  .formasyonKus.kanatCirpiyor, .ajanKus.kanatCirpiyor {
+    transform-origin: 50% 75%; animation: formasyonKanat .55s ease-in-out infinite alternate;
+  }
   @media (prefers-reduced-motion: reduce) {
-    .formasyonKus.kanatCirpiyor { animation: none; }
+    .formasyonKus.kanatCirpiyor, .ajanKus.kanatCirpiyor { animation: none; }
   }
   .formasyonGiris, .formasyonCikis { cursor: default; }
   .formasyonGiris { cursor: pointer; }
