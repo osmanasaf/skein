@@ -669,6 +669,55 @@ describe("gozcuEylemEtiketi — başlat/devral/durdur etiketi", () => {
 });
 
 /**
+ * GOZCUBEKLEMESONUCU — "Yeniden başlat"ın otomatik ikinci yarısının
+ * kararı (DEVIR.md §2, kart c-20261105-92d731). SAF, DOM yok.
+ *
+ * Reviewer ret notu (bu kenarda 2. ret, reddedilen commit 017d453): bu
+ * karar önceden ciz() içine gömülüydü ve hiçbir testle kapsanmıyordu.
+ * Her SINIR burada ayrı sınanıyor ki mutasyon (=== yerine !==, && yerine
+ * ||, "yenidenBaslatiliyor" yerine başka bir string, null kontrolünün
+ * kaldırılması) en az bir sınamayı düşürsün.
+ */
+describe("gozcuBeklemeSonucu — durdurma/yeniden başlatma bekleniyorken gözcü öldüyse", () => {
+  type Sonuc = { yenidenBaslat: boolean } | null;
+  const sonuc = (bekleyen: string | null, g: Daemon): Sonuc =>
+    fonksiyon<(b: string | null, g: Daemon) => Sonuc>(renderPage("t"), "gozcuBeklemeSonucu")(bekleyen, g);
+
+  it("beklenen YOK (bekleyen null): her g için null", () => {
+    expect(sonuc(null, null)).toBeNull();
+    expect(sonuc(null, { alive: true, info: DAEMON_INFO })).toBeNull();
+    expect(sonuc(null, { alive: false, info: DAEMON_INFO })).toBeNull();
+  });
+
+  // SINIR: süreç HÂLÂ canlıysa (g && g.alive) beklenen iş henüz
+  // BİTMEDİ — "durduruluyor" da "yenidenBaslatiliyor" da null dönmeli,
+  // bayrak İNDİRİLMEMELİ. `&&` yerine `||` yazılsaydı g===null iken de
+  // bu dal seçilir, aşağıdaki "öldü" sınamaları yanlış geçerdi.
+  it("bekleyen VAR ama süreç HÂLÂ canlı: null (henüz bitmedi)", () => {
+    expect(sonuc("durduruluyor", { alive: true, info: DAEMON_INFO })).toBeNull();
+    expect(sonuc("yenidenBaslatiliyor", { alive: true, info: DAEMON_INFO })).toBeNull();
+  });
+
+  // "durduruluyor" iken öldüyse (kilit yok YA DA ölü) yeniden başlatma
+  // TETİKLENMEMELİ — normal "Gözcüyü durdur" bunu hiç vaat etmiyor.
+  it("'durduruluyor' + öldü: bayrak iner, yenidenBaslat false", () => {
+    expect(sonuc("durduruluyor", null)).toEqual({ yenidenBaslat: false });
+    expect(sonuc("durduruluyor", { alive: false, info: DAEMON_INFO })).toEqual({ yenidenBaslat: false });
+  });
+
+  // ASIL DAVRANIŞ: "yenidenBaslatiliyor" iken öldüyse (kilit yok YA DA
+  // ölü) yeniden başlatma TETİKLENMELİ — "Yeniden başlat" düğmesinin
+  // vaadi tam bu. Bu string karşılaştırması `===` yerine herhangi bir
+  // başka değerle (ör. her zaman true) değiştirilseydi "durduruluyor"
+  // sınaması yukarıda düşerdi; kaldırılsaydı (her zaman false) bu
+  // sınama düşer.
+  it("'yenidenBaslatiliyor' + öldü: bayrak iner, yenidenBaslat true", () => {
+    expect(sonuc("yenidenBaslatiliyor", null)).toEqual({ yenidenBaslat: true });
+    expect(sonuc("yenidenBaslatiliyor", { alive: false, info: DAEMON_INFO })).toEqual({ yenidenBaslat: true });
+  });
+});
+
+/**
  * RENDERPAGE — gözcü ayarı gömülü (kart c-20261105-92d731). Kaynak metin
  * sınaması: JETON'un AYNI deseni, `GOZCU_AYAR` sayfaya JSON olarak gömülü.
  */

@@ -463,10 +463,23 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
     }
   }, 60_000);
 
-  /** Gözcü bayraklarıyla açılan, sahte `spawn` alan ayrı bir sunucu — bu takımın MANAGED sınamaları için. */
+  /**
+   * Gözcü bayraklarıyla açılan, sahte `spawn` alan ayrı bir sunucu — bu
+   * takımın MANAGED sınamaları için.
+   *
+   * `alive` isteğe bağlı: varsayılanı HER ZAMAN true (eski davranış,
+   * aşağıdaki çoğu sınama buna dayanıyor). "Yeniden başlat"ın otomatik
+   * ikinci yarısını (gözcü GERÇEKTEN öldüğünde "/gozcu/baslat"ın kendiliğinden
+   * tetiklenmesi) tarayıcıda sınamak bu değerin TEST SIRASINDA false'a
+   * dönebilmesini gerektiriyor — bkz. aşağıdaki "Yeniden başlat tıklanınca…"
+   * sınaması, reviewer ret notu (reddedilen commit 017d453): bu geçiş
+   * eskiden yardımcının sabit `() => true`'u yüzünden tarayıcıda hiç
+   * SINANAMAZ'dı.
+   */
   async function yonetilenSunucu(gozcuAyar: {
     bayraklar?: string[];
     spawn?: (argv: string[]) => { pid: number; kill: () => void; onExit: (cb: () => void) => void };
+    alive?: () => boolean;
   } = {}): Promise<{ s: UiServer; flow: { name: string; hash: string } }> {
     const flow = await loadFlow(join(root, "hub", "flows", "test.yaml"), { root, providers: knownProviderSet() });
     const s = await serveUi({
@@ -474,7 +487,7 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
       // Bayat kilidin PID'i gerçek olmayabilir (4_194_305 gibi) — alive
       // override'ı o YOLU bozmuyor, pidAlive zaten test boyunca
       // KULLANILMIYOR (model her zaman verilen fonksiyona bakıyor).
-      alive: () => true,
+      alive: gozcuAyar.alive ?? (() => true),
       gozcu: {
         komut: ["node", "-e", ""],
         bayraklar: gozcuAyar.bayraklar ?? ["--model", "claude:m"],
@@ -604,6 +617,90 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
       // Normal "Gözcüyü durdur" düğmesi UYARI KUTUSUNUN YANINDA hâlâ duruyor
       // — topoloji uyarısı "on" durumunu DEĞİŞTİRMİYOR, yalnızca EK bir kutu.
       expect(await page.textContent(".railGozcuEylemler .railBtn")).toBe("Gözcüyü durdur");
+    } finally {
+      await page.close();
+      await s.close();
+    }
+  }, 60_000);
+
+  /**
+   * "YENİDEN BAŞLAT"IN OTOMATİK İKİNCİ YARISI — gerçek tarayıcıda.
+   *
+   * Reviewer ret notu (bu kenarda 2. ret, reddedilen commit 017d453): bu
+   * geçiş (durdur → gözcü GERÇEKTEN ölünce "/gozcu/baslat"ın KENDİLİĞİNDEN
+   * tetiklenmesi, bkz. page.ts ciz() + gozcuBeklemeSonucu) hiçbir testle
+   * kapsanmıyordu — page.test.ts yalnızca KARAR fonksiyonunu saf sınıyor,
+   * "gerçekten otomatik tetikleniyor mu" sorusu yalnızca burada görünür.
+   * Üstüne, yardımcı `yonetilenSunucu`'nun eski sabit `alive: () => true`'u
+   * bu geçişi tarayıcıda SINANAMAZ kılıyordu — bu test onu `alive`
+   * override'ıyla (yukarıda, yardımcıya eklendi) aşıyor.
+   *
+   * Gerçek bir süreç ölümü yerine `alive` override'ı mutasyona uğratılıyor
+   * (üçüncü sınamanın "bayat kilit" ile aynı ilke): ikinci `spawn` çağrısı
+   * (otomatik yeniden başlatma) GERÇEKTEN olduğu an override'ı senkron
+   * olarak true'ya döndürüyor, yani yarış yok — bkz. aşağıdaki yorumlar.
+   */
+  it("gözcü GERÇEKTEN ölünce 'Yeniden başlat' otomatik olarak /gozcu/baslat'ı tetikler", async () => {
+    const cagrilar: string[][] = [];
+    const canli = { deger: true };
+    let sayac = 0;
+    const { s, flow } = await yonetilenSunucu({
+      alive: () => canli.deger,
+      spawn: (argv) => {
+        cagrilar.push(argv);
+        sayac += 1;
+        // Her ikisi de GERÇEK bir OS sürecine AİT OLAMAYACAK kadar büyük
+        // pid (2^22 üstü, Linux'ta ayrılmaz) — /gozcu/baslat'ın kendi iç
+        // `liveLock` kontrolü GERÇEK `pidAlive`'a bakıyor (bu testin
+        // `alive` override'ı SADECE EKRANA giden modeli etkiliyor, bkz.
+        // yonetilenSunucu yorumu), yoksa İKİNCİ (otomatik) başlatma "zaten
+        // bir gözcü açık" hatasına çarpardı.
+        const pid = 4_194_305 + sayac;
+        // BİRİNCİ çağrı KASITLI ESKİ bir hash yazıyor — "Yeniden başlat"
+        // düğmesini çıkarmak için gereken topoloji uyuşmazlığı GERÇEK bir
+        // akış değişikliği yerine burada kuruluyor. İKİNCİ çağrı (otomatik
+        // yeniden başlatma) GÜNCEL hash'i yazıyor: yeni gözcü artık
+        // GÜNCEL topolojiyle ayakta.
+        const hash = sayac === 1 ? "ESKI-HASH-abc" : flow.hash;
+        writeFileSync(join(root, ".skein", "daemon.json"), JSON.stringify({
+          pid, startedAt: new Date().toISOString(), flow: flow.name, hash, mode: "serve",
+        }));
+        // İKİNCİ çağrı GERÇEKTEN olduğu an "yeni süreç ayakta" demek —
+        // override'ı BURADA, aynı senkron adımda true'ya çevirmek, test
+        // kodunun bunu AYRI bir zamanlamada yapmasını (yarış) gereksiz
+        // kılıyor.
+        if (sayac === 2) canli.deger = true;
+        return { pid, kill: () => {}, onExit: () => {} };
+      },
+    });
+    const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+    try {
+      await page.goto(s.url, { waitUntil: "networkidle" });
+      await page.waitForSelector("#bar .pill", { timeout: 15_000 });
+      await page.click("#bar .pill");
+      await page.waitForSelector(".railGozcuEylemler .railBtn", { timeout: 10_000 });
+      await page.click(".railGozcuEylemler .railBtn"); // "Gözcüyü başlat" — İLK, GERÇEK start.
+      await page.waitForSelector(".railGozcuUyari", { timeout: 10_000 });
+      expect(cagrilar.length).toBe(1);
+
+      await page.click(".railGozcuUyari button"); // "Yeniden başlat".
+      await page.waitForTimeout(400);
+      expect(await page.textContent(".railGozcuBaslik")).toBe("gözcü duruyor…");
+      // Durdurma hiçbir yeni süreç başlatmıyor — hâlâ tek çağrı.
+      expect(cagrilar.length).toBe(1);
+
+      // Gözcü GERÇEKTEN ÖLDÜ — hiçbir düğmeye basılmadan.
+      canli.deger = false;
+      // setInterval(yokla, 1000)'in EN AZ bir turunu bekle: ciz() bu turda
+      // gozcuBeklemeSonucu'nun "öldü" dalına girip "/gozcu/baslat"ı
+      // KENDİLİĞİNDEN tetiklemeli — test hiçbir düğmeye basmıyor.
+      await page.waitForTimeout(1_800);
+
+      expect(cagrilar.length).toBe(2);
+      expect(await page.textContent(".railGozcuBaslik")).toBe("gözcü açık");
+      const pillMetin = await page.textContent("#bar .pill");
+      expect(pillMetin).toContain("gözcü açık");
+      expect(pillMetin).not.toContain("yeniden başlat");
     } finally {
       await page.close();
       await s.close();

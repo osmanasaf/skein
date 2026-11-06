@@ -1966,6 +1966,35 @@ function calisanAjanSayisi(cards) {
   return cards.filter((c) => c.state === "active").length;
 }
 
+/**
+ * DURDURMA/YENİDEN BAŞLATMA bekleniyorken gözcü GERÇEKTEN öldüyse ne
+ * yapılacağı — SAF, DOM yok (DEVIR.md §2, kart c-20261105-92d731).
+ *
+ * Reviewer ret notu (bu kenarda 2. ret, reddedilen commit 017d453): bu
+ * karar DAHA ÖNCE ciz() içine GÖMÜLÜYDÜ — komşu kararların
+ * (gozcuPanelDurum/gozcuTopoUyari/gozcuEylemEtiketi) HEPSİ SAF
+ * fonksiyona çıkarılıp sınır durumlarıyla sınanırken bu TEK dallanma
+ * DOM'a gömülü kaldı, hiçbir testle (ne page.test.ts'teki saf fonksiyon
+ * sınamalarıyla ne tarayici.test.ts'teki tarayıcı sınamalarıyla)
+ * kapsanmıyordu — mutasyon denemesi de yapılamadı, deneyecek sınama
+ * yoktu.
+ *
+ * 'bekleyen' o anki GOZCU_BEKLEYEN değeri, 'g' m.daemon:
+ *   - bekleyen === null: beklenen bir şey YOK, 'null' döner.
+ *   - süreç HÂLÂ canlıysa (g && g.alive): beklenen iş henüz BİTMEDİ,
+ *     'null' döner — çağıran hiçbir şeyi DEĞİŞTİRMEMELİ.
+ *   - öldüyse (g === null YA DA g.alive === false): bayrak İNDİRİLMELİ
+ *     ve 'bekleyen === "yenidenBaslatiliyor"' idiyse "/gozcu/baslat"
+ *     tetiklenmeli — bunu çağıran, AYRI bir adım olarak yapıyor (bkz.
+ *     ciz() çağrı yeri yorumu); hemen ardı ardına çağırmak "zaten bir
+ *     gözcü açık" hatasına çarpardı.
+ */
+function gozcuBeklemeSonucu(bekleyen, g) {
+  if (bekleyen === null) return null;
+  if (g && g.alive) return null;
+  return { yenidenBaslat: bekleyen === "yenidenBaslatiliyor" };
+}
+
 function ciz(m) {
   AKTIF_AD = m.flow.name;
   SON_MODEL = m;
@@ -2073,17 +2102,14 @@ function ciz(m) {
   // railGozcuCiz) — çip tek başına tıklanabilir, sağ paneli gözcü moduna
   // açıyor (gozcuAc).
   const g = m.daemon;
-  // DURDURMA/YENİDEN BAŞLATMA bekleniyorsa VE gözcü GERÇEKTEN öldüyse
-  // (artık canlı değil): beklenen iş bitti. "yenidenBaslatiliyor" ise
-  // şimdi "/gozcu/baslat" tetiklenir — DEVIR'in "Yeniden başlat" düğmesi
-  // tam bunu vaat ediyor ("durdur, sonra başlat"), ama durdurma ANLIK
-  // DEĞİL (bkz. server.ts "/gozcu/durdur"), o yüzden "başlat" ayrı bir
-  // adım olarak BURADA, süreç gerçekten bittiğinde tetiklenir — hemen
-  // ardı ardına çağırmak "zaten bir gözcü açık" hatasına çarpardı.
-  if (GOZCU_BEKLEYEN !== null && !(g && g.alive)) {
-    const bekleyen = GOZCU_BEKLEYEN;
+  // KARAR gozcuBeklemeSonucu'nda (yukarıda, SAF) — burada yalnızca
+  // DOM'a bağlı tarafı yapılıyor: bayrağı indirmek ve "başlat"ı gerçek
+  // bir düğme olmadan (gözcüKomut bir <button> bekliyor, otomatik
+  // tetiklemede tıklanan bir düğme yok) tetiklemek.
+  const beklemeSonucu = gozcuBeklemeSonucu(GOZCU_BEKLEYEN, g);
+  if (beklemeSonucu) {
     GOZCU_BEKLEYEN = null;
-    if (bekleyen === "yenidenBaslatiliyor") void gozcuKomut("baslat", document.createElement("button"));
+    if (beklemeSonucu.yenidenBaslat) void gozcuKomut("baslat", document.createElement("button"));
   }
   const durumBilgi = gozcuPanelDurum(g, Boolean(GOZCU_AYAR), GOZCU_BEKLEYEN !== null);
   const topoUyari = gozcuTopoUyari(g, m.flow.hash, durumBilgi.durum);
