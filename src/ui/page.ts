@@ -369,6 +369,60 @@ const PAGE = `<!doctype html>
        * token-kontrast.test.ts "bad-ink/color-surface" çifti, iki temada.
        */
       --bad-ink: var(--color-accent-400);
+
+      /* ------------------------------------------------------------------
+       * NEUTRAL-400/500 (fill rolü) — reviewer'ın reddi (bu kenarda 1. ret,
+       * reddedilen commit 36ae34a). Üstteki ACCENT RAMPASI düzeltmesi
+       * ".railKapiKutu"yu (accent-100 ZEMİNİNİ) ezdi ama color-neutral-400/
+       * 500'ü HİÇ ezmedi — bu ikisi de gerçek, görünür seçicilerde FILL
+       * (dolgu) rolünde kullanılıyor: --queue-square-fill (neutral-500,
+       * .formasyonDugum .kare-kuyrukta / .lejant .kare.kuyrukta /
+       * .railSatir .kare.kuyrukta), --daemon-dot-off-fill (neutral-400,
+       * .dot.off/.unmanaged / .railGozcuNokta.off/.unmanaged — SAĞ
+       * PANELDEKİ GÖZCÜ AÇIK/KAPALI ANA GÖSTERGESİ), --daemon-dot-stopping-
+       * fill (neutral-500, .dot.stopping / .railGozcuNokta.stopping).
+       * BORDER'ları (queue-square-border, daemon-dot-off/stopping-border)
+       * zaten var(--color-text) üzerinden otomatik düzeliyor (üstteki not)
+       * — ama bu üç FILL token'ı o zincire GİRMİYOR, kendi ham neutral
+       * ramp değerine (#bab6b6/#9b9797) sabit kalıyordu.
+       *
+       * Ölçüldü (reviewer): koyu gövde #1A1817 parlaklık 24.3;
+       * neutral-400 (#bab6b6) parlaklık 183.3, fark 159; neutral-500
+       * (#9b9797) parlaklık 152.3, fark 128 — ikisi de kartın kendi 100
+       * birimlik eşiğini AŞIYOR. En görünür sonuç sağ paneldeki gözcü
+       * ana göstergesiydi (SAPMALAR §1'in "gözcünün açık mı kapalı mı
+       * olduğunu söyleyen ANA işaret"): ".railGozcuNokta.unmanaged" koyu
+       * gövdenin üstünde neredeyse-beyaz bir nokta basıyordu.
+       *
+       * YÖNTEM — YENİ RENK İCAT EDİLMİYOR, ramptaki İKİ KOYU basamak (700,
+       * 800) ödünç alınıyor; accent'teki "ters basamak" (100<->900 vb.)
+       * burada UYGULANAMIYOR çünkü 9 basamaklı neutral ramp'te 500
+       * ortanın kendisi (aynası kendisiyle aynı kalır, 152.3 hâlâ 100
+       * biriminin üstünde kalırdı) — bu yüzden 400/500 ÇİFTİ, ramptaki
+       * KOYU UCA (700/800) kaydırılıyor, tıpkı görev metninin kendi
+       * örneğinin dediği gibi ("koyuda accent-100 yerine rampanın koyu
+       * ucu"). SIRALAMA bilerek KORUNUYOR: açık temada "off" (neutral-400,
+       * fark 59 gövdeden) "stopping"ten (neutral-500, fark 90) DAHA AZ
+       * fark ediyor — off sönük/pasif, stopping daha belirgin/geçişte.
+       * Koyu temada da AYNI ilişki: off -> neutral-800'ün ham değeri
+       * (#444141, fark 41.7), stopping -> neutral-700'ün ham değeri
+       * (#605d5d, fark 69.7) — off hâlâ DAHA AZ fark ediyor, ikisi de
+       * <=100 hedefinin rahatça altında (reviewer'ın eşik-sınırı not
+       * ettiği 400<->600 ayna seçeneği sadece 98 bırakıyordu; 700/800
+       * daha güvenli bir pay bırakıyor).
+       *
+       * Ölçüm: token-kontrast.test.ts "SAPMALAR §2.5 — zemin dolgusu"
+       * takımı (üç fill token'ı, AÇIK VE KOYU için AYRI AYRI, kaynak
+       * metinden) ve tarayici.test.ts'teki iki gerçek-tarayıcı sınaması
+       * (".lejant .kare.kuyrukta" ve ".railGozcuNokta.unmanaged",
+       * getComputedStyle ile GERÇEK çizilen rengi ölçüyor — SAPMALAR
+       * §2.7: "nitelik doğru" ile "ekranda doğru" ayrı iddialar).
+       * daemon-dot-stopping-fill AYRICA tarayıcıda ölçülmüyor çünkü
+       * queue-square-fill ile TAM AYNI token zincirine (--color-neutral-500)
+       * bağlı — ikisi her zaman birebir aynı hesaplanmış rengi taşır.
+       * ------------------------------------------------------------------ */
+      --color-neutral-400: #444141; /* = color-neutral-800'ün ışık değeri */
+      --color-neutral-500: #605d5d; /* = color-neutral-700'ün ışık değeri */
     }
   }
   /*
@@ -402,6 +456,8 @@ const PAGE = `<!doctype html>
     --color-accent-800: #ffe0d9;
     --color-neutral-900: var(--color-neutral-100);
     --bad-ink: var(--color-accent-400);
+    --color-neutral-400: #444141; /* = color-neutral-800'ün ışık değeri */
+    --color-neutral-500: #605d5d; /* = color-neutral-700'ün ışık değeri */
   }
   * { box-sizing: border-box; }
   body {

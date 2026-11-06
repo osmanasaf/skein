@@ -371,6 +371,70 @@ describe("token kontrastı — koyu tema", () => {
   });
 });
 
+/** "#RRGGBB" metninden 0-255 arası ORTALAMA kanal (kaba parlaklık) — tarayici.test.ts'teki `parlaklik()`'in AYNI formülü, ama "rgb(r, g, b)" DEĞİL kaynak metnin kendi hex'i üzerinde. */
+function parlaklikHex(hex: string): number {
+  const esle = /^#([0-9A-Fa-f]{6})$/.exec(hex);
+  if (!esle) throw new Error("gecersiz renk: " + hex);
+  const deger = esle[1];
+  if (deger === undefined) throw new Error("gecersiz renk: " + hex);
+  const r = parseInt(deger.slice(0, 2), 16);
+  const g = parseInt(deger.slice(2, 4), 16);
+  const b = parseInt(deger.slice(4, 6), 16);
+  return (r + g + b) / 3;
+}
+
+/**
+ * SAPMALAR §2.5 — zemin DOLGUSU (fill), KENAR (border) DEĞİL.
+ *
+ * reviewer'ın reddi (bu kenarda 1. ret, reddedilen commit 36ae34a):
+ * "SAPMALAR §2/§3/§4 satırları" (yukarıdaki "queue-square-border",
+ * "daemon-dot-off-border", "daemon-dot-stopping-border" çiftleri) yalnızca
+ * KENARI ölçüyor — aynı seçicilerin FILL (dolgu) rengini (--queue-square-
+ * fill, --daemon-dot-off-fill, --daemon-dot-stopping-fill, neutral-400/500
+ * üzerinden) HİÇBİR sınama ölçmüyordu. Bu üçü AÇIK/KOYU için AYRI AYRI,
+ * gövdeden (color-bg) ÖLÇÜLEBİLİR bir parlaklık farkıyla (görev metninin
+ * ÖLÇÜLEBİLİR HEDEFİ: "gövdeden 100 parlaklık biriminden fazla sapan
+ * yüzey KALMASIN") burada kilitleniyor — kontrastOrani/NORMAL_METIN_ESIGI
+ * burada KULLANILMIYOR çünkü bu bir METİN rolü değil (ikisi zaten çok
+ * düşük oran veriyor, açık temada da: 1.80:1 ve 2.59:1 — tasarımın
+ * KENDİSİ bu dolguları KENARLA okunur kılıyor, dolgunun kendisiyle değil).
+ *
+ * Gerçek piksel GÖRÜNÜMÜ (bu statik kaynak-metin ölçümünün YAKALAYAMADIĞI,
+ * SAPMALAR §2.7'nin ayrımı) tarayici.test.ts'teki iki gerçek-tarayıcı
+ * sınamasında ayrıca ölçülüyor.
+ */
+describe("SAPMALAR §2.5 — zemin dolgusu (fill, kenar DEĞİL): gövdeden (color-bg) parlaklık farkı <=100, açık ve koyu AYRI", () => {
+  const FILL_TOKENLARI = [
+    "queue-square-fill",
+    "daemon-dot-off-fill",
+    "daemon-dot-stopping-fill",
+  ] as const;
+
+  it.each(FILL_TOKENLARI)("%s/color-bg — AÇIK temada", (ad) => {
+    const { acik } = temaTokenlari(renderPage("x"));
+    const fark = Math.abs(parlaklikHex(renk(acik, ad)) - parlaklikHex(renk(acik, "color-bg")));
+    expect(fark).toBeLessThanOrEqual(100);
+  });
+
+  it.each(FILL_TOKENLARI)("%s/color-bg — KOYU temada (reviewer'ın yakaladığı kusur: ÖNCEDEN hiç ezilmiyordu — neutral-400 fark 159, neutral-500 fark 128, ikisi de >100)", (ad) => {
+    const { koyu } = temaTokenlari(renderPage("x"));
+    const fark = Math.abs(parlaklikHex(renk(koyu, ad)) - parlaklikHex(renk(koyu, "color-bg")));
+    expect(fark).toBeLessThanOrEqual(100);
+  });
+
+  it("--color-neutral-400 koyu temada ESKİ açık ham değerine (neutral-400, #bab6b6) EŞİT DEĞİL — bu, tam reviewer'ın bulduğu kusurdu", () => {
+    const { koyu } = temaTokenlari(renderPage("x"));
+    expect(cozumle(koyu, "color-neutral-400")).not.toBe("#bab6b6");
+    expect(cozumle(koyu, "color-neutral-400")).toBe("#444141");
+  });
+
+  it("--color-neutral-500 koyu temada ESKİ açık ham değerine (neutral-500, #9b9797) EŞİT DEĞİL — tam reviewer'ın bulduğu kusurdu", () => {
+    const { koyu } = temaTokenlari(renderPage("x"));
+    expect(cozumle(koyu, "color-neutral-500")).not.toBe("#9b9797");
+    expect(cozumle(koyu, "color-neutral-500")).toBe("#605d5d");
+  });
+});
+
 describe("token ayrıştırma — bağlantı sınaması", () => {
   // Bu sınama BAĞLANTIYI doğruluyor: ayrıştırıcı sahte bir harita
   // üretmiyor, sayfadaki GERÇEK token sayısını buluyor. Eşik sayısı

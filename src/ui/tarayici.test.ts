@@ -425,6 +425,73 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
   }, 60_000);
 
   /**
+   * ÖLÇÜLEN KUSUR (devamı) — reviewer'ın reddi (bu kenarda 1. ret,
+   * reddedilen commit 36ae34a). Üstteki ".railKapiKutu" düzeltmesi
+   * accent-100 ZEMİNİNİ ezdi ama color-neutral-400/500'ü (FILL rolünde
+   * kullanılan iki ayrı token) hiç ezmedi. ".lejant .kare.kuyrukta" (ana
+   * panonun ALTINDAKİ lejant — queue-square-fill/neutral-500) hep çizili,
+   * hiçbir kuyruklu kart gerekmiyor. Ölçtü: koyu gövde #1A1817 (parlaklık
+   * 24.3), neutral-500 ham değeri (#9b9797) parlaklık 152.3, fark 128 —
+   * kartın kendi 100 birimlik eşiğini AŞIYOR.
+   */
+  it("koyu temada '.lejant .kare.kuyrukta' (kuyruk dolgusu, queue-square-fill) artık gövdeden >100 parlaklık birimi uzak PARLAK bir yüzey DEĞİL", async () => {
+    const { page, hatalar } = await acTema("dark");
+    try {
+      await page.waitForSelector("#lejant", { timeout: 15_000 });
+      const kareZemin = await page.evaluate(() =>
+        getComputedStyle(document.querySelector(".lejant .kare.kuyrukta")).backgroundColor);
+      const govdeZemin = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+
+      // ESKİ (kusurlu) değer tam olarak bu — KARŞIT iddia, regresyonu pinler.
+      expect(kareZemin).not.toBe("rgb(155, 151, 151)"); // #9b9797
+      // YENİ değer: --color-neutral-500'ün koyu ezmesi, #605d5d → rgb(96, 93, 93).
+      expect(kareZemin).toBe("rgb(96, 93, 93)");
+
+      const fark = Math.abs(parlaklik(kareZemin) - parlaklik(govdeZemin));
+      expect(fark).toBeLessThanOrEqual(100);
+
+      expect(hatalar).toEqual([]);
+    } finally {
+      await page.close();
+    }
+  }, 60_000);
+
+  /**
+   * AYNI kusurun İKİNCİSİ — SAPMALAR §1'in "gözcünün açık mı kapalı mı
+   * olduğunu söyleyen ANA işaret" dediği ".railGozcuNokta" (sağ paneldeki
+   * gözcü göstergesi, burada "unmanaged" — ekran gözcü bayrakları olmadan
+   * açıldı, varsayılan `server` kurulumu budur). daemon-dot-off-fill de
+   * neutral-400 üzerinden geliyordu, AYNI şekilde hiç ezilmiyordu. Ölçtü:
+   * neutral-400 ham değeri (#bab6b6) parlaklık 183.3, gövdeden fark 159.
+   * ".dot.off/.unmanaged" (üst çubuktaki küçük hap) AYNI token zincirine
+   * bağlı — burada AYRICA ölçülmüyor, token-kontrast.test.ts'in "SAPMALAR
+   * §2.5" takımı token SEVİYESİNDE ikisini de kapsıyor.
+   */
+  it("koyu temada '.railGozcuNokta.unmanaged' (gözcü ANA göstergesi, daemon-dot-off-fill) artık gövdeden >100 parlaklık birimi uzak PARLAK bir yüzey DEĞİL", async () => {
+    const { page, hatalar } = await acTema("dark");
+    try {
+      await page.waitForSelector("#bar .pill", { timeout: 15_000 });
+      await page.click("#bar .pill");
+      await page.waitForSelector(".railGozcuNokta.unmanaged", { timeout: 10_000 });
+      const noktaZemin = await page.evaluate(() =>
+        getComputedStyle(document.querySelector(".railGozcuNokta.unmanaged")).backgroundColor);
+      const govdeZemin = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+
+      // ESKİ (kusurlu) değer tam olarak bu — KARŞIT iddia, regresyonu pinler.
+      expect(noktaZemin).not.toBe("rgb(186, 182, 182)"); // #bab6b6
+      // YENİ değer: --color-neutral-400'ün koyu ezmesi, #444141 → rgb(68, 65, 65).
+      expect(noktaZemin).toBe("rgb(68, 65, 65)");
+
+      const fark = Math.abs(parlaklik(noktaZemin) - parlaklik(govdeZemin));
+      expect(fark).toBeLessThanOrEqual(100);
+
+      expect(hatalar).toEqual([]);
+    } finally {
+      await page.close();
+    }
+  }, 60_000);
+
+  /**
    * TEMA ANAHTARI — kart c-20261106-e62847 (UX.md: "operatör koyu temayı
    * kapatamıyor"). Üç sınama: anında uygulanıyor (ağ isteğini beklemeden),
    * sunucudan BAĞIMSIZ bir OS tercihini EZEBİLİyor (var olan data-theme
