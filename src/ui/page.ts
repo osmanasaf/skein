@@ -541,6 +541,97 @@ const PAGE = `<!doctype html>
   }
 
   /*
+   * MOD 5 — ROLLERİ DÜZENLE (kart c-20261105-725320, DEVIR.md §3).
+   *
+   * MEVCUT ".railBtn"/".railGeri" aynen kullanılıyor (Vazgeç/Kaydet/Geri);
+   * burada yalnızca bu modun KENDİ yapıları — rol bloğu, 2x2 ızgara,
+   * segment düğmesi, stepper, hata/uyarı satırları, sabit alt çubuk.
+   * Hepsi Modernist token'larla (SAPMALAR.md: yeni renk icat edilmiyor).
+   */
+  .duzenleAciklama { font-size: var(--fs-13); color: var(--label-ink); margin: var(--space-2) 0 var(--space-5); max-width: 40ch; }
+  .duzenleRolListe { display: flex; flex-direction: column; gap: var(--space-4); margin-bottom: var(--space-4); }
+  .duzenleRol {
+    border: var(--border-row) solid var(--color-text); padding: var(--space-4);
+  }
+  .duzenleRol.duzenleVurgu { background: var(--color-accent-100); }
+  .duzenleRolUst { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); }
+  .duzenleRolNo { font-family: var(--mono); font-size: var(--fs-11); color: var(--label-ink); flex: 0 0 auto; }
+  .duzenleAdGirisi {
+    flex: 1 1 auto; min-width: 0; font: inherit; font-family: var(--font-heading); font-weight: 800;
+    font-size: var(--fs-15); padding: var(--space-1) var(--space-2); border: var(--border-row) solid var(--color-text);
+    background: var(--color-surface); color: var(--color-text);
+  }
+  /* "boş rol adı"/"aynı adı taşıyan iki rol" HATA'sı — accent-700 kenar (DEVIR.md §3 "Doğrulama"). */
+  .duzenleAdGirisi.gecersiz { border-color: var(--color-accent-700); border-width: 2px; }
+  /*
+   * İKON DÜĞMELERİ — 36px, görevin kendi ölçüsü (DEVIR.md'nin genel 40/44px
+   * buton kuralından burada KASITLI sapma: "↑ ↓ ✕ ikon düğmeleri (36px)"
+   * açıkça yazıyor).
+   */
+  .duzenleIkon {
+    width: 36px; height: 36px; flex: 0 0 auto; font: inherit; font-size: var(--fs-14); line-height: 1;
+    border: var(--border-row) solid var(--color-text); background: var(--color-surface); color: var(--color-text);
+    cursor: pointer;
+  }
+  .duzenleIkon:hover:not(:disabled) { background: var(--color-neutral-200); }
+  .duzenleIkon:disabled { opacity: .45; cursor: not-allowed; }
+  .duzenleIkonSil:hover:not(:disabled) { border-color: var(--color-accent-700); color: var(--color-accent-700); }
+  .duzenleIzgara {
+    display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3) var(--space-4); margin-bottom: var(--space-3);
+  }
+  .duzenleAlanEtiket {
+    display: block; font-size: var(--fs-10-5); font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--label-ink); margin-bottom: 3px;
+  }
+  .duzenleIzgara label, .duzenlePromptSarmal label { display: block; min-width: 0; }
+  .duzenleIzgara input, .duzenleIzgara select, .duzenlePromptSarmal select, .duzenleAlanTekil input, .duzenleAlanTekil select {
+    width: 100%; font: inherit; font-family: var(--mono); font-size: var(--fs-12); min-height: 34px;
+    padding: 0 var(--space-2); border: var(--border-row) solid var(--color-text);
+    background: var(--color-surface); color: var(--color-text);
+  }
+  /* ALIM — tekil/toplu segment düğmesi: 2px kenar, seçili KOYU ZEMİNLİ (DEVIR.md §3). */
+  .duzenleSegment { display: flex; border: 2px solid var(--color-text); }
+  .duzenleSegmentBtn {
+    flex: 1 1 auto; font: inherit; font-size: var(--fs-12); font-weight: 600; min-height: 34px;
+    border: none; background: var(--color-surface); color: var(--color-text); cursor: pointer;
+  }
+  .duzenleSegmentBtn:not(:last-child) { border-right: 2px solid var(--color-text); }
+  .duzenleSegmentBtn.secili { background: var(--color-text); color: var(--color-bg); }
+  .duzenlePromptSarmal { display: flex; align-items: flex-end; gap: var(--space-2); margin-bottom: var(--space-3); }
+  .duzenlePromptSarmal label { flex: 1 1 auto; }
+  .duzenlePlanKatilim { display: flex; align-items: center; gap: var(--space-2); font-size: var(--fs-12); }
+  .duzenlePlanKatilimEtiket { color: var(--color-text); }
+  .duzenlePlanDevreder { margin-left: auto; font-size: var(--fs-11); color: var(--label-ink); }
+  .duzenleBolum { border-top: var(--border-row) solid var(--color-text); padding-top: var(--space-4); margin-top: var(--space-5); }
+  .duzenleOzet { font-size: var(--fs-13); color: var(--color-text); margin: var(--space-2) 0; }
+  .duzenleStepperSarmal { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-3) 0; }
+  .duzenleStepper { display: flex; align-items: center; gap: var(--space-2); }
+  .duzenleStepperDeger { min-width: 18px; text-align: center; font-size: var(--fs-14); font-weight: 700; }
+  /*
+   * accent-700 metin + accent-100 zemin — token-kontrast.test.ts'in
+   * "Sağ panel kapı kutusu üst etiketi" çiftiyle AYNI, YENİ bir çift
+   * İCAT EDİLMİYOR (SAPMALAR.md §1). O çift TEMA-DEĞİŞMEZ (accent-100
+   * hiçbir zaman ezilmiyor) — HATA accent-700'ün düz --color-bg üstünde
+   * mi yoksa burada mı durduğu KOYU TEMADA ayrışırdı, bu yüzden zemin de
+   * BİRLİKTE taşınıyor.
+   */
+  .duzenleHata {
+    color: var(--color-accent-700); background: var(--color-accent-100);
+    padding: var(--space-2) var(--space-3); font-size: var(--fs-13); font-weight: 600; margin-bottom: var(--space-2);
+  }
+  .duzenleUyari {
+    color: var(--color-text); background: var(--color-neutral-200); padding: var(--space-2) var(--space-3);
+    font-size: var(--fs-13); margin-bottom: var(--space-2);
+  }
+  /* SABİT ALT ÇUBUK — "durum metni, Vazgeç, Kaydet" (DEVIR.md §3). */
+  .duzenleAlt {
+    position: sticky; bottom: 0; display: flex; align-items: center; gap: var(--space-3);
+    background: var(--color-bg); border-top: var(--border-section) solid var(--color-text);
+    padding: var(--space-3) 0; margin-top: var(--space-5);
+  }
+  .duzenleDurumMetni { flex: 1 1 auto; min-width: 0; font-size: var(--fs-13); color: var(--label-ink); }
+
+  /*
    * BİLDİRİM — DEVIR.md "Interactions & Behavior": "Her çıkış kartı
    * ilgili kuyruğa bırakır ve kısa bir bildirim gösterir ... sol altta,
    * koyu zemin, 4px accent sol kenar, 3.4 sn." karar() (yukarıda,
@@ -1760,6 +1851,15 @@ function ciz(m) {
   duzenle.type = "button";
   duzenle.addEventListener("click", () => { location.hash = "akis"; });
   panoArac.append(duzenle);
+  // "Rolleri düzenle" — DEVIR.md §3, sağ panelin MOD 5'i (kart
+  // c-20261105-725320). "Akışı düzenle" (yukarıda) ESKİ overlay'i açıyor —
+  // bu YENİ düğme sağ panelde ayrı bir yüzey açıyor, overlay'in yerini
+  // ALMIYOR (ikisi de AYNI /akis + /akis/onizleme + /akis/yaz uçlarını
+  // paylaşıyor, overlay'in sökülmesi bu kartın kapsamı dışında).
+  const rolleriDuzenleDugme = el("button", "mini", "Rolleri düzenle");
+  rolleriDuzenleDugme.type = "button";
+  rolleriDuzenleDugme.addEventListener("click", () => { duzenleAc(); });
+  panoArac.append(rolleriDuzenleDugme);
   const promptlarDugme = el("button", "mini", "Promptları düzenle");
   promptlarDugme.type = "button";
   promptlarDugme.addEventListener("click", () => { location.hash = "prompt"; });
@@ -2583,6 +2683,15 @@ function formasyonSvgKur(m) {
     g.append(formasyonEtiketKur(rol, i, p));
 
     const secimDegistir = () => {
+      // "Rolleri düzenle" AÇIKKEN düğüme tıklamak MODU DEĞİŞTİRMİYOR —
+      // DEVIR.md §3: "Diyagramda bir düğüme tıklanınca o rolün bloğu
+      // accent-100 ile vurgulanır." railGecis'in rolSec dalı burada YANLIŞ
+      // olurdu: panelden ÇIKARIR, oysa istenen panel AÇIKKEN içindeki
+      // bloğu işaret etmek.
+      if (RAIL.mode === "edit") {
+        duzenleVurgula(rol.id);
+        return;
+      }
       RAIL = railGecis(RAIL, { tur: "rolSec", rolId: rol.id });
       ciz(m);
     };
@@ -2900,11 +3009,755 @@ function railYenidenYuklenmeliMi(gosterilenId, hedefId) {
   return gosterilenId !== hedefId;
 }
 
+// --- MOD 5 — Rolleri düzenle (kart c-20261105-725320, DEVIR.md §3) ---
+//
+// Bu bölümün KARAR fonksiyonları (duzenle... ile başlayıp DOM almayanlar)
+// SAF: page.test.ts bunları fonksiyon()/fonksiyonlar() ile kaynaktan
+// çıkarıp doğrudan çağırıyor, railGecis/railRolMeta ile AYNI ilke. Çizim
+// fonksiyonları (duzenle...Ciz, railDuzenlePaneliCiz) bu karaları DOM'a
+// döküyor, kendileri karar vermiyor.
+
+/**
+ * HATA listesi — DEVIR.md §3 "Doğrulama": boş rol adı ve aynı adı taşıyan
+ * iki rol. İkisi de kaydetmeyi ENGELLER (accent-700). 'gecersiz' kümesi
+ * hangi rol bloğunun kırmızı kenarla işaretleneceğini taşıyor — mesaj
+ * metninin kendisi "hangi kutu" sorusuna cevap vermez.
+ */
+function duzenleHatalari(roller) {
+  const hatalar = [];
+  const gecersiz = new Set();
+  roller.forEach((r, i) => {
+    if (!r.id || r.id.trim() === "") {
+      hatalar.push((i + 1) + ". rolün adı boş");
+      gecersiz.add(i);
+    }
+  });
+  const sayim = new Map();
+  roller.forEach((r) => {
+    const ad = (r.id || "").trim();
+    if (ad === "") return;
+    sayim.set(ad, (sayim.get(ad) || 0) + 1);
+  });
+  const tekrarlar = new Set();
+  sayim.forEach((n, ad) => { if (n > 1) tekrarlar.add(ad); });
+  roller.forEach((r, i) => {
+    const ad = (r.id || "").trim();
+    if (tekrarlar.has(ad)) gecersiz.add(i);
+  });
+  tekrarlar.forEach((ad) => hatalar.push("'" + ad + "' adı birden çok rolde kullanılıyor"));
+  return { hatalar, gecersiz };
+}
+
+/**
+ * UYARI listesi — DEVIR.md §3: "açık kartı olan bir rol silinirse"
+ * (ENGELLEMEZ). 'oncekiIdler' panel AÇILDIĞINDA yüklenen rol kimlikleri,
+ * 'simdikiIdler' o anki taslak; aradaki fark SİLİNEN roller. "açık" olmak
+ * state !== "done" — railRolCiz'in kart listesiyle AYNI filtre, yetim
+ * kartlar ('orphan') zaten akıştan bağımsız, sayılmaz.
+ */
+function duzenleSilmeUyarilari(oncekiIdler, simdikiIdler, kartlar) {
+  const simdiSet = new Set(simdikiIdler);
+  const uyarilar = [];
+  oncekiIdler.filter((id) => !simdiSet.has(id)).forEach((id) => {
+    const acikSayisi = kartlar.filter((c) => c.role === id && c.state !== "done" && !c.orphan).length;
+    if (acikSayisi > 0) uyarilar.push("'" + id + "' silindi ama " + acikSayisi + " açık kartı var");
+  });
+  return uyarilar;
+}
+
+/**
+ * 'next'i HER ZAMAN sıradan türetir, sonuncusu "done" — DEVIR.md §3
+ * "Normalizasyon". Diziyi YERİNDE günceller (role nesneleri aynı
+ * referans) ve aynı diziyi döner; ekranda ayrı bir "next" alanı/seçicisi
+ * YOK, sıra tek doğruluk kaynağı.
+ */
+function duzenleSiradanBagla(roller) {
+  roller.forEach((r, i) => {
+    r.next = i + 1 < roller.length ? roller[i + 1].id : "done";
+  });
+  return roller;
+}
+
+/**
+ * Kural 13'ün ('reject' yalnızca zincirde DAHA ÖNCE gelen role işaret
+ * eder) normalizasyon karşılığı: taşıma/silme SONRASI artık geçersiz
+ * kalan 'reject' hedeflerini temizler. Ekranın "ret yolu: yalnızca
+ * kendinden ÖNCEKİ roller ya da 'yok'" seçicisi zaten bunun DIŞINDAKİ
+ * seçenekleri sunmuyor, ama bir TAŞIMA önceden geçerli bir değeri listenin
+ * dışına çıkarabilir — bu fonksiyon o artığı siler.
+ */
+function duzenleReddiTemizle(roller) {
+  const indeks = new Map(roller.map((r, i) => [r.id, i]));
+  roller.forEach((r, i) => {
+    if (r.reject === undefined || r.reject === "") return;
+    const hedef = indeks.get(r.reject);
+    if (hedef === undefined || hedef >= i) r.reject = undefined;
+  });
+  return roller;
+}
+
+/**
+ * Rolü i konumundan 'yon' (-1 yukarı / +1 aşağı) yönünde bir komşuyla
+ * DEĞİŞ TOKUŞ eder — DEVIR.md §3 "↑ ↓ ikon düğmeleri". Sınırın dışına
+ * taşmaya çalışmak (ilk rolü yukarı, son rolü aşağı) hiçbir şey yapmaz.
+ * Taşıma SIRAYI değiştirdiği için 'next' yeniden türetilir ve artık
+ * geçersiz kalmış 'reject' hedefleri temizlenir.
+ */
+function duzenleTasi(roller, i, yon) {
+  const j = i + yon;
+  if (j < 0 || j >= roller.length) return roller;
+  const tmp = roller[i];
+  roller[i] = roller[j];
+  roller[j] = tmp;
+  duzenleReddiTemizle(roller);
+  duzenleSiradanBagla(roller);
+  return roller;
+}
+
+/**
+ * Ad girişini DEVIR.md §3'ün izin verdiği kümeye indirger: yalnızca
+ * a-z0-9-. Küçük harfe çevirir (Shift ile "Coder" yazmak sessizce başka
+ * bir rol İCAT ETMEMELİ) ve kümenin dışındaki her karakteri DÜŞÜRÜR —
+ * geçersiz bir karakteri REDDETMEK (kaydetmeyi engellemek) yerine
+ * SESSİZCE temizlemek, DEVIR.md'nin kendi kısıtını (yalnızca a-z0-9-)
+ * ihlal etmeyen bir sonucu HER ZAMAN garantiliyor.
+ */
+function duzenleAdSanitize(deger) {
+  return (deger || "").trim().toLowerCase().replace(/[^a-z0-9-]/g, "");
+}
+
+/**
+ * Rol adını değiştirir ve ONA BAĞLI HER referansı günceller: 'reject',
+ * 'planlama.katilimcilar', 'planlama.denetci' — DEVIR.md §3: "ad
+ * değişince ona bağlı reject, planlama.katilimcilar ve denetci
+ * referansları da güncellenir". 'next' burada YOK: her zaman sıradan
+ * türetiliyor (bkz. duzenleSiradanBagla), ad değişikliğinden etkilenmez.
+ *
+ * Boş ada yeniden adlandırma İSTEĞİ (eski 'rolAdiDegis' editörüyle AYNI
+ * kural) YOK SAYILIR: eski ad kalır, kaskad hiç çalışmaz. Böyle bir alan
+ * yine de "boş" HALE gelebilir (kullanıcı kutuya sadece boşluk yazarsa) —
+ * o durum kaskad DIŞINDA, duzenleHatalari'nin yakaladığı bir durum.
+ */
+function duzenleAdDegis(taslak, i, yeniAd) {
+  const eski = taslak.roles[i].id;
+  if (!yeniAd || yeniAd === eski) return taslak;
+  taslak.roles[i].id = yeniAd;
+  taslak.roles.forEach((r, idx) => {
+    if (idx !== i && r.reject === eski) r.reject = yeniAd;
+  });
+  if (taslak.planlama) {
+    taslak.planlama.katilimcilar = taslak.planlama.katilimcilar.map((k) => (k === eski ? yeniAd : k));
+    if (taslak.planlama.denetci === eski) taslak.planlama.denetci = yeniAd;
+  }
+  return taslak;
+}
+
+/**
+ * Rolü çıkarır ve ona yapılan HER atfı temizler: 'reject', 'syncBack',
+ * 'gates', 'planlama.katilimcilar', 'planlama.denetci' — DEVIR.md §3
+ * "Normalizasyon: ... silinen rollere giden referanslar temizlenir".
+ * Katılımcı listesi BOŞALIRSA 'planlama' bütünüyle kaldırılır: kural 17
+ * tek katılımcısız bir planlamayı zaten yasaklıyor, yarım bir blok
+ * bırakmanın anlamı yok. Son rol SİLİNEMEZ (eski 'rolSil' ile AYNI koruma).
+ */
+function duzenleSil(taslak, id) {
+  const i = taslak.roles.findIndex((r) => r.id === id);
+  if (i === -1 || taslak.roles.length < 2) return taslak;
+  taslak.roles.splice(i, 1);
+  taslak.roles.forEach((r) => {
+    if (r.reject === id) r.reject = undefined;
+    if (r.syncBack) r.syncBack = r.syncBack.filter((x) => x !== id);
+  });
+  if (taslak.gates) taslak.gates = taslak.gates.filter((g) => g.after !== id);
+  if (taslak.planlama) {
+    taslak.planlama.katilimcilar = taslak.planlama.katilimcilar.filter((k) => k !== id);
+    if (taslak.planlama.denetci === id) taslak.planlama.denetci = undefined;
+    if (taslak.planlama.katilimcilar.length === 0) taslak.planlama = undefined;
+  }
+  duzenleReddiTemizle(taslak.roles);
+  duzenleSiradanBagla(taslak.roles);
+  return taslak;
+}
+
+/**
+ * Planlama katılımını AYARLAR — DEVIR.md §3: "ilk katılımcı yazar,
+ * diğerleri itiraz eder". Katılımcılar zincirin BAŞINDAN başlayan
+ * KESİNTİSİZ bir önek olmak ZORUNDA (kural 19) — SAF fonksiyon tek bir
+ * geçerli hamleyi uygular; sıra dışı bir istek sessizce YOK SAYILIR
+ * (arayüz zaten sıra dışı kutuları devre dışı bırakıyor, bkz.
+ * duzenlePlanlamaKatilimKutusuCiz).
+ *
+ * 'katilmak' true ise İSTEK yalnızca önekin TAM BİR SONRASI (idx === k)
+ * olduğunda kabul edilir — önek bir uzar. 'katilmak' false ise idx'in
+ * KENDİSİ ve SONRASI önekten çıkar: aradan birini çıkarmak öndekini
+ * katılımcı olmaktan ÇIKARAMAZ, ama ardındaki zaten önek dışıydı.
+ */
+function duzenlePlanlamaAyarla(katilimcilar, rolIdler, idx, katilmak) {
+  const k = katilimcilar.length;
+  if (katilmak) {
+    if (idx !== k) return katilimcilar;
+    return rolIdler.slice(0, k + 1);
+  }
+  if (idx >= k) return katilimcilar;
+  return rolIdler.slice(0, idx);
+}
+
+/**
+ * Katılımcı kümesi/sıra değiştiğinde GEÇERSİZ kalan denetçiyi temizler —
+ * kural 23: denetçi katılımcı OLAMAZ ve katılımcılardan SONRA gelmek
+ * ZORUNDA. Katılımcı yoksa denetçi de anlamsız (yükümlülük kapısının
+ * denetleyeceği bir itiraz yok).
+ */
+function duzenleDenetciGecerle(denetci, katilimcilar, rolIdler) {
+  if (denetci === undefined || denetci === "") return undefined;
+  if (katilimcilar.length === 0 || katilimcilar.includes(denetci)) return undefined;
+  const sonKatilimciIndeks = rolIdler.indexOf(katilimcilar[katilimcilar.length - 1]);
+  const denetciIndeks = rolIdler.indexOf(denetci);
+  if (denetciIndeks === -1 || denetciIndeks <= sonKatilimciIndeks) return undefined;
+  return denetci;
+}
+
+/** "Yazar: X · itiraz: Y, Z" özeti — DEVIR.md §3 "Planlama bölümü: özet". Katılımcı yoksa boş dize. */
+function duzenlePlanlamaOzet(katilimcilar) {
+  if (katilimcilar.length === 0) return "";
+  if (katilimcilar.length === 1) return "Yazar: " + katilimcilar[0];
+  return "Yazar: " + katilimcilar[0] + " · itiraz: " + katilimcilar.slice(1).join(", ");
+}
+
+/**
+ * Sunucuya göndermeden (önizleme ya da kaydetme) önce HER ZAMAN uygulanan
+ * normalizasyon — DEVIR.md §3 "Normalizasyon" paragrafının TAMAMI: next
+ * sıradan türer, geçersiz ret hedefleri ve geçersiz denetçi temizlenir.
+ * Taslağı YERİNDE değiştirir ve aynı nesneyi döner.
+ */
+function duzenleNormallestir(taslak) {
+  duzenleReddiTemizle(taslak.roles);
+  duzenleSiradanBagla(taslak.roles);
+  if (taslak.planlama) {
+    const rolIdler = taslak.roles.map((r) => r.id);
+    taslak.planlama.denetci = duzenleDenetciGecerle(taslak.planlama.denetci, taslak.planlama.katilimcilar, rolIdler);
+  }
+  return taslak;
+}
+
+// Panelin durumu — overlay'in TASLAK/SAGLAYICILAR'ından KASITLI OLARAK
+// AYRI (bkz. "Rolleri düzenle" düğmesinin yorumu): ikisi aynı anda açık
+// olabilir, aynı değişkeni paylaşmak çapraz yazmaya yol açardı.
+let DUZENLE_TASLAK = null;
+let DUZENLE_SAGLAYICILAR = [];
+let DUZENLE_PROMPTLAR = [];
+// Panel AÇILDIĞINDA okunan taslağın JSON görüntüsü — "değişiklik var mı"
+// (Kaydet/Vazgeç'in devre dışı kalma kararı) ve Vazgeç'in geri döneceği
+// hâl BUNDAN türüyor.
+let DUZENLE_ORIJINAL = null;
+let DUZENLE_ORIJINAL_ROL_IDLER = [];
+let DUZENLE_HATA = null;
+let DUZENLE_YAML_GORUNUR = false;
+// /akis/onizleme'nin son cevabı — {ok, yaml, message?/cost?}. null =
+// henüz hiç sorulmadı (Kaydet o ana kadar devre dışı kalır).
+let DUZENLE_ONIZLEME = null;
+// Diyagramdan tıklanan düğümün vurgulayacağı blok — yalnızca GÖRSEL,
+// RAIL'i değiştirmez (bkz. secimDegistir'in "edit" dalı).
+let DUZENLE_VURGU = null;
+
+/** "Rolleri düzenle" girişi — panoArac'taki düğme bunu çağırır. */
+function duzenleAc() {
+  RAIL = { mode: "edit", roleId: null, cardId: null, cardFrom: "overview" };
+  DUZENLE_TASLAK = null;
+  DUZENLE_ORIJINAL = null;
+  DUZENLE_ORIJINAL_ROL_IDLER = [];
+  DUZENLE_HATA = null;
+  DUZENLE_YAML_GORUNUR = false;
+  DUZENLE_ONIZLEME = null;
+  DUZENLE_VURGU = null;
+  railYenidenCiz();
+}
+
+/** Genel bakışa döner ve panelin durumunu TEMİZLER — açık bir taslak bayat kalmasın. */
+function duzenleKapat() {
+  RAIL = { mode: "overview", roleId: null, cardId: null, cardFrom: "overview" };
+  DUZENLE_TASLAK = null;
+  DUZENLE_ORIJINAL = null;
+  railYenidenCiz();
+}
+
+/**
+ * Taslağı ve sağlayıcı/prompt listesini YÜKLER — sagPanelCiz bunu "edit"
+ * moduna İLK girişte BİR KEZ çağırıyor (bkz. "data-rail-edit" koruması,
+ * railKartYukle'nin "data-rail-kart"ıyla AYNI desen): yoksa her saniyelik
+ * yoklama formu sıfırlar, operatör yazarken kutular BAŞA dönerdi.
+ */
+async function railDuzenleYukle(kutu) {
+  kutu.replaceChildren(el("div", "railBos", "yükleniyor…"));
+  try {
+    const akisCevap = await fetch("/akis", { cache: "no-store" });
+    const akisVeri = await akisCevap.json();
+    if (!akisCevap.ok) throw new Error(akisVeri.hata || akisCevap.status);
+    if (!akisVeri.draft) throw new Error("Bu ekran akış düzenlemeye açık değil.");
+    DUZENLE_TASLAK = akisVeri.draft;
+    DUZENLE_SAGLAYICILAR = akisVeri.providers || [];
+    DUZENLE_ORIJINAL = JSON.stringify(DUZENLE_TASLAK);
+    DUZENLE_ORIJINAL_ROL_IDLER = DUZENLE_TASLAK.roles.map((r) => r.id);
+    // /promptlar başarısız olsa bile (örn. akış hiç prompt bildirmiyor)
+    // editörü ENGELLEMİYORUZ — prompt alanı o durumda yalnızca ROLÜN
+    // KENDİ değerini seçenek olarak gösterir (bkz. duzenlePromptAlani).
+    try {
+      const promptCevap = await fetch("/promptlar", { cache: "no-store" });
+      const promptVeri = await promptCevap.json();
+      DUZENLE_PROMPTLAR = promptCevap.ok ? (promptVeri.promptlar || []) : [];
+    } catch {
+      DUZENLE_PROMPTLAR = [];
+    }
+  } catch (e) {
+    DUZENLE_HATA = e.message;
+  }
+  if (RAIL.mode !== "edit") return; // panel kapandıysa bayat cevabı YAZMA
+  railDuzenlePaneliCiz(kutu, SON_MODEL);
+}
+
+/** Tek değerli bir alan: seçenek listesi varsa 'select', yoksa serbest metin 'input'. */
+function duzenleAlan(etiket, deger, secenekler, onChange, etiketCozucu) {
+  const l = el("label", "duzenleAlanTekil");
+  l.append(el("span", "duzenleAlanEtiket", etiket));
+  const g = el(secenekler ? "select" : "input");
+  if (secenekler) {
+    secenekler.forEach((s) => {
+      const o = el("option", null, etiketCozucu ? etiketCozucu(s) : (s === "" ? "yok" : s));
+      o.value = s;
+      if (s === deger) o.selected = true;
+      g.append(o);
+    });
+  } else {
+    g.value = deger == null ? "" : deger;
+  }
+  g.addEventListener("change", () => { onChange(g.value); duzenleYenile(); });
+  l.append(g);
+  return l;
+}
+
+/** ALIM segment düğmesi — "tekil/toplu", 2px kenar, seçili koyu zeminli (DEVIR.md §3). */
+function duzenleSegment(etiket, deger, secenekler, onChange) {
+  const sarmal = el("div");
+  sarmal.append(el("span", "duzenleAlanEtiket", etiket));
+  const grup = el("div", "duzenleSegment");
+  grup.setAttribute("role", "group");
+  grup.setAttribute("aria-label", etiket);
+  secenekler.forEach(([v, ad]) => {
+    const b = el("button", "duzenleSegmentBtn" + (v === deger ? " secili" : ""), ad);
+    b.type = "button";
+    b.setAttribute("aria-pressed", String(v === deger));
+    b.addEventListener("click", () => {
+      if (v === deger) return;
+      onChange(v);
+      duzenleYenile();
+    });
+    grup.append(b);
+  });
+  sarmal.append(grup);
+  return sarmal;
+}
+
+/** 1..5 arası stepper — tur ve ret limiti AYNI widget'ı paylaşıyor (DEVIR.md §3). */
+function duzenleStepper(deger, min, max, onChange) {
+  const sarmal = el("div", "duzenleStepper");
+  const eksi = el("button", "duzenleIkon", "−");
+  eksi.type = "button";
+  eksi.disabled = deger <= min;
+  eksi.setAttribute("aria-label", "azalt");
+  eksi.addEventListener("click", () => { onChange(Math.max(min, deger - 1)); duzenleYenile(); });
+  sarmal.append(eksi);
+  sarmal.append(el("span", "duzenleStepperDeger mono", String(deger)));
+  const arti = el("button", "duzenleIkon", "+");
+  arti.type = "button";
+  arti.disabled = deger >= max;
+  arti.setAttribute("aria-label", "arttır");
+  arti.addEventListener("click", () => { onChange(Math.min(max, deger + 1)); duzenleYenile(); });
+  sarmal.append(arti);
+  return sarmal;
+}
+
+/**
+ * Prompt seçimi ("roles/*.md") + "Aç" düğmesi — DEVIR.md §3. Liste
+ * /promptlar'tan (topolojinin BİLDİRDİĞİ dosyalar, SAPMALAR.md §3) — bu
+ * akışın dışında yeni bir uç İCAT EDİLMİYOR. Rolün KENDİ değeri listede
+ * yoksa (örn. henüz hiçbir rolün kullanmadığı bir yol) seçenek listesine
+ * EKLENİR — aksi hâlde seçim sessizce BAŞKA bir dosyaya kayardı.
+ */
+function duzenlePromptAlani(rol) {
+  const sarmal = el("div", "duzenlePromptSarmal");
+  const bilinenler = DUZENLE_PROMPTLAR.map((p) => p.yol);
+  const secenekler = bilinenler.includes(rol.prompt) ? bilinenler : [rol.prompt, ...bilinenler];
+  const alan = duzenleAlan("prompt", rol.prompt, secenekler, (v) => { rol.prompt = v; });
+  sarmal.append(alan);
+  const ac = el("button", "railBtn", "Aç");
+  ac.type = "button";
+  ac.addEventListener("click", () => {
+    PROMPT_SEC = rol.prompt;
+    location.hash = "prompt";
+  });
+  sarmal.append(ac);
+  return sarmal;
+}
+
+/**
+ * Planlamaya katılım kutusu (tek rol bloğu içinde) — DEVIR.md §3: "ilk
+ * katılımcı yazar, diğerleri itiraz eder; satırın sağında 'devreder →
+ * sonraki'". Sıra dışı bir katılım isteği (önceki rol katılımcı değilken
+ * bu kutuyu işaretlemek) kutunun KENDİSİ devre dışı bırakılarak
+ * ÖNLENİYOR — duzenlePlanlamaAyarla zaten sessizce yok sayardı, ama bir
+ * düğmenin "yapamayacağı şeyi vaat etmesi" bu dosyada iki kez düzeltilmiş
+ * bir kusur sınıfı (bkz. "back" düğmesinin kaldırılması).
+ */
+function duzenlePlanlamaKatilimKutusuCiz(taslak, i) {
+  const rol = taslak.roles[i];
+  const katilimcilar = taslak.planlama ? taslak.planlama.katilimcilar : [];
+  const k = katilimcilar.length;
+  const katilimciMi = i < k;
+  const sarmal = el("div", "duzenlePlanKatilim");
+  const kutucuk = el("input");
+  kutucuk.type = "checkbox";
+  kutucuk.id = "duzenlePlan-" + i;
+  kutucuk.checked = katilimciMi;
+  kutucuk.disabled = !katilimciMi && i !== k;
+  const etiket = el("label", "duzenlePlanKatilimEtiket");
+  etiket.htmlFor = kutucuk.id;
+  etiket.append(document.createTextNode("planlamaya katıl"));
+  sarmal.append(kutucuk, etiket);
+
+  if (katilimciMi && i === k - 1) {
+    const sonrakiRol = taslak.roles[k] ? taslak.roles[k].id : "done";
+    sarmal.append(el("span", "duzenlePlanDevreder", "devreder → " + sonrakiRol));
+  }
+
+  kutucuk.addEventListener("change", () => {
+    const rolIdler = taslak.roles.map((r) => r.id);
+    const yeniKatilimcilar = duzenlePlanlamaAyarla(katilimcilar, rolIdler, i, kutucuk.checked);
+    if (yeniKatilimcilar.length === 0) {
+      taslak.planlama = undefined;
+    } else {
+      const onceki = taslak.planlama;
+      taslak.planlama = {
+        katilimcilar: yeniKatilimcilar,
+        plan: onceki ? onceki.plan : "docs/plan/{kart}.md",
+        tur: onceki ? onceki.tur : 1,
+        ilkTurKor: onceki ? onceki.ilkTurKor : true,
+        ...(onceki && onceki.denetci !== undefined ? { denetci: onceki.denetci } : {}),
+      };
+      taslak.planlama.denetci = duzenleDenetciGecerle(taslak.planlama.denetci, yeniKatilimcilar, rolIdler);
+    }
+    duzenleYenile();
+  });
+  return sarmal;
+}
+
+/** Planlama bölümü: özet, tur stepper'ı (1-5), yükümlülük denetçisi seçimi (DEVIR.md §3). */
+function duzenlePlanlamaBolumuCiz(taslak) {
+  const kutu = el("div", "duzenleBolum");
+  kutu.append(el("div", "eyebrow", "Planlama"));
+  const katilimcilar = taslak.planlama ? taslak.planlama.katilimcilar : [];
+  const ozet = duzenlePlanlamaOzet(katilimcilar);
+  kutu.append(el("div", "duzenleOzet", ozet || "katılım yok — hiçbir rol planlamaya katılmıyor"));
+  if (katilimcilar.length === 0 || !taslak.planlama) return kutu;
+
+  const turSira = el("div", "duzenleStepperSarmal");
+  turSira.append(el("span", "duzenleAlanEtiket", "en çok tur"));
+  turSira.append(duzenleStepper(taslak.planlama.tur, 1, 5, (v) => { taslak.planlama.tur = v; }));
+  kutu.append(turSira);
+
+  const rolIdler = taslak.roles.map((r) => r.id);
+  const denetciSecenekleri = ["", ...rolIdler.slice(katilimcilar.length)];
+  kutu.append(duzenleAlan("yükümlülük denetçisi", taslak.planlama.denetci || "", denetciSecenekleri,
+    (v) => { taslak.planlama.denetci = v || undefined; }));
+
+  return kutu;
+}
+
+/** Ret bölümü: limit stepper'ı (1-5); limit dolunca kart kapıya düşer (DEVIR.md §3). */
+function duzenleRetBolumuCiz(taslak) {
+  if (!taslak.reject) taslak.reject = { limit: 2, onExhausted: "gate" };
+  const kutu = el("div", "duzenleBolum");
+  kutu.append(el("div", "eyebrow", "Ret"));
+  const sira = el("div", "duzenleStepperSarmal");
+  sira.append(el("span", "duzenleAlanEtiket", "limit"));
+  sira.append(duzenleStepper(taslak.reject.limit ?? 2, 1, 5, (v) => { taslak.reject.limit = v; }));
+  kutu.append(sira);
+  kutu.append(el("div", "duzenleAciklama", "limit dolunca kart insan kapısında bekler (onExhausted: gate)"));
+  return kutu;
+}
+
+/** Bir rol bloğu — numara, ad girişi, ↑↓✕, 2x2 ızgara, prompt, planlama katılımı (DEVIR.md §3). */
+function duzenleRolBlogu(taslak, i, gecersizMi) {
+  const rol = taslak.roles[i];
+  const blok = el("div", "duzenleRol" + (DUZENLE_VURGU === rol.id ? " duzenleVurgu" : ""));
+  blok.dataset.rol = rol.id;
+
+  const ust = el("div", "duzenleRolUst");
+  ust.append(el("span", "duzenleRolNo mono", String(i + 1).padStart(2, "0")));
+  const adGirisi = el("input", "duzenleAdGirisi" + (gecersizMi ? " gecersiz" : ""));
+  adGirisi.value = rol.id;
+  adGirisi.setAttribute("aria-label", (i + 1) + ". rolün adı");
+  // DEVIR.md §3: "ad girişi (yalnızca a-z0-9-)". 'pattern' TARAYICIYA
+  // İPUCU (form doğrulaması olmayan serbest bir <input>'ta tek başına
+  // zorlamaz) — asıl zorlama duzenleAdSanitize'da: izin verilmeyen her
+  // karakter YAZILIRKEN sessizce düşer, kaydedilmeden SONRA bir hata
+  // göstermek yerine.
+  adGirisi.setAttribute("pattern", "[a-z0-9-]+");
+  adGirisi.addEventListener("change", () => {
+    duzenleAdDegis(taslak, i, duzenleAdSanitize(adGirisi.value));
+    duzenleYenile();
+  });
+  ust.append(adGirisi);
+
+  const yukari = el("button", "duzenleIkon", "↑");
+  yukari.type = "button";
+  yukari.disabled = i === 0;
+  yukari.setAttribute("aria-label", "yukarı taşı");
+  yukari.addEventListener("click", () => { duzenleTasi(taslak.roles, i, -1); duzenleYenile(); });
+  ust.append(yukari);
+
+  const asagi = el("button", "duzenleIkon", "↓");
+  asagi.type = "button";
+  asagi.disabled = i === taslak.roles.length - 1;
+  asagi.setAttribute("aria-label", "aşağı taşı");
+  asagi.addEventListener("click", () => { duzenleTasi(taslak.roles, i, 1); duzenleYenile(); });
+  ust.append(asagi);
+
+  const sil = el("button", "duzenleIkon duzenleIkonSil", "✕");
+  sil.type = "button";
+  sil.disabled = taslak.roles.length < 2;
+  sil.setAttribute("aria-label", "rolü sil");
+  sil.addEventListener("click", () => { duzenleSil(taslak, rol.id); duzenleYenile(); });
+  ust.append(sil);
+  blok.append(ust);
+
+  const izgara = el("div", "duzenleIzgara");
+  // DEVIR.md §3 "claude/codex/copilot/gemini" diyor, ama bu DÖRDÜ sabit bir
+  // liste DEĞİL: kayıtlı sağlayıcı kümesi /akis'in döndürdüğü
+  // DUZENLE_SAGLAYICILAR'dan geliyor (bkz. railDuzenleYukle) ve bu depoda
+  // bugün yalnızca claude/codex kayıtlı (bkz. adapters/factory.ts). Burada
+  // sabit dört seçenek göstermek, kural 8'in ("provider kayıtlı bir
+  // adaptöre karşılık gelir") REDDEDECEĞİ bir seçimi SUNMAK olurdu —
+  // "yapamayacağı şeyi vaat eden düğme" kusur sınıfının select hâli.
+  const saglayicilar = DUZENLE_SAGLAYICILAR.length ? DUZENLE_SAGLAYICILAR : [rol.provider];
+  izgara.append(duzenleAlan("sağlayıcı", rol.provider, saglayicilar, (v) => { rol.provider = v; }));
+  izgara.append(duzenleAlan("çalışma alanı", rol.workspace, null, (v) => { rol.workspace = v; }));
+  izgara.append(duzenleSegment("alım", rol.receive || "task",
+    [["task", "tekil"], ["batch", "toplu"]], (v) => { rol.receive = v; }));
+  const oncekiIdler = taslak.roles.slice(0, i).map((r) => r.id);
+  izgara.append(duzenleAlan("ret yolu", rol.reject || "", ["", ...oncekiIdler],
+    (v) => { rol.reject = v || undefined; }));
+  blok.append(izgara);
+
+  blok.append(duzenlePromptAlani(rol));
+  blok.append(duzenlePlanlamaKatilimKutusuCiz(taslak, i));
+
+  return blok;
+}
+
+/** "Rol ekle" — zincirin SONUNA ekler (sıra = tek doğruluk kaynağı, next duzenleSiradanBagla'dan gelir). */
+function duzenleRolEkle() {
+  const taslak = DUZENLE_TASLAK;
+  const sonuncusu = taslak.roles[taslak.roles.length - 1];
+  let n = 1;
+  while (taslak.roles.some((r) => r.id === "rol" + n)) n += 1;
+  taslak.roles.push({
+    id: "rol" + n,
+    provider: sonuncusu ? sonuncusu.provider : (DUZENLE_SAGLAYICILAR[0] || "claude"),
+    workspace: "rol" + n,
+    prompt: sonuncusu ? sonuncusu.prompt : "",
+    receive: "task",
+    next: "done",
+  });
+  duzenleSiradanBagla(taslak.roles);
+  duzenleYenile();
+}
+
+/** Diyagramdan tıklanan düğümü panelde vurgular — RAIL'i DEĞİŞTİRMEZ (bkz. secimDegistir). */
+function duzenleVurgula(id) {
+  DUZENLE_VURGU = id;
+  document.querySelectorAll("#sagPanel .duzenleRol").forEach((node) => {
+    node.classList.toggle("duzenleVurgu", node.dataset.rol === id);
+  });
+  const hedef = document.querySelector('#sagPanel .duzenleRol[data-rol="' + id + '"]');
+  if (hedef && hedef.scrollIntoView) hedef.scrollIntoView({ block: "nearest" });
+}
+
+/** "Vazgeç" — panel AÇILDIĞINDAki hâle döner, kaydetmeden. */
+function duzenleVazgec() {
+  if (DUZENLE_ORIJINAL === null) return;
+  DUZENLE_TASLAK = JSON.parse(DUZENLE_ORIJINAL);
+  DUZENLE_YAML_GORUNUR = false;
+  DUZENLE_ONIZLEME = null;
+  duzenleYenile();
+}
+
+/**
+ * Taslağı DOSYAYA YAZMADAN doğrular — "YAML'ı göster" önizlemesi VE
+ * Kaydet'in devre dışı kalma kararı BU cevaba bağlı. MEVCUT /akis/onizleme
+ * ucu (SAPMALAR.md §3) — ekrana ayrı bir kural kopyası YAZILMIYOR.
+ * Normalizasyon (bkz. duzenleNormallestir) gönderilen KOPYAYA uygulanıyor,
+ * DUZENLE_TASLAK'ın KENDİSİNE değil: önizleme "next"i ÖNCEDEN göstersin
+ * diye roller dizisini sessizce değiştirmek, operatörün GÖRMEDİĞİ bir
+ * mutasyon olurdu.
+ */
+async function duzenleOnizlemeYukle() {
+  const kopya = duzenleNormallestir(JSON.parse(JSON.stringify(DUZENLE_TASLAK)));
+  try {
+    const cevap = await fetch("/akis/onizleme", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-skein-token": JETON },
+      body: JSON.stringify(kopya),
+    });
+    const v = await cevap.json();
+    if (!cevap.ok) throw new Error(v.hata || cevap.status);
+    DUZENLE_ONIZLEME = v;
+  } catch (e) {
+    DUZENLE_ONIZLEME = { ok: false, message: "Önizleme alınamadı: " + e.message, yaml: "" };
+  }
+  if (RAIL.mode !== "edit") return; // panel kapandıysa bayat cevabı YAZMA
+  duzenleAltCubukGuncelle();
+  const yamlKutu = document.getElementById("duzenleYaml");
+  if (yamlKutu) yamlKutu.textContent = DUZENLE_ONIZLEME.yaml || "";
+}
+
+/** Sabit alt çubuğu (durum metni + Vazgeç/Kaydet'in devre dışı kalma durumu) SURGICAL olarak günceller. */
+function duzenleAltCubukGuncelle() {
+  const taslak = DUZENLE_TASLAK;
+  if (!taslak) return;
+  const { hatalar } = duzenleHatalari(taslak.roles);
+  const degisti = JSON.stringify(taslak) !== DUZENLE_ORIJINAL;
+  const sunucuGecersiz = Boolean(DUZENLE_ONIZLEME && DUZENLE_ONIZLEME.ok === false);
+  const durum = document.getElementById("duzenleDurumMetni");
+  if (durum) {
+    durum.textContent = hatalar.length > 0 ? hatalar.length + " hata — kaydedilemez"
+      : !degisti ? "değişiklik yok"
+      : sunucuGecersiz ? "akış geçersiz — kaydedilemez"
+      : "değişiklik var · henüz kaydedilmedi";
+  }
+  const vazgecBtn = document.getElementById("duzenleVazgecBtn");
+  if (vazgecBtn) vazgecBtn.disabled = !degisti;
+  const kaydetBtn = document.getElementById("duzenleKaydetBtn");
+  if (kaydetBtn) {
+    kaydetBtn.disabled = !degisti || hatalar.length > 0
+      || !(DUZENLE_ONIZLEME && DUZENLE_ONIZLEME.ok === true);
+  }
+}
+
+/** Taslağın TAMAMINI yeniden çizer ve taze bir önizleme ister — her mutasyondan sonra çağrılır. */
+function duzenleYenile() {
+  const kutu = document.getElementById("sagPanel");
+  if (!kutu || RAIL.mode !== "edit") return;
+  railDuzenlePaneliCiz(kutu, SON_MODEL);
+  void duzenleOnizlemeYukle();
+}
+
+/** "Kaydet" — MEVCUT /akis/yaz ucu. Geçersiz taslak zaten devre dışı bırakılmış düğmeden çağrılamaz. */
+async function duzenleYaz() {
+  const kaydetBtn = document.getElementById("duzenleKaydetBtn");
+  if (kaydetBtn) kaydetBtn.disabled = true;
+  const kopya = duzenleNormallestir(JSON.parse(JSON.stringify(DUZENLE_TASLAK)));
+  try {
+    const cevap = await fetch("/akis/yaz", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-skein-token": JETON },
+      body: JSON.stringify(kopya),
+    });
+    const v = await cevap.json();
+    if (!cevap.ok) throw new Error(v.hata || cevap.status);
+    ciz(v.model);
+    duzenleKapat();
+    bildirimGoster("Roller kaydedildi.");
+  } catch (e) {
+    DUZENLE_ONIZLEME = { ok: false, message: "Kaydedilemedi: " + e.message, yaml: DUZENLE_ONIZLEME ? DUZENLE_ONIZLEME.yaml : "" };
+    duzenleAltCubukGuncelle();
+  }
+}
+
+/** MOD 5'in dış çatısı — geri düğmesi, üst bilgi, rol listesi, bölümler, YAML önizlemesi, sabit alt çubuk. */
+function railDuzenlePaneliCiz(kutu, m) {
+  kutu.replaceChildren();
+
+  const geri = el("button", "railGeri", "← Genel bakış");
+  geri.type = "button";
+  geri.addEventListener("click", () => { duzenleKapat(); });
+  kutu.append(geri);
+
+  if (DUZENLE_HATA) {
+    kutu.append(el("div", "err", "Akış okunamadı: " + DUZENLE_HATA));
+    return;
+  }
+  if (!DUZENLE_TASLAK) {
+    kutu.append(el("div", "railBos", "yükleniyor…"));
+    return;
+  }
+
+  const taslak = DUZENLE_TASLAK;
+  kutu.append(el("div", "railUst", "hub/flows/" + m.flow.name + ".yaml"));
+  kutu.append(el("h2", "railRolBaslik", "Roller"));
+  kutu.append(el("div", "duzenleAciklama",
+    "Sıra formasyonu belirler: ↑/↓ ile taşımak rolün V'deki yerini de değiştirir."));
+
+  const { hatalar, gecersiz } = duzenleHatalari(taslak.roles);
+  const uyarilar = duzenleSilmeUyarilari(DUZENLE_ORIJINAL_ROL_IDLER, taslak.roles.map((r) => r.id), m.cards);
+  hatalar.forEach((h) => kutu.append(el("div", "duzenleHata", h)));
+  uyarilar.forEach((w) => kutu.append(el("div", "duzenleUyari", w)));
+
+  const liste = el("div", "duzenleRolListe");
+  taslak.roles.forEach((rol, i) => { liste.append(duzenleRolBlogu(taslak, i, gecersiz.has(i))); });
+  kutu.append(liste);
+
+  const ekle = el("button", "railBtn", "Rol ekle");
+  ekle.type = "button";
+  ekle.addEventListener("click", () => { duzenleRolEkle(); });
+  kutu.append(ekle);
+
+  kutu.append(duzenlePlanlamaBolumuCiz(taslak));
+  kutu.append(duzenleRetBolumuCiz(taslak));
+
+  const yamlBtn = el("button", "railBtn", DUZENLE_YAML_GORUNUR ? "YAML'ı gizle" : "YAML'ı göster");
+  yamlBtn.type = "button";
+  yamlBtn.addEventListener("click", () => {
+    DUZENLE_YAML_GORUNUR = !DUZENLE_YAML_GORUNUR;
+    railDuzenlePaneliCiz(kutu, m);
+  });
+  kutu.append(yamlBtn);
+  if (DUZENLE_YAML_GORUNUR) {
+    const onizlemeKutu = el("div", "onizle");
+    onizlemeKutu.id = "duzenleYaml";
+    onizlemeKutu.textContent = DUZENLE_ONIZLEME ? (DUZENLE_ONIZLEME.yaml || "") : "önizleme yükleniyor…";
+    kutu.append(onizlemeKutu);
+  }
+
+  const altCubuk = el("div", "duzenleAlt");
+  const durum = el("div", "duzenleDurumMetni");
+  durum.id = "duzenleDurumMetni";
+  altCubuk.append(durum);
+  const vazgec = el("button", "railBtn", "Vazgeç");
+  vazgec.type = "button";
+  vazgec.id = "duzenleVazgecBtn";
+  vazgec.addEventListener("click", () => { duzenleVazgec(); });
+  altCubuk.append(vazgec);
+  const kaydetBtn = el("button", "railBtn primary", "Kaydet");
+  kaydetBtn.type = "button";
+  kaydetBtn.id = "duzenleKaydetBtn";
+  kaydetBtn.disabled = true;
+  kaydetBtn.addEventListener("click", () => { void duzenleYaz(); });
+  altCubuk.append(kaydetBtn);
+  kutu.append(altCubuk);
+
+  duzenleAltCubukGuncelle();
+  if (DUZENLE_ONIZLEME === null) void duzenleOnizlemeYukle();
+}
+
 /** Sağ paneli RAIL'in o anki moduna göre doldurur — ciz()'in her çağrısında. */
 function sagPanelCiz(m) {
   const kutu = document.getElementById("sagPanel");
   if (!kutu) return;
   if (RAIL.mode !== "card") kutu.removeAttribute("data-rail-kart");
+  // MOD 5 kendi "data-rail-edit" bayrağıyla AYNI korumayı kullanıyor
+  // (railKartYukle'nin "data-rail-kart"ı) — yoksa her saniyelik yoklama
+  // (yokla/ciz) formu sıfırlar, operatör yazarken kutular BAŞA döner.
+  if (RAIL.mode !== "edit") kutu.removeAttribute("data-rail-edit");
   if (RAIL.mode === "role") {
     railRolCiz(kutu, m, RAIL.roleId);
     return;
@@ -2913,6 +3766,13 @@ function sagPanelCiz(m) {
     if (railYenidenYuklenmeliMi(kutu.dataset.railKart, RAIL.cardId)) {
       kutu.dataset.railKart = RAIL.cardId;
       void railKartYukle(kutu, RAIL.cardId);
+    }
+    return;
+  }
+  if (RAIL.mode === "edit") {
+    if (kutu.dataset.railEdit !== "1") {
+      kutu.dataset.railEdit = "1";
+      void railDuzenleYukle(kutu);
     }
     return;
   }

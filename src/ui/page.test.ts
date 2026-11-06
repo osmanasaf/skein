@@ -1005,3 +1005,394 @@ describe("railYenidenYuklenmeliMi — Kart modunun fetch kararı", () => {
     expect(karar(undefined, "c-1")).toBe(true);
   });
 });
+
+/**
+ * MOD 5 — "Rolleri düzenle" (kart c-20261105-725320, DEVIR.md §3). Bu
+ * fonksiyonların hepsi SAF: çizim (railDuzenlePaneliCiz ve yardımcıları)
+ * DOM gerektirdiği için tarayici.test.ts'te, burada yalnızca KARAR.
+ */
+type DuzenleRol = {
+  id: string; provider?: string; workspace?: string; receive?: string;
+  reject?: string; syncBack?: string[]; next?: string; prompt?: string;
+};
+
+describe("duzenleHatalari — boş/tekrarlanan rol adı HATA'sı", () => {
+  const hatalar = (roller: DuzenleRol[]): { hatalar: string[]; gecersiz: Set<number> } =>
+    fonksiyon<(r: DuzenleRol[]) => { hatalar: string[]; gecersiz: Set<number> }>(
+      renderPage("t"), "duzenleHatalari",
+    )(roller);
+
+  it("hepsi tekil ve doluysa hata YOK", () => {
+    const sonuc = hatalar([{ id: "coder" }, { id: "reviewer" }]);
+    expect(sonuc.hatalar).toEqual([]);
+    expect(sonuc.gecersiz.size).toBe(0);
+  });
+
+  it("boş ad (ya da sadece boşluk) HATA verir ve o indeksi işaretler", () => {
+    const sonuc = hatalar([{ id: "coder" }, { id: "   " }]);
+    expect(sonuc.hatalar).toHaveLength(1);
+    expect(sonuc.gecersiz.has(1)).toBe(true);
+    expect(sonuc.gecersiz.has(0)).toBe(false);
+  });
+
+  it("aynı adı taşıyan İKİ rol HATA verir ve İKİSİNİ de işaretler", () => {
+    const sonuc = hatalar([{ id: "coder" }, { id: "coder" }, { id: "reviewer" }]);
+    expect(sonuc.hatalar).toHaveLength(1);
+    expect(sonuc.hatalar[0]).toContain("coder");
+    expect(sonuc.gecersiz).toEqual(new Set([0, 1]));
+  });
+
+  it("boş liste için hata YOK", () => {
+    expect(hatalar([]).hatalar).toEqual([]);
+  });
+});
+
+describe("duzenleSilmeUyarilari — açık kartı olan silinen rol UYARI'sı (engellemez)", () => {
+  type Kart = { role: string; state: string; orphan?: boolean };
+  const uyarilar = (onceki: string[], simdi: string[], kartlar: Kart[]): string[] =>
+    fonksiyon<(o: string[], s: string[], k: Kart[]) => string[]>(
+      renderPage("t"), "duzenleSilmeUyarilari",
+    )(onceki, simdi, kartlar);
+
+  it("silinmeyen rol için uyarı YOK", () => {
+    expect(uyarilar(["coder"], ["coder"], [{ role: "coder", state: "active" }])).toEqual([]);
+  });
+
+  it("silinen rolün AÇIK (done olmayan) kartı varsa uyarır", () => {
+    const sonuc = uyarilar(["coder", "reviewer"], ["coder"], [{ role: "reviewer", state: "gate" }]);
+    expect(sonuc).toHaveLength(1);
+    expect(sonuc[0]).toContain("reviewer");
+  });
+
+  it("silinen rolün kartları hepsi 'done'sa uyarmaz", () => {
+    expect(uyarilar(["coder", "reviewer"], ["coder"], [{ role: "reviewer", state: "done" }])).toEqual([]);
+  });
+
+  it("silinen rolün kartı YETİM (orphan) ise SAYMAZ", () => {
+    expect(uyarilar(["coder", "reviewer"], ["coder"], [{ role: "reviewer", state: "gate", orphan: true }])).toEqual([]);
+  });
+});
+
+describe("duzenleSiradanBagla — 'next' HER ZAMAN sıradan türer, sonuncusu 'done'", () => {
+  const bagla = (roller: DuzenleRol[]): DuzenleRol[] =>
+    fonksiyon<(r: DuzenleRol[]) => DuzenleRol[]>(renderPage("t"), "duzenleSiradanBagla")(roller);
+
+  it("üç rolü sırayla zincirler, sonuncusu 'done'", () => {
+    const sonuc = bagla([{ id: "a" }, { id: "b" }, { id: "c" }]);
+    expect(sonuc.map((r) => r.next)).toEqual(["b", "c", "done"]);
+  });
+
+  it("tek rol de 'done'a bağlanır", () => {
+    expect(bagla([{ id: "a" }])[0]?.next).toBe("done");
+  });
+});
+
+describe("duzenleReddiTemizle — kural 13: reject yalnızca DAHA ÖNCEki role işaret edebilir", () => {
+  const temizle = (roller: DuzenleRol[]): DuzenleRol[] =>
+    fonksiyon<(r: DuzenleRol[]) => DuzenleRol[]>(renderPage("t"), "duzenleReddiTemizle")(roller);
+
+  it("öncekine işaret eden reject KORUNUR", () => {
+    const sonuc = temizle([{ id: "a" }, { id: "b", reject: "a" }]);
+    expect(sonuc[1]?.reject).toBe("a");
+  });
+
+  it("SONRAKİ bir role işaret eden reject TEMİZLENİR", () => {
+    const sonuc = temizle([{ id: "a", reject: "b" }, { id: "b" }]);
+    expect(sonuc[0]?.reject).toBeUndefined();
+  });
+
+  it("var olmayan bir role işaret eden reject TEMİZLENİR", () => {
+    const sonuc = temizle([{ id: "a" }, { id: "b", reject: "yok" }]);
+    expect(sonuc[1]?.reject).toBeUndefined();
+  });
+
+  it("kendine işaret eden reject (hedef === i) TEMİZLENİR", () => {
+    const sonuc = temizle([{ id: "a", reject: "a" }]);
+    expect(sonuc[0]?.reject).toBeUndefined();
+  });
+});
+
+describe("duzenleTasi — ↑/↓ ikon düğmeleri: sırayı değiştirir, next'i yeniden türetir", () => {
+  const tasi = (roller: DuzenleRol[], i: number, yon: number): DuzenleRol[] =>
+    fonksiyonlar<(r: DuzenleRol[], i: number, y: number) => DuzenleRol[]>(
+      renderPage("t"), ["duzenleReddiTemizle", "duzenleSiradanBagla", "duzenleTasi"], "duzenleTasi",
+    )(roller, i, yon);
+
+  it("ortadaki rolü YUKARI taşır", () => {
+    const sonuc = tasi([{ id: "a" }, { id: "b" }, { id: "c" }], 1, -1);
+    expect(sonuc.map((r) => r.id)).toEqual(["b", "a", "c"]);
+    expect(sonuc.map((r) => r.next)).toEqual(["a", "c", "done"]);
+  });
+
+  it("İLK rolü YUKARI taşımak hiçbir şey yapmaz (sınır)", () => {
+    const roller = [{ id: "a" }, { id: "b" }];
+    expect(tasi(roller, 0, -1).map((r) => r.id)).toEqual(["a", "b"]);
+  });
+
+  it("SON rolü AŞAĞI taşımak hiçbir şey yapmaz (sınır)", () => {
+    const roller = [{ id: "a" }, { id: "b" }];
+    expect(tasi(roller, 1, 1).map((r) => r.id)).toEqual(["a", "b"]);
+  });
+
+  // Taşıma sırayı tersine çevirince eski bir reject GEÇERSİZ kalabilir —
+  // normalizasyon (duzenleReddiTemizle) bunu TEMİZLEMELİ.
+  it("taşıma SONRASI geçersiz kalan reject TEMİZLENİR", () => {
+    const sonuc = tasi([{ id: "a" }, { id: "b", reject: "a" }, { id: "c" }], 0, 1);
+    // yeni sıra: b, a, c — b artık a'DAN ÖNCE, b'nin a'ya reject'i geçersiz.
+    expect(sonuc.map((r) => r.id)).toEqual(["b", "a", "c"]);
+    expect(sonuc.find((r) => r.id === "b")?.reject).toBeUndefined();
+  });
+});
+
+describe("duzenleAdSanitize — DEVIR.md §3: ad girişi yalnızca a-z0-9-", () => {
+  const sanitize = (deger: string): string =>
+    fonksiyon<(d: string) => string>(renderPage("t"), "duzenleAdSanitize")(deger);
+
+  it("zaten geçerli bir ad DEĞİŞMEDEN kalır", () => {
+    expect(sanitize("coder-2")).toBe("coder-2");
+  });
+
+  it("BÜYÜK harfler küçültülür", () => {
+    expect(sanitize("Coder")).toBe("coder");
+  });
+
+  it("izin verilmeyen karakterler (boşluk, nokta, alt çizgi) DÜŞÜRÜLÜR", () => {
+    expect(sanitize("my role_1.v2")).toBe("myrole1v2");
+  });
+
+  it("baştaki/sondaki boşluk kırpılır", () => {
+    expect(sanitize("  coder  ")).toBe("coder");
+  });
+
+  it("yalnızca boşluktan oluşan bir ad BOŞ dizeye düşer", () => {
+    expect(sanitize("   ")).toBe("");
+  });
+});
+
+describe("duzenleAdDegis — ad değişince reject/planlama.katilimcilar/denetci de güncellenir", () => {
+  type Taslak = { roles: DuzenleRol[]; planlama?: { katilimcilar: string[]; denetci?: string } };
+  const degis = (taslak: Taslak, i: number, yeniAd: string): Taslak =>
+    fonksiyon<(t: Taslak, i: number, a: string) => Taslak>(renderPage("t"), "duzenleAdDegis")(taslak, i, yeniAd);
+
+  it("rolün kendi id'sini değiştirir", () => {
+    const sonuc = degis({ roles: [{ id: "coder" }] }, 0, "yazar");
+    expect(sonuc.roles[0]?.id).toBe("yazar");
+  });
+
+  it("BAŞKA bir rolün 'reject'i eski ada işaret ediyorsa GÜNCELLENİR", () => {
+    const taslak: Taslak = { roles: [{ id: "coder" }, { id: "reviewer", reject: "coder" }] };
+    const sonuc = degis(taslak, 0, "yazar");
+    expect(sonuc.roles[1]?.reject).toBe("yazar");
+  });
+
+  it("planlama.katilimcilar İÇİNDEKİ eski ad GÜNCELLENİR", () => {
+    const taslak: Taslak = {
+      roles: [{ id: "coder" }, { id: "reviewer" }],
+      planlama: { katilimcilar: ["coder"] },
+    };
+    const sonuc = degis(taslak, 0, "yazar");
+    expect(sonuc.planlama?.katilimcilar).toEqual(["yazar"]);
+  });
+
+  it("planlama.denetci eski ada işaret ediyorsa GÜNCELLENİR", () => {
+    const taslak: Taslak = {
+      roles: [{ id: "coder" }, { id: "guard" }],
+      planlama: { katilimcilar: ["coder"], denetci: "guard" },
+    };
+    const sonuc = degis(taslak, 1, "denetmen");
+    expect(sonuc.planlama?.denetci).toBe("denetmen");
+  });
+
+  it("İLGİSİZ bir rolün referansını DEĞİŞTİRMEZ", () => {
+    const taslak: Taslak = { roles: [{ id: "coder" }, { id: "reviewer", reject: "coder" }, { id: "guard" }] };
+    const sonuc = degis(taslak, 2, "denetmen");
+    expect(sonuc.roles[1]?.reject).toBe("coder");
+  });
+
+  it("BOŞ ada yeniden adlandırma YOK SAYILIR — eski ad kalır", () => {
+    const sonuc = degis({ roles: [{ id: "coder" }] }, 0, "");
+    expect(sonuc.roles[0]?.id).toBe("coder");
+  });
+
+  it("aynı ada 'değiştirmek' hiçbir referansa dokunmaz", () => {
+    const taslak: Taslak = { roles: [{ id: "coder" }, { id: "reviewer", reject: "coder" }] };
+    const sonuc = degis(taslak, 0, "coder");
+    expect(sonuc.roles[1]?.reject).toBe("coder");
+  });
+});
+
+describe("duzenleSil — rol silinince reject/syncBack/gates/planlama referansları temizlenir", () => {
+  type Gate = { after: string; type: string };
+  type Taslak = {
+    roles: DuzenleRol[]; gates?: Gate[];
+    planlama?: { katilimcilar: string[]; denetci?: string };
+  };
+  const sil = (taslak: Taslak, id: string): Taslak =>
+    fonksiyonlar<(t: Taslak, id: string) => Taslak>(
+      renderPage("t"), ["duzenleReddiTemizle", "duzenleSiradanBagla", "duzenleSil"], "duzenleSil",
+    )(taslak, id);
+
+  it("rolü diziden ÇIKARIR", () => {
+    const sonuc = sil({ roles: [{ id: "a" }, { id: "b" }] }, "b");
+    expect(sonuc.roles.map((r) => r.id)).toEqual(["a"]);
+  });
+
+  it("ona 'reject' eden rolün referansını TEMİZLER", () => {
+    const sonuc = sil({ roles: [{ id: "a" }, { id: "b" }, { id: "c", reject: "b" }] }, "b");
+    expect(sonuc.roles.find((r) => r.id === "c")?.reject).toBeUndefined();
+  });
+
+  it("ona 'syncBack' eden rolün listesinden ÇIKARIR", () => {
+    const sonuc = sil({ roles: [{ id: "a", syncBack: ["b"] }, { id: "b" }] }, "b");
+    expect(sonuc.roles.find((r) => r.id === "a")?.syncBack).toEqual([]);
+  });
+
+  it("ona ait 'gates' girdisini KALDIRIR", () => {
+    const sonuc = sil({ roles: [{ id: "a" }, { id: "b" }], gates: [{ after: "b", type: "approval" }] }, "b");
+    expect(sonuc.gates).toEqual([]);
+  });
+
+  it("planlama.katilimcilar İÇİNDEN çıkarır, boşalırsa planlama TAMAMEN kalkar", () => {
+    const sonuc = sil({ roles: [{ id: "a" }, { id: "b" }], planlama: { katilimcilar: ["a"] } }, "a");
+    expect(sonuc.planlama).toBeUndefined();
+  });
+
+  it("denetçi silinirse planlama.denetci TEMİZLENİR (katılımcılar kalsa da)", () => {
+    const sonuc = sil(
+      { roles: [{ id: "a" }, { id: "b" }, { id: "c" }], planlama: { katilimcilar: ["a"], denetci: "c" } },
+      "c",
+    );
+    expect(sonuc.planlama?.denetci).toBeUndefined();
+    expect(sonuc.planlama?.katilimcilar).toEqual(["a"]);
+  });
+
+  it("SON kalan rol SİLİNEMEZ", () => {
+    const sonuc = sil({ roles: [{ id: "a" }] }, "a");
+    expect(sonuc.roles).toHaveLength(1);
+  });
+
+  it("bilinmeyen bir id için hiçbir şey YAPMAZ", () => {
+    const taslak = { roles: [{ id: "a" }, { id: "b" }] };
+    expect(sil(taslak, "yok").roles).toHaveLength(2);
+  });
+});
+
+describe("duzenlePlanlamaAyarla — katılım her zaman zincirin KESİNTİSİZ bir öneği", () => {
+  const ayarla = (katilimcilar: string[], rolIdler: string[], idx: number, katilmak: boolean): string[] =>
+    fonksiyon<(k: string[], r: string[], i: number, kt: boolean) => string[]>(
+      renderPage("t"), "duzenlePlanlamaAyarla",
+    )(katilimcilar, rolIdler, idx, katilmak);
+
+  const ROLLER = ["a", "b", "c", "d"];
+
+  it("hiç katılımcı yokken İLK rolü katmak öneği bir uzatır", () => {
+    expect(ayarla([], ROLLER, 0, true)).toEqual(["a"]);
+  });
+
+  it("önekin TAM ARDINDAKİ rolü katmak öneği uzatır", () => {
+    expect(ayarla(["a"], ROLLER, 1, true)).toEqual(["a", "b"]);
+  });
+
+  // SIRA DIŞI istek: önek {a} iken DOĞRUDAN c'yi (idx 2) katmaya çalışmak
+  // kuralı (19) ihlal ederdi — sessizce YOK SAYILIR.
+  it("SIRA DIŞI bir katılım isteği YOK SAYILIR, önek değişmez", () => {
+    expect(ayarla(["a"], ROLLER, 2, true)).toEqual(["a"]);
+  });
+
+  it("zaten katılımcı olan bir role 'katıl' demek DEĞİŞTİRMEZ", () => {
+    expect(ayarla(["a", "b"], ROLLER, 0, true)).toEqual(["a", "b"]);
+  });
+
+  it("önekin SON elemanını çıkarmak öneği bir kısaltır", () => {
+    expect(ayarla(["a", "b"], ROLLER, 1, false)).toEqual(["a"]);
+  });
+
+  it("ortadan birini ÇIKARMAK onu ve ARDINDAKİ hepsini öneğin dışına atar", () => {
+    expect(ayarla(["a", "b", "c"], ROLLER, 1, false)).toEqual(["a"]);
+  });
+
+  it("katılımcı olmayan bir role 'çık' demek DEĞİŞTİRMEZ", () => {
+    expect(ayarla(["a"], ROLLER, 2, false)).toEqual(["a"]);
+  });
+});
+
+describe("duzenleDenetciGecerle — kural 23: denetçi katılımcı OLAMAZ, katılımcılardan SONRA gelmeli", () => {
+  const gecerle = (denetci: string | undefined, katilimcilar: string[], rolIdler: string[]): string | undefined =>
+    fonksiyon<(d: string | undefined, k: string[], r: string[]) => string | undefined>(
+      renderPage("t"), "duzenleDenetciGecerle",
+    )(denetci, katilimcilar, rolIdler);
+
+  const ROLLER = ["a", "b", "c", "d"];
+
+  it("katılımcılardan SONRA gelen geçerli bir denetçiyi KORUR", () => {
+    expect(gecerle("c", ["a", "b"], ROLLER)).toBe("c");
+  });
+
+  it("denetçi bir KATILIMCIYSA temizlenir", () => {
+    expect(gecerle("b", ["a", "b"], ROLLER)).toBeUndefined();
+  });
+
+  it("denetçi katılımcılardan ÖNCE/ARASINDAYSA temizlenir", () => {
+    expect(gecerle("a", ["a", "b"], ROLLER)).toBeUndefined();
+  });
+
+  it("katılımcı YOKSA denetçi de anlamsız, temizlenir", () => {
+    expect(gecerle("c", [], ROLLER)).toBeUndefined();
+  });
+
+  it("denetçi tanımsızsa tanımsız kalır", () => {
+    expect(gecerle(undefined, ["a"], ROLLER)).toBeUndefined();
+  });
+});
+
+describe("duzenlePlanlamaOzet — 'Yazar: X · itiraz: Y, Z' özeti", () => {
+  const ozet = (katilimcilar: string[]): string =>
+    fonksiyon<(k: string[]) => string>(renderPage("t"), "duzenlePlanlamaOzet")(katilimcilar);
+
+  it("katılımcı yoksa boş dize", () => {
+    expect(ozet([])).toBe("");
+  });
+
+  it("tek katılımcıda yalnızca yazar", () => {
+    expect(ozet(["planner"])).toBe("Yazar: planner");
+  });
+
+  it("birden çok katılımcıda ilk yazar, ötekiler itiraz", () => {
+    expect(ozet(["planner", "architect", "analyst"])).toBe("Yazar: planner · itiraz: architect, analyst");
+  });
+});
+
+describe("duzenleNormallestir — kaydetmeden/önizlemeden önce uygulanan TAM normalizasyon", () => {
+  type Taslak = {
+    roles: DuzenleRol[];
+    planlama?: { katilimcilar: string[]; denetci?: string; tur: number; plan: string; ilkTurKor: boolean };
+  };
+  const normallestir = (taslak: Taslak): Taslak =>
+    fonksiyonlar<(t: Taslak) => Taslak>(
+      renderPage("t"),
+      ["duzenleReddiTemizle", "duzenleSiradanBagla", "duzenleDenetciGecerle", "duzenleNormallestir"],
+      "duzenleNormallestir",
+    )(taslak);
+
+  it("next'i sıradan türetir", () => {
+    const sonuc = normallestir({ roles: [{ id: "a" }, { id: "b" }] });
+    expect(sonuc.roles.map((r) => r.next)).toEqual(["b", "done"]);
+  });
+
+  it("geçersiz reject'i temizler", () => {
+    const sonuc = normallestir({ roles: [{ id: "a", reject: "b" }, { id: "b" }] });
+    expect(sonuc.roles[0]?.reject).toBeUndefined();
+  });
+
+  it("planlama varken geçersiz kalmış denetçiyi temizler", () => {
+    const sonuc = normallestir({
+      roles: [{ id: "a" }, { id: "b" }],
+      planlama: { katilimcilar: ["a", "b"], denetci: "b", tur: 1, plan: "docs/plan/{kart}.md", ilkTurKor: true },
+    });
+    expect(sonuc.planlama?.denetci).toBeUndefined();
+  });
+
+  it("planlama yoksa denetçi adımını hiç ÇALIŞTIRMAZ (çökmez)", () => {
+    expect(() => normallestir({ roles: [{ id: "a" }] })).not.toThrow();
+  });
+});

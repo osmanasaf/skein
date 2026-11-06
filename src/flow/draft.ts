@@ -19,6 +19,36 @@ export interface FlowDraft {
   gates?: { after: string; type: string; message?: string }[];
   reject?: { limit?: number; onExhausted?: string };
   audit?: { enabled?: boolean; fingerprint?: string[] };
+  /**
+   * Planlama politikası — kart c-20261105-725320: "Rolleri düzenle" paneli
+   * katılım kutularını, tur stepper'ını ve denetçi seçimini bu alandan
+   * okuyup yazıyor.
+   *
+   * ÖNCEDEN bu blok hiç modellenmiyordu (bkz. `draftAlanlari`'ın eski
+   * yorumu, altta) — ekran `planlama`'ya DOKUNAMIYORDU, blok dosyada
+   * yalnızca PATLAMADAN duruyordu. Bu kart onu ekranın düzenleyebileceği
+   * bir alana TAŞIYOR: artık `undefined` = "planlama yok/kaldırıldı"
+   * (silinir), bir değer = "dosyadaki tam karşılığı bu" (üzerine yazılır)
+   * — `gates`/`reject`/`audit` ile AYNI sözleşme. Bir rolü yeniden
+   * adlandırırken `katilimcilar`/`denetci`'yi GÜNCELLEMEDEN bu alanı
+   * taşımak artık kuralı (17/23) ihlal eder — bu KASITLI: tutarsızlık
+   * sessizce silinmek yerine `checkDraft`'ın mesajında konuşsun.
+   */
+  planlama?: DraftPlan;
+}
+
+/** `FlowDraft.planlama` — `flow/load.ts`'in `PlanPolicy`'siyle aynı alanlar, türetilen `itiraz` hariç. */
+export interface DraftPlan {
+  /** İlki planı YAZAR, zincir sırasında; ötekiler itiraz eder. */
+  katilimcilar: string[];
+  /** Plan dosyasının kök-relatif yolu; `{kart}` içermeli. Ekran bu alanı düzenlemiyor, aynen taşıyor. */
+  plan: string;
+  /** İtiraz→cevap döngüsü tavanı; 1..5. */
+  tur: number;
+  /** İlk tur körlemesi. Ekran bu alanı düzenlemiyor, aynen taşıyor. */
+  ilkTurKor: boolean;
+  /** Kabul edilmiş itirazları denetleyecek rol; yoksa yükümlülük kapısı yok. */
+  denetci?: string;
 }
 
 export interface DraftRole {
@@ -70,6 +100,17 @@ export function fromFlow(flow: Flow): FlowDraft {
     ...(flow.gates.length > 0 ? { gates: flow.gates.map((g) => ({ ...g })) } : {}),
     reject: { limit: flow.reject.limit, onExhausted: flow.reject.onExhausted },
     audit: { enabled: flow.audit.enabled, fingerprint: [...flow.audit.fingerprint] },
+    // `plan` KÖK-RELATİF (rule 20: `../` yasak) — `constitution`/`prompt`
+    // gibi AKIŞ DOSYASINA göre çözülmüyor, `goreli()` burada YANLIŞ olurdu.
+    ...(flow.plan === undefined ? {} : {
+      planlama: {
+        katilimcilar: [...flow.plan.katilimcilar],
+        plan: flow.plan.plan,
+        tur: flow.plan.tur,
+        ilkTurKor: flow.plan.ilkTurKor,
+        ...(flow.plan.denetci === undefined ? {} : { denetci: flow.plan.denetci }),
+      },
+    }),
   };
 }
 
@@ -100,12 +141,21 @@ export type DraftCheck =
  *
  * Çare ikisini birden kapatıyor: dosya varsa `parseDocument` ile BELGE
  * olarak okunuyor ve yalnızca ekranın modellediği anahtarlar yerinde
- * değiştiriliyor. Dokunulmayan her şey — yorumlar, `planlama`, gelecekte
- * eklenecek bloklar — aynen kalıyor.
+ * değiştiriliyor. Dokunulmayan her şey — yorumlar, gelecekte eklenecek
+ * bloklar — aynen kalıyor.
  *
- * Kalan sınır yazılı: rol listesi bütün olarak değiştiği için ROL
- * İÇİNDEKİ yorumlar korunmuyor. Belgenin başlığındaki ve dokunulmayan
- * blokların içindeki yorumlar korunuyor.
+ * `planlama` kart c-20261105-725320'den beri MODELLİ (bkz. `FlowDraft.
+ * planlama` yorumu): artık `gates`/`reject`/`audit` ile AYNI kategoride,
+ * `draft.planlama` neyse dosyadaki karşılığı O olur — taşınmıyor,
+ * ÜZERİNE YAZILIYOR. Bir taslak `.planlama` taşımıyorsa (ekranın "Rolleri
+ * düzenle" paneli DIŞINDAN gelen, örn. yalnızca `description` değiştiren
+ * bir taslak) blok SİLİNİR; o yüzden `planlama`'ya dokunmayan her çağıran
+ * onu taslağa `fromFlow`'un ürettiği hâliyle AYNEN geri taşımak zorunda.
+ *
+ * Kalan sınır yazılı: rol listesi ve `planlama` bütün olarak değiştiği
+ * için İÇLERİNDEKİ yorumlar korunmuyor. Belgenin başlığındaki ve
+ * dokunulmayan blokların (örn. henüz modellenmeyen gelecek alanlar)
+ * içindeki yorumlar korunuyor.
  */
 export function toYaml(draft: FlowDraft, mevcut?: string): string {
   const alanlar = draftAlanlari(draft);
@@ -155,6 +205,15 @@ function draftAlanlari(draft: FlowDraft): Record<string, unknown> {
   doc["gates"] = draft.gates !== undefined && draft.gates.length > 0 ? draft.gates : undefined;
   doc["reject"] = draft.reject;
   doc["audit"] = draft.audit;
+  doc["planlama"] = draft.planlama === undefined ? undefined : {
+    katilimcilar: draft.planlama.katilimcilar,
+    plan: draft.planlama.plan,
+    tur: draft.planlama.tur,
+    "ilk-tur-kor": draft.planlama.ilkTurKor,
+    ...(draft.planlama.denetci !== undefined && draft.planlama.denetci !== ""
+      ? { denetci: draft.planlama.denetci }
+      : {}),
+  };
   return doc;
 }
 

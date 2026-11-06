@@ -76,6 +76,8 @@ type El = {
   open?: boolean;
   /** Yalnızca `<textarea>` değerini okumak için — bkz. "Prompt" düğmesi sınaması. */
   value?: string;
+  /** Yalnızca "Rolleri düzenle" ad girişini odaktan ÇIKARMAK için — bkz. o sınamanın yorumu. */
+  blur?: () => void;
 };
 declare const document: {
   querySelector: (s: string) => El | null;
@@ -2029,4 +2031,244 @@ planlama:
       await page.close();
     }
   }, 60_000);
+
+  /**
+   * MOD 5 — "Rolleri düzenle" (kart c-20261105-725320, DEVIR.md §3).
+   *
+   * page.test.ts yalnızca karar fonksiyonlarını (duzenleHatalari,
+   * duzenleTasi, duzenleAdDegis, ...) kaynaktan çıkarıp sınıyor — panelin
+   * GERÇEKTEN açıldığı, düğmelerin doğru öğeye bağlı olduğu ve Kaydet'in
+   * GERÇEKTEN /akis/yaz'a gidip dosyayı değiştirdiği yalnızca burada
+   * görünür. "Akışı düzenle" (üstteki "akış diyagramı" describe'ı) AYRI
+   * bir yüzey — bu describe ona DOKUNMUYOR, kendi uçlarını (/akis,
+   * /akis/onizleme, /akis/yaz, /promptlar) PAYLAŞIYOR.
+   */
+  describe("Rolleri düzenle (sağ panel MOD 5)", () => {
+    const duzenleFlowYaml = (ad: string): string => `
+name: ${ad}
+constitution:
+  - ../prompts/base.md
+roles:
+  - id: coder
+    provider: claude
+    workspace: main
+    prompt: ../../roles/coder.prompt
+    next: reviewer
+
+  - id: reviewer
+    provider: claude
+    workspace: reviewer
+    prompt: ../../roles/coder.prompt
+    receive: batch
+    reject: coder
+    next: guard
+
+  - id: guard
+    provider: codex
+    workspace: guard
+    prompt: ../../roles/coder.prompt
+    receive: batch
+    next: done
+`;
+
+    /** "Ham YAML" sekmesinin DÜZENLENEBİLİR sunucu açılışıyla AYNI kalıp (bkz. akisSunucusuDuzenlenebilirAc). */
+    async function duzenleSunucusuAc(ad: string, metin: string) {
+      const yol = join(root, "hub", "flows", `${ad}.yaml`);
+      await writeFile(yol, metin);
+      const live = await LiveFlow.open(yol, { root, providers: knownProviderSet() });
+      return serveUi({
+        root, queue, topology: live.topology, flowName: live.flow.name, flowHash: live.flow.hash,
+        live, flowPath: live.flow.path,
+        loadOptions: { root, providers: knownProviderSet() },
+        providerIds: knownProviderSet().ids(),
+      });
+    }
+
+    it("panel açılınca roller listelenir; başlıkta akış dosya yolu görünür, Kaydet değişiklik yokken devre dışıdır", async () => {
+      const s = await duzenleSunucusuAc("duzenle-test1", duzenleFlowYaml("duzenle-test1"));
+      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const hatalar: string[] = [];
+      page.on("pageerror", (e) => hatalar.push(String(e)));
+      try {
+        await page.goto(s.url, { waitUntil: "networkidle" });
+        await page.waitForSelector("#bar .pill", { timeout: 15_000 });
+        await page.click('button:has-text("Rolleri düzenle")');
+        await page.waitForSelector(".duzenleRol", { timeout: 10_000 });
+
+        expect(await page.evaluate(() => document.querySelectorAll(".duzenleRol").length)).toBe(3);
+        expect(await page.textContent(".railUst")).toContain("hub/flows/duzenle-test1.yaml");
+        await page.waitForSelector("#duzenleKaydetBtn[disabled]", { timeout: 10_000 });
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+        await s.close();
+      }
+    }, 60_000);
+
+    it("aynı adı taşıyan iki rol HATA verir (accent-700), Kaydet devre dışı kalır", async () => {
+      const s = await duzenleSunucusuAc("duzenle-test2", duzenleFlowYaml("duzenle-test2"));
+      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const hatalar: string[] = [];
+      page.on("pageerror", (e) => hatalar.push(String(e)));
+      try {
+        await page.goto(s.url, { waitUntil: "networkidle" });
+        await page.waitForSelector("#bar .pill", { timeout: 15_000 });
+        await page.click('button:has-text("Rolleri düzenle")');
+        await page.waitForSelector(".duzenleRol", { timeout: 10_000 });
+
+        // İKİNCİ rolün adını BİRİNCİYLE AYNI yapıyoruz. ÖNCE blur() —
+        // odaklı girdiyi KALDIRAN bir yeniden çizim (duzenleYenile ->
+        // replaceChildren) tarayıcının kendi senkron "blur" yan etkisiyle
+        // çakışıp "node to be removed is no longer a child" hatası
+        // verebiliyor (ölçüldü); gerçek kullanıcı da yazdıktan sonra
+        // ALANDAN ÇIKAR (Tab/tıkla), bu adım onu TAKLİT ediyor.
+        await page.fill(".duzenleRolListe > .duzenleRol:nth-of-type(2) .duzenleAdGirisi", "coder");
+        await page.evaluate(() => {
+          const girdi = document.querySelectorAll(".duzenleAdGirisi")[1];
+          girdi?.blur?.();
+          girdi?.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+        await page.waitForSelector(".duzenleHata", { timeout: 10_000 });
+        expect(await page.textContent(".duzenleHata")).toContain("coder");
+        const disabled = await page.evaluate(() =>
+          document.querySelector("#duzenleKaydetBtn")?.getAttribute("disabled") !== null);
+        expect(disabled).toBe(true);
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+        await s.close();
+      }
+    }, 60_000);
+
+    // UYARI engellemez (DEVIR.md §3) — bu sınama onu KANITLIYOR: açık
+    // kartı olan bir rol SİLİNEBİLİYOR, yalnızca uyarılıyor.
+    it("açık kartı olan bir rol silinince UYARI çıkar, ama silmeyi ENGELLEMEZ", async () => {
+      const ad = "duzenle-test3";
+      const yol = join(root, "hub", "flows", `${ad}.yaml`);
+      await writeFile(yol, duzenleFlowYaml(ad));
+      const live = await LiveFlow.open(yol, { root, providers: knownProviderSet() });
+      await queue.add(newCard({ title: "açık kart", task: "iş", topology: live.topology }));
+      const s = await serveUi({
+        root, queue, topology: live.topology, flowName: live.flow.name, flowHash: live.flow.hash,
+        live, flowPath: live.flow.path,
+        loadOptions: { root, providers: knownProviderSet() },
+        providerIds: knownProviderSet().ids(),
+      });
+      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const hatalar: string[] = [];
+      page.on("pageerror", (e) => hatalar.push(String(e)));
+      try {
+        await page.goto(s.url, { waitUntil: "networkidle" });
+        await page.waitForSelector("#bar .pill", { timeout: 15_000 });
+        await page.click('button:has-text("Rolleri düzenle")');
+        await page.waitForSelector(".duzenleRol", { timeout: 10_000 });
+
+        // KART İLK ROLE ("coder") GİRDİ — onu SİLİYORUZ.
+        await page.click('.duzenleRolListe > .duzenleRol:nth-of-type(1) button[aria-label="rolü sil"]');
+        await page.waitForSelector(".duzenleUyari", { timeout: 10_000 });
+        expect(await page.textContent(".duzenleUyari")).toContain("coder");
+        expect(await page.evaluate(() => document.querySelectorAll(".duzenleRol").length)).toBe(2);
+        // HATA yok — silme ENGELLENMEDİ, sadece uyarıldı.
+        expect(await page.evaluate(() => document.querySelectorAll(".duzenleHata").length)).toBe(0);
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+        await s.close();
+      }
+    }, 60_000);
+
+    it("sağlayıcı değiştirip Kaydet'e basmak dosyayı GERÇEKTEN değiştiriyor", async () => {
+      const ad = "duzenle-test4";
+      const s = await duzenleSunucusuAc(ad, duzenleFlowYaml(ad));
+      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const hatalar: string[] = [];
+      page.on("pageerror", (e) => hatalar.push(String(e)));
+      try {
+        await page.goto(s.url, { waitUntil: "networkidle" });
+        await page.waitForSelector("#bar .pill", { timeout: 15_000 });
+        await page.click('button:has-text("Rolleri düzenle")');
+        await page.waitForSelector(".duzenleRol", { timeout: 10_000 });
+
+        // GUARD (3. rol) codex'ten claude'a geçiyor.
+        await page.selectOption(
+          '.duzenleRolListe > .duzenleRol:nth-of-type(3) .duzenleIzgara label:has-text("sağlayıcı") select',
+          "claude",
+        );
+        await page.waitForSelector("#duzenleKaydetBtn:not([disabled])", { timeout: 10_000 });
+        await page.click("#duzenleKaydetBtn");
+        await page.waitForTimeout(500);
+
+        // İDDİA sunucunun söylediği değil DİSKTE GERÇEKTEN ne olduğu.
+        const yaml = await readFile(join(root, "hub", "flows", `${ad}.yaml`), "utf8");
+        expect(yaml).toMatch(/id: guard[\s\S]*?provider: claude/);
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+        await s.close();
+      }
+    }, 60_000);
+
+    // ↑/↓ ikon düğmeleri — DEVIR.md §3: sıra formasyonu belirler.
+    // "Normalizasyon: next HER ZAMAN sıradan türetilir" burada DİSKE
+    // YAZILAN dosyada KANITLANIYOR, duzenleSiradanBagla'nın page.test.ts'teki
+    // birim sınamasının TAMAMLAYICISI.
+    it("↑ ile rolü yukarı taşımak sırayı GERÇEKTEN değiştirir, next yeniden kurulup kaydedilir", async () => {
+      const ad = "duzenle-test5";
+      const s = await duzenleSunucusuAc(ad, duzenleFlowYaml(ad));
+      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const hatalar: string[] = [];
+      page.on("pageerror", (e) => hatalar.push(String(e)));
+      try {
+        await page.goto(s.url, { waitUntil: "networkidle" });
+        await page.waitForSelector("#bar .pill", { timeout: 15_000 });
+        await page.click('button:has-text("Rolleri düzenle")');
+        await page.waitForSelector(".duzenleRol", { timeout: 10_000 });
+
+        // GUARD'ı (3.) YUKARI taşı: coder, guard, reviewer olmalı.
+        await page.click('.duzenleRolListe > .duzenleRol:nth-of-type(3) button[aria-label="yukarı taşı"]');
+        const ikinciAd = await page.evaluate(() => document.querySelectorAll(".duzenleAdGirisi")[1]?.value);
+        expect(ikinciAd).toBe("guard");
+
+        await page.waitForSelector("#duzenleKaydetBtn:not([disabled])", { timeout: 10_000 });
+        await page.click("#duzenleKaydetBtn");
+        await page.waitForTimeout(500);
+
+        const yaml = await readFile(join(root, "hub", "flows", `${ad}.yaml`), "utf8");
+        expect(yaml).toMatch(/id: guard[\s\S]*?next: reviewer/);
+        expect(yaml).toMatch(/id: reviewer[\s\S]*?next: done/);
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+        await s.close();
+      }
+    }, 60_000);
+
+    // DEVIR.md §3: "Diyagramda bir düğüme tıklanınca o rolün bloğu
+    // accent-100 ile vurgulanır." — RAIL modu DEĞİŞMİYOR (panel kapanmıyor).
+    it("diyagramda bir düğüme tıklamak panelde o rolün bloğunu vurgular, panel AÇIK KALIR", async () => {
+      const ad = "duzenle-test6";
+      const s = await duzenleSunucusuAc(ad, duzenleFlowYaml(ad));
+      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const hatalar: string[] = [];
+      page.on("pageerror", (e) => hatalar.push(String(e)));
+      try {
+        await page.goto(s.url, { waitUntil: "networkidle" });
+        await page.waitForSelector("#bar .pill", { timeout: 15_000 });
+        await page.click('button:has-text("Rolleri düzenle")');
+        await page.waitForSelector(".duzenleRol", { timeout: 10_000 });
+
+        await page.click('.formasyonDugum[data-rol="guard"] rect.kutu');
+        await page.waitForSelector(".duzenleRol.duzenleVurgu", { timeout: 10_000 });
+        const vurgulanan = await page.evaluate(() =>
+          document.querySelector(".duzenleRol.duzenleVurgu")?.getAttribute("data-rol"));
+        expect(vurgulanan).toBe("guard");
+        // Panel KAPANMADI — hâlâ üç blok duruyor.
+        expect(await page.evaluate(() => document.querySelectorAll(".duzenleRol").length)).toBe(3);
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+        await s.close();
+      }
+    }, 60_000);
+  });
 });

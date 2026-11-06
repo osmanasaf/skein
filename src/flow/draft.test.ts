@@ -149,7 +149,9 @@ describe("fromFlow — gidiş dönüş", () => {
   // En sert sınav: deponun KENDİ akış dosyaları taslağa çevrilip geri
   // yazıldığında topoloji hash'i DEĞİŞMEMELİ. Değişirse ekrandan yapılan ilk
   // kaydetme akışı sessizce başka bir şeye dönüştürmüş olur.
-  for (const ad of ["daily", "spec"]) {
+  // `plan4` planlama bloğunu (`denetci` dahil) taşıyan tek örnek — bloğun
+  // artık MODELLİ olması (kart c-20261105-725320) hash'i bozmamalı.
+  for (const ad of ["daily", "spec", "plan4"]) {
     it(`${ad}: taslağa çevrilip geri yazılınca hash aynı kalır`, async () => {
       const yol = join(repoRoot, "hub", "flows", `${ad}.yaml`);
       const once = await loadFlow(yol, gercek);
@@ -195,20 +197,16 @@ describe("fromFlow — gidiş dönüş", () => {
   });
 });
 
-// EKRANDAN VERİ KAYBI. `toYaml` belgeyi sıfırdan kuruyor ve `planlama`
-// bloğunu hiç modellemiyor; `plan4.yaml`'i ekrandan düzenlemek o bloğu —
-// `denetci` dahil — sessizce siliyordu. Blok isteğe bağlı olduğu için akış
-// hâlâ geçerli doğruluyordu, yani kayıp hiçbir yere yazılmıyordu.
+// EKRANDAN VERİ KAYBI (tarihî). `toYaml` belgeyi sıfırdan kuruyordu ve HİÇ
+// modellenmeyen blokları (eskiden `planlama`, `denetci` dahil) sessizce
+// siliyordu. Blok isteğe bağlı olduğu için akış hâlâ geçerli doğruluyordu,
+// yani kayıp hiçbir yere yazılmıyordu. Çare `parseDocument` ile yerinde
+// düzenlemeydi — bu describe o genel mekanizmayı, HÂLÂ modellenmeyen bir
+// anahtarla sınıyor (`planlama`'nın kendisi kart c-20261105-725320'den beri
+// modelli, bkz. alttaki describe).
 describe("ekranın modellemediği bloklar korunuyor", () => {
-  const PLANLAMA = `
-planlama:
-  katilimcilar: [coder]
-  plan: docs/plan/{kart}.md
-  denetci: reviewer
-`;
-
-  it("planlama bloğu düzenlemeden sonra dosyada DURUYOR", async () => {
-    await writeFile(path, `${toYaml(taslak())}${PLANLAMA}`);
+  it("bilinmeyen üst düzey anahtar düzenlemeden sonra dosyada DURUYOR", async () => {
+    await writeFile(path, `${toYaml(taslak())}\ndeneysel:\n  ileride: eklenecek\n`);
 
     const yeni = taslak();
     yeni.description = "ekrandan düzenlendi";
@@ -216,41 +214,18 @@ planlama:
 
     expect(sonuc.ok).toBe(true);
     const yazilan = await readFile(path, "utf8");
-    expect(yazilan).toContain("planlama:");
-    expect(yazilan).toContain("denetci: reviewer");
+    expect(yazilan).toContain("deneysel:");
+    expect(yazilan).toContain("ileride: eklenecek");
     expect(yazilan).toContain("ekrandan düzenlendi");
-    // Yüklenen akış da bloğu taşımalı: metinde durup çözülmemesi yetmez.
-    const flow = await loadFlow(path, opts);
-    expect(flow.plan?.denetci).toBe("reviewer");
-  });
-
-  // Yan fayda: blok korunduğu için kurallar artık KONUŞUYOR. Düşürüldüğünde
-  // hiç konuşmuyordu — kullanıcı planlama katılımcısını silip geçerli bir
-  // akış elde ediyordu.
-  it("rolleri planlamayla çelişecek şekilde değiştirmek artık hata veriyor", async () => {
-    await writeFile(path, `${toYaml(taslak())}${PLANLAMA}`);
-
-    const yeni = taslak();
-    // Rol adı değişiyor ve ONA BAĞLI her kenar da düzeltiliyor: amaç
-    // yalnızca planlama bloğunu çelişkide bırakmak, başka kuralı değil.
-    (yeni.roles[0] as { id: string }).id = "yazar";
-    (yeni.roles[1] as { reject?: string }).reject = "yazar";
-    (yeni.roles[1] as { syncBack?: string[] }).syncBack = ["yazar"];
-    const sonuc = await checkDraft(path, yeni, opts);
-
-    expect(sonuc.ok).toBe(false);
-    expect(sonuc.ok === false && sonuc.message).toMatch(/kural 17/);
   });
 
   // YORUMLAR da korunuyor. Ölçüldü: plan4.yaml için 96 satır / 34 yorum
-  // satırı → 55 satır / 0 yorum. Gerekçeler bu projede kodun yarısı;
-  // "ilk-tur-kor: true  # ÖLÇÜMÜN KENDİSİ" satırının yorumu silindiğinde
-  // kalan şey anlamını kaybediyor.
-  it("yorumlar düzenlemeden sonra DURUYOR", async () => {
+  // satırı → 55 satır / 0 yorum. Gerekçeler bu projede kodun yarısı.
+  it("belge başlığındaki yorumlar düzenlemeden sonra DURUYOR", async () => {
     await writeFile(path, `# Üst başlık yorumu
 # İkinci satır
 
-${toYaml(taslak())}${PLANLAMA}`);
+${toYaml(taslak())}`);
 
     const yeni = taslak();
     yeni.description = "ekrandan düzenlendi";
@@ -259,18 +234,80 @@ ${toYaml(taslak())}${PLANLAMA}`);
     const yazilan = await readFile(path, "utf8");
     expect(yazilan).toContain("# Üst başlık yorumu");
     expect(yazilan).toContain("# İkinci satır");
-    expect(yazilan).toContain("denetci: reviewer");
     expect(yazilan).toContain("ekrandan düzenlendi");
   });
 
   // Silinen isteğe bağlı alan dosyadan da düşmeli: belgeyi yerinde
   // düzenlemek, kaldırılan bir alanın yerinde kalması riskini getiriyor.
   it("taslaktan silinen açıklama dosyadan da düşüyor", async () => {
-    await writeFile(path, `${toYaml({ ...taslak(), description: "eski" })}${PLANLAMA}`);
+    await writeFile(path, toYaml({ ...taslak(), description: "eski" }));
     const yeni = taslak();
     delete yeni.description;
     expect((await writeDraft(path, yeni, opts)).ok).toBe(true);
     expect(await readFile(path, "utf8")).not.toContain("eski");
+  });
+});
+
+// `planlama` kart c-20261105-725320'den beri MODELLİ — `FlowDraft.planlama`
+// yorumunun anlattığı gibi artık `gates`/`reject`/`audit` kategorisinde:
+// taşınmıyor, draft'ta NE VARSA dosyaya O yazılıyor. "Rolleri düzenle"
+// paneli rol adını değiştirirken `katilimcilar`/`denetci`'yi KENDİSİ
+// güncellemek zorunda — burada o taşımanın YAPILMAMASININ hâlâ hata
+// verdiği, modellemenin kendisinin round-trip ve silme/ekleme yollarının
+// doğru çalıştığı sınanıyor.
+describe("planlama bloğu — taşıma ve round-trip", () => {
+  const planBlok = (): NonNullable<FlowDraft["planlama"]> => ({
+    katilimcilar: ["coder"],
+    plan: "docs/plan/{kart}.md",
+    tur: 1,
+    ilkTurKor: true,
+    denetci: "reviewer",
+  });
+
+  it("açıkça taşınan planlama bloğu dosyaya YAZILIR", async () => {
+    await writeFile(path, toYaml(taslak()));
+
+    const yeni = taslak();
+    yeni.planlama = planBlok();
+    const sonuc = await writeDraft(path, yeni, opts);
+
+    expect(sonuc.ok).toBe(true);
+    const yazilan = await readFile(path, "utf8");
+    expect(yazilan).toContain("planlama:");
+    expect(yazilan).toContain("denetci: reviewer");
+    const flow = await loadFlow(path, opts);
+    expect(flow.plan?.denetci).toBe("reviewer");
+    expect(flow.plan?.katilimcilar).toEqual(["coder"]);
+  });
+
+  // Yan fayda: blok artık her zaman draft'tan geldiği için kurallar
+  // KONUŞUYOR. Eskiden (blok hiç modellenmeden, dosyada aynen kalarak)
+  // da konuşuyordu; farkı: artık draft'ın KENDİSİ tutarsız olduğunda da
+  // konuşuyor, dosyada neyin kaldığına bakılmaksızın.
+  it("rolü yeniden adlandırıp planlama alanını GÜNCELLEMEMEK hata verir", async () => {
+    await writeFile(path, toYaml(taslak()));
+
+    const yeni = taslak();
+    yeni.planlama = planBlok(); // "coder"a işaret ediyor
+    (yeni.roles[0] as { id: string }).id = "yazar"; // ama rol "yazar" oldu
+    (yeni.roles[1] as { reject?: string }).reject = "yazar";
+    (yeni.roles[1] as { syncBack?: string[] }).syncBack = ["yazar"];
+    const sonuc = await checkDraft(path, yeni, opts);
+
+    expect(sonuc.ok).toBe(false);
+    expect(sonuc.ok === false && sonuc.message).toMatch(/kural 17/);
+  });
+
+  // `.planlama` taşımamak — dosyada önceden var olsa bile — bloğu SİLER.
+  // `gates`/`audit` ile aynı sözleşme: modellenen bir alanı atlamak artık
+  // "dokunma" değil "kaldır" anlamına geliyor.
+  it("planlama taşınmazsa dosyadan DÜŞER", async () => {
+    await writeFile(path, `${toYaml(taslak())}\nplanlama:\n  katilimcilar: [coder]\n  plan: docs/plan/{kart}.md\n`);
+
+    const sonuc = await writeDraft(path, taslak(), opts);
+
+    expect(sonuc.ok).toBe(true);
+    expect(await readFile(path, "utf8")).not.toContain("planlama");
   });
 
   it("planlama bloğu olmayan akışta hiçbir şey eklenmiyor", async () => {
@@ -278,6 +315,17 @@ ${toYaml(taslak())}${PLANLAMA}`);
     const sonuc = await writeDraft(path, taslak(), opts);
     expect(sonuc.ok).toBe(true);
     expect(await readFile(path, "utf8")).not.toContain("planlama");
+  });
+
+  it("fromFlow planlama bloğunu taşlağa taşır (denetci dahil)", async () => {
+    await writeFile(path, `${toYaml(taslak())}\nplanlama:\n  katilimcilar: [coder]\n  plan: docs/plan/{kart}.md\n  denetci: reviewer\n`);
+    const flow = await loadFlow(path, opts);
+
+    const draft = fromFlow(flow);
+
+    expect(draft.planlama).toEqual({
+      katilimcilar: ["coder"], plan: "docs/plan/{kart}.md", tur: 1, ilkTurKor: true, denetci: "reviewer",
+    });
   });
 });
 
