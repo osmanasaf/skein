@@ -12,6 +12,7 @@ import { loadFlow } from "../flow/load.js";
 import { LiveFlow } from "../flow/live.js";
 import { snapshot, type TopologySnapshot } from "../flow/snapshot.js";
 import { acquireLock } from "../watch/lock.js";
+import { EventLog } from "../events/log.js";
 import { serveUi, type UiServer } from "./server.js";
 
 /**
@@ -2842,6 +2843,177 @@ roles:
       } finally {
         await page.close();
         await s.close();
+      }
+    }, 60_000);
+  });
+
+  /**
+   * AJANLAR SEKMESİ — DEVIR.md §6, kart c-20261105-d304ed.
+   *
+   * `page.test.ts` yalnızca karar fonksiyonlarını (ajanDurumMetni vb.)
+   * izole sınıyor; GERÇEK bir aktivasyonun "GET /adimlar"a gidip
+   * döndüğünü, "canlı" etiketinin GERÇEKTEN göründüğünü ve rol seçiminin
+   * GERÇEKTEN panel değiştirdiğini ancak burada görebiliriz.
+   */
+  describe("Ajanlar sekmesi", () => {
+    const ikiRolFlowYaml = `
+name: test
+constitution:
+  - ../prompts/base.md
+roles:
+  - id: coder
+    provider: claude
+    workspace: main
+    prompt: ../../roles/coder.prompt
+    next: reviewer
+  - id: reviewer
+    provider: codex
+    workspace: reviewer
+    receive: batch
+    prompt: ../../roles/reviewer.prompt
+    next: done
+`;
+
+    /** İKİ rollü bir akışla ekran — rol SEÇİMİNİ ve "Görevi" özetini sınamak için. */
+    async function ikiRolSunucusuAc() {
+      await writeFile(
+        join(root, "roles", "reviewer.prompt"),
+        "# Rolün: reviewer\n\nKodu gözden geçirir.\n\n## Sahiplendiğin\n\n- kodu incele\n- hata bul\n",
+      );
+      await writeFile(join(root, "hub", "flows", "test.yaml"), ikiRolFlowYaml);
+      const live = await LiveFlow.open(join(root, "hub", "flows", "test.yaml"), {
+        root, providers: knownProviderSet(),
+      });
+      const topo = snapshot(live.flow, root);
+      return serveUi({
+        root, queue, topology: topo, flowName: "test", flowHash: live.flow.hash,
+        live, flowPath: live.flow.path, loadOptions: { root, providers: knownProviderSet() },
+      });
+    }
+
+    it("solda her rol için bir satır; tıklamak sağ paneli o role çevirir", async () => {
+      const s = await ikiRolSunucusuAc();
+      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const hatalar: string[] = [];
+      page.on("pageerror", (e) => hatalar.push(String(e)));
+      try {
+        await page.goto(s.url, { waitUntil: "networkidle" });
+        await page.click('.navSekme:has-text("Ajanlar")');
+        await page.waitForSelector(".ajanSatir", { timeout: 10_000 });
+
+        const satirlar = await page.evaluate(() =>
+          Array.from(document.querySelectorAll(".ajanSatir")).map((s) => s.textContent));
+        expect(satirlar.some((t) => t?.includes("coder"))).toBe(true);
+        expect(satirlar.some((t) => t?.includes("reviewer"))).toBe(true);
+        // Hiç kart yokken İKİSİ de boşta.
+        expect(satirlar.every((t) => t?.includes("boşta"))).toBe(true);
+
+        // İLK rol varsayılan olarak seçili — sağlayıcısı, çalışma alanı,
+        // alım biçimi ve "Görevi" özeti GERÇEK topolojiden geliyor.
+        const ilkPanel = await page.textContent(".ajanPanel");
+        expect(ilkPanel).toContain("coder");
+        expect(ilkPanel).toContain("claude");
+        expect(ilkPanel).toContain("tekil alım");
+
+        await page.click('.ajanSatir:has-text("reviewer")');
+        await page.waitForSelector(".ajanPanelAd:has-text(\"reviewer\")", { timeout: 10_000 });
+        // "Görevi" özeti AYRI bir fetch'ten geliyor (ajanPromptYukle) ve
+        // bir SONRAKİ saniyelik yoklamada basılıyor — madde listesi
+        // GERÇEKTEN göründüğünde özet de hazır demektir.
+        await page.waitForSelector(".ajanGorevListe", { timeout: 10_000 });
+        const reviewerPanel = await page.textContent(".ajanPanel");
+        expect(reviewerPanel).toContain("codex");
+        expect(reviewerPanel).toContain("toplu alım");
+        // "Görevi · promptundan" — giriş paragrafı + ilk bölümün maddeleri,
+        // GERÇEKTEN diskten okunup ayrıştırıldı.
+        expect(reviewerPanel).toContain("Kodu gözden geçirir.");
+        expect(reviewerPanel).toContain("kodu incele");
+        expect(reviewerPanel).toContain("hata bul");
+
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+        await s.close();
+      }
+    }, 60_000);
+
+    it("'Ajanı izle →' Rol modundan Ajanlar sekmesini O ROLÜ SEÇİLİ açar", async () => {
+      const s = await ikiRolSunucusuAc();
+      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const hatalar: string[] = [];
+      page.on("pageerror", (e) => hatalar.push(String(e)));
+      try {
+        await page.goto(s.url, { waitUntil: "networkidle" });
+        await page.click('.formasyonDugum[data-rol="reviewer"] rect.kutu');
+        await page.waitForSelector('button:has-text("Ajanı izle →")', { timeout: 10_000 });
+        await page.click('button:has-text("Ajanı izle →")');
+
+        await page.waitForSelector(".ajanPanelAd:has-text(\"reviewer\")", { timeout: 10_000 });
+        expect(await page.evaluate(() =>
+          document.querySelector(".navSekme-aktif")?.textContent ?? "")).toContain("Ajanlar");
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+        await s.close();
+      }
+    }, 60_000);
+
+    /**
+     * GERÇEK AKTİVASYON — "GET /adimlar"ın UÇTAN UCA sınaması. model.test.ts
+     * ve page.test.ts ikisi de bu yolun PARÇALARINI (activationSteps,
+     * ajanCanliMi) izole sınıyor; burada ÜÇÜ (günlük → uç → tarayıcı)
+     * birlikte, GERÇEKTEN çalışıyor mu görülüyor.
+     */
+    it("koşan ajan: 'şu an' kutusu, 'canlı' etiketi ve Adımlar listesi GERÇEK /adimlar'dan gelir", async () => {
+      // "canlı" (ve bu nedenle "GET /adimlar"ın GERÇEKTEN çağrılması)
+      // gözcünün AÇIK olmasını şart koşuyor (ajanCanliMi, page.ts) — gerçek
+      // bu test SÜRECİNİN kendi pid'i kullanılıyor ki `pidAlive` GERÇEKTEN
+      // "yaşıyor" dönsün (bkz. watch/lock.ts pidAlive: process.kill(pid, 0)).
+      await acquireLock(join(root, ".skein", "daemon.json"), {
+        pid: process.pid, startedAt: new Date().toISOString(), flow: "test", hash: "h", mode: "serve",
+      });
+      const kart = await queue.add(newCard({ title: "jitter ekle", task: "iş", topology }));
+      await al(queue, "coder");
+      const log = new EventLog(join(root, ".skein", "olaylar.jsonl"), "kosu-1");
+      await log.append({
+        type: "agent.started", cell: `${kart.id}:coder`, role: "coder",
+        provider: "claude", model: "m", promptHash: "h",
+      });
+      await log.append({
+        type: "agent.step", cell: `${kart.id}:coder`, role: "coder",
+        seq: 1, kind: "tool", name: "Read", detail: "src/retry.ts",
+      });
+      await log.append({
+        type: "agent.step", cell: `${kart.id}:coder`, role: "coder",
+        seq: 2, kind: "tool", name: "Bash", detail: "npx vitest run",
+      });
+
+      const { page, hatalar } = await ac();
+      try {
+        await page.click('.navSekme:has-text("Ajanlar")');
+        await page.waitForSelector(".ajanSatir", { timeout: 10_000 });
+
+        // SOL SATIR: canlı adım "araç · ayrıntı" biçiminde.
+        await page.waitForSelector(".ajanSatirDurum:has-text(\"Bash\")", { timeout: 10_000 });
+        const satirMetni = await page.textContent(".ajanSatirDurum");
+        expect(satirMetni).toBe("Bash · npx vitest run");
+
+        // SAĞ PANEL: "Şu an" kutusu kartın başlığını taşıyor, "canlı"
+        // etiketi görünür, ve Adımlar listesi SUNUCUDAN GERÇEKTEN gelen
+        // iki adımı EN YENİSİ EN ÜSTTE gösteriyor.
+        expect(await page.textContent(".ajanSuAnBaslik")).toBe("jitter ekle");
+        await page.waitForSelector(".ajanCanliEtiket", { timeout: 10_000 });
+        await page.waitForSelector(".ajanAdim", { timeout: 10_000 });
+        const adimlar = await page.evaluate(() =>
+          Array.from(document.querySelectorAll(".ajanAdim")).map((a) => a.textContent ?? ""));
+        expect(adimlar).toHaveLength(2);
+        expect(adimlar[0]).toContain("Bash");
+        expect(adimlar[0]).toContain("npx vitest run");
+        expect(adimlar[1]).toContain("Read");
+
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
       }
     }, 60_000);
   });

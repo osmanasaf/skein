@@ -1271,6 +1271,23 @@ let AKTIF_AD = "";
 let SON_MODEL = null;
 const DOT = { accepted: "var(--accept)", rejected: "var(--reject)", gate: "var(--gate)", released: "var(--gate)", done: "var(--accept)" };
 
+// --- Ajanlar sekmesi (DEVIR.md §6, kart c-20261105-d304ed) ---
+//
+// Seçili rol — RAIL'den BİLEREK AYRI: RAIL Pano'nun sağ panelinin modu,
+// bu sekmenin kendi seçimi. "Ajanı izle →" düğmesi (railRolCiz) ikisini
+// BİRLİKTE değiştiriyor (RAIL'i genel bakışa döndürmüyor, yalnızca bu
+// değişkeni ve hash'i).
+let AJAN_SEC = null;
+// Seçili rolün GÜNCEL kartının TAM adım izi, kart kimliğine göre —
+// "GET /adimlar"ın cevabı. Sunucu ARTAN (seq 1'den) veriyor; "en yenisi
+// en üstte" göstermek İSTEYEN taraf İSTEMCİ (bkz. ajanAdimlarKur) — bu
+// önbellek sunucunun verdiği sırayı DEĞİŞTİRMEDEN taşıyor.
+let AJAN_ADIMLAR = {};
+// Rol prompt dosyasının "Görevi" özeti, prompt yoluna göre — promptGorevOzeti
+// çıktısı. 'undefined' HENÜZ İSTENMEDİ, 'null' istendi ama OKUNAMADI
+// (PROMPT_HATA'da sebebi var), nesne BAŞARIYLA ayrıştırıldı.
+let AJAN_PROMPT_OZET = {};
+
 /*
  * KUŞ İŞARETİ — TEK ÇİZGİ, İKİ ANLAM. (favicon'un yolu — bkz. aşağıda)
  *
@@ -2550,6 +2567,11 @@ function ciz(m) {
   // ÇAĞRIDA RAIL'in o anki moduna göre yeniden doluyor (Kart modu
   // kendi FETCH korumasını kendi taşıyor, bkz. sagPanelCiz).
   sagPanelCiz(m);
+
+  // AJANLAR SEKMESİ — formasyonSvgKur/sagPanelCiz'le AYNI ilke: sekme
+  // GÖRÜNMÜYOR OLSA BİLE her yoklamada yeniden çiziliyor (DEVIR.md §6,
+  // kart c-20261105-d304ed), ki sekmeye geçildiği an içerik hazır olsun.
+  ajanlarEkraniCiz(m);
 }
 
 /**
@@ -3764,11 +3786,12 @@ function railGenelBakisCiz(kutu, m) {
  * (bkz. #icerikPromptlar/promptlarEkraniCiz) — eski "#prompt" çekmecesi bu
  * sekme kurulunca söküldü.
  *
- * "Ajanı izle →" düğmesi hâlâ aynı dürüstlük kuralına uyuyor: Ajanlar
- * sekmesi bugün sabit bir yer tutucu, rol SEÇME yeteneği yok. Düğme yalnız
- * sekmeyi açtığını vaat ediyor (gerçekten de açar) — rolü oradan
- * "izleyeceğini" vaat ETMİYOR, çünkü o yetenek henüz YOK. Varsayım açık:
- * bu düğmenin "o rolü seçili açması" ayrı bir karta kalıyor.
+ * "Ajanı izle →" düğmesi artık "Prompt" düğmesiyle AYNI deseni izliyor:
+ * Ajanlar sekmesi GERÇEKTEN kuruldu (kart c-20261105-d304ed) ve AJAN_SEC'i
+ * bu rolün id'sine önceden set edip hash'i "ajanlar"a çeviriyor —
+ * ajanlarEkraniCiz zaten geçerli bir AJAN_SEC'i AYNEN kullanıyor (bkz. o
+ * fonksiyonun "m.roles.some" kontrolü), yani düğme "o rolü seçili açar"
+ * vaadini artık GERÇEKTEN tutuyor.
  */
 function railRolCiz(kutu, m, rolId) {
   kutu.replaceChildren();
@@ -3813,7 +3836,10 @@ function railRolCiz(kutu, m, rolId) {
   dugmeler.append(promptBtn);
   const ajanBtn = el("button", "railBtn", "Ajanı izle →");
   ajanBtn.type = "button";
-  ajanBtn.addEventListener("click", () => { location.hash = "ajanlar"; });
+  ajanBtn.addEventListener("click", () => {
+    AJAN_SEC = meta.id;
+    location.hash = "ajanlar";
+  });
   dugmeler.append(ajanBtn);
   kutu.append(dugmeler);
 
@@ -6179,6 +6205,252 @@ async function yeniRolGonder() {
     hataKutu.style.cssText = "display:block;white-space:pre-wrap";
   } finally {
     ekle.disabled = false;
+  }
+}
+
+// --- Ajanlar sekmesi (DEVIR.md §6, kart c-20261105-d304ed) ---
+//
+// Solda akıştaki her ROL için bir satır (DEVIR'in "ajan" sözcüğü burada
+// ROL ile AYNI şey), sağda seçili rolün "şu an" kutusu + tam adım izi +
+// rol promptunun "Görevi" özeti. Birincil veri (rol listesi, durum
+// metinleri) ZATEN m (her saniye okunan /durum modeli) içinde; bu sekme
+// de Pano'nun formasyon panosu gibi HER YOKLAMADA yeniden çiziliyor —
+// Promptlar/Akışlar'ın "sekme açılınca BİR KEZ" ilkesinin TERSİ, çünkü
+// onların listesi /durum'un parçası değil, bu sekmeninki ZATEN parça.
+
+/**
+ * Seçili rolün "Şu an" kutusu — DEVIR.md §6: surface zemin, çalışırken/
+ * kapıda üstte 4px accent çizgi, kart başlığı, adım/araç/süre/maliyet
+ * satırı, "Kartı panoda aç".
+ */
+function ajanSuAnKutuKur(guncelKart) {
+  const kutu = el("div", "ajanSuAn");
+  if (!guncelKart) {
+    kutu.append(el("div", "ipucu", "Şu an bu role atanmış bir kart yok."));
+    return kutu;
+  }
+  // guncelKart burada YA koşuyor YA kapıda (ajanGuncelKart'ın tanımı) —
+  // DEVIR'in "çalışırken ya da kapıda üstte 4px accent çizgi" kuralı bu
+  // yüzden KOŞULSUZ: başka bir durumda bu kutu hiç açılmaz.
+  kutu.classList.add("ajanSuAn-vurgulu");
+  kutu.append(el("div", "ajanSuAnBaslik", guncelKart.title));
+
+  const satir = el("div", "ajanSuAnSatir mono");
+  if (guncelKart.state === "active" && guncelKart.live) {
+    satir.append(el("b", null, guncelKart.live.name || guncelKart.live.kind));
+    if (guncelKart.live.detail) satir.append(el("span", null, guncelKart.live.detail));
+  } else if (guncelKart.state === "active") {
+    satir.append(el("span", null, "çalışıyor"));
+  } else {
+    satir.append(el("span", null, "kapıda"));
+  }
+  if (guncelKart.durationMs) satir.append(el("span", null, sure(guncelKart.durationMs)));
+  if (guncelKart.costUsd || guncelKart.olculmeyen) {
+    satir.append(el("span", guncelKart.olculmeyen ? "bad" : null,
+      maliyetMetni(guncelKart.costUsd, guncelKart.olculmeyen, guncelKart.tokens)));
+  }
+  kutu.append(satir);
+
+  const ac = el("button", "railBtn", "Kartı panoda aç");
+  ac.type = "button";
+  ac.addEventListener("click", () => { location.hash = "kart/" + guncelKart.id; });
+  kutu.append(ac);
+  return kutu;
+}
+
+/**
+ * "Adımlar" listesi — DEVIR.md §6: seq, araç adı, ayrıntı, saat; en
+ * yenisi en üstte; çalışırken "canlı" etiketi.
+ *
+ * AJAN_ADIMLAR[guncelKart.id] sunucudan ARTAN sırada geliyor (bkz.
+ * model.ts activationSteps) — TERSİNE çevirme BURADA, istemci tarafında:
+ * sunucunun kendi sırası ikinci bir kez YORUMLANMIYOR, yalnızca GÖSTERİM
+ * yönü değişiyor.
+ */
+function ajanAdimlarKur(guncelKart, daemon) {
+  const kutu = el("div", "ajanBolum");
+  const baslik = el("div", "railAraBaslik", "Adımlar");
+  if (ajanCanliMi(guncelKart, daemon)) baslik.append(el("span", "ajanCanliEtiket", "canlı"));
+  kutu.append(baslik);
+
+  if (!guncelKart) {
+    kutu.append(el("div", "ipucu", "Koşan bir ajan yok."));
+    return kutu;
+  }
+  const adimlar = AJAN_ADIMLAR[guncelKart.id] || [];
+  if (!adimlar.length) {
+    kutu.append(el("div", "ipucu",
+      ajanCanliMi(guncelKart, daemon) ? "ilk adım bekleniyor…" : "bu aktivasyon için kayıtlı adım yok."));
+    return kutu;
+  }
+  adimlar.slice().reverse().forEach((a) => {
+    const satir = el("div", "ajanAdim");
+    satir.append(el("span", "seq", String(a.seq)));
+    satir.append(el("span", "ad", a.name || a.kind));
+    satir.append(el("span", "detay", a.detail || ""));
+    satir.append(el("span", "saat", a.at ? a.at.slice(11, 19) : ""));
+    kutu.append(satir);
+  });
+  return kutu;
+}
+
+/**
+ * "Görevi · promptundan" bloğu — DEVIR.md §6: rol prompt dosyasının giriş
+ * paragrafı + ilk "##" bölümünün madde listesi (en fazla 5), "Promptu
+ * düzenle →".
+ */
+function ajanGorevKur(meta) {
+  const kutu = el("div", "ajanBolum");
+  kutu.append(el("div", "railAraBaslik", "Görevi · " + meta.prompt));
+
+  const ozet = AJAN_PROMPT_OZET[meta.prompt];
+  if (ozet === undefined) {
+    kutu.append(el("div", "ipucu", "yükleniyor…"));
+  } else if (ozet === null) {
+    kutu.append(el("div", "err", "Prompt okunamadı" + (PROMPT_HATA[meta.prompt] ? ": " + PROMPT_HATA[meta.prompt] : ".")));
+  } else {
+    if (ozet.giris) kutu.append(el("p", "ajanGorevMetin", ozet.giris));
+    if (ozet.maddeler.length) {
+      const liste = el("ul", "ajanGorevListe");
+      ozet.maddeler.forEach((madde) => liste.append(el("li", null, madde)));
+      kutu.append(liste);
+    } else if (!ozet.giris) {
+      kutu.append(el("div", "ipucu", "(bölüm boş)"));
+    }
+  }
+
+  const duzenle = el("button", "railBtn", "Promptu düzenle →");
+  duzenle.type = "button";
+  duzenle.addEventListener("click", () => {
+    PROMPT_SEC = meta.prompt;
+    location.hash = "promptlar";
+  });
+  kutu.append(duzenle);
+  return kutu;
+}
+
+/** Seçili rolün sağ taraf içeriği — üst bilgi + "şu an" + adımlar + görev (DEVIR.md §6). */
+function ajanPanelKur(m, rolId) {
+  const panel = el("div", "ajanPanel");
+  const meta = railRolMeta(m, rolId);
+  if (!meta) {
+    panel.append(el("div", "ipucu", "Rol bulunamadı."));
+    return panel;
+  }
+
+  const ust = el("div", "ajanPanelUst");
+  ust.append(el("div", "railAraBaslik", "ajan " + meta.no + " · " + m.flow.name));
+  ust.append(el("h1", "ajanPanelAd", meta.id));
+  const metaSatir = el("div", "ajanPanelMeta mono");
+  metaSatir.append(el("span", null, meta.provider));
+  metaSatir.append(el("span", null, meta.workspace));
+  metaSatir.append(el("span", null, meta.receive === "batch" ? "toplu alım" : "tekil alım"));
+  metaSatir.append(el("span", null, "sonraki · " + meta.sonrakiRol));
+  ust.append(metaSatir);
+  panel.append(ust);
+
+  const guncelKart = ajanGuncelKart(rolId, m.cards);
+  panel.append(ajanSuAnKutuKur(guncelKart));
+  panel.append(ajanAdimlarKur(guncelKart, m.daemon));
+  panel.append(ajanGorevKur(meta));
+  return panel;
+}
+
+/** Ajan listesinin TEK satırı — 36px kuş, rol adı, sağlayıcı, tek satırlık durum (DEVIR.md §6). */
+function ajanSatirKur(m, rol) {
+  const guncelKart = ajanGuncelKart(rol.id, m.cards);
+  const kartlar = rolunAcikKartlari(m.cards, rol.id);
+
+  const satir = el("button", "ajanSatir" + (rol.id === AJAN_SEC ? " ajanSatir-secili" : ""));
+  satir.type = "button";
+  satir.setAttribute("aria-pressed", String(rol.id === AJAN_SEC));
+
+  const animasyonAcik = document.documentElement.dataset.animate !== "off";
+  const kus = sv("svg", { viewBox: "0 0 46 23", role: "img", "aria-label": rol.id + " rolü" });
+  kus.classList.add("ajanKus");
+  if (kanatCirpiyorMu(kartlar, m.daemon) && animasyonAcik) kus.classList.add("kanatCirpiyor");
+  const kusCizgi = sv("polyline", { points: "2,5 13,9 24,19 35,9 46,5", fill: "none" });
+  kusCizgi.style.stroke = kusRengi(kartlar);
+  kusCizgi.style.strokeWidth = "4";
+  kusCizgi.style.strokeLinejoin = "miter";
+  kus.append(kusCizgi);
+  satir.append(kus);
+
+  const bilgi = el("div", "ajanSatirBilgi");
+  bilgi.append(el("div", "ajanSatirAd", rol.id + " · " + rol.provider));
+  bilgi.append(el("div", "ajanSatirDurum", ajanDurumMetni(rol, guncelKart, m.daemon)));
+  satir.append(bilgi);
+
+  satir.addEventListener("click", () => {
+    AJAN_SEC = rol.id;
+    ajanlarEkraniCiz(m);
+  });
+  return satir;
+}
+
+/**
+ * Ajanlar sekmesinin TAM içeriği — HER yoklamada yeniden çiziliyor
+ * (formasyonSvgKur ile AYNI ilke): birincil veri /durum modelinin parçası.
+ * Sekme GÖRÜNMÜYOR OLSA BİLE çağrılıyor (Pano'nun board'u gibi), ki
+ * sekmeye geçildiği an içerik hazır olsun.
+ */
+function ajanlarEkraniCiz(m) {
+  const kok = document.getElementById("icerikAjanlar");
+  if (!kok) return;
+  if (!m.roles.length) {
+    kok.replaceChildren(el("div", "ipucu", "Bu akışta rol yok."));
+    return;
+  }
+  if (!m.roles.some((r) => r.id === AJAN_SEC)) AJAN_SEC = m.roles[0].id;
+
+  const govde = el("div", "ajanlarGovde");
+  const liste = el("div", "ajanlarListe");
+  m.roles.forEach((rol) => liste.append(ajanSatirKur(m, rol)));
+  govde.append(liste);
+  govde.append(ajanPanelKur(m, AJAN_SEC));
+  kok.replaceChildren(govde);
+
+  // Bu noktadan sonrası yalnızca SEKME GERÇEKTEN açıkken: gizliyken
+  // prompt/adım isteği atmanın anlamı yok — Promptlar/Akışlar'ın "sekme
+  // açılınca yükle" ilkesiyle AYNI gerekçe, burada "her saniye" için.
+  if (sekmeAdi(decodeURIComponent(location.hash.replace(/^#/, ""))) !== "ajanlar") return;
+
+  const rol = m.roles.find((r) => r.id === AJAN_SEC);
+  if (rol && AJAN_PROMPT_OZET[rol.prompt] === undefined) void ajanPromptYukle(rol.prompt);
+
+  const guncelKart = ajanGuncelKart(AJAN_SEC, m.cards);
+  if (ajanCanliMi(guncelKart, m.daemon)) void ajanAdimlariYukle(guncelKart.id);
+}
+
+/**
+ * Rol promptunun "Görevi" özetini bir KEZ yükler — promptlarMetniGetir'in
+ * KENDİ önbelleği (PROMPT_METIN) zaten "yüklüyse tekrar okuma" diyor, bu
+ * da AYNI metni promptGorevOzeti ile BİR KEZ ayrıştırıp AJAN_PROMPT_OZET'e
+ * yazıyor. Promptlar sekmesi bu dosyayı AYRICA açarsa (PROMPT_SEC
+ * değişirse) metin zaten önbellekte, ikinci bir ağ isteği olmaz.
+ */
+async function ajanPromptYukle(yol) {
+  await promptlarMetniGetir(yol);
+  const metin = PROMPT_METIN[yol];
+  AJAN_PROMPT_OZET[yol] = metin === undefined ? null : promptGorevOzeti(metin);
+}
+
+/**
+ * Güncel kartın TAM adım izini getirir — "GET /adimlar?kart=" (DEVIR.md
+ * §6'nın gerçekten yeni ucu, bkz. server.ts). Bu fonksiyon kendi başına
+ * yeniden ÇİZMİYOR: bir sonraki saniyelik yoklamada (ciz() → ajanlarEkraniCiz)
+ * AJAN_ADIMLAR'daki TAZE liste zaten basılır — sagPanelCiz'in Kart modu
+ * "data-rail-kart" desenindeki fazladan karmaşıklık burada GEREKMİYOR,
+ * bu ekran saniyede bir ZATEN yeniden çiziliyor.
+ */
+async function ajanAdimlariYukle(kartId) {
+  try {
+    const cevap = await fetch("/adimlar?kart=" + encodeURIComponent(kartId), { cache: "no-store" });
+    const veri = await cevap.json();
+    if (cevap.ok && Array.isArray(veri.adimlar)) AJAN_ADIMLAR[kartId] = veri.adimlar;
+  } catch (e) {
+    // Sessizce bırak: önbellekteki ESKİ liste (varsa) ekranda kalır, bir
+    // sonraki yoklama yeniden deneyecek.
   }
 }
 
