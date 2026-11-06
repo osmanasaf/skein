@@ -200,6 +200,39 @@ Kapsam dışı bırakmak, görmemiş gibi yazmak demek değildir.
 
 ---
 
+### 2.8 EKRANDA ÖLÇMEK YETMEZ — ÖLÇÜMÜN KENDİSİ KARARLI OLMALI
+
+§2.7'nin dersi "ekranda ölç" idi. Kuşların uçuşu kartı bunu yaptı ve
+yine bir kusur yerleşti: ölçüm KARARSIZDI.
+
+Sınama (`tarayici.test.ts`, "ara karede kuş kaynak İLE hedef ARASINDA
+durur") `waitForSelector(".ucanKus")` ile uçuşu bekliyor, sonra sabit
+`waitForTimeout(400)` ile TEK kare ölçüyordu. 400ms sabitti ama
+BAŞLANGIÇ noktası değil: `waitForSelector`'ın dönme gecikmesi makine
+yüküne göre değişiyor, örnek uçuşun sonuna — kuşun hedefe geri
+tırmandığı yere — kayıyordu.
+
+**ÖLÇÜM:** 5 koşudan 3'ü düştü (y = 337.7 / 343.4 / 346.9; eşik 349.0).
+Kart, suite'in yeşil geldiği koşuda denetçiden RET ALMADAN geçti.
+
+**Niye tehlikeli:** rastgele ısıran bir sınama, ısırmayan bir sınamadan
+kötüdür. Sonraki kartın denetçisi kırmızıyı görür, kendi diff'inde
+sebep arar, bulamaz; ya yanlış yere ret verir ya da alakasız bir
+"düzeltme" yapar. Takımın kırmızısı sinyal olmaktan çıkar.
+
+**KURAL:** bir hareketi/animasyonu ölçen sınama, ZAMANLAMAYA bağlı tek
+bir kareye dayanmayacak. Ya hareketin tamamı örneklenip zamanlamadan
+BAĞIMSIZ bir değişmez üzerinden iddia kurulur (burada: V'nin DİBİ —
+uçuş onu her hâlükârda geçiyor), ya da zaman denetim altına alınır.
+Yeni bir zamanlama sınaması eklerken 5 kez koştur; 5/5 değilse sınama
+hazır değil.
+
+**Düzeltme:** örnekleyici DEVİRDEN ÖNCE başlıyor, tüm uçuş boyunca
+`requestAnimationFrame` ile kare topluyor, iddia en derin kare üzerinden
+kuruluyor. Mutasyonla doğrulandı: `govdeYolu` düz çizgi döndürünce
+kırmızı (y 324.4), `ucusSuresiMs` 1ms döndürünce kırmızı (0 kare),
+ikisi geri alınınca yeşil; ve 5/5 kararlı.
+
 ## 3. Tasarımın "yeni" sandığı ama zaten var olan uçlar
 
 `DEVIR.md` üç yeni uç istiyor. İkisi zaten var:

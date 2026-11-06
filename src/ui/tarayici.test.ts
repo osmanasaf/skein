@@ -132,6 +132,15 @@ declare function getComputedStyle(
  * "Rol modundaki rol kaybolursa" sınaması için: RAIL'i doğrudan kurup
  * GERÇEK ciz() ile çizdiriyor (bkz. o sınamanın yorumu).
  */
+/**
+ * Uçuş sınaması kuşun konumunu TARAYICIDA kare kare örnekliyor (bkz.
+ * "Uçuş — devredilen kartın V üzerinde uçması"). Projenin `lib`'i
+ * bilerek `dom` içermiyor (yukarıdaki `document` notu), o yüzden
+ * gereken iki ad da aynı desenle, EN AZ yüzeyle bildiriliyor.
+ */
+declare function requestAnimationFrame(cb: () => void): number;
+declare const performance: { now: () => number };
+
 declare let RAIL: { mode: string; roleId: string | null; cardId: string | null; cardFrom: string };
 declare let SON_MODEL: unknown;
 declare function ciz(m: unknown): void;
@@ -3668,28 +3677,62 @@ roles:
         const coderMerkez = await dugumMerkeziCoder(page);
         const reviewerMerkez = await dugumMerkeziReviewer(page);
 
+        /*
+         * ÖRNEKLEYİCİ DEVİRDEN ÖNCE başlar ve TÜM uçuş boyunca kare
+         * toplar. Sözü Node tarafında tutuluyor: `evaluate` beklenmeden
+         * başlatılıyor, devir arada yapılıyor, sonuç sonra alınıyor.
+         *
+         * NİYE: önceki hâli `waitForSelector` + sabit `waitForTimeout(400)`
+         * ile TEK kare ölçüyordu ve KARARSIZDI — ölçüldü, 5 koşudan 3'ü
+         * düştü (y = 337.7 / 343.4 / 346.9; eşik 349.0). 400ms sabitti ama
+         * BAŞLANGIÇ noktası değil: `waitForSelector`'ın dönme gecikmesi
+         * yüke göre değişiyor ve örnek uçuşun SONUNA, kuşun hedefe geri
+         * tırmandığı yere kayıyordu. Suite'in yeşil geldiği koşuda kart
+         * denetçiden geçti; kararsızlık böyle yerleşti.
+         *
+         * V'nin DİBİ zamanlamadan BAĞIMSIZ: uçuş onu her hâlükârda
+         * geçiyor. İddia aynı (SAPMALAR §2.7 — KONUM ölçülür, nitelik
+         * değil), yalnızca dayanağı sağlam.
+         */
+        const izSozu = page.evaluate(
+          () =>
+            new Promise<{ x: number; y: number; w: number }[]>((coz) => {
+              const kareler: { x: number; y: number; w: number }[] = [];
+              let gorundu = false;
+              const bitis = performance.now() + 20_000; // koşulsuz üst sınır
+              const bak = (): void => {
+                const el = document.querySelector(".ucanKus svg.formasyonKus");
+                if (el !== null) {
+                  gorundu = true;
+                  const r = el.getBoundingClientRect();
+                  kareler.push({ x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width });
+                } else if (gorundu) {
+                  coz(kareler); // uçuş bitti: overlay söküldü
+                  return;
+                }
+                if (performance.now() > bitis) { coz(kareler); return; }
+                requestAnimationFrame(bak);
+              };
+              bak();
+            }),
+        );
+
         // DEVİR — kart artık "coder" DEĞİL, "reviewer" rolünde.
         await queue.handoff(taken, {});
 
-        await page.waitForSelector(".ucanKus", { timeout: 5_000 });
-        // Uçuş ~900ms (coder/reviewer FARKLI kollarda, tepeden dolanıyor —
-        // bkz. govdeYolu/ucusSuresiMs). 400ms, başa ya da sona YAPIŞMAYAN
-        // güvenli bir ARA KARE.
-        await page.waitForTimeout(400);
-        const araKonum = await page.evaluate(() => {
-          const el = document.querySelector(".ucanKus svg.formasyonKus");
-          if (!el) return null;
-          const r = el.getBoundingClientRect();
-          return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width };
-        });
-        expect(araKonum).not.toBeNull();
+        const iz = await izSozu;
+        // Tek kare "hareket" iddiasını taşımaz.
+        expect(iz.length).toBeGreaterThan(2);
+
+        // V'nin DİBİ: ekranda en AŞAĞIDAKİ (en büyük y) kare.
+        const araKonum = iz.reduce((a, b) => (b.y > a.y ? b : a));
 
         // SAPMALAR.md §2.7'nin asıl iddiası: KONUM ölçülüyor, nitelik/
         // sınıf değil. x KAYNAK İLE HEDEF ARASINDA, İKİSİNE DE eşit DEĞİL.
         const solX = Math.min(coderMerkez.x, reviewerMerkez.x);
         const sagX = Math.max(coderMerkez.x, reviewerMerkez.x);
-        expect(araKonum!.x).toBeGreaterThan(solX + 5);
-        expect(araKonum!.x).toBeLessThan(sagX - 5);
+        expect(araKonum.x).toBeGreaterThan(solX + 5);
+        expect(araKonum.x).toBeLessThan(sagX - 5);
 
         // DÜZ ÇİZGİ DEĞİL: coder ve reviewer AYNI satırda (ekranda aynı Y),
         // düz bir çizgi ara karede de O satırda kalırdı. Gerçek yol
@@ -3697,14 +3740,14 @@ roles:
         // Y'si ikisininkinden GÖZLE GÖRÜLÜR ölçüde BÜYÜK (ekranda AŞAĞIDA)
         // olmalı.
         expect(Math.abs(coderMerkez.y - reviewerMerkez.y)).toBeLessThan(15);
-        expect(araKonum!.y).toBeGreaterThan(coderMerkez.y + 20);
-        expect(araKonum!.y).toBeGreaterThan(reviewerMerkez.y + 20);
+        expect(araKonum.y).toBeGreaterThan(coderMerkez.y + 20);
+        expect(araKonum.y).toBeGreaterThan(reviewerMerkez.y + 20);
 
         // SAPMALAR.md §2.7'nin ikinci dersi (21 kat büyüme kusuru): bu YENİ
         // öğe de kendi nominal (46x23) ölçüsünde kalmalı, diyagramı
         // kaplamamalı.
-        expect(araKonum!.w).toBeLessThan(120);
-        expect(araKonum!.w).toBeGreaterThan(10);
+        expect(araKonum.w).toBeLessThan(120);
+        expect(araKonum.w).toBeGreaterThan(10);
 
         expect(hatalar).toEqual([]);
       } finally {
