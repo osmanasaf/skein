@@ -81,8 +81,8 @@ export function quoteFound(report: string, quote: string): boolean {
 interface RawVerdict {
   no?: unknown;
   yakalandi?: unknown;
-  alinti?: unknown;
-  gerekce?: unknown;
+  quotation?: unknown;
+  rationale?: unknown;
 }
 
 /**
@@ -124,8 +124,8 @@ export function applyVerdicts(
 ): JudgeVerdict[] {
   return hooks.map((hook, i) => {
     const raw = raws.find((r) => typeof r.no === "number" && r.no === i + 1) ?? raws[i];
-    const reason = typeof raw?.gerekce === "string" ? raw.gerekce : undefined;
-    const quote = typeof raw?.alinti === "string" ? raw.alinti : undefined;
+    const reason = typeof raw?.rationale === "string" ? raw.rationale : undefined;
+    const quote = typeof raw?.quotation === "string" ? raw.quotation : undefined;
     const claimed = raw?.yakalandi === true;
     if (!claimed) {
       return { hook, caught: false, ...(reason ? { reason } : {}) };

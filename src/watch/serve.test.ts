@@ -286,25 +286,25 @@ describe("serve — yetim kart", () => {
   it("aynı kartı bir kez duyurur", async () => {
     await yetimKoy();
     const stop = new AbortController();
-    let sayac = 0;
+    let counter = 0;
 
-    const running = serve({ topology }, { ...base, signal: stop.signal, onOrphan: () => (sayac += 1) });
+    const running = serve({ topology }, { ...base, signal: stop.signal, onOrphan: () => (counter += 1) });
     await new Promise((r) => setTimeout(r, 120));
     stop.abort();
     const summary = await running;
 
     expect(summary.sweeps).toBeGreaterThan(2);
-    expect(sayac).toBe(1);
+    expect(counter).toBe(1);
   });
 
   it("yetim yoksa hiç duyurmaz", async () => {
     const stop = new AbortController();
-    let sayac = 0;
-    const running = serve({ topology }, { ...base, signal: stop.signal, onOrphan: () => (sayac += 1) });
+    let counter = 0;
+    const running = serve({ topology }, { ...base, signal: stop.signal, onOrphan: () => (counter += 1) });
     await new Promise((r) => setTimeout(r, 60));
     stop.abort();
     await running;
-    expect(sayac).toBe(0);
+    expect(counter).toBe(0);
   });
 });
 
@@ -338,20 +338,20 @@ describe("serve — akışı yeniden yükleme", () => {
   // Canlı koşuda aynı uyarı 3 saniyede 48 kez yazdı; terminal okunmaz oldu.
   it("aynı hata tekrar tekrar duyurulmaz", async () => {
     const stop = new AbortController();
-    let sayac = 0;
+    let counter = 0;
 
     const running = serve({ topology }, {
       ...base,
       signal: stop.signal,
       refresh: async () => ({ kind: "failed" as const, message: "hep aynı hata" }),
-      onReload: () => (sayac += 1),
+      onReload: () => (counter += 1),
     });
     await new Promise((r) => setTimeout(r, 120));
     stop.abort();
     const summary = await running;
 
     expect(summary.sweeps).toBeGreaterThan(2);
-    expect(sayac).toBe(1);
+    expect(counter).toBe(1);
   });
 
   it("hata değişirse yeniden duyurulur", async () => {

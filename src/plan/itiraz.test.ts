@@ -11,7 +11,7 @@ baştan oynatma sürümü geriye düşürür.
 **Durum:** açık
 `;
 
-const varMi = (yol: string): boolean => yol === "src/selector.ts";
+const present = (yol: string): boolean => yol === "src/selector.ts";
 
 // CANLI KOŞUDA ÖLÇÜLEN KUSUR. Bir rol biçime uygun bir itiraz yazdı,
 // `**Durum:** açık` koydu ve ardından `## Kontrol ettiklerim` diye serbest
@@ -36,7 +36,7 @@ ${alan}Sürüm geriye düşüyor.
 **Neyi yanlışlar:** \`src/a.ts:1\` — orada.
 **Durum:** ${durum}
 `;
-  const coz = (metin: string) => parseItirazlar(metin, { varMi: () => true });
+  const coz = (metin: string) => parseItirazlar(metin, { present: () => true });
 
   // `**Durum:** kabul.` geçersiz sayılıyordu ve bedeli kaskad: kabul
   // sayımdan düşüyor, "kabul etti ama planı değiştirmedi" kapısı
@@ -141,7 +141,7 @@ describe("alanlar — başlık bloğu bitirir", () => {
 `;
 
   it("başlıktan sonraki serbest bölüm `Durum`u yemiyor", () => {
-    const d = parseItirazlar(GOVDE, { varMi: () => true });
+    const d = parseItirazlar(GOVDE, { present: () => true });
     expect(d.itirazlar).toHaveLength(1);
     expect(d.itirazlar[0]?.gecersiz).toBeUndefined();
     expect(d.itirazlar[0]?.durum).toBe("acik");
@@ -158,7 +158,7 @@ iki
 **Neyi yanlışlar:** \`src/a.ts:1\` — dört
 beş
 **Durum:** açık
-`, { varMi: () => true });
+`, { present: () => true });
     expect(d.itirazlar[0]?.ne).toBe("bir iki");
     expect(d.itirazlar[0]?.kanit).toContain("dört beş");
   });
@@ -166,7 +166,7 @@ beş
 
 describe("parseItirazlar", () => {
   it("dört alanı ve rolü okur", () => {
-    const d = parseItirazlar(ITIRAZ, { varMi });
+    const d = parseItirazlar(ITIRAZ, { present });
     expect(d.gecerli).toHaveLength(1);
     const i = d.gecerli[0];
     expect(i?.no).toBe(1);
@@ -177,7 +177,7 @@ describe("parseItirazlar", () => {
   });
 
   it("çok satırlı alanı birleştirir", () => {
-    const d = parseItirazlar(ITIRAZ, { varMi });
+    const d = parseItirazlar(ITIRAZ, { present });
     expect(d.gecerli[0]?.neden).toMatch(/baştan oynatma sürümü geriye düşürür/);
   });
 
@@ -190,31 +190,31 @@ describe("parseItirazlar", () => {
 **Neyi yanlışlar:** \`src/selector.ts\`
 **Durum:** ret: ölçüm bunu göstermiyor
 `;
-    const d = parseItirazlar(text, { varMi });
+    const d = parseItirazlar(text, { present });
     expect(d.kabul).toHaveLength(1);
     expect(d.acik).toHaveLength(0);
     expect(d.gecerli[1]?.durum).toBe("ret");
-    expect(d.gecerli[1]?.gerekce).toBe("ölçüm bunu göstermiyor");
+    expect(d.gecerli[1]?.rationale).toBe("ölçüm bunu göstermiyor");
   });
 
   it("insana çıkan itirazı ayrı sayar", () => {
     const text = ITIRAZ.replace("**Durum:** açık", "**Durum:** insana: bu bir değer kararı");
-    const d = parseItirazlar(text, { varMi });
+    const d = parseItirazlar(text, { present });
     expect(d.insana).toHaveLength(1);
-    expect(d.insana[0]?.gerekce).toBe("bu bir değer kararı");
+    expect(d.insana[0]?.rationale).toBe("bu bir değer kararı");
   });
 
   // "ret" ve "insana" kararlarının bedeli var; gerekçesiz olamazlar.
   it("gerekçesiz reddi geçersiz sayar", () => {
     const text = ITIRAZ.replace("**Durum:** açık", "**Durum:** ret");
-    const d = parseItirazlar(text, { varMi });
+    const d = parseItirazlar(text, { present });
     expect(d.gecerli).toHaveLength(0);
     expect(d.itirazlar[0]?.gecersiz).toMatch(/gerekçesiz/);
   });
 
   it("eksik alanlı itirazı geçersiz sayar", () => {
     const text = `## İtiraz 1 — architect\n**Ne:** Bir şey yanlış.\n**Durum:** açık\n`;
-    const d = parseItirazlar(text, { varMi });
+    const d = parseItirazlar(text, { present });
     expect(d.gecerli).toHaveLength(0);
     expect(d.itirazlar[0]?.gecersiz).toMatch(/eksik alan: Neden, Neyi yanlışlar/);
   });
@@ -222,7 +222,7 @@ describe("parseItirazlar", () => {
   // Tasarımın en keskin kuralı: genel öğüt makineyle elenir.
   it("depoda olmayan yola işaret eden itirazı geçersiz sayar", () => {
     const text = ITIRAZ.replace("`src/selector.ts:12`", "`src/olmayan.ts:3`");
-    const d = parseItirazlar(text, { varMi });
+    const d = parseItirazlar(text, { present });
     expect(d.gecerli).toHaveLength(0);
     expect(d.acik).toHaveLength(0);
     expect(d.itirazlar[0]?.gecersiz).toMatch(/depoda olmayan/);
@@ -231,7 +231,7 @@ describe("parseItirazlar", () => {
   it("hiç yol içermeyen kanıtı geçersiz sayar", () => {
     const text = ITIRAZ.replace("**Neyi yanlışlar:** `src/selector.ts:12` — aynı sürüm için önbellek tazelenmez.",
       "**Neyi yanlışlar:** Sınır durumlarına dikkat edilmeli.");
-    const d = parseItirazlar(text, { varMi });
+    const d = parseItirazlar(text, { present });
     expect(d.gecerli).toHaveLength(0);
     expect(d.itirazlar[0]?.gecersiz).toMatch(/dosya yolu içermiyor/);
   });
@@ -243,7 +243,7 @@ describe("parseItirazlar", () => {
   it("kanıt olarak plan belgesini gösteren itirazı geçersiz sayar", () => {
     const text = ITIRAZ.replace("`src/selector.ts:12`", "`docs/plan/c-1.md:42`");
     const d = parseItirazlar(text, {
-      varMi: (yol) => yol === "docs/plan/c-1.md" || varMi(yol),
+      present: (yol) => yol === "docs/plan/c-1.md" || present(yol),
       kendiBelgeleri: ["docs/plan/c-1.md"],
     });
     expect(d.gecerli).toHaveLength(0);
@@ -254,7 +254,7 @@ describe("parseItirazlar", () => {
   it("kanıt olarak bir itiraz dosyasını gösteren itirazı geçersiz sayar", () => {
     const text = ITIRAZ.replace("`src/selector.ts:12`", "`docs/plan/c-1.itiraz.reviewer.md`");
     const d = parseItirazlar(text, {
-      varMi: () => true,
+      present: () => true,
       kendiBelgeleri: ["docs/plan/c-1.md", "docs/plan/c-1.itiraz.reviewer.md"],
     });
     expect(d.gecerli).toHaveLength(0);
@@ -266,7 +266,7 @@ describe("parseItirazlar", () => {
   it("alışverişin dışındaki bir belgeyi kanıt saymayı sürdürür", () => {
     const text = ITIRAZ.replace("`src/selector.ts:12`", "`docs/ARCHITECTURE.md:7`");
     const d = parseItirazlar(text, {
-      varMi: () => true,
+      present: () => true,
       kendiBelgeleri: ["docs/plan/c-1.md"],
     });
     expect(d.gecerli).toHaveLength(1);
@@ -284,7 +284,7 @@ describe("parseItirazlar", () => {
       "- `src/selector.ts:10-11` — cache koşulu undo'dan sonra yanlış sonuç verir.",
     );
     const d = parseItirazlar(text, {
-      varMi: () => true,
+      present: () => true,
       kendiBelgeleri: ["docs/plan/c-1.md"],
     });
     expect(d.itirazlar[0]?.gecersiz).toBeUndefined();
@@ -299,7 +299,7 @@ describe("parseItirazlar", () => {
       "- `docs/plan/c-1.itiraz.reviewer.md:3` — reviewer da böyle demiş.",
     );
     const d = parseItirazlar(text, {
-      varMi: () => true,
+      present: () => true,
       kendiBelgeleri: ["docs/plan/c-1.md", "docs/plan/c-1.itiraz.reviewer.md"],
     });
     expect(d.gecerli).toHaveLength(0);
@@ -307,7 +307,7 @@ describe("parseItirazlar", () => {
   });
 
   it("boş dosyada itiraz yok", () => {
-    const d = parseItirazlar("# İtirazlar\n\nBu turda itirazım yok.\n", { varMi });
+    const d = parseItirazlar("# İtirazlar\n\nBu turda itirazım yok.\n", { present });
     expect(d.itirazlar).toHaveLength(0);
     expect(d.acik).toHaveLength(0);
   });
@@ -362,7 +362,7 @@ describe("Durum satırı — dört durum da gerekçe alır", () => {
     const d = parseItirazlar(ile("kabul — Haklı. Plan güncellenmiştir: state caching."));
     expect(d.gecerli).toHaveLength(1);
     expect(d.kabul).toHaveLength(1);
-    expect(d.itirazlar[0]?.gerekce).toMatch(/^Haklı/);
+    expect(d.itirazlar[0]?.rationale).toMatch(/^Haklı/);
   });
 
   it("`kabul: gerekçe` de okunur", () => {
@@ -372,7 +372,7 @@ describe("Durum satırı — dört durum da gerekçe alır", () => {
   it("`açık — not` okunur ve açık sayılır", () => {
     const d = parseItirazlar(ile("açık — henüz yanıtlamadım"));
     expect(d.acik).toHaveLength(1);
-    expect(d.itirazlar[0]?.gerekce).toBe("henüz yanıtlamadım");
+    expect(d.itirazlar[0]?.rationale).toBe("henüz yanıtlamadım");
   });
 
   // Ayraç zorunlu: yalnızca boşluk kabul edilseydi "kabul edilemez"

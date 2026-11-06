@@ -77,7 +77,7 @@ export function describeTick(role: string, result: TickResult): string {
       // olmadan "alınamadı" cümlesi kullanıcıyı hiçbir yere götürmez.
       return (
         `${head} ✗ kuyrukta kart var ama ALINAMADI (yarış değil)` +
-        result.engeller
+        result.blockages
           .map((e) => `\n             ${e.code}  ${e.path}\n             ${e.message}`)
           .join("")
       );

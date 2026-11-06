@@ -152,7 +152,7 @@ describe("describeTick — kuyruk engeli", () => {
   it("dosyayı ve errno'yu basıyor", async () => {
     const result: TickResult = {
       status: "engelli",
-      engeller: [
+      blockages: [
         { path: "/d/.skein/queue/coder/0-x-c-1.json", code: "EPERM", message: "operation not permitted" },
       ],
     };
@@ -168,7 +168,7 @@ describe("describeTick — kuyruk engeli", () => {
   it("her engel için ayrı satır", async () => {
     const result: TickResult = {
       status: "engelli",
-      engeller: [
+      blockages: [
         { path: "/a.json", code: "EPERM", message: "m1" },
         { path: "/b.json", code: "EBUSY", message: "m2" },
       ],

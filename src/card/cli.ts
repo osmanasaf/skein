@@ -187,18 +187,18 @@ async function run(argv: string[], root: string): Promise<number> {
         console.log(USAGE);
         return 1;
       }
-      const engel = await gozcuVarsaDur(root, "take");
-      if (engel !== null) {
-        console.error(`✗ ${engel}`);
+      const blockage = await gozcuVarsaDur(root, "take");
+      if (blockage !== null) {
+        console.error(`✗ ${blockage}`);
         return 1;
       }
       const alinan = await queue.take(role);
       // "Kuyruk boş" ile "alamadım" aynı cümle OLAMAZ: ikincisinde kart
       // kuyrukta duruyor ve kullanıcı bunu bilmeden bekler.
-      for (const engel of alinan.kind === "bos" ? [] : alinan.engeller) {
-        console.error(`✗ kart alınamadı (yarış değil): ${engel.code}`);
-        console.error(`  ${engel.path}`);
-        console.error(`  ${engel.message}`);
+      for (const blockage of alinan.kind === "bos" ? [] : alinan.blockages) {
+        console.error(`✗ kart alınamadı (yarış değil): ${blockage.code}`);
+        console.error(`  ${blockage.path}`);
+        console.error(`  ${blockage.message}`);
       }
       if (alinan.kind === "engel") return 1;
       if (alinan.kind === "bos") {
@@ -291,9 +291,9 @@ async function run(argv: string[], root: string): Promise<number> {
     }
 
     case "recover": {
-      const engel = await gozcuVarsaDur(root, "recover");
-      if (engel !== null) {
-        console.error(`✗ ${engel}`);
+      const blockage = await gozcuVarsaDur(root, "recover");
+      if (blockage !== null) {
+        console.error(`✗ ${blockage}`);
         return 1;
       }
       const cards = await queue.recover();

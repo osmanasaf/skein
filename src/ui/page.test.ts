@@ -310,11 +310,11 @@ describe("renderPage — kuyruk engeli bandı", () => {
  * kullanırsan, ya da ternary'yi tersine çevirirsen birinci sınama düşer.
  */
 describe("engelBandBasligi — davranış", () => {
-  const baslik = (kartSayisi: number, engeller: { code: string }[]): string =>
+  const baslik = (kartSayisi: number, blockages: { code: string }[]): string =>
     fonksiyon<(k: number, e: { code: string }[]) => string>(
       renderPage("x"),
       "engelBandBasligi",
-    )(kartSayisi, engeller);
+    )(kartSayisi, blockages);
 
   it("8 kirli dosyalı tek kartta '1 kart' geçiyor, '8 kart' GEÇMİYOR", () => {
     const sekizKirliDosya = Array.from({ length: 8 }, () => ({ code: "KIRLI" }));

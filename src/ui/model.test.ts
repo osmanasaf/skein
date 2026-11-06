@@ -281,7 +281,7 @@ describe("buildModel — ölçüm", () => {
     // Zaman aşımı: dolar YOK, token var (akıştan toplanan yarım ölçü).
     await log.append({
       type: "agent.finished", cell: `${card.id}:reviewer`, exitCode: 137, durationMs: 1_200_000,
-      timedOut: true, usage: { inputTokens: 3_000_000, outputTokens: 40_000, kismi: true },
+      timedOut: true, usage: { inputTokens: 3_000_000, outputTokens: 40_000, partial: true },
     });
 
     const model = await buildModel(base);
@@ -862,10 +862,10 @@ describe("buildModel — kuyruk engeli", () => {
 
     const m = await buildModel(base);
 
-    expect(m.engeller).toHaveLength(1);
+    expect(m.blockages).toHaveLength(1);
     // Kod ve yol olmadan "alınamadı" kullanıcıyı hiçbir yere götürmez.
-    expect(m.engeller[0]).toMatchObject({ code: "EPERM", role: "coder", path: yol });
-    expect(m.engeller[0]?.message).toBe("operation not permitted");
+    expect(m.blockages[0]).toMatchObject({ code: "EPERM", role: "coder", path: yol });
+    expect(m.blockages[0]?.message).toBe("operation not permitted");
   });
 
   it("dosya gitmişse engel bildirilmiyor", async () => {
@@ -874,7 +874,7 @@ describe("buildModel — kuyruk engeli", () => {
 
     const m = await buildModel(base);
 
-    expect(m.engeller).toEqual([]);
+    expect(m.blockages).toEqual([]);
   });
 
   // Gözcü her geçişte bir kayıt yazıyor: aynı engel onlarca kez basılmamalı.
@@ -888,13 +888,13 @@ describe("buildModel — kuyruk engeli", () => {
 
     const m = await buildModel(base);
 
-    expect(m.engeller).toHaveLength(1);
-    expect(m.engeller[0]?.code).toBe("EBUSY");
+    expect(m.blockages).toHaveLength(1);
+    expect(m.blockages[0]?.code).toBe("EBUSY");
   });
 
   it("hiç engel kaydı yoksa boş", async () => {
     await put();
-    expect((await buildModel(base)).engeller).toEqual([]);
+    expect((await buildModel(base)).blockages).toEqual([]);
   });
 });
 
@@ -905,26 +905,26 @@ describe("buildModel — kuyruk engeli", () => {
  * düşer; geri alınca yeşile döner.
  */
 describe("kartSayisi", () => {
-  const engel = (ovr: Partial<UiEngel>): UiEngel => ({
+  const blockage = (ovr: Partial<UiEngel>): UiEngel => ({
     path: "p", code: "KIRLI", message: "m", role: "coder", at: "2026-11-06T00:00:00.000Z", ...ovr,
   });
 
   it("aynı rolün birden çok KIRLI kaydı TEK kart sayılır", () => {
-    const engeller = [engel({ path: "a" }), engel({ path: "b" }), engel({ path: "c" })];
-    expect(kartSayisi(engeller)).toBe(1);
+    const blockages = [blockage({ path: "a" }), blockage({ path: "b" }), blockage({ path: "c" })];
+    expect(kartSayisi(blockages)).toBe(1);
   });
 
   it("farklı rollerin KIRLI kayıtları ayrı kart sayılır", () => {
-    const engeller = [engel({ path: "a", role: "coder" }), engel({ path: "b", role: "reviewer" })];
-    expect(kartSayisi(engeller)).toBe(2);
+    const blockages = [blockage({ path: "a", role: "coder" }), blockage({ path: "b", role: "reviewer" })];
+    expect(kartSayisi(blockages)).toBe(2);
   });
 
   it("KIRLI olmayan kodlarda yol kart sayar, eski anlam korunuyor", () => {
-    const engeller = [
-      engel({ code: "EPERM", path: "x", role: "coder" }),
-      engel({ code: "EPERM", path: "y", role: "coder" }),
+    const blockages = [
+      blockage({ code: "EPERM", path: "x", role: "coder" }),
+      blockage({ code: "EPERM", path: "y", role: "coder" }),
     ];
-    expect(kartSayisi(engeller)).toBe(2);
+    expect(kartSayisi(blockages)).toBe(2);
   });
 
   it("boş liste sıfır kart", () => {
@@ -939,27 +939,27 @@ describe("kartSayisi", () => {
  * `undefined` dalını `false`'a çevirirsen ilk/son sınama düşer.
  */
 describe("kirliSuruyorMu", () => {
-  const engel: UiEngel = {
+  const blockage: UiEngel = {
     path: "src/ui/server.ts", code: "KIRLI", message: "m", role: "coder",
     at: "2026-11-06T02:29:00.000Z",
   };
 
   it("rol hiç tur başlatmadıysa sürüyor sayılır — bilmiyorsak çözülmüş sayma", () => {
-    expect(kirliSuruyorMu(engel, undefined)).toBe(true);
+    expect(kirliSuruyorMu(blockage, undefined)).toBe(true);
   });
 
   it("engelden SONRA bir agent.started varsa çözülmüş sayılır", () => {
-    expect(kirliSuruyorMu(engel, "2026-11-06T05:00:00.000Z")).toBe(false);
+    expect(kirliSuruyorMu(blockage, "2026-11-06T05:00:00.000Z")).toBe(false);
   });
 
   it("agent.started engelden ÖNCEYSE hâlâ sürüyor sayılır", () => {
-    expect(kirliSuruyorMu(engel, "2026-11-06T01:00:00.000Z")).toBe(true);
+    expect(kirliSuruyorMu(blockage, "2026-11-06T01:00:00.000Z")).toBe(true);
   });
 
   // Tam aynı an: kesinlikle SONRA değil, o yüzden temkinli taraf seçiliyor
   // — "daha yeni" (SAPMALAR'ın "bilmiyorsak başlatma" ilkesiyle aynı).
   it("agent.started engelle TAM AYNI anda sayılırsa hâlâ sürüyor sayılır", () => {
-    expect(kirliSuruyorMu(engel, engel.at)).toBe(true);
+    expect(kirliSuruyorMu(blockage, blockage.at)).toBe(true);
   });
 });
 
@@ -983,8 +983,8 @@ describe("buildModel — KIRLI engeli", () => {
     await kirliKaydi(kaynak);
 
     const once = await buildModel(base);
-    expect(once.engeller).toHaveLength(1);
-    expect(once.engeller[0]?.code).toBe("KIRLI");
+    expect(once.blockages).toHaveLength(1);
+    expect(once.blockages[0]?.code).toBe("KIRLI");
 
     // Rol sonradan BAŞARIYLA bir tur başlattı — runRole ajanı çağırmadan
     // önce ağacı kontrol ediyor (tick.ts), yani bu olay ancak ağaç o anda
@@ -996,7 +996,7 @@ describe("buildModel — KIRLI engeli", () => {
     });
 
     const sonra = await buildModel(base);
-    expect(sonra.engeller).toEqual([]);
+    expect(sonra.blockages).toEqual([]);
     // Dosya HÂLÂ yerinde: çözülme varlığa değil olaya bağlı olduğunu kanıtlıyor.
     await expect(stat(kaynak)).resolves.toBeDefined();
   });
@@ -1008,7 +1008,7 @@ describe("buildModel — KIRLI engeli", () => {
     await kirliKaydi(kaynak);
 
     const m = await buildModel(base);
-    expect(m.engeller).toHaveLength(1);
+    expect(m.blockages).toHaveLength(1);
   });
 
   it("8 kirli dosyalı aynı rol TEK kart sayılır (totals.engelliKart)", async () => {
@@ -1021,7 +1021,7 @@ describe("buildModel — KIRLI engeli", () => {
     }
 
     const m = await buildModel(base);
-    expect(m.engeller).toHaveLength(8);
+    expect(m.blockages).toHaveLength(8);
     expect(m.totals.engelliKart).toBe(1);
   });
 
@@ -1041,8 +1041,8 @@ describe("buildModel — KIRLI engeli", () => {
     const m = await buildModel(base);
     // Dosya hâlâ yerinde: sonraki agent.started KIRLI'nin kuralı, bunu
     // ETKİLEMEMELİ — eski anlam (varlık testi) bu kod için geçerli.
-    expect(m.engeller).toHaveLength(1);
-    expect(m.engeller[0]?.code).toBe("EPERM");
+    expect(m.blockages).toHaveLength(1);
+    expect(m.blockages[0]?.code).toBe("EPERM");
   });
 });
 
@@ -1072,14 +1072,14 @@ describe("tick → model — engel sözleşmesi", () => {
 
     const m = await buildModel(base);
 
-    expect(m.engeller).toHaveLength(1);
-    expect(m.engeller[0]?.role).toBe("coder");
-    expect(m.engeller[0]?.path).toContain(kart.id);
+    expect(m.blockages).toHaveLength(1);
+    expect(m.blockages[0]?.role).toBe("coder");
+    expect(m.blockages[0]?.path).toContain(kart.id);
     // Kod gerçek bir errno olmalı: "?" demek alanın adının ayrıştığı
     // ya da hiç yazılmadığı anlamına gelir.
-    expect(m.engeller[0]?.code).not.toBe("?");
-    expect(m.engeller[0]?.code).not.toBe("ENOENT");
-    expect(m.engeller[0]?.message).not.toBe("");
+    expect(m.blockages[0]?.code).not.toBe("?");
+    expect(m.blockages[0]?.code).not.toBe("ENOENT");
+    expect(m.blockages[0]?.message).not.toBe("");
   });
 });
 

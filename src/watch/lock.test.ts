@@ -96,13 +96,13 @@ describe("acquireLock", () => {
     let gozlem = 0;
     while (!bitti) {
       gozlem += 1;
-      let varMi = true;
+      let present = true;
       try {
         await stat(path);
       } catch {
-        varMi = false;
+        present = false;
       }
-      if (varMi && (await readLock(path)) === null) yarim += 1;
+      if (present && (await readLock(path)) === null) yarim += 1;
       await new Promise((r) => setImmediate(r));
     }
     await kosu;

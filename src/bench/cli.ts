@@ -1166,8 +1166,8 @@ if (cmd === "report") {
   // `loadTask` "geçerli YAML değil" diyordu ve bilinmeyen bir komut (ya da
   // henüz çekilmemiş yeni bir komut) tamamen alakasız bir hata üretiyordu.
   const taskRoot = join(REPO, "bench/tasks");
-  const varMi = await readdir(taskRoot).then((d) => d.includes(cmd)).catch(() => false);
-  if (!varMi) {
+  const present = await readdir(taskRoot).then((d) => d.includes(cmd)).catch(() => false);
+  if (!present) {
     const gorevler = await readdir(taskRoot, { withFileTypes: true })
       .then((d) => d.filter((e) => e.isDirectory()).map((e) => e.name).sort())
       .catch(() => [] as string[]);

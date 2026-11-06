@@ -77,8 +77,8 @@ describe("formatUsage", () => {
  */
 describe("yarım ölçü (kismi)", () => {
   it("toplama giren tek bir yarım çağrı bütün toplamı yarım yapar", () => {
-    const t = totalUsage([{ inputTokens: 10, costUsd: 0.1 }, { inputTokens: 5, kismi: true }]);
-    expect(t.kismi).toBe(true);
+    const t = totalUsage([{ inputTokens: 10, costUsd: 0.1 }, { inputTokens: 5, partial: true }]);
+    expect(t.partial).toBe(true);
     expect(t.inputTokens).toBe(15);
   });
 
@@ -86,16 +86,16 @@ describe("yarım ölçü (kismi)", () => {
   // alan hiç yazılmaz, yoksa her toplam alt sınır gibi okunurdu.
   it("hiçbir çağrı yarım değilse işaret HİÇ yazılmaz", () => {
     const t = totalUsage([{ inputTokens: 10 }, { costUsd: 0.1 }]);
-    expect(t.kismi).toBeUndefined();
+    expect(t.partial).toBeUndefined();
     expect("kismi" in t).toBe(false);
   });
 
   it("sumUsage de işareti taşır", () => {
-    expect(sumUsage({ inputTokens: 1, kismi: true }, { inputTokens: 2 }).kismi).toBe(true);
+    expect(sumUsage({ inputTokens: 1, partial: true }, { inputTokens: 2 }).partial).toBe(true);
   });
 
   it("formatUsage yarım doları ALT SINIR olarak basar", () => {
-    const satir = formatUsage({ costUsd: 1.5, inputTokens: 10, outputTokens: 2, kismi: true });
+    const satir = formatUsage({ costUsd: 1.5, inputTokens: 10, outputTokens: 2, partial: true });
     expect(satir).toContain("\u2265$1.5000");
     expect(satir).toContain("\u226510\u21922 token");
   });
@@ -104,7 +104,7 @@ describe("yarım ölçü (kismi)", () => {
   // BİLDİRMİYOR (ücretsiz olabilir), yarım ölçüde ise dolar hiç
   // ÜRETİLMEDİ çünkü tur bitmedi (kesinlikle ücretsiz değil).
   it("dolarsız yarım ölçüyü abonelik kimliğinden AYIRIR", () => {
-    const yarim = formatUsage({ inputTokens: 3000, outputTokens: 30, kismi: true });
+    const yarim = formatUsage({ inputTokens: 3000, outputTokens: 30, partial: true });
     expect(yarim).toContain("tur yar\u0131da kesildi");
     expect(yarim).not.toContain("abonelik");
 

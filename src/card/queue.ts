@@ -31,11 +31,11 @@ export interface KuyrukEngeli {
 
 export type TakeResult =
   /** Kart alındı. `engeller` boş olmayabilir: başka kartlar alınamamış olabilir. */
-  | { kind: "alindi"; card: Card; engeller: KuyrukEngeli[] }
+  | { kind: "alindi"; card: Card; blockages: KuyrukEngeli[] }
   /** Kuyrukta kart yok. Engel de yok — alan bilerek bulunmuyor. */
   | { kind: "bos" }
   /** Kuyrukta kart VAR ama hiçbiri alınamadı. */
-  | { kind: "engel"; engeller: KuyrukEngeli[] };
+  | { kind: "engel"; blockages: KuyrukEngeli[] };
 
 export class QueueError extends Error {
   constructor(message: string) {
@@ -235,44 +235,44 @@ export class CardQueue {
    * fırlatıyor, ve gözcü açılışta uyarı basıyor. Fark şu: artık İLGİSİZ
    * her işlemi durdurmuyor.
    */
-  async #scan(dir: string): Promise<{ kartlar: Located[]; bozuk: string[] }> {
+  async #scan(dir: string): Promise<{ kartlar: Located[]; corrupt: string[] }> {
     let entries;
     try {
       entries = await readdir(dir, { withFileTypes: true });
     } catch {
-      return { kartlar: [], bozuk: [] };
+      return { kartlar: [], corrupt: [] };
     }
     const kartlar: Located[] = [];
-    const bozuk: string[] = [];
+    const corrupt: string[] = [];
     for (const entry of entries.sort((a, b) => (a.name < b.name ? -1 : 1))) {
       const path = join(dir, entry.name);
       if (entry.isDirectory()) {
         const alt = await this.#scan(path);
         kartlar.push(...alt.kartlar);
-        bozuk.push(...alt.bozuk);
+        corrupt.push(...alt.corrupt);
       } else if (entry.name.endsWith(".json") && !entry.name.startsWith(".tmp-")) {
         // Dosya tarandıktan sonra kaybolmuş olabilir: öteki koşucu aldı.
         try {
           const card = await this.#readCardIfPresent(path);
           if (card !== null) kartlar.push({ card, path });
         } catch {
-          bozuk.push(path);
+          corrupt.push(path);
         }
       }
     }
-    return { kartlar, bozuk };
+    return { kartlar, corrupt };
   }
 
   /** Dört alanın hepsini tarar; sağlam kartlar ve bozuk yollar. */
-  async #tara(): Promise<{ kartlar: Located[]; bozuk: string[] }> {
+  async #tara(): Promise<{ kartlar: Located[]; corrupt: string[] }> {
     const kartlar: Located[] = [];
-    const bozuk: string[] = [];
+    const corrupt: string[] = [];
     for (const area of AREAS) {
       const r = await this.#scan(join(this.#root, area));
       kartlar.push(...r.kartlar);
-      bozuk.push(...r.bozuk);
+      corrupt.push(...r.corrupt);
     }
-    return { kartlar, bozuk };
+    return { kartlar, corrupt };
   }
 
   /**
@@ -281,7 +281,7 @@ export class CardQueue {
    * Gözcü açılışta basıyor: bozukluk ölümcül değil ama SESSİZ de değil.
    */
   async bozuklar(): Promise<string[]> {
-    return (await this.#tara()).bozuk;
+    return (await this.#tara()).corrupt;
   }
 
   async #locate(id: string): Promise<Located[]> {
@@ -289,15 +289,15 @@ export class CardQueue {
   }
 
   async get(id: string): Promise<Card | null> {
-    const { kartlar, bozuk } = await this.#tara();
+    const { kartlar, corrupt } = await this.#tara();
     const found = kartlar.filter((entry) => entry.card.id === id);
     const card = kopyaSirasi(found)[0]?.card;
     if (card !== undefined) return card;
     // Aranan kart BOZUK olanlardan biri olabilir: "böyle bir kart yok"
     // demek veri kaybını yokluk gibi okutmak olurdu.
-    if (bozuk.length > 0) {
+    if (corrupt.length > 0) {
       throw new QueueError(
-        `\`${id}\` bulunamadı ve ${bozuk.length} kart dosyası okunamıyor: ${bozuk.join(", ")}`,
+        `\`${id}\` bulunamadı ve ${corrupt.length} kart dosyası okunamıyor: ${corrupt.join(", ")}`,
       );
     }
     return null;
@@ -353,7 +353,7 @@ export class CardQueue {
   async take(role: string): Promise<TakeResult> {
     const dir = this.#activeDir(role);
     await mkdir(dir, { recursive: true });
-    const engeller: KuyrukEngeli[] = [];
+    const blockages: KuyrukEngeli[] = [];
 
     for (const { card, path } of (await this.#scan(this.#queueDir(role))).kartlar) {
       const dest = join(dir, `${card.id}.json`);
@@ -381,7 +381,7 @@ export class CardQueue {
         // geçiş denemenin kendisidir. Tek seferlik CLI'de ise kullanıcı
         // teşhisi görüp kendi karar verir.
         if (code === "ENOENT") continue;
-        engeller.push({ path, code, message: (cause as Error).message });
+        blockages.push({ path, code, message: (cause as Error).message });
         continue;
       }
       // İçerik talepten SONRA güncellenir. Buradaki çökme kartı `active/`
@@ -392,13 +392,13 @@ export class CardQueue {
         state: "active" as const,
       };
       await this.#rewrite(dest, claimed);
-      return { kind: "alindi", card: claimed, engeller };
+      return { kind: "alindi", card: claimed, blockages };
     }
     // "Boş" ile "alınamadı" yapısal olarak ayrı: `bos` varyantının `engeller`
     // alanı YOK, yani engel varken "kuyruk boş" demek tip düzeyinde
     // temsil edilemiyor. Bu projede en sık tekrarlayan kusur sınıfı
     // "bildiğinden az söyleyen rapor yolu"; burada o yol kapatıldı.
-    return engeller.length === 0 ? { kind: "bos" } : { kind: "engel", engeller };
+    return blockages.length === 0 ? { kind: "bos" } : { kind: "engel", blockages };
   }
 
   /** Bir kart dosyasını yerinde, atomik olarak günceller. */

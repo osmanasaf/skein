@@ -63,7 +63,7 @@ export interface Usage {
    * gelmez — sağlayıcı onu yalnızca kapanış kaydında bildiriyor, ve
    * uydurulmuş bir dolar, eksik bir dolardan kötüdür.
    */
-  kismi?: true;
+  partial?: true;
 }
 
 export interface InvokeResult {

@@ -465,14 +465,14 @@ describe("akış birikimi", () => {
     birikimeEkle(b, rec(MESAJ(5, 2, 100)));
     // Girdi = önbelleğe girmemiş + önbellekten okunan. Tek başına
     // `input_tokens` okumak hacmi 15 gösterirdi; gerçek hacim 315.
-    expect(b).toEqual({ girdi: 315, cikti: 5, sayac: 2 });
+    expect(b).toEqual({ girdi: 315, cikti: 5, counter: 2 });
   });
 
   it("assistant OLMAYAN kayıt sayılmaz", () => {
     const b = yeniBirikim();
     birikimeEkle(b, rec(JSON.stringify({ type: "system", subtype: "init" })));
     birikimeEkle(b, rec(JSON.stringify({ type: "user", message: { content: [] } })));
-    expect(b.sayac).toBe(0);
+    expect(b.counter).toBe(0);
   });
 
   // Yukarıdaki sınama tip kontrolünü UYANDIRMIYOR: o kayıtlarda zaten
@@ -486,7 +486,7 @@ describe("akış birikimi", () => {
       type: "user",
       message: { content: [], usage: { input_tokens: 999, output_tokens: 9 } },
     })));
-    expect(b).toEqual({ girdi: 0, cikti: 0, sayac: 0 });
+    expect(b).toEqual({ girdi: 0, cikti: 0, counter: 0 });
   });
 
   // Kullanım bloğu OLMAYAN bir mesaj "sıfır token" demek değil: sayacı
@@ -494,7 +494,7 @@ describe("akış birikimi", () => {
   it("kullanım bildirmeyen assistant mesajı sayacı artırmaz", () => {
     const b = yeniBirikim();
     birikimeEkle(b, rec(S_TOOL));
-    expect(b).toEqual({ girdi: 0, cikti: 0, sayac: 0 });
+    expect(b).toEqual({ girdi: 0, cikti: 0, counter: 0 });
   });
 
   // Ve aynı kural bir adım derinde: kullanım bloğu VAR ama içi BOŞ.
@@ -506,7 +506,7 @@ describe("akış birikimi", () => {
       type: "assistant",
       message: { content: [], usage: {} },
     })));
-    expect(b).toEqual({ girdi: 0, cikti: 0, sayac: 0 });
+    expect(b).toEqual({ girdi: 0, cikti: 0, counter: 0 });
   });
 
   it("hiç mesaj görülmediyse ÖLÇÜ YOK — sıfır token değil", () => {
@@ -517,7 +517,7 @@ describe("akış birikimi", () => {
     const b = yeniBirikim();
     birikimeEkle(b, rec(MESAJ(10, 3)));
     const u = kismiKullanim(b);
-    expect(u).toEqual({ inputTokens: 10, outputTokens: 3, kismi: true });
+    expect(u).toEqual({ inputTokens: 10, outputTokens: 3, partial: true });
     // Dolar uydurmak bir fiyat tablosu uydurmaktır: bayatlar, ama kesin
     // görünür. Sağlayıcı doları yalnızca kapanış kaydında veriyor.
     expect(u?.costUsd).toBeUndefined();
@@ -539,7 +539,7 @@ describe("ClaudeCliAdapter — ölçü kapanış kaydı gelmediğinde", () => {
       .invoke(req({ onStep: () => {}, timeoutMs: 1500 }));
 
     expect(r.timedOut).toBe(true);
-    expect(r.usage).toEqual({ inputTokens: 3000, outputTokens: 30, kismi: true });
+    expect(r.usage).toEqual({ inputTokens: 3000, outputTokens: 30, partial: true });
   });
 
   // Kapanış kaydı GELDİYSE ölçü odur. Yarım toplam onu ezseydi, biten
@@ -551,7 +551,7 @@ ${S_RESULT}
     const r = await new ClaudeCliAdapter({ model: "m", bin }).invoke(req({ onStep: () => {} }));
 
     expect(r.usage).toEqual({ inputTokens: 7, outputTokens: 3, costUsd: 0.02 });
-    expect(r.usage?.kismi).toBeUndefined();
+    expect(r.usage?.partial).toBeUndefined();
   });
 
   // Hiç mesaj görülmeden ölen bir süreç ÖLÇÜLEMEZ, sıfır değil.

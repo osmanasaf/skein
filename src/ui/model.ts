@@ -87,7 +87,7 @@ export interface UiModel {
    * olduğunda gözcü hiç açılamıyordu), ama görünmez de olmamalı: izole
    * etmek ile saklamak ayrı şeyler. Ekran bunu uyarı olarak basıyor.
    */
-  bozuk: string[];
+  corrupt: string[];
   /**
    * Kuyrukta duran ama ALINAMAYAN kartlar — hâlâ engelli olanlar.
    *
@@ -102,7 +102,7 @@ export interface UiModel {
    * "hâlâ sıkışık mı" sorusunun tam cevabı. Kalıcı bir engel dosyası
    * tutmak gerekmiyor; durum diskte zaten yazılı.
    */
-  engeller: UiEngel[];
+  blockages: UiEngel[];
   at: string;
 }
 
@@ -359,7 +359,7 @@ export async function buildModel(options: BuildOptions): Promise<UiModel> {
 
   // `totals.engelliKart` da `engeller`'den okuyor — aynı liste, tek
   // sayım kuralı (`kartSayisi`), iki yerde iki ayrı yorum riski yok.
-  const engeller = await surenEngeller(events);
+  const blockages = await surenEngeller(events);
 
   return {
     flow: {
@@ -382,10 +382,10 @@ export async function buildModel(options: BuildOptions): Promise<UiModel> {
       costUsd: ui.reduce((sum, c) => sum + c.costUsd, 0),
       olculmeyen: ui.reduce((sum, c) => sum + c.olculmeyen, 0),
       activations: events.filter((e) => e.type === "agent.started").length,
-      engelliKart: kartSayisi(engeller),
+      engelliKart: kartSayisi(blockages),
     },
-    bozuk: await options.queue.bozuklar(),
-    engeller,
+    corrupt: await options.queue.bozuklar(),
+    blockages,
     at: now().toISOString(),
   };
 }
@@ -410,10 +410,10 @@ export async function buildModel(options: BuildOptions): Promise<UiModel> {
  * bir kart/kuyruk dosyasını işaret eder — eski anlam korunuyor: her PATH
  * ayrı bir karttır.
  */
-export function kartSayisi(engeller: UiEngel[]): number {
+export function kartSayisi(blockages: UiEngel[]): number {
   const gruplar = new Set<string>();
-  for (const engel of engeller) {
-    gruplar.add(engel.code === "KIRLI" ? `rol:${engel.role}` : `yol:${engel.path}`);
+  for (const blockage of blockages) {
+    gruplar.add(blockage.code === "KIRLI" ? `rol:${blockage.role}` : `yol:${blockage.path}`);
   }
   return gruplar.size;
 }
@@ -441,13 +441,13 @@ export function kartSayisi(engeller: UiEngel[]): number {
  * (yoksa `undefined`), çıktı bir boolean. DOM yok, I/O yok — `surenEngeller`
  * günlüğü zaten okudu, bu fonksiyon sadece karar veriyor.
  */
-export function kirliSuruyorMu(engel: UiEngel, sonTurBaslangici: string | undefined): boolean {
+export function kirliSuruyorMu(blockage: UiEngel, sonTurBaslangici: string | undefined): boolean {
   // Bu rol hiç tur başlatmamışsa (ya da engelden önce başlatılmışsa) ağacın
   // o zamandan beri temizlendiğine dair bir kanıt yok: engel hâlâ sürüyor
   // sayılır — bilmiyorsak çözülmüş SAYMIYORUZ, aynı projenin "bilmiyorsak
   // başlatma" ilkesi.
   if (sonTurBaslangici === undefined) return true;
-  return sonTurBaslangici <= engel.at;
+  return sonTurBaslangici <= blockage.at;
 }
 
 /**
@@ -482,22 +482,22 @@ async function surenEngeller(events: SkeinEvent[]): Promise<UiEngel[]> {
   }
 
   const suren: UiEngel[] = [];
-  for (const engel of sonKayit.values()) {
-    if (engel.code === "KIRLI") {
+  for (const blockage of sonKayit.values()) {
+    if (blockage.code === "KIRLI") {
       // Dosyanın varlığı bu kod için hiçbir şey söylemiyor (bkz.
       // `kirliSuruyorMu`); karar olay günlüğünden türüyor.
-      if (kirliSuruyorMu(engel, sonTurBaslangici.get(engel.role))) suren.push(engel);
+      if (kirliSuruyorMu(blockage, sonTurBaslangici.get(blockage.role))) suren.push(blockage);
       continue;
     }
     // Diğer kodlarda yol bir kart/kuyruk dosyası: dosya yerinde değilse
     // engel çözülmüş (kart alındı ya da taşındı). Çözülmüş engeli basmak,
     // operatöre olmayan bir arıza göstermek olurdu.
     try {
-      await stat(engel.path);
+      await stat(blockage.path);
     } catch {
       continue;
     }
-    suren.push(engel);
+    suren.push(blockage);
   }
   // En yeni önce: ekranda ilk göreceği şey en son olan olmalı.
   return suren.sort((a, b) => b.at.localeCompare(a.at));

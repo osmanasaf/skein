@@ -140,7 +140,7 @@ describe("tick — kuyruk engeli", () => {
     const result = await tick("coder", options);
 
     expect(result.status).toBe("engelli");
-    expect(result.status === "engelli" && result.engeller).toHaveLength(1);
+    expect(result.status === "engelli" && result.blockages).toHaveLength(1);
     // Ajan ÇAĞRILMAMALI: elimizde kart yok.
     expect(claude.calls).toHaveLength(0);
   });
@@ -1023,11 +1023,11 @@ describe("tick — tur başında temiz ağaç", () => {
     // Parası ödenmiş bir tur yok: ajan hiç çağrılmadı.
     expect(claude.calls).toHaveLength(0);
     expect(result.status).toBe("engelli");
-    const engeller = (result as { engeller: { path: string; code: string }[] }).engeller;
+    const blockages = (result as { blockages: { path: string; code: string }[] }).blockages;
     // Her kirli yol AYRI engel: toplu bir satır hangi dosya olduğunu
     // söylemezdi ve ekranda temizlenecek şeyin listesi lazım.
-    expect(engeller.map((e) => e.path)).toEqual(["src/ui/page.ts", "src/ui/yeni.ts"]);
-    expect(engeller.every((e) => e.code === "KIRLI")).toBe(true);
+    expect(blockages.map((e) => e.path)).toEqual(["src/ui/page.ts", "src/ui/yeni.ts"]);
+    expect(blockages.every((e) => e.code === "KIRLI")).toBe(true);
 
     // Kart KAPIDA değil KUYRUKTA: ortam sorunu kartın kusuru değil.
     const geri = (await queue.list()).find((c) => c.id === card.id) as Card;
@@ -1061,7 +1061,7 @@ describe("tick — tur başında temiz ağaç", () => {
 
     expect(claude.calls).toHaveLength(0);
     expect(result.status).toBe("engelli");
-    expect((result as { engeller: { message: string }[] }).engeller[0]?.message)
+    expect((result as { blockages: { message: string }[] }).blockages[0]?.message)
       .toContain("git yok");
   });
 

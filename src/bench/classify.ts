@@ -29,8 +29,8 @@ export interface ClassifyResult {
 interface RawFinding {
   sinif?: unknown;
   kanitli?: unknown;
-  alinti?: unknown;
-  gerekce?: unknown;
+  quotation?: unknown;
+  rationale?: unknown;
 }
 
 const CLASSES: FindingClass[] = ["gercek", "nit", "yanlis", "belirsiz"];
@@ -52,13 +52,13 @@ export function applyFindings(raws: RawFinding[], report: string): {
   const findings: Finding[] = [];
   let unverified = 0;
   for (const raw of raws) {
-    const quote = typeof raw.alinti === "string" ? raw.alinti : "";
+    const quote = typeof raw.quotation === "string" ? raw.quotation : "";
     if (!quoteFound(report, quote)) {
       unverified += 1;
       continue;
     }
     const sinif = CLASSES.find((c) => c === raw.sinif) ?? "belirsiz";
-    const reason = typeof raw.gerekce === "string" ? raw.gerekce : undefined;
+    const reason = typeof raw.rationale === "string" ? raw.rationale : undefined;
     findings.push({
       sinif,
       proven: raw.kanitli === true,

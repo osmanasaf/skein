@@ -17,6 +17,6 @@ export async function al(queue: CardQueue, role: string): Promise<Card> {
   if (sonuc.kind === "bos") throw new Error(`${role} kuyruğu boş: alınacak kart yok`);
   throw new Error(
     `${role} kuyruğundan kart alınamadı: ` +
-      sonuc.engeller.map((e) => `${e.code} ${e.path}`).join(" · "),
+      sonuc.blockages.map((e) => `${e.code} ${e.path}`).join(" · "),
   );
 }

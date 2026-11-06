@@ -692,7 +692,7 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
     // Aynı hücreye ikinci bir aktivasyon: zaman aşımı, dolar YOK, token akıştan kurtarılmış.
     await log.append({
       type: "agent.finished", cell: `${kart.id}:coder`, exitCode: 137, durationMs: 1_200_000,
-      timedOut: true, usage: { inputTokens: 3_000_000, outputTokens: 40_000, kismi: true },
+      timedOut: true, usage: { inputTokens: 3_000_000, outputTokens: 40_000, partial: true },
     });
 
     const { page, hatalar } = await ac();
@@ -979,25 +979,25 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
   it("gözcü GERÇEKTEN ölünce 'Yeniden başlat' otomatik olarak /gozcu/baslat'ı tetikler", async () => {
     const cagrilar: string[][] = [];
     const canli = { deger: true };
-    let sayac = 0;
+    let counter = 0;
     const { s, flow } = await yonetilenSunucu({
       alive: () => canli.deger,
       spawn: (argv) => {
         cagrilar.push(argv);
-        sayac += 1;
+        counter += 1;
         // Her ikisi de GERÇEK bir OS sürecine AİT OLAMAYACAK kadar büyük
         // pid (2^22 üstü, Linux'ta ayrılmaz) — /gozcu/baslat'ın kendi iç
         // `liveLock` kontrolü GERÇEK `pidAlive`'a bakıyor (bu testin
         // `alive` override'ı SADECE EKRANA giden modeli etkiliyor, bkz.
         // yonetilenSunucu yorumu), yoksa İKİNCİ (otomatik) başlatma "zaten
         // bir gözcü açık" hatasına çarpardı.
-        const pid = 4_194_305 + sayac;
+        const pid = 4_194_305 + counter;
         // BİRİNCİ çağrı KASITLI ESKİ bir hash yazıyor — "Yeniden başlat"
         // düğmesini çıkarmak için gereken topoloji uyuşmazlığı GERÇEK bir
         // akış değişikliği yerine burada kuruluyor. İKİNCİ çağrı (otomatik
         // yeniden başlatma) GÜNCEL hash'i yazıyor: yeni gözcü artık
         // GÜNCEL topolojiyle ayakta.
-        const hash = sayac === 1 ? "ESKI-HASH-abc" : flow.hash;
+        const hash = counter === 1 ? "ESKI-HASH-abc" : flow.hash;
         writeFileSync(join(root, ".skein", "daemon.json"), JSON.stringify({
           pid, startedAt: new Date().toISOString(), flow: flow.name, hash, mode: "serve",
         }));
@@ -1005,7 +1005,7 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
         // override'ı BURADA, aynı senkron adımda true'ya çevirmek, test
         // kodunun bunu AYRI bir zamanlamada yapmasını (yarış) gereksiz
         // kılıyor.
-        if (sayac === 2) canli.deger = true;
+        if (counter === 2) canli.deger = true;
         return { pid, kill: () => {}, onExit: () => {} };
       },
     });
@@ -1614,11 +1614,11 @@ reject:
         '"4285ec03-c118-4613-b7a5-c74ca34de154","uuid":' +
         '"5c473ca0-34b2-451d-a387-9d0b10cbd941","timestamp":' +
         '"2026-11-03T15:41:29.839Z","request_id":"req_011CggFNLdfTgJLC5gY89p4f"}';
-      const gerekce = `${cekirdek}\n\nAjan şunu söyledi:\n${ajanKuyruk}`;
+      const rationale = `${cekirdek}\n\nAjan şunu söyledi:\n${ajanKuyruk}`;
 
       await queue.add(newCard({ title: "zaman asimi", task: "iş", topology }));
       const taken = await al(queue, "coder");
-      await queue.escalate(taken, gerekce);
+      await queue.escalate(taken, rationale);
 
       const { page, hatalar } = await ac();
       try {

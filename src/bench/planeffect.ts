@@ -314,10 +314,10 @@ function hookSets(plansizRuns: ArmRun[], planliRuns: ArmRun[]): HookSets {
  */
 export function kararlilikDamgasi(
   olculenKosu: number, herKosuda: number, hepsi: number,
-): { damga: string; kararli: boolean } {
-  if (olculenKosu < 2) return { damga: "TEK KOŞU — kararlılık ölçülmedi", kararli: false };
-  const kararli = hepsi > 0 && herKosuda === hepsi;
-  return { damga: kararli ? "KARARLI" : "değişken", kararli };
+): { damga: string; stable: boolean } {
+  if (olculenKosu < 2) return { damga: "TEK KOŞU — kararlılık ölçülmedi", stable: false };
+  const stable = hepsi > 0 && herKosuda === hepsi;
+  return { damga: stable ? "KARARLI" : "değişken", stable };
 }
 
 function side(runs: ArmRun[]): ArmSide | null {

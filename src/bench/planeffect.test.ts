@@ -134,20 +134,20 @@ describe("kararlilikDamgasi", () => {
   it("tek koşuda kararlılık İDDİA EDİLMİYOR", () => {
     // 3/3 kanca "her koşuda" — ama koşu bir tane, yani kesişim = birleşim.
     expect(kararlilikDamgasi(1, 3, 3)).toEqual({
-      damga: "TEK KOŞU — kararlılık ölçülmedi", kararli: false,
+      damga: "TEK KOŞU — kararlılık ölçülmedi", stable: false,
     });
   });
 
   it("iki koşuda tam kesişim kararlıdır", () => {
-    expect(kararlilikDamgasi(2, 3, 3)).toEqual({ damga: "KARARLI", kararli: true });
+    expect(kararlilikDamgasi(2, 3, 3)).toEqual({ damga: "KARARLI", stable: true });
   });
 
   it("iki koşuda eksik kesişim değişkendir", () => {
-    expect(kararlilikDamgasi(3, 1, 3)).toEqual({ damga: "değişken", kararli: false });
+    expect(kararlilikDamgasi(3, 1, 3)).toEqual({ damga: "değişken", stable: false });
   });
 
   it("hiç kanca yoksa kararlı denmiyor", () => {
-    expect(kararlilikDamgasi(3, 0, 0).kararli).toBe(false);
+    expect(kararlilikDamgasi(3, 0, 0).stable).toBe(false);
   });
 });
 

@@ -28,7 +28,7 @@ export type TickResult =
    * ve gözcü ona bakıp duruyor. Engel "iş var ama elimi süremiyorum"
    * demek; aynı kovaya konsa kart sonsuza kadar sessizce durur.
    */
-  | { status: "engelli"; engeller: KuyrukEngeli[] }
+  | { status: "engelli"; blockages: KuyrukEngeli[] }
   | { status: "accepted"; card: Card; summary?: string; warnings?: string[] }
   | { status: "rejected"; card: Card; reason: string }
   | { status: "escalated"; card: Card; reason: string };
@@ -74,13 +74,13 @@ export async function tick(roleId: string, options: TickOptions): Promise<TickRe
   if (result.status === "engelli") {
     // Engel başına bir kayıt: hangi dosya, hangi errno. Toplu bir
     // "alınamadı" satırı nedeni söylemezdi.
-    for (const engel of result.engeller) {
+    for (const blockage of result.blockages) {
       await options.log?.append({
         type: "queue.blocked",
         role: roleId,
-        path: engel.path,
-        code: engel.code,
-        message: engel.message,
+        path: blockage.path,
+        code: blockage.code,
+        message: blockage.message,
       });
     }
   }
@@ -110,17 +110,17 @@ async function settle(roleId: string, options: TickOptions): Promise<TickResult>
 
   const alinan = await queue.take(roleId);
   if (alinan.kind === "bos") return { status: "idle" };
-  if (alinan.kind === "engel") return { status: "engelli", engeller: alinan.engeller };
+  if (alinan.kind === "engel") return { status: "engelli", blockages: alinan.blockages };
   const card = alinan.card;
   // Kart alındı ama BAŞKA kartlar alınamadıysa o da kaybolmamalı: turun
   // sonucu "kabul" olsa bile kuyrukta elimizi süremediğimiz bir dosya var.
-  for (const engel of alinan.engeller) {
+  for (const blockage of alinan.blockages) {
     await options.log?.append({
       type: "queue.blocked",
       role: roleId,
-      path: engel.path,
-      code: engel.code,
-      message: engel.message,
+      path: blockage.path,
+      code: blockage.code,
+      message: blockage.message,
     });
   }
 
@@ -237,7 +237,7 @@ async function runRole(card: Card, role: SnapshotRole, options: TickOptions): Pr
     // bir cevap yok, ve "bilmiyorum"u "temiz" saymak kapıyı sessizce açar.
     const mesaj = `çalışma ağacının durumu okunamadı: ${(cause as Error).message}`;
     await queue.requeue(card, mesaj);
-    return { status: "engelli", engeller: [{ path: workdir, code: "GIT", message: mesaj }] };
+    return { status: "engelli", blockages: [{ path: workdir, code: "GIT", message: mesaj }] };
   }
   if (kirli.length > 0) {
     const mesaj =
@@ -248,7 +248,7 @@ async function runRole(card: Card, role: SnapshotRole, options: TickOptions): Pr
     // söylemezdi, ve ekranda temizlenecek şeyin listesi lazım.
     return {
       status: "engelli",
-      engeller: kirli.map((yol) => ({ path: yol, code: "KIRLI", message: mesaj })),
+      blockages: kirli.map((yol) => ({ path: yol, code: "KIRLI", message: mesaj })),
     };
   }
 
@@ -701,7 +701,7 @@ async function planStep(
   // "plan şöyle diyor" demektir, planın dokunacağı kodu göstermek değil.
   const kendiBelgeleri = [planPath, ...itirazYollari.map((y) => y.path)];
   const dosya = birlestirItirazlar(okunan.map((o) => parseItirazlar(o.text, {
-    varMi: (yol) => yollar.get(yol) === true,
+    present: (yol) => yollar.get(yol) === true,
     owner: o.role,
     kendiBelgeleri,
   })));
@@ -868,7 +868,7 @@ async function planStep(
   // insana çıkmış bir soruyu makinede bir tur daha döndürmek olurdu.
   if (insana.length > 0) {
     const reason = `Planlamada ${insana.length} itiraz insana çıktı: ` +
-      insana.map((i) => `#${i.no} ${i.ne} — ${i.gerekce ?? ""}`).join(" · ");
+      insana.map((i) => `#${i.no} ${i.ne} — ${i.rationale ?? ""}`).join(" · ");
     await options.log?.append({
       type: "plan.settled", card: card.id, role: role.id, outcome: "insana",
       rounds: phase.round, objections: dosya.gecerli.length, accepted: kabul.length,

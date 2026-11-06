@@ -77,10 +77,10 @@ describe("checkDraft", () => {
   // Kural numaraları kullanıcıya AYNEN gitmeli; ekrana ayrı bir kural
   // kopyası yazmak iki kümenin ayrışmasıyla biterdi.
   it("kural ihlalini numarasıyla bildirir", async () => {
-    const bozuk = taslak();
-    bozuk.roles[1]!.next = "coder"; // döngü: kimse `done`'a gitmiyor
+    const corrupt = taslak();
+    corrupt.roles[1]!.next = "coder"; // döngü: kimse `done`'a gitmiyor
 
-    const sonuc = await checkDraft(path, bozuk, opts);
+    const sonuc = await checkDraft(path, corrupt, opts);
 
     expect(sonuc.ok).toBe(false);
     expect(!sonuc.ok && sonuc.message).toContain("kural 4");
@@ -90,38 +90,38 @@ describe("checkDraft", () => {
   // büyütürken yapılacak en kolay hata (kural 16). İki `main` ise daha önce
   // kural 2'ye takılıyor, o yüzden çakışma main DIŞINDA kuruluyor.
   it("aynı workspace'i paylaşan iki rol reddedilir", async () => {
-    const bozuk = taslak();
-    bozuk.roles.push({
+    const corrupt = taslak();
+    corrupt.roles.push({
       id: "guard", provider: "claude", workspace: "reviewer",
       prompt: "../../roles/reviewer.prompt", receive: "batch", next: "done",
     });
-    bozuk.roles[1]!.next = "guard";
+    corrupt.roles[1]!.next = "guard";
 
-    const sonuc = await checkDraft(path, bozuk, opts);
+    const sonuc = await checkDraft(path, corrupt, opts);
 
     expect(!sonuc.ok && sonuc.message).toContain("kural 16");
   });
 
   it("iki rol `main` isterse kural 2 reddeder", async () => {
-    const bozuk = taslak();
-    bozuk.roles[1]!.workspace = "main";
-    expect(!(await checkDraft(path, bozuk, opts)).ok).toBe(true);
+    const corrupt = taslak();
+    corrupt.roles[1]!.workspace = "main";
+    expect(!(await checkDraft(path, corrupt, opts)).ok).toBe(true);
   });
 
   it("olmayan prompt dosyası reddedilir", async () => {
-    const bozuk = taslak();
-    bozuk.roles[0]!.prompt = "../../roles/yok.prompt";
-    expect((await checkDraft(path, bozuk, opts)).ok).toBe(false);
+    const corrupt = taslak();
+    corrupt.roles[0]!.prompt = "../../roles/yok.prompt";
+    expect((await checkDraft(path, corrupt, opts)).ok).toBe(false);
   });
 
   // DOSYAYA YAZMADAN doğrulanmalı: ekranda denenen her taslak diske
   // düşseydi, gözcü yarım taslakları okurdu.
   it("doğrulama dosyaya dokunmaz", async () => {
     const once = await readFile(path, "utf8");
-    const bozuk = taslak();
-    bozuk.roles[1]!.next = "coder";
+    const corrupt = taslak();
+    corrupt.roles[1]!.next = "coder";
 
-    await checkDraft(path, bozuk, opts);
+    await checkDraft(path, corrupt, opts);
 
     expect(await readFile(path, "utf8")).toBe(once);
   });
@@ -344,10 +344,10 @@ describe("writeDraft", () => {
   // sistemi ekrandan bozmak olurdu.
   it("geçersiz taslağı YAZMAZ", async () => {
     const once = await readFile(path, "utf8");
-    const bozuk = taslak();
-    bozuk.roles[1]!.workspace = "main";
+    const corrupt = taslak();
+    corrupt.roles[1]!.workspace = "main";
 
-    const sonuc = await writeDraft(path, bozuk, opts);
+    const sonuc = await writeDraft(path, corrupt, opts);
 
     expect(sonuc.ok).toBe(false);
     expect(await readFile(path, "utf8")).toBe(once);

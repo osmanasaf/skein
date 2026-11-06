@@ -19,7 +19,7 @@ export interface Itiraz {
   kanit: string;
   durum: Durum;
   /** `ret` ve `insana` için zorunlu gerekçe. */
-  gerekce?: string;
+  rationale?: string;
   /**
    * Geçersizlik sebebi; doluysa itiraz SAYILMAZ.
    *
@@ -152,7 +152,7 @@ const DURUMLAR: readonly (readonly [string, Durum])[] = [
  * "kabul edilemez" → `kabul` diye okunur ve itirazın anlamı tersine
  * dönerdi; ayraçsız hâl geçersiz sayılıp görünür oluyor.
  */
-function durumOf(raw: string): { durum: Durum; gerekce?: string } | null {
+function durumOf(raw: string): { durum: Durum; rationale?: string } | null {
   const text = raw.trim();
   const dusuk = text.toLocaleLowerCase("tr");
   for (const [anahtar, durum] of DURUMLAR) {
@@ -169,11 +169,11 @@ function durumOf(raw: string): { durum: Durum; gerekce?: string } | null {
     // kalan ya boş olacak ya noktalama/parantez ile başlayacak — harfle
     // başlayan kuyruk belirsizdir.
     if (!/^[\s]*[:—–.(;,-]/u.test(kalan)) continue;
-    const gerekce = kalan
+    const rationale = kalan
       .replace(/^[\s:—–.(;,-]+/u, "")
       .replace(/[)\s.]+$/u, "")
       .trim();
-    return gerekce === "" ? { durum } : { durum, gerekce };
+    return rationale === "" ? { durum } : { durum, rationale };
   }
   return null;
 }
@@ -233,7 +233,7 @@ function yolGibi(parca: string): boolean {
 
 export interface ParseOptions {
   /** Yol depoda var mı. Verilmezse yol denetimi yapılmaz. */
-  varMi?: (yol: string) => boolean;
+  present?: (yol: string) => boolean;
   /**
    * Dosyanın SAHİBİ; verilirse her itirazın `role` alanı buna eşitlenir.
    *
@@ -349,7 +349,7 @@ function kur(no: number, role: string, alan: Map<string, string>, options: Parse
   const taban: Itiraz = {
     no, role, ne, neden, kanit,
     durum: cozum?.durum ?? "acik",
-    ...(cozum?.gerekce === undefined ? {} : { gerekce: cozum.gerekce }),
+    ...(cozum?.rationale === undefined ? {} : { rationale: cozum.rationale }),
   };
 
   const eksik = [
@@ -363,7 +363,7 @@ function kur(no: number, role: string, alan: Map<string, string>, options: Parse
   if (cozum === null) {
     return { ...taban, gecersiz: `\`Durum\` okunamadı: "${durumRaw}". Beklenen: açık | kabul | ret: … | insana: …` };
   }
-  if ((cozum.durum === "ret" || cozum.durum === "insana") && cozum.gerekce === undefined) {
+  if ((cozum.durum === "ret" || cozum.durum === "insana") && cozum.rationale === undefined) {
     return { ...taban, gecersiz: `\`${cozum.durum}\` gerekçesiz olamaz` };
   }
 
@@ -371,12 +371,12 @@ function kur(no: number, role: string, alan: Map<string, string>, options: Parse
   // Üç koşul da BÜTÜN yollara bakıyor: bir itiraz, gösterdiği yollardan
   // EN AZ BİRİ geçerliyse ayakta kalır. Yoksa yanında plan belgesini de
   // anan iyi bir itiraz elenir.
-  if (options.varMi !== undefined) {
+  if (options.present !== undefined) {
     const yollar = kanitYollari(kanit);
     if (yollar.length === 0) {
       return { ...taban, gecersiz: "`Neyi yanlışlar` bir dosya yolu içermiyor" };
     }
-    const depoda = yollar.filter((y) => options.varMi?.(y) === true);
+    const depoda = yollar.filter((y) => options.present?.(y) === true);
     if (depoda.length === 0) {
       return {
         ...taban,

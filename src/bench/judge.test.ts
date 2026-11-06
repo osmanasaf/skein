@@ -57,7 +57,7 @@ describe("applyVerdicts", () => {
 
   it("alıntı doğrulanırsa yakalama sayılır", () => {
     const v = applyVerdicts(hooks, [
-      { no: 1, yakalandi: true, alinti: "son denemeden sonra da bekliyor" },
+      { no: 1, yakalandi: true, quotation: "son denemeden sonra da bekliyor" },
       { no: 2, yakalandi: false },
     ], report);
     expect(v[0]?.caught).toBe(true);
@@ -68,7 +68,7 @@ describe("applyVerdicts", () => {
   // kanıt diye sunan karar, yakalama sayılmaz ve ayrıca işaretlenir.
   it("uydurulmuş alıntı yakalama sayılmaz ve işaretlenir", () => {
     const v = applyVerdicts(hooks, [
-      { no: 1, yakalandi: true, alinti: "raporda böyle bir cümle hiç geçmiyor" },
+      { no: 1, yakalandi: true, quotation: "raporda böyle bir cümle hiç geçmiyor" },
     ], report);
     expect(v[0]?.caught).toBe(false);
     expect(v[0]?.unverified).toBe(true);
@@ -83,7 +83,7 @@ describe("applyVerdicts", () => {
   // Eksik karar, kaçırma demektir: hakem bir kusur hakkında hiçbir şey
   // söylemediyse, raporda bulunduğuna dair kanıt yok.
   it("hakem bir kancayı hiç değerlendirmezse kaçırma sayılır", () => {
-    const v = applyVerdicts(hooks, [{ no: 1, yakalandi: true, alinti: "son denemeden sonra da bekliyor" }], report);
+    const v = applyVerdicts(hooks, [{ no: 1, yakalandi: true, quotation: "son denemeden sonra da bekliyor" }], report);
     expect(v).toHaveLength(2);
     expect(v[1]?.caught).toBe(false);
   });

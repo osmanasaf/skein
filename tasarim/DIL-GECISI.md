@@ -107,6 +107,21 @@ geçiyor. Bunlar dize, tanımlayıcı değil — AST tabanlı değiştirme
 onlara DOKUNMUYOR, ve bu kasıtlı. CSS sınıf adları AYRI bir geçiş;
 sınamalar o seçicilere bakıyor, ikisi birlikte değişecek.
 
+**3. Düz nesneyi eşlem olarak kullanmak.** Aracın ilk sürümü eşlemi
+`{}` ile tutuyordu ve `src/card/queue.ts`'i BOZDU: `eslem["toString"]`
+`Object.prototype`'tan MİRAS gelen fonksiyonu döndürüyor, `undefined`
+değil — araç `.toString(` çağrısını `.function toString() { [native
+code] }(` yaptı. Aynı tuzak `constructor`, `valueOf`,
+`hasOwnProperty` için de geçerli. `Map` kullanılıyor. Bu sefer
+sözdizimi patladığı için `tsc` yakaladı; miras gelen bir DİZE olsaydı
+sessizce geçebilirdi.
+
+**4. Dize-literal türleri tanımlayıcı sanmak.** `planli`/`plansiz`
+`Record<Arm, string>`'in anahtarları ama `Arm = "planli" | "plansiz"`
+bir dize-literal türü, ve `events/log.ts`'te olay alanının DEĞERİ. Yani
+veri. `tsc` yakaladı; sabit listeye eklendi. Ders: bir adı çevirmeden
+önce "bu ad bir DEĞER olarak da geçiyor mu" diye bakılacak.
+
 **Kanıt (her iki aşama için):** Türkçe metne bakan sınamaların hepsi
 DEĞİŞMEDEN geçmeli. Değişen varsa sınır çiğnenmiştir.
 

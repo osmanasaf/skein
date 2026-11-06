@@ -336,11 +336,11 @@ function toUsage(parsed: ClaudeJsonResult | undefined): Usage | undefined {
 export interface AkisBirikimi {
   girdi: number;
   cikti: number;
-  sayac: number;
+  counter: number;
 }
 
 export function yeniBirikim(): AkisBirikimi {
-  return { girdi: 0, cikti: 0, sayac: 0 };
+  return { girdi: 0, cikti: 0, counter: 0 };
 }
 
 /**
@@ -364,7 +364,7 @@ export function birikimeEkle(b: AkisBirikimi, record: StreamRecord): void {
   if (girdi === undefined && typeof cikti !== "number") return;
   b.girdi += girdi ?? 0;
   b.cikti += typeof cikti === "number" ? cikti : 0;
-  b.sayac += 1;
+  b.counter += 1;
 }
 
 /**
@@ -375,8 +375,8 @@ export function birikimeEkle(b: AkisBirikimi, record: StreamRecord): void {
  * olurdu — bayatlayan, ama kesin görünen bir sayı.
  */
 export function kismiKullanim(b: AkisBirikimi): Usage | undefined {
-  if (b.sayac === 0) return undefined;
-  return { inputTokens: b.girdi, outputTokens: b.cikti, kismi: true };
+  if (b.counter === 0) return undefined;
+  return { inputTokens: b.girdi, outputTokens: b.cikti, partial: true };
 }
 
 /** Akıştaki tek kayıt: tipi ve gövdesi. */

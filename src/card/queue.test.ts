@@ -404,12 +404,12 @@ describe("CardQueue — çökme ve yarış", () => {
 
     expect(sonuc.kind).toBe("engel");
     if (sonuc.kind !== "engel") throw new Error("engel beklendi");
-    expect(sonuc.engeller).toHaveLength(1);
+    expect(sonuc.blockages).toHaveLength(1);
     // Teşhis kodu ve dosyayı İÇERMELİ: "alınamadı" tek başına hiçbir yere
     // götürmez.
-    expect(sonuc.engeller[0]?.code).not.toBe("ENOENT");
-    expect(sonuc.engeller[0]?.code).not.toBe("?");
-    expect(sonuc.engeller[0]?.path).toContain(card.id);
+    expect(sonuc.blockages[0]?.code).not.toBe("ENOENT");
+    expect(sonuc.blockages[0]?.code).not.toBe("?");
+    expect(sonuc.blockages[0]?.path).toContain(card.id);
     // Kart KUYRUKTA kalmış olmalı: kaybolmadı, yalnızca alınamadı.
     expect(await queue.depth("coder")).toBe(1);
   });
@@ -431,7 +431,7 @@ describe("CardQueue — çökme ve yarış", () => {
     expect(sonuc.kind).toBe("alindi");
     if (sonuc.kind !== "alindi") throw new Error("alindi beklendi");
     expect(sonuc.card.id).toBe(saglam.id);
-    expect(sonuc.engeller.map((e) => e.path.includes(engelli.id))).toEqual([true]);
+    expect(sonuc.blockages.map((e) => e.path.includes(engelli.id))).toEqual([true]);
   });
 
   // Kaybolan dosya iyi huylu, BOZUK dosya değil: ikincisi veri kaybı ve

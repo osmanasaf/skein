@@ -181,9 +181,9 @@ describe("serveUi", () => {
     const res = await fetch(`${server.url}durum`);
 
     expect(res.status).toBe(200);
-    const m = (await res.json()) as { bozuk: string[] };
-    expect(m.bozuk).toHaveLength(1);
-    expect(m.bozuk[0]).toContain("0-bozuk.json");
+    const m = (await res.json()) as { corrupt: string[] };
+    expect(m.corrupt).toHaveLength(1);
+    expect(m.corrupt[0]).toContain("0-bozuk.json");
   });
 
   it("varsayılan olarak yalnızca yerel arayüzü dinler", () => {

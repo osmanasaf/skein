@@ -20,7 +20,7 @@ export interface UsageTotal {
    * yarım bir sayı tam bir sayı gibi okunur — ölçünün yarım olduğunu bilip
    * söylememek, hiç ölçmemekten daha yanıltıcı.
    */
-  kismi?: true;
+  partial?: true;
 }
 
 /**
@@ -49,12 +49,12 @@ export function totalUsage(list: readonly (Usage | undefined)[]): UsageTotal {
   const outputTokens = topla((u) => u.outputTokens);
   // Tek bir yarım çağrı bütün toplamı alt sınıra çevirir: kirlilik yukarı
   // taşınır, aşağı değil.
-  const kismi = list.some((u) => u?.kismi === true);
+  const partial = list.some((u) => u?.partial === true);
   return {
     ...(costUsd === undefined ? {} : { costUsd }),
     ...(inputTokens === undefined ? {} : { inputTokens }),
     ...(outputTokens === undefined ? {} : { outputTokens }),
-    ...(kismi ? { kismi: true as const } : {}),
+    ...(partial ? { partial: true as const } : {}),
   };
 }
 
@@ -75,7 +75,7 @@ export function formatUsage(t: UsageTotal): string {
     : undefined;
   // Yarım ölçü SAYIYA YAPIŞIR, cümlenin sonuna iliştirilmez: satır
   // kırpıldığında bile "en az" okunur kalmalı.
-  const en = t.kismi === true ? "≥" : "";
+  const en = t.partial === true ? "≥" : "";
   if (t.costUsd !== undefined) {
     const dolar = `${en}$${t.costUsd.toFixed(4)}`;
     return token === undefined ? dolar : `${dolar} · ${en}${token}`;
@@ -84,7 +84,7 @@ export function formatUsage(t: UsageTotal): string {
     // İki ayrı "dolar yok" sebebi var ve karıştırılmamalı: abonelik kimliği
     // dolar BİLDİRMİYOR, yarım ölçüde ise dolar HİÇ ÜRETİLMEDİ çünkü tur
     // bitmedi. İlki ücretsiz olabilir, ikincisi kesinlikle değil.
-    const sebep = t.kismi === true
+    const sebep = t.partial === true
       ? "tur yarıda kesildi, dolar bildirilmedi — ALT SINIR"
       : "dolar yok (abonelik kimliği)";
     return `${en}${token} · ${sebep}`;
