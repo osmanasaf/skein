@@ -2103,6 +2103,65 @@ describe("ajanDurumMetni — DEVIR.md §6'nın beş durum metni", () => {
   });
 });
 
+describe("promptGorevOzeti — 'Görevi · promptundan' bloğunun ayrıştırması", () => {
+  const ozet = (metin: string): { giris: string; baslik: string | null; maddeler: string[] } =>
+    fonksiyon<(m: string) => { giris: string; baslik: string | null; maddeler: string[] }>(
+      renderPage("t"), "promptGorevOzeti",
+    )(metin);
+
+  it("boş metinde boş özet döner", () => {
+    expect(ozet("")).toEqual({ giris: "", baslik: null, maddeler: [] });
+  });
+
+  // server.ts'in rolPromptSablonu'nun TAM biçimi: başlıktan hemen sonra
+  // bölüm geliyor, GİRİŞ PARAGRAFI yok.
+  it("şablonun kendisi — giriş boş, ilk bölümün maddeleri alınır", () => {
+    const metin = "# Rolün: coder\n\n## Sahiplendiğin\n\n" +
+      "- (bu rol hangi davranışı/işi üstleniyor?)\n\n## Nasıl çalışırsın\n\n- ilgisiz\n";
+    expect(ozet(metin)).toEqual({
+      giris: "", baslik: "Sahiplendiğin",
+      maddeler: ["(bu rol hangi davranışı/işi üstleniyor?)"],
+    });
+  });
+
+  it("başlık ve ilk '##' arasındaki düz metni GİRİŞ sayar", () => {
+    const metin = "# Rolün: coder\n\nKısa bir açıklama cümlesi.\nİkinci satır.\n\n" +
+      "## Sahiplendiğin\n\n- madde 1\n";
+    expect(ozet(metin).giris).toBe("Kısa bir açıklama cümlesi. İkinci satır.");
+  });
+
+  it("'* ' işaretli maddeleri de '- ' kadar madde sayar", () => {
+    const metin = "# x\n\n## Sahiplendiğin\n\n* bir\n* iki\n";
+    expect(ozet(metin).maddeler).toEqual(["bir", "iki"]);
+  });
+
+  it("madde OLMAYAN düz metin satırlarını listeye KATMAZ", () => {
+    const metin = "# x\n\n## Sahiplendiğin\n\nbu bir madde değil\n- bu bir madde\n";
+    expect(ozet(metin).maddeler).toEqual(["bu bir madde"]);
+  });
+
+  // EN FAZLA 5 — DEVIR.md'nin kendi sınırı.
+  it("ilk bölümde 5'ten fazla madde varsa yalnızca İLK 5'i alır", () => {
+    const metin = "# x\n\n## Sahiplendiğin\n\n" + [1, 2, 3, 4, 5, 6, 7].map((n) => "- madde " + n).join("\n") + "\n";
+    expect(ozet(metin).maddeler).toEqual(["madde 1", "madde 2", "madde 3", "madde 4", "madde 5"]);
+  });
+
+  it("ilk bölümden SONRAKİ bölümlerin maddelerini saymaz", () => {
+    const metin = "# x\n\n## Sahiplendiğin\n\n- bir\n\n## Nasıl çalışırsın\n\n- iki\n- üç\n";
+    expect(ozet(metin).maddeler).toEqual(["bir"]);
+  });
+
+  it("hiç '##' bölümü yoksa baslik null, maddeler boş, her şey GİRİŞ sayılır", () => {
+    const metin = "# x\n\nyalnızca düz metin, bölüm yok.\n";
+    expect(ozet(metin)).toEqual({ giris: "yalnızca düz metin, bölüm yok.", baslik: null, maddeler: [] });
+  });
+
+  it("başlık satırı ('# ...') hiç yoksa her şey yine doğru ayrıştırılır", () => {
+    const metin = "## Sahiplendiğin\n\n- tek madde\n";
+    expect(ozet(metin)).toEqual({ giris: "", baslik: "Sahiplendiğin", maddeler: ["tek madde"] });
+  });
+});
+
 describe("ajanCanliMi — 'canlı' etiketi ve /adimlar yoklama kararı", () => {
   const canli = (kart: AjanKart | null, daemon: unknown): boolean =>
     fonksiyon<(k: AjanKart | null, d: unknown) => boolean>(renderPage("t"), "ajanCanliMi")(kart, daemon);

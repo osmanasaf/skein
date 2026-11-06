@@ -5661,6 +5661,48 @@ function dosyaAdiKisa(yol) {
   return nokta > 0 ? son.slice(0, nokta) : son;
 }
 
+/**
+ * Bir rol prompt dosyasının "Görevi" özeti — Ajanlar sekmesinin "Görevi ·
+ * promptundan" bloğu (DEVIR.md §6): başlıkla ilk "##" arasındaki GİRİŞ
+ * PARAGRAFI + ilk "##" bölümünün MADDE LİSTESİ (en fazla 5). SAF, DOM yok.
+ *
+ * Biçim "rolPromptSablonu"nun (server.ts) kendi şablonuyla AYNI: "# Rolün:
+ * x" başlığı, ardından "## Sahiplendiğin" gibi bölümler. Bu fonksiyon o
+ * biçimi YORUMLUYOR, yeni bir biçim İCAT ETMİYOR — şablon değişirse burası
+ * da güncellenmeli, ama bugün ikisi aynı varsayımı paylaşıyor.
+ *
+ * "##" öncesi metin olmayan (doğrudan başlıktan sonra bölüme geçen, tam
+ * olarak şablonun kendisi) dosyalarda "giris" boş döner — bu bir hata
+ * DEĞİL, çağıran (ajanGorevKur) boş girişi hiç basmıyor.
+ */
+function promptGorevOzeti(metin) {
+  const satirlar = (metin || "").split("\\n");
+  let i = 0;
+  // Başlık satırı ("# ...") varsa atlanır — yoksa (biçimi tutmayan bir
+  // dosya) her şey GİRİŞ sayılır, ilk "##" bulunana kadar.
+  if (satirlar.length && satirlar[0].trim().indexOf("# ") === 0) i = 1;
+
+  const girisSatirlari = [];
+  while (i < satirlar.length && satirlar[i].trim().indexOf("## ") !== 0) {
+    const satir = satirlar[i].trim();
+    if (satir !== "") girisSatirlari.push(satir);
+    i += 1;
+  }
+
+  if (i >= satirlar.length) return { giris: girisSatirlari.join(" "), baslik: null, maddeler: [] };
+
+  const baslik = satirlar[i].trim().slice("## ".length).trim();
+  i += 1;
+  const maddeler = [];
+  while (i < satirlar.length && satirlar[i].trim().indexOf("## ") !== 0) {
+    const satir = satirlar[i].trim();
+    if (satir.indexOf("- ") === 0 || satir.indexOf("* ") === 0) maddeler.push(satir.slice(2).trim());
+    i += 1;
+  }
+
+  return { giris: girisSatirlari.join(" "), baslik, maddeler: maddeler.slice(0, 5) };
+}
+
 /** Bir dosyanın editördeki metni DİSKTEKİ (son yüklenen/kaydedilen) metinden FARKLI mı. SAF. */
 function promptKirliMi(orijinal, metin, yol) {
   return metin[yol] !== undefined && metin[yol] !== orijinal[yol];
