@@ -1993,3 +1993,133 @@ describe("promptDurumMetni — sabit alt çubuğun durum metni", () => {
     expect(metin(false)).toBe("kaydedildi");
   });
 });
+
+// --- Ajanlar sekmesi (DEVIR.md §6, kart c-20261105-d304ed) ---
+
+type AjanKart = {
+  role: string; state: string; gate?: string | null; orphan?: boolean; title?: string;
+  live?: { name: string | null; kind: string; detail: string | null } | null;
+};
+
+describe("ajanGuncelKart — rolün 'güncel' kartı", () => {
+  const guncel = (rolId: string, cards: AjanKart[]): AjanKart | null =>
+    fonksiyonlar<(r: string, c: AjanKart[]) => AjanKart | null>(
+      renderPage("t"), ["rolunAcikKartlari", "ajanGuncelKart"], "ajanGuncelKart",
+    )(rolId, cards);
+
+  it("hiç kart yoksa null", () => {
+    expect(guncel("coder", [])).toBeNull();
+  });
+
+  it("koşan kart varsa ONU verir — kuyruktaki/bitmiş kartları saymaz", () => {
+    const kosan: AjanKart = { role: "coder", state: "active", title: "x" };
+    expect(guncel("coder", [
+      { role: "coder", state: "done", title: "bitmiş" },
+      kosan,
+      { role: "coder", state: "queued", title: "kuyrukta" },
+    ])).toEqual(kosan);
+  });
+
+  it("koşan yoksa KAPIDA bekleyen kartı verir", () => {
+    const kapida: AjanKart = { role: "coder", state: "gate", gate: "approval", title: "k" };
+    expect(guncel("coder", [kapida])).toEqual(kapida);
+  });
+
+  // ÖNCELİK: ikisi de varsa (nadir ama olanaklı — toplu alım yapan bir
+  // rolün BİR kartı koşuyorken ÖTEKİ kapıda bekleyebilir) KOŞAN kazanır.
+  // "şu an ne oluyor" sorusunun cevabı bu — kapıda bekleyen zaten İNSANI
+  // bekliyor, operatörün önce görmesi gereken şey KOŞAN.
+  it("hem koşan hem kapıda kart varsa KOŞAN kazanır", () => {
+    const kosan: AjanKart = { role: "coder", state: "active", title: "koşan" };
+    const kapida: AjanKart = { role: "coder", state: "gate", gate: "approval", title: "kapıda" };
+    expect(guncel("coder", [kapida, kosan])).toEqual(kosan);
+  });
+
+  it("ne koşan ne kapıda varsa (yalnızca kuyrukta) null", () => {
+    expect(guncel("coder", [{ role: "coder", state: "queued", title: "x" }])).toBeNull();
+  });
+
+  // YETİM kartlar rolün KARTI SAYILMAZ — formasyon düğümüyle AYNI filtre
+  // (rolunAcikKartlari), ikinci bir "bu role ait mi" yorumu YOK.
+  it("yetim kart sayılmaz, başka rolün kartı sayılmaz", () => {
+    expect(guncel("coder", [
+      { role: "coder", state: "active", orphan: true, title: "yetim" },
+      { role: "reviewer", state: "active", title: "başka rol" },
+    ])).toBeNull();
+  });
+});
+
+describe("ajanDurumMetni — DEVIR.md §6'nın beş durum metni", () => {
+  const ON = { alive: true };
+  const KAPALI = null;
+  const durum = (role: { depth: number }, kart: AjanKart | null, daemon: unknown): string =>
+    fonksiyon<(r: { depth: number }, k: AjanKart | null, d: unknown) => string>(
+      renderPage("t"), "ajanDurumMetni",
+    )(role, kart, daemon);
+
+  it("boşta: kart yok, kuyruk boş", () => {
+    expect(durum({ depth: 0 }, null, ON)).toBe("boşta");
+  });
+
+  it("N kart kuyrukta: kart yok ama kuyruk dolu", () => {
+    expect(durum({ depth: 3 }, null, ON)).toBe("3 kart kuyrukta");
+  });
+
+  it("kapıda bekliyor: kart kapıda, başlığıyla birlikte", () => {
+    const kart: AjanKart = { role: "coder", state: "gate", gate: "approval", title: "jitter ekle" };
+    expect(durum({ depth: 0 }, kart, ON)).toBe("kapıda bekliyor · jitter ekle");
+  });
+
+  it("araç · ayrıntı: koşuyor, gözcü açık, canlı adım var", () => {
+    const kart: AjanKart = {
+      role: "coder", state: "active", title: "x",
+      live: { name: "Bash", kind: "tool", detail: "npx vitest run" },
+    };
+    expect(durum({ depth: 0 }, kart, ON)).toBe("Bash · npx vitest run");
+  });
+
+  it("çalışıyor: koşuyor, gözcü açık, henüz hiç adım yok", () => {
+    const kart: AjanKart = { role: "coder", state: "active", title: "x", live: null };
+    expect(durum({ depth: 0 }, kart, ON)).toBe("çalışıyor");
+  });
+
+  /**
+   * SAPMALAR.md §2.6'nın "bayat kilitte düğme 'durdur' DEMEZ" kuralıyla
+   * AYNI ilke: kart "active" olsa bile gözcü çökmüşse ona dokunan bir
+   * süreç yok — "Bash · …" demek var olmayan bir işlemi varmış gibi
+   * göstermek olurdu.
+   */
+  it("gözcü kapalı · … yarıda: kart active ama gözcü ÖLÜ (bayat kilit)", () => {
+    const kart: AjanKart = {
+      role: "coder", state: "active", title: "jitter ekle",
+      live: { name: "Bash", kind: "tool", detail: "npx vitest run" },
+    };
+    expect(durum({ depth: 0 }, kart, KAPALI)).toBe("gözcü kapalı · jitter ekle yarıda");
+  });
+
+  it("gözcü kapalı: daemon alive:false iken de aynı dal çalışır", () => {
+    const kart: AjanKart = { role: "coder", state: "active", title: "x" };
+    expect(durum({ depth: 0 }, kart, { alive: false })).toBe("gözcü kapalı · x yarıda");
+  });
+});
+
+describe("ajanCanliMi — 'canlı' etiketi ve /adimlar yoklama kararı", () => {
+  const canli = (kart: AjanKart | null, daemon: unknown): boolean =>
+    fonksiyon<(k: AjanKart | null, d: unknown) => boolean>(renderPage("t"), "ajanCanliMi")(kart, daemon);
+
+  it("kart yoksa canlı değil", () => {
+    expect(canli(null, { alive: true })).toBe(false);
+  });
+
+  it("kart active VE gözcü canlıysa canlı", () => {
+    expect(canli({ role: "coder", state: "active" }, { alive: true })).toBe(true);
+  });
+
+  it("kart active ama gözcü ÖLÜYSE canlı DEĞİL", () => {
+    expect(canli({ role: "coder", state: "active" }, null)).toBe(false);
+  });
+
+  it("kart kapıda (active değil) canlı DEĞİL", () => {
+    expect(canli({ role: "coder", state: "gate", gate: "approval" }, { alive: true })).toBe(false);
+  });
+});

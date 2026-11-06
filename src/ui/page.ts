@@ -1114,6 +1114,95 @@ const PAGE = `<!doctype html>
     color: var(--color-text); resize: vertical; margin-bottom: var(--space-4);
   }
   .promptlarMetin:disabled { opacity: .6; }
+
+  /*
+   * AJANLAR SEKMESİ — DEVIR.md §6, kart c-20261105-d304ed. Solda 340px
+   * ajan listesi (akıştaki her ROL için bir satır — tasarımın "ajan"
+   * sözcüğü burada ROL ile AYNI şey), sağda seçili rolün "şu an" kutusu +
+   * adımlar + "Görevi · promptundan" özeti.
+   *
+   * Hiçbir YENİ token KOMBİNASYONU İCAT EDİLMİYOR — her metin/zemin çifti
+   * token-kontrast.test.ts'te ZATEN ölçülü:
+   *   gövde metni zemin/yüzey üstünde — "Modernist gövde metni" (iki girdi),
+   *   etiket zemin üstünde — "label-ink/color-bg",
+   *   "canlı" etiketi — "Sağ panel kapı kutusu üst etiketi" (accent-700/
+   *     accent-100, DEĞİŞMEYEN bir çift — SAPMALAR.md §2.5'in "tema
+   *     tarafından hiç ezilmiyor" notuyla AYNI gerekçe).
+   * Kuş rengi/kanat çırpma JS'i formasyon diyagramıyla PAYLAŞILIYOR
+   * (kusRengi/kanatCirpiyorMu) — ikinci bir "kuş nasıl boyanır" kuralı
+   * YOK, o yüzden seçili satır BİLEREK zemin DEĞİŞTİRMİYOR (sol kenar +
+   * kalın yazı yetiyor): kuşu accent-100 gibi hiç ölçülmemiş bir zeminin
+   * üstüne koymak YENİ bir çift açardı.
+   */
+  #icerikAjanlar { background: var(--color-bg); padding: var(--space-6) 0; }
+  .ajanlarGovde { display: flex; align-items: flex-start; gap: var(--space-7); }
+  .ajanlarListe {
+    flex: 0 0 340px; width: 340px; display: flex; flex-direction: column;
+    border-right: var(--border-section) solid var(--color-text); padding-right: var(--space-5);
+    max-height: calc(100vh - 140px); overflow-y: auto;
+  }
+  .ajanSatir {
+    display: flex; align-items: center; gap: var(--space-3); width: 100%; text-align: left;
+    font: inherit; background: none; border: none; border-left: var(--border-accent) solid transparent;
+    color: var(--color-text); cursor: pointer; padding: var(--space-3);
+  }
+  .ajanSatir:hover { background: var(--color-neutral-200); }
+  .ajanSatir-secili { border-left-color: var(--color-accent); }
+  .ajanSatir-secili .ajanSatirAd { font-weight: 800; }
+  .ajanKus { flex: 0 0 auto; width: 36px; height: 18px; }
+  .ajanSatirBilgi { min-width: 0; flex: 1 1 auto; }
+  .ajanSatirAd { font-weight: 700; font-size: var(--fs-13); }
+  .ajanSatirDurum {
+    font-size: var(--fs-12); color: var(--label-ink);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  .ajanPanel { flex: 1 1 auto; min-width: 0; }
+  .ajanPanelUst { margin-bottom: var(--space-5); }
+  .ajanPanelAd {
+    font-family: var(--font-heading); font-weight: 800; font-size: var(--fs-36);
+    margin: var(--space-1) 0; color: var(--color-text);
+  }
+  .ajanPanelMeta {
+    display: flex; flex-wrap: wrap; gap: var(--space-3); font-size: var(--fs-13); color: var(--label-ink);
+  }
+
+  /* "ŞU AN" KUTUSU — DEVIR.md §6: surface zemin, çalışırken/kapıda üstte 4px accent çizgi. */
+  .ajanSuAn {
+    background: var(--color-surface); color: var(--color-text);
+    padding: var(--space-4); margin-bottom: var(--space-5);
+    border-top: var(--border-accent) solid transparent;
+  }
+  .ajanSuAn-vurgulu { border-top-color: var(--color-accent); }
+  .ajanSuAnBaslik {
+    font-family: var(--font-heading); font-weight: 800; font-size: var(--fs-20); margin: 0 0 var(--space-2);
+  }
+  .ajanSuAnSatir {
+    display: flex; flex-wrap: wrap; gap: var(--space-3); font-size: var(--fs-13);
+    align-items: center; margin: 0 0 var(--space-3); font-variant-numeric: tabular-nums;
+  }
+  .ajanSuAnSatir .bad { color: var(--color-accent-700); }
+
+  .ajanBolum { margin-bottom: var(--space-6); }
+  .ajanCanliEtiket {
+    display: inline-flex; margin-left: var(--space-2); font-size: var(--fs-10-5); font-weight: 600;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--color-accent-700);
+    background: var(--color-accent-100); padding: 1px var(--space-2);
+  }
+  .ajanAdim {
+    display: flex; align-items: baseline; gap: var(--space-3); padding: var(--space-2) 0;
+    border-bottom: var(--border-row) solid var(--color-divider); font-size: var(--fs-13);
+    font-family: var(--mono);
+  }
+  .ajanAdim .seq { color: var(--label-ink); flex: 0 0 auto; width: 2em; }
+  .ajanAdim .ad { font-weight: 700; flex: 0 0 auto; }
+  .ajanAdim .detay {
+    flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; color: var(--label-ink);
+  }
+  .ajanAdim .saat { flex: 0 0 auto; color: var(--label-ink); font-size: var(--fs-12); }
+  .ajanGorevMetin { margin: 0 0 var(--space-3); font-size: var(--fs-13); line-height: 1.5; max-width: 70ch; }
+  .ajanGorevListe { margin: 0 0 var(--space-3); padding-left: 18px; font-size: var(--fs-13); line-height: 1.5; }
 </style>
 </head>
 <body>
@@ -1134,11 +1223,7 @@ const PAGE = `<!doctype html>
   </div>
   <div id="icerikAkislar" style="display:none"></div>
   <div id="icerikPromptlar" style="display:none"></div>
-  <div id="icerikAjanlar" class="yerTutucu" style="display:none">
-    <h2>Ajanlar</h2>
-    <p>Bu sekme henüz kurulmadı — çalışan ajanların adım adım izi burada
-    görünecek.</p>
-  </div>
+  <div id="icerikAjanlar" style="display:none"></div>
   </div>
 <div id="panel"></div>
 <div id="bildirim" class="bildirim" role="status" aria-live="polite"></div>
@@ -3146,6 +3231,77 @@ function kanatCirpiyorMu(rolKartlari, daemon) {
 }
 
 /**
+ * Bir rolün KARTLARI — bitmiş ve yetim kartlar sayılmıyor. SAF, DOM yok.
+ *
+ * Formasyon düğümü (formasyonSvgKur) VE sağ panelin Rol modu (railRolCiz)
+ * AYNI filtreyi kendi "rolKartlari" yerel değişkenlerinde taşıyordu —
+ * ÜÇÜNCÜ bir kopya (Ajanlar sekmesi) açmak AJAN_AYRAC'ın tam uyardığı
+ * kusur sınıfı olurdu, o yüzden üçü de artık BURADAN okuyor. Çağıranların
+ * yerel değişken adı ("rolKartlari") BİLEREK bu fonksiyonun adıyla
+ * ÇARPIŞMASIN diye isim farklı — "const rolKartlari = rolKartlari(...)"
+ * kendi kendine referans verip ReferenceError fırlatırdı (TDZ).
+ *
+ * (Not: bu bölge gömülü betiğin şablon dizesinin İÇİNDE — ters tırnak
+ * yazmak dizeyi kapatır ve dosya derlenmez, bu dosyada birkaç kez
+ * düşülen bir tuzak.)
+ */
+function rolunAcikKartlari(cards, rolId) {
+  return cards.filter((c) => c.role === rolId && c.state !== "done" && !c.orphan);
+}
+
+/**
+ * Bir rolün "GÜNCEL" kartı — Ajanlar sekmesinin "Şu an" kutusu ve
+ * "Adımlar" listesi bunun üstünden kurulur (DEVIR.md §6). SAF, DOM yok.
+ *
+ * ÖNCELİK: koşan kart varsa O (operatörün görmek istediği şey "şu an ne
+ * oluyor"); yoksa kapıda bekleyen kart (DEVIR'in "kapıda bekliyor · …"
+ * durumu de aynı karttan okunuyor). İkisi de yoksa "null" — rol boşta ya
+ * da yalnızca kuyrukta, gösterilecek "güncel" bir kart yok.
+ */
+function ajanGuncelKart(rolId, cards) {
+  const kartlar = rolunAcikKartlari(cards, rolId);
+  return kartlar.find((c) => c.state === "active") || kartlar.find((c) => c.gate) || null;
+}
+
+/**
+ * Rolün tek satırlık durum metni — DEVIR.md §6'nın beş örneğinin BİREBİR
+ * karşılığı: "Bash · npx vitest run …", "kapıda bekliyor · …", "N kart
+ * kuyrukta", "boşta", "gözcü kapalı · … yarıda". SAF, DOM yok.
+ *
+ * "gözcü kapalı" dalı KASITLI OLARAK "koşuyor" dalından ÖNCE: bir kart
+ * "active" durumunda olabilir ama gözcü çökmüşse (bayat kilit) ona
+ * dokunan bir süreç YOK — "Bash · …" demek operatöre var olmayan bir
+ * işlemi varmış gibi göstermek olurdu, SAPMALAR.md §2.6'nın "bayat
+ * kilitte düğme 'durdur' DEMEZ" kuralıyla AYNI ilke, burada rol durumuna
+ * uygulanmış hâli.
+ */
+function ajanDurumMetni(role, guncelKart, daemon) {
+  if (guncelKart && guncelKart.state === "active") {
+    if (!(daemon && daemon.alive)) return "gözcü kapalı · " + guncelKart.title + " yarıda";
+    if (guncelKart.live) return (guncelKart.live.name || guncelKart.live.kind) + " · " + (guncelKart.live.detail || "");
+    return "çalışıyor";
+  }
+  if (guncelKart && guncelKart.gate) return "kapıda bekliyor · " + guncelKart.title;
+  if (role.depth > 0) return role.depth + " kart kuyrukta";
+  return "boşta";
+}
+
+/**
+ * Bir rol GERÇEKTEN "canlı" mı — Ajanlar sekmesinin "canlı" etiketi VE
+ * "GET /adimlar"ı saniyelik yoklamaya açıp açmama kararı BU fonksiyondan
+ * geçiyor (bkz. ajanlarEkraniCiz). SAF, DOM yok.
+ *
+ * "kanatCirpiyorMu" ile AYNI iki koşulu taşıyor (kart aktif VE gözcü
+ * canlı) ama TEK bir karttan, formasyonun bütün-rol listesinden DEĞİL —
+ * ikisi farklı girdi alıyor diye farklı bir KURAL yazmak AJAN_AYRAC'ın
+ * tam uyardığı sapma olurdu, o yüzden mantık burada da "ikisi birden"
+ * diyor.
+ */
+function ajanCanliMi(guncelKart, daemon) {
+  return Boolean(guncelKart) && guncelKart.state === "active" && Boolean(daemon && daemon.alive);
+}
+
+/**
  * Planlama katılımcılarının V üzerindeki konumları, zincir sırasıyla —
  * SAF, DOM yok. Bilinmeyen bir katılımcı (akış doğrulamasından geçmiş
  * olduğu için teoride OLMAMALI, bkz. flow/load.ts kural 17) sessizce
@@ -3399,7 +3555,7 @@ function formasyonSvgKur(m) {
   // ROL DÜĞÜMLERİ — en üstte çiziliyor (her şeyin üzerinde tıklanabilir).
   roller.forEach((rol, i) => {
     const p = konumlar[i];
-    const rolKartlari = m.cards.filter((c) => c.role === rol.id && c.state !== "done" && !c.orphan);
+    const rolKartlari = rolunAcikKartlari(m.cards, rol.id);
     // Düğüm "seçili" sayılır RAIL.roleId bu role eşitse — Rol modunda VE
     // o rolün bir kartına (Kart modu, cardFrom "role") bakarken AYNI:
     // rolden içeri girilince düğüm Genel bakışa dönülene kadar vurgulu
@@ -3661,7 +3817,7 @@ function railRolCiz(kutu, m, rolId) {
   dugmeler.append(ajanBtn);
   kutu.append(dugmeler);
 
-  const rolKartlari = m.cards.filter((c) => c.role === rolId && c.state !== "done" && !c.orphan);
+  const rolKartlari = rolunAcikKartlari(m.cards, rolId);
   kutu.append(el("div", "railAraBaslik", "kartlar · " + rolKartlari.length));
   if (rolKartlari.length === 0) {
     const rol = m.roles.find((r) => r.id === rolId);
