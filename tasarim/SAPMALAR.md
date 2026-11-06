@@ -138,6 +138,34 @@ rol ekleme, kart açma, gözcü başlatma ve durdurma. Aynı iddia bir kez
 
 Geri getirilmeyecek.
 
+### 2.6 GÖZCÜ DAVRANIŞLARI — yeniden yazım bunları BOZAMAZ
+
+Gözcü panelinin görünüşü değişiyor; **davranışı değişmiyor**. Üç
+güvence mevcut sınamalarla korunuyor ve yeniden yazım bunları
+düşüremez:
+
+1. **Bayat kilitte düğme "durdur" DEMEZ.** `daemon.json` duruyor ama
+   pid ölüyse gözcü koşmuyordur; "durdur" demek operatöre var olmayan
+   bir süreci durdurabileceğini söylemektir. Doğrusu "Kilidi devral ve
+   başlat".
+2. **Başka bir ekranın başlattığı gözcü DURDURULMAZ.** Bu ekran onu
+   yönetmiyor; durdurma düğmesi çıkmaz.
+3. **Durdurma yanıtı "süren turu bitirecek" der.** Durdurma anlık
+   değildir; aksini söylemek operatöre yalan söylemektir.
+
+Bu madde sonradan eklendi, çünkü kart 5'in ilk turu tam olarak
+birincisini bozdu: `bayat kilitte gözcü düğmesi 'başlat' diyor`
+sınaması düştü. İş 1217 satırdı, derliyordu, ama kırmızıydı ve
+commit edilmedi — diff'i saklandı, ağaç temizlendi, kart yeniden
+kuyruğa verildi.
+
+**Kural:** gözcü panelini yazarken önce `tarayici.test.ts` ve
+`server.test.ts` içindeki mevcut gözcü sınamalarını OKU. Onları
+kırmadan görünüşü değiştir. Bir sınama görünüş yüzünden düşüyorsa
+seçiciyi güncelle; DAVRANIŞI değiştirme.
+
+---
+
 ---
 
 ## 3. Tasarımın "yeni" sandığı ama zaten var olan uçlar
