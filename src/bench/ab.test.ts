@@ -37,7 +37,7 @@ const sandbox2 = (): string => sandbox;
 class RoleAdapter implements Adapter {
   readonly id = "claude";
   readonly model = "sahte-1";
-  readonly gorulen: string[] = [];
+  readonly seen: string[] = [];
   /** Kodu yazan rol bunu `src/<entry>` olarak yazar. */
   cozum = "export function topla(n: number[]): number {\n  return n.reduce((a, b) => a + b, 0);\n}\n";
 
@@ -47,7 +47,7 @@ class RoleAdapter implements Adapter {
     // eden rolü hiç tanımıyordu.
     const metin = await readFile(req.promptFile, "utf8");
     const rol = /rol:([a-z-]+)/.exec(metin)?.[1] ?? "?";
-    this.gorulen.push(rol);
+    this.seen.push(rol);
 
     if (rol === "planner") {
       const kart = /Kart: `([^`]+)`/.exec(req.taskText ?? "")?.[1] ?? "x";
@@ -134,7 +134,7 @@ describe("6d koşum takımı", () => {
     const sonuc = await kos("plansiz", adapter);
 
     expect(sonuc.cardState).toBe("done");
-    expect(adapter.gorulen).toEqual(["coder", "reviewer"]);
+    expect(adapter.seen).toEqual(["coder", "reviewer"]);
     // Gizli süit GERÇEKTEN koştu: bu, "kusur yok" demenin ön koşulu.
     expect(sonuc.ran).toBe(true);
     expect(sonuc.total).toBeGreaterThan(0);
@@ -147,7 +147,7 @@ describe("6d koşum takımı", () => {
     const adapter = new RoleAdapter();
     const sonuc = await kos("planli", adapter);
     expect(sonuc.cardState).toBe("done");
-    expect(adapter.gorulen).toEqual(["planner", "architect", "coder", "reviewer"]);
+    expect(adapter.seen).toEqual(["planner", "architect", "coder", "reviewer"]);
     expect(sonuc.ran).toBe(true);
     expect(sonuc.planning).toEqual({ rounds: 1, objections: 0, accepted: 0, invalid: 0 });
     // Planlama iki aktivasyon ekliyor: ölçümün bedeli bu.
@@ -298,7 +298,7 @@ describe("kol sürdürme", () => {
       logPath, runId: "t-surdur", timeoutMs: 20_000, maxSweeps: 1,
     });
     expect(yarim.cardState).not.toBe("done");
-    expect(adapter.gorulen).toEqual(["coder"]);
+    expect(adapter.seen).toEqual(["coder"]);
 
     // İkinci geçiş: AYNI kum havuzu, aynı runId, kurulum yok.
     const tam = await runArm({
@@ -307,7 +307,7 @@ describe("kol sürdürme", () => {
       logPath, runId: "t-surdur", timeoutMs: 20_000, resume: true,
     });
     expect(tam.cardState).toBe("done");
-    expect(adapter.gorulen).toEqual(["coder", "reviewer"]);
+    expect(adapter.seen).toEqual(["coder", "reviewer"]);
     expect(tam.ran).toBe(true);
     // Aktivasyonlar AYNI koşuya toplanıyor: iki geçiş tek kol.
     expect(tam.activations).toBe(2);

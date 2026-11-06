@@ -55,7 +55,7 @@ export interface ServeUiOptions extends DetailOptions {
    */
   akisSecimi?: {
     /** Seçilebilecek akış adları. */
-    listele: () => Promise<string[]>;
+    list: () => Promise<string[]>;
     /** Adı verilen akışı açar. Başarısızsa FIRLATIR ve eskisi durur. */
     ac: (ad: string) => Promise<{ live: CanliAkis; flowPath: string }>;
   };
@@ -267,7 +267,7 @@ async function hedefAkisYolu(
   if (ayar === undefined) {
     throw new Error("Bu ekran yeni akış oluşturmaya açık değil.");
   }
-  const mevcutAdlar = await ayar.listele();
+  const mevcutAdlar = await ayar.list();
   if (mevcutAdlar.includes(yeniAd)) {
     throw new Error(`Bu ad zaten kullanılıyor: ${yeniAd}`);
   }
@@ -306,9 +306,9 @@ export interface GozcuLogSatiri {
  * ayrıştıramadığımız bir satırı gizlemek de aynı kusur sınıfı.
  */
 export function gozcuLogSatiriAyristir(ham: string): GozcuLogSatiri {
-  const esle = /^(\d{2}:\d{2}) (.*)$/.exec(ham);
-  const mesaj = esle ? (esle[2] ?? "") : ham;
-  return { at: esle ? (esle[1] ?? "") : "", mesaj, hata: mesaj.startsWith("✗") };
+  const match = /^(\d{2}:\d{2}) (.*)$/.exec(ham);
+  const mesaj = match ? (match[2] ?? "") : ham;
+  return { at: match ? (match[1] ?? "") : "", mesaj, hata: mesaj.startsWith("✗") };
 }
 
 /**
@@ -491,7 +491,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
   const portu = (): number => dinlenenPort;
 
   /** Yaşayan akış varsa yoklar ve o anki topolojiyle seçenekleri kurar. */
-  const guncel = async (): Promise<ServeUiOptions> => {
+  const current = async (): Promise<ServeUiOptions> => {
     const live = aktif.live;
     if (live === undefined) return options;
     await live.refresh();
@@ -614,7 +614,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
       const basla = path === "/gozcu/baslat";
       let mesaj: string | null = null;
       (async () => {
-        const o = await guncel();
+        const o = await current();
         const kilitYolu = join(o.root, ".skein", "daemon.json");
         const tutan = await liveLock(kilitYolu);
 
@@ -665,7 +665,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
         }
         // Model kilitten okunuyor; gözcünün gerçekten açıldığını dosya
         // söylüyor, bizim iddiamız değil.
-        return buildModel(await guncel());
+        return buildModel(await current());
       })()
         .then((model) => {
           res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
@@ -699,7 +699,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
           const gorev = typeof istek["gorev"] === "string" ? istek["gorev"] : "";
 
           // Topoloji YAŞAYAN dosyadan: kart açılırken donan hash budur.
-          const o = await guncel();
+          const o = await current();
 
           // AKIŞ GEÇERSİZSE KART AÇILMAZ.
           //
@@ -786,7 +786,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
           // AYRI ve AÇIK bir eylem (`/akis/sec`), bir dosya yazmak kendi
           // başına "şuna geç" demez — istemci yeni akışı açmak istiyorsa
           // bunu ayrıca ister.
-          const model = await buildModel(await guncel());
+          const model = await buildModel(await current());
           res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
           res.end(JSON.stringify({ ...sonuc, model }));
         })
@@ -818,7 +818,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
           // temizleyerek" reddedilseydi, temizleme kuralı bir gün eksik
           // kalırdı — ÜYELİK asla eksik kalmaz: listede yoksa ad, hangi
           // şekilde yazılmış olursa olsun, burada reddedilir.
-          const akislar = await ayar.listele();
+          const akislar = await ayar.list();
           if (!akislar.includes(ad)) {
             throw new Error(`Bilinmeyen akış: ${ad}`);
           }
@@ -827,7 +827,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
           // akış" diye bir durum yok, `LiveFlow`'un kendi kuralının aynısı.
           const { live, flowPath } = await ayar.ac(ad);
           aktif = { live, flowPath };
-          const model = await buildModel(await guncel());
+          const model = await buildModel(await current());
           return model;
         })
         .then((model) => {
@@ -865,7 +865,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
           const yol = typeof istek.yol === "string" ? istek.yol : "";
           const metin = typeof istek.metin === "string" ? istek.metin : "";
 
-          const o = await guncel();
+          const o = await current();
           // ÜYELİK: yol, akışın bildirdiği listede AYNEN var mı. `../` ya da
           // mutlak yol, şekli ne olursa olsun, listede olmadığı için burada
           // aynen reddedilir — dizgi temizlenerek değil.
@@ -882,7 +882,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
           // topologyHash) ve bu KASITLI — bu yazma onu bozmuyor, kapsamaya
           // da başlatmıyor. Model yine de tazeleniyor: akış dosyası arada
           // elle değişmiş olabilir.
-          return buildModel(await guncel());
+          return buildModel(await current());
         })
         .then((model) => {
           res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
@@ -960,7 +960,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
             );
           }
 
-          await guncel(); // akışı yokla — en güncel `canliAkis.flow` üstünden çalışıyoruz.
+          await current(); // akışı yokla — en güncel `canliAkis.flow` üstünden çalışıyoruz.
           const taslak = fromFlow(canliAkis.flow);
 
           // AYNI ID REDDEDİLİR — ve DOSYA YAZILMADAN: bu denetim her türlü
@@ -1012,7 +1012,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
             else await writeFile(promptAbs, eskiMetin, "utf8");
             return { kod: 409 as const, hata: sonuc.message };
           }
-          const model = await buildModel(await guncel());
+          const model = await buildModel(await current());
           return { kod: 200 as const, model };
         })
         .then((sonuc) => {
@@ -1036,7 +1036,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
         return;
       }
       const id = decodeURIComponent(kapat[1] as string);
-      guncel()
+      current()
         .then(async (o) => {
           // Hangi akışa bakılacağı KARTIN KENDİSİNDEN okunuyor, ekranın
           // açıldığı akıştan değil. `card -- kapat` bunu zaten böyle
@@ -1086,7 +1086,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
             karar as ReleaseDecision | undefined,
             options.logPath,
           );
-          const model = await buildModel(await guncel());
+          const model = await buildModel(await current());
           res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
           res.end(JSON.stringify({ kart: { id: card.id, role: card.role, state: card.state }, model }));
         })
@@ -1143,8 +1143,8 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
       // OKUMA UCU: `akisSecimi` verilmemişse 404 değil boş liste — ekran
       // seçiciyi bu uca bakarak ÇİZEBİLMELİ, uç yoksa seçici hiç çıkmaz.
       const ayar = options.akisSecimi;
-      const listele = ayar === undefined ? Promise.resolve<string[]>([]) : ayar.listele();
-      Promise.all([listele, guncel()])
+      const list = ayar === undefined ? Promise.resolve<string[]>([]) : ayar.list();
+      Promise.all([list, current()])
         .then(async ([akislar, o]) => {
           // `ozet`: Akışlar sekmesinin kart ızgarası (DEVIR.md §4) için —
           // bkz. `akisOzetiYukle` yorumu. `akislar` BOŞSA (uç verilmemiş)
@@ -1175,7 +1175,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
       // OKUMA UCU, gözcü/kart uçları gibi jetonsuz: liste TOPOLOJİDEN
       // türüyor, yazma yetkisine bağlı değil — ekran salt okunur açılsa
       // bile hangi dosyaların akışa ait olduğu görülebilir olmalı.
-      guncel().then(
+      current().then(
         (o) => {
           res.writeHead(200, {
             "content-type": "application/json; charset=utf-8",
@@ -1193,7 +1193,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
 
     if (path === "/prompt") {
       const yol = queryParam(req, "yol");
-      guncel()
+      current()
         .then(async (o) => {
           // ÜYELİK — `/prompt/yaz` ile aynı kapı: yol listede AYNEN var mı.
           const liste = promptListesi(o.topology);
@@ -1220,7 +1220,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
 
     if (path === "/akis") {
       // Düzenleyicinin başlangıç hâli: yaşayan akışın taslak karşılığı.
-      guncel().then(
+      current().then(
         async (o) => {
           // Taslak yaşayan AKIŞTAN kuruluyor, dondurulmuş topolojiden değil:
           // kapı mesajları ve yol biçimi yalnızca akışta tam.
@@ -1242,7 +1242,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
     }
 
     if (path === "/durum") {
-      guncel().then(buildModel).then(
+      current().then(buildModel).then(
         (model: UiModel) => {
           res.writeHead(200, {
             "content-type": "application/json; charset=utf-8",
@@ -1263,7 +1263,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
 
     if (path !== undefined && path.startsWith("/kart/")) {
       const id = decodeURIComponent(path.slice("/kart/".length));
-      guncel().then((o) => buildDetail(o, id)).then(
+      current().then((o) => buildDetail(o, id)).then(
         (detail) => {
           if (detail === null) {
             res.writeHead(404, { "content-type": "application/json; charset=utf-8" });
@@ -1310,7 +1310,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
     }
 
     if (path === "/gozcu/log") {
-      guncel().then(async (o) => {
+      current().then(async (o) => {
         const satirlar = await gozcuLogKuyruk(join(o.root, ".skein", "gozcu.log"));
         res.writeHead(200, {
           "content-type": "application/json; charset=utf-8",
@@ -1348,7 +1348,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
         res.end(JSON.stringify({ hata: "`kart` parametresi gerekli." }));
         return;
       }
-      guncel().then((o) => buildSteps(o, id)).then(
+      current().then((o) => buildSteps(o, id)).then(
         (adimlar) => {
           if (adimlar === null) {
             res.writeHead(404, { "content-type": "application/json; charset=utf-8" });

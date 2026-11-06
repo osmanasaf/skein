@@ -699,14 +699,14 @@ async function planStep(
   // `owner`: rolün yer gerçeği DOSYA, başlıkta yazan ad değil.
   // Alışverişin kendi belgeleri kanıt olamaz: plan belgesini göstermek
   // "plan şöyle diyor" demektir, planın dokunacağı kodu göstermek değil.
-  const kendiBelgeleri = [planPath, ...itirazYollari.map((y) => y.path)];
+  const ownDocs = [planPath, ...itirazYollari.map((y) => y.path)];
   const dosya = birlestirItirazlar(okunan.map((o) => parseItirazlar(o.text, {
     present: (yol) => yollar.get(yol) === true,
     owner: o.role,
-    kendiBelgeleri,
+    ownDocs,
   })));
   // "İtiraz yok" ile "itiraz var ama hiçbiri sayılmadı" aynı şey değil.
-  const gecersiz = dosya.itirazlar.length - dosya.gecerli.length;
+  const gecersiz = dosya.itirazlar.length - dosya.valid.length;
   const kor = planBlind(card.topology, phase.round);
 
   // Kartın dondurduğu plan hash'i: itiraz turu planı DEĞİŞTİRMİYOR ve
@@ -724,7 +724,7 @@ async function planStep(
     // tur başındaki sayıdan çıkarılarak bulunuyor. Doğal sonlanma kuralı
     // buna dayanıyor: bir tur hiç yeni itiraz eklemediyse alışveriş biter.
     const taban = objectionBaseline(card, phase.round);
-    const yeni = dosya.gecerli.length - taban;
+    const yeni = dosya.valid.length - taban;
 
     await options.log?.append({
       type: "plan.round", card: card.id, role: role.id, round: phase.round,
@@ -735,9 +735,9 @@ async function planStep(
       invalid: gecersiz,
     });
 
-    const kayit = (): Extract<Card["history"][number], { event: "plan" }> => ({
+    const record = (): Extract<Card["history"][number], { event: "plan" }> => ({
       at: new Date().toISOString(), event: "plan", role: role.id,
-      action: "itiraz", round: phase.round, objections: dosya.gecerli.length,
+      action: "itiraz", round: phase.round, objections: dosya.valid.length,
       invalid: gecersiz,
     });
 
@@ -753,7 +753,7 @@ async function planStep(
       return {
         kind: "tasindi",
         result: await planMove(
-          card, role, options, workdir, sonrakiItirazci, kayit(), undefined, summary, dallan,
+          card, role, options, workdir, sonrakiItirazci, record(), undefined, summary, dallan,
         ),
       };
     }
@@ -766,7 +766,7 @@ async function planStep(
       return {
         kind: "tasindi",
         result: await planMove(
-          card, role, options, workdir, yazar, kayit(), undefined, summary,
+          card, role, options, workdir, yazar, record(), undefined, summary,
           // FAN-IN: bütün itirazcıların ağaçları yazara katılıyor. Her biri
           // kendi dosyasına yazdığı için çakışma yüzeyi yok.
           itirazcilar,
@@ -785,14 +785,14 @@ async function planStep(
           dosya.acik.map((i) => `#${i.no} ${i.ne}`).join(" · ") + ".";
         await options.log?.append({
           type: "plan.settled", card: card.id, role: role.id, outcome: "tukendi",
-          rounds: phase.round, objections: dosya.gecerli.length, accepted: dosya.kabul.length,
+          rounds: phase.round, objections: dosya.valid.length, accepted: dosya.kabul.length,
           invalid: gecersiz, path: planPath, planHash: donmusHash,
         });
         return {
           kind: "tasindi",
           result: {
             status: "escalated",
-            card: await options.queue.deadlock(card, reason, kayit()),
+            card: await options.queue.deadlock(card, reason, record()),
             reason,
           },
         };
@@ -802,19 +802,19 @@ async function planStep(
       if (sonra === null) return { kind: "yok" };
       await options.log?.append({
         type: "plan.settled", card: card.id, role: role.id, outcome: "anlasma",
-        rounds: phase.round, objections: dosya.gecerli.length, accepted: dosya.kabul.length,
+        rounds: phase.round, objections: dosya.valid.length, accepted: dosya.kabul.length,
         invalid: gecersiz, path: planPath, planHash: donmusHash,
       });
       return {
         kind: "tasindi",
-        result: await planMove(card, role, options, workdir, sonra, kayit(), undefined, summary),
+        result: await planMove(card, role, options, workdir, sonra, record(), undefined, summary),
       };
     }
 
     // Yeni itiraz var: yanıt sırası yazarda.
     return {
       kind: "tasindi",
-      result: await planMove(card, role, options, workdir, yazar, kayit(), undefined, summary),
+      result: await planMove(card, role, options, workdir, yazar, record(), undefined, summary),
     };
   }
 
@@ -828,7 +828,7 @@ async function planStep(
   // burası: itirazcılar kendi dosyalarından başkasını görmüyor, yani
   // turun gerçek toplamı ilk kez fan-in'den sonra biliniyor.
   const yazarTaban = objectionBaseline(card, phase.round);
-  const yazarYeni = dosya.gecerli.length - yazarTaban;
+  const yazarYeni = dosya.valid.length - yazarTaban;
   await options.log?.append({
     type: "plan.round", card: card.id, role: role.id, round: phase.round,
     blind: kor, newObjections: Math.max(0, yazarYeni),
@@ -840,7 +840,7 @@ async function planStep(
   ): Extract<Card["history"][number], { event: "plan" }> => ({
     at: new Date().toISOString(), event: "plan", role: role.id,
     action: "cevap", round: phase.round, invalid: gecersiz,
-    objections: dosya.gecerli.length, accepted: kabul.length,
+    objections: dosya.valid.length, accepted: kabul.length,
     ...(planHash === undefined ? {} : { planHash }),
   });
 
@@ -871,7 +871,7 @@ async function planStep(
       insana.map((i) => `#${i.no} ${i.ne} — ${i.rationale ?? ""}`).join(" · ");
     await options.log?.append({
       type: "plan.settled", card: card.id, role: role.id, outcome: "insana",
-      rounds: phase.round, objections: dosya.gecerli.length, accepted: kabul.length,
+      rounds: phase.round, objections: dosya.valid.length, accepted: kabul.length,
       invalid: gecersiz, path: planPath, planHash: donmusHash,
     });
     return {
@@ -902,7 +902,7 @@ async function planStep(
     if (sonra !== null) {
       await options.log?.append({
         type: "plan.settled", card: card.id, role: role.id, outcome: "anlasma",
-        rounds: phase.round, objections: dosya.gecerli.length, accepted: kabul.length,
+        rounds: phase.round, objections: dosya.valid.length, accepted: kabul.length,
         invalid: gecersiz, path: planPath, planHash: donmusHash,
       });
       return {
@@ -921,7 +921,7 @@ async function planStep(
       `. Cevapsız bırakılan itiraz kabul sayılmaz.`;
     await options.log?.append({
       type: "plan.settled", card: card.id, role: role.id, outcome: "tukendi",
-      rounds: phase.round, objections: dosya.gecerli.length, accepted: kabul.length,
+      rounds: phase.round, objections: dosya.valid.length, accepted: kabul.length,
       invalid: gecersiz, path: planPath, planHash: yeniHash ?? donmusHash,
     });
     return {
@@ -956,7 +956,7 @@ async function planStep(
   if (sonra === null) return { kind: "yok" };
   await options.log?.append({
     type: "plan.settled", card: card.id, role: role.id, outcome: "anlasma",
-    rounds: phase.round, objections: dosya.gecerli.length, accepted: kabul.length,
+    rounds: phase.round, objections: dosya.valid.length, accepted: kabul.length,
     invalid: gecersiz, path: planPath, planHash: yeniHash ?? "",
   });
   return {

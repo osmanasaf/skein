@@ -227,12 +227,12 @@ describe("port/akış/tema hafızası birbirini EZMİYOR", () => {
 describe("portuHatirlayarakAc", () => {
   it("explicitPort verilmişse hatırlanan port HİÇ okunmuyor, ac AYNEN explicit ile çağrılıyor", async () => {
     await sonPortuYaz(root, 1111);
-    const gorulenler: (number | undefined)[] = [];
+    const seenList: (number | undefined)[] = [];
     const sonuc = await portuHatirlayarakAc(root, 9999, async (p) => {
-      gorulenler.push(p);
+      seenList.push(p);
       return { port: 9999 };
     });
-    expect(gorulenler).toEqual([9999]);
+    expect(seenList).toEqual([9999]);
     expect(sonuc).toEqual({ port: 9999 });
   });
 
@@ -243,29 +243,29 @@ describe("portuHatirlayarakAc", () => {
   });
 
   it("explicit yok, hafıza boş → ac undefined (boş port) ile çağrılır", async () => {
-    const gorulenler: (number | undefined)[] = [];
+    const seenList: (number | undefined)[] = [];
     await portuHatirlayarakAc(root, undefined, async (p) => {
-      gorulenler.push(p);
+      seenList.push(p);
       return { port: 5050 };
     });
-    expect(gorulenler).toEqual([undefined]);
+    expect(seenList).toEqual([undefined]);
   });
 
   it("explicit yok, hafızada port VAR → ac önce o port ile çağrılır", async () => {
     await sonPortuYaz(root, 7777);
-    const gorulenler: (number | undefined)[] = [];
+    const seenList: (number | undefined)[] = [];
     await portuHatirlayarakAc(root, undefined, async (p) => {
-      gorulenler.push(p);
+      seenList.push(p);
       return { port: 7777 };
     });
-    expect(gorulenler).toEqual([7777]);
+    expect(seenList).toEqual([7777]);
   });
 
   it("hatırlanan port DOLUYSA (EADDRINUSE) sessizce boş porta düşer", async () => {
     await sonPortuYaz(root, 7777);
-    const gorulenler: (number | undefined)[] = [];
+    const seenList: (number | undefined)[] = [];
     const sonuc = await portuHatirlayarakAc(root, undefined, async (p) => {
-      gorulenler.push(p);
+      seenList.push(p);
       if (p === 7777) {
         const hata = new Error("in use") as NodeJS.ErrnoException;
         hata.code = "EADDRINUSE";
@@ -274,7 +274,7 @@ describe("portuHatirlayarakAc", () => {
       return { port: 8080 };
     });
     // Önce hatırlanan denendi, dolu çıktı, sonra boş port istendi.
-    expect(gorulenler).toEqual([7777, undefined]);
+    expect(seenList).toEqual([7777, undefined]);
     expect(sonuc).toEqual({ port: 8080 });
   });
 
@@ -320,25 +320,25 @@ describe("portuHatirlayarakAc", () => {
   it("aralık dışı hatırlanan port engel olmuyor — boş port ile açılmaya devam eder", async () => {
     await mkdir(join(root, ".skein"), { recursive: true });
     await writeFile(join(root, ".skein", "ekran.json"), JSON.stringify({ port: 70000 }), "utf8");
-    const gorulenler: (number | undefined)[] = [];
+    const seenList: (number | undefined)[] = [];
     const sonuc = await portuHatirlayarakAc(root, undefined, async (p) => {
-      gorulenler.push(p);
+      seenList.push(p);
       return { port: 4040 };
     });
     // 70000 HİÇ denenmemeli: denenirse `listen` fırlatır ve ekran açılmaz.
-    expect(gorulenler).toEqual([undefined]);
+    expect(seenList).toEqual([undefined]);
     expect(sonuc).toEqual({ port: 4040 });
   });
 
   it("bozuk hafıza dosyası engel olmuyor — boş port ile açılmaya devam eder", async () => {
     await mkdir(join(root, ".skein"), { recursive: true });
     await writeFile(join(root, ".skein", "ekran.json"), "bozuk", "utf8");
-    const gorulenler: (number | undefined)[] = [];
+    const seenList: (number | undefined)[] = [];
     const sonuc = await portuHatirlayarakAc(root, undefined, async (p) => {
-      gorulenler.push(p);
+      seenList.push(p);
       return { port: 3030 };
     });
-    expect(gorulenler).toEqual([undefined]);
+    expect(seenList).toEqual([undefined]);
     expect(sonuc).toEqual({ port: 3030 });
   });
 });

@@ -122,6 +122,28 @@ bir dize-literal türü, ve `events/log.ts`'te olay alanının DEĞERİ. Yani
 veri. `tsc` yakaladı; sabit listeye eklendi. Ders: bir adı çevirmeden
 önce "bu ad bir DEĞER olarak da geçiyor mu" diye bakılacak.
 
+**5. `page.ts` ÜÇÜNCÜ BİR SINIR: 324 KB kod-dize.** `src/ui/page.ts`
+tarayıcıda koşan betiği bir template literal İÇİNDE taşıyor — o kod
+DİZE, ve AST yeniden adlandırması dizelere dokunmuyor. Ama
+`page.test.ts`/`tarayici.test.ts` o betiği `declare` ile tipleyip
+ÇAĞIRIYOR; sözleşme ikisi arasında.
+
+**ÖLÇÜLDÜ:** sınama dosyaları çevrilip betik dizesi çevrilmeyince
+**28 sınama düştü ve `tsc` TEMİZ kaldı** — tür düzeyinde görünmeyen bir
+kırılma. Örnek: betik `{ hatalar: [...] }` döndürüyor, sınama `.errors`
+okuyor, `undefined`. Dosyayı dışlamak ters sorunu yarattı: `server.ts`
+çevrilince dışlanan sınama `ServeUiOptions.gozcu`'yu arıyordu.
+
+**ÇÖZÜM:** dışlama DOSYA bazında değil **AD** bazında. `page.ts`'in dize
+içeriğinde geçen her ad erteleniyor (ölçüldü: 42 adın 30'u orada
+geçiyor). Geri kalanı her yerde çevriliyor.
+
+**Niye kör metin değiştirme ÇALIŞMAZ:** o 324 KB'ın içinde betiğin
+tanımlayıcıları, CSS sınıf adları, Türkçe arayüz metni ve serileşen
+DEĞERLER (`data-tema="acik"`) birlikte duruyor. Doğru yol: betiği JS
+olarak AYRIŞTIRIP kendi AST'si üzerinden çevirmek, sonra dizeye geri
+koymak — arayüz katmanı AYRI ve en büyük aşama.
+
 **Kanıt (her iki aşama için):** Türkçe metne bakan sınamaların hepsi
 DEĞİŞMEDEN geçmeli. Değişen varsa sınır çiğnenmiştir.
 

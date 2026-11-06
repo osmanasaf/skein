@@ -152,10 +152,10 @@ describe("ui cli — port hafızası (gerçek süreç)", () => {
     const e = await ekraniBaslat(["test", "--tarayici-yok", "--port", "18391"]);
     try {
       expect(e.port).toBe(18391);
-      const kayit = JSON.parse(
+      const record = JSON.parse(
         await readFile(join(root, ".skein", "ekran.json"), "utf8"),
       ) as { port: number };
-      expect(kayit.port).toBe(18391);
+      expect(record.port).toBe(18391);
     } finally {
       await e.durdur();
     }
@@ -180,11 +180,11 @@ describe("ui cli — port hafızası (gerçek süreç)", () => {
     const e2 = await ekraniBaslat(["test", "--tarayici-yok", "--port", "18394"]);
     try {
       expect(e2.port).toBe(18394);
-      const kayit = JSON.parse(
+      const record = JSON.parse(
         await readFile(join(root, ".skein", "ekran.json"), "utf8"),
       ) as { port: number };
       // Ezilen kayıt artık İKİNCİ (açık) isteği taşıyor, birinciyi değil.
-      expect(kayit.port).toBe(18394);
+      expect(record.port).toBe(18394);
     } finally {
       await e2.durdur();
     }

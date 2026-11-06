@@ -1071,15 +1071,15 @@ describe("tick — tur başında temiz ağaç", () => {
   it("orkestratör yolları yok sayma listesiyle BİRLİKTE soruluyor", async () => {
     await put();
     claude.answer = writes({ decision: "accept" });
-    const gorulen: string[][] = [];
+    const seen: string[][] = [];
 
     await tick("coder", {
       ...options,
-      dirtyPaths: async (_w, ignore) => { gorulen.push(ignore); return []; },
+      dirtyPaths: async (_w, ignore) => { seen.push(ignore); return []; },
     });
 
-    expect(gorulen.length).toBeGreaterThan(0);
-    expect(gorulen[0]).toContain(".skein");
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen[0]).toContain(".skein");
   });
 
   it("ağaç temizse tur normal koşar", async () => {

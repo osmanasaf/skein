@@ -401,9 +401,9 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
 
   /** "rgb(r, g, b)" metninden 0-255 arası ORTALAMA kanal (kaba parlaklık). */
   function parlaklik(rgb: string): number {
-    const esle = /rgb\((\d+),\s*(\d+),\s*(\d+)\)/.exec(rgb);
-    if (!esle) throw new Error("rgb ayrıştırılamadı: " + rgb);
-    return (Number(esle[1]) + Number(esle[2]) + Number(esle[3])) / 3;
+    const match = /rgb\((\d+),\s*(\d+),\s*(\d+)\)/.exec(rgb);
+    if (!match) throw new Error("rgb ayrıştırılamadı: " + rgb);
+    return (Number(match[1]) + Number(match[2]) + Number(match[3])) / 3;
   }
 
   /**
@@ -779,14 +779,14 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
       await page.waitForSelector("#bar .pill", { timeout: 15_000 });
       await page.click("#bar .pill");
       await page.waitForSelector(".railGozcuNokta", { timeout: 10_000 });
-      const olcu = await page.evaluate(() => {
+      const measure = await page.evaluate(() => {
         const n = document.querySelector(".railGozcuNokta");
         if (!n) return null;
         const r = n.getBoundingClientRect();
         const s = getComputedStyle(n);
-        return { w: r.width, h: r.height, kenar: s.borderWidth, kose: s.borderRadius };
+        return { w: r.width, h: r.height, kenar: s.borderWidth, corner: s.borderRadius };
       });
-      expect(olcu).toEqual({ w: 10, h: 10, kenar: "2px", kose: "0px" });
+      expect(measure).toEqual({ w: 10, h: 10, kenar: "2px", corner: "0px" });
       expect(hatalar).toEqual([]);
     } finally {
       await page.close();
@@ -1070,7 +1070,7 @@ roles:
     const s = await serveUi({
       root, queue, topology, flowName: "test", flowHash: live.flow.hash, live,
       akisSecimi: {
-        listele: async () => ["test", "ikinci"],
+        list: async () => ["test", "ikinci"],
         ac: async (ad) => {
           const l = await LiveFlow.open(join(root, "hub", "flows", `${ad}.yaml`), {
             root, providers: knownProviderSet(),
@@ -1694,8 +1694,8 @@ reject:
         expect(await page.evaluate(() => document.getElementById("bildirim")?.classList.contains("gorunur")))
           .toBe(false);
 
-        const guncel = await queue.get(taken.id);
-        expect(guncel?.state).not.toBe("gate");
+        const current = await queue.get(taken.id);
+        expect(current?.state).not.toBe("gate");
         expect(hatalar).toEqual([]);
       } finally {
         await page.close();
@@ -1789,14 +1789,14 @@ reject:
         await page.waitForSelector(".railBaslikBtn", { timeout: 15_000 });
         await page.click(".railBaslikBtn");
         await page.waitForSelector(".iz .rail i", { timeout: 10_000 });
-        const olcu = await page.evaluate(() => {
+        const measure = await page.evaluate(() => {
           const n = document.querySelector(".iz .rail i");
           if (!n) return null;
           const r = n.getBoundingClientRect();
           const s = getComputedStyle(n);
-          return { w: r.width, h: r.height, kenar: s.borderWidth, kose: s.borderRadius };
+          return { w: r.width, h: r.height, kenar: s.borderWidth, corner: s.borderRadius };
         });
-        expect(olcu).toEqual({ w: 10, h: 10, kenar: "2px", kose: "0px" });
+        expect(measure).toEqual({ w: 10, h: 10, kenar: "2px", corner: "0px" });
         expect(hatalar).toEqual([]);
       } finally {
         await page.close();
@@ -1841,8 +1841,8 @@ reject:
         // kuyruğa bak (aynı disiplin: yukarıdaki "...sayısı güncelleniyor"
         // sınaması).
         await page.waitForTimeout(500);
-        const guncel = await queue.get(taken.id);
-        expect(guncel?.state).not.toBe("gate");
+        const current = await queue.get(taken.id);
+        expect(current?.state).not.toBe("gate");
 
         // PANEL KENDİLİĞİNDEN GÜNCELLENİYOR MU — bu kartın ASIL şartı. Sayfa
         // hiç yeniden yüklenmedi, RAIL.cardId HİÇ değişmedi (hâlâ aynı kart,
@@ -3130,7 +3130,7 @@ roles:
           // GERÇEK dizini okuyor (production'daki listFlowNames'in AYNISI)
           // — sabit bir dizi, "Yeni akış" kutusunun yazdığı dosyayı asla
           // GÖRMEZDİ ve /akis/sec "Bilinmeyen akış" diye reddederdi.
-          listele: async () => {
+          list: async () => {
             const girdiler = await readdir(join(root, "hub", "flows"));
             return girdiler.filter((e) => e.endsWith(".yaml")).map((e) => e.slice(0, -".yaml".length)).sort();
           },
@@ -3233,8 +3233,8 @@ roles:
           document.querySelector("#panoArac .mono")?.textContent ?? "");
         expect(akisMono).toContain("ucuncu");
 
-        const yeniYol = join(root, "hub", "flows", "ucuncu.yaml");
-        expect(await readFile(yeniYol, "utf8")).toContain("id: coder");
+        const newPath = join(root, "hub", "flows", "ucuncu.yaml");
+        expect(await readFile(newPath, "utf8")).toContain("id: coder");
         expect(hatalar).toEqual([]);
       } finally {
         await page.close();
@@ -3270,9 +3270,9 @@ roles:
         await page.waitForSelector(".dialog .err", { timeout: 10_000 });
         const stil = await page.evaluate(() => {
           const e = document.querySelector(".dialog .err");
-          return e ? { kose: getComputedStyle(e).borderRadius, metin: e.textContent } : null;
+          return e ? { corner: getComputedStyle(e).borderRadius, metin: e.textContent } : null;
         });
-        expect(stil?.kose).toBe("0px");
+        expect(stil?.corner).toBe("0px");
         expect(stil?.metin).toContain("okunamıyor");
         expect(hatalar).toEqual([]);
       } finally {
@@ -3853,18 +3853,18 @@ describe("formasyon kuşu — çizilen boyut", () => {
   it("kuş kendi 46x23 kutusunda kalır, diyagramı kaplamaz", async () => {
     const { page, hatalar } = await ac();
     try {
-      const olcu = await page.evaluate(() => {
+      const measure = await page.evaluate(() => {
         const kus = document.querySelector("svg.formasyonKus");
         if (!kus) return null;
         const r = kus.getBoundingClientRect();
         return { g: r.width };
       });
-      expect(olcu).not.toBeNull();
+      expect(measure).not.toBeNull();
       // 46x23 nominal; ölçek ve yuvarlama için geniş pay bırakıyoruz ama
       // bir büyüklük mertebesi sapmayı yakalayacak kadar dar.
-      expect(olcu!.g).toBeLessThan(120);
+      expect(measure!.g).toBeLessThan(120);
       // Sıfır da kusurdur: görünmeyen kuş da yanlış.
-      expect(olcu!.g).toBeGreaterThan(10);
+      expect(measure!.g).toBeGreaterThan(10);
       expect(hatalar).toEqual([]);
     } finally {
       await page.close();
@@ -3876,11 +3876,11 @@ describe("formasyon kuşu — çizilen boyut", () => {
     // görünmez olur; o yön de pinli.
     const { page } = await ac();
     try {
-      const olcu = await page.evaluate(() => {
+      const measure = await page.evaluate(() => {
         const dis = document.querySelector(".formasyonSarmal > svg");
         return dis ? Math.round(dis.getBoundingClientRect().width) : 0;
       });
-      expect(olcu).toBeGreaterThan(300);
+      expect(measure).toBeGreaterThan(300);
     } finally {
       await page.close();
     }

@@ -1846,43 +1846,43 @@ describe("akisKartSinifi — 'panoda' zemin kararı", () => {
 });
 
 describe("akisAdiGecerliMi — DEVIR.md §3/§4'ün a-z0-9- kısıtı", () => {
-  const gecerli = (ad: string): boolean =>
+  const valid = (ad: string): boolean =>
     fonksiyon<(a: string) => boolean>(renderPage("t"), "akisAdiGecerliMi")(ad);
 
   it("küçük harf, sayı ve tire kabul edilir", () => {
-    expect(gecerli("ab-planli-2")).toBe(true);
+    expect(valid("ab-planli-2")).toBe(true);
   });
 
   it("boş ad reddedilir", () => {
-    expect(gecerli("")).toBe(false);
+    expect(valid("")).toBe(false);
   });
 
   it("büyük harf reddedilir (sessizce düşürülmez, dizge TAMAMEN düşer)", () => {
-    expect(gecerli("Kopya")).toBe(false);
+    expect(valid("Kopya")).toBe(false);
   });
 
   it("boşluk ve diğer özel karakterler reddedilir", () => {
-    expect(gecerli("kopya adi")).toBe(false);
-    expect(gecerli("kopya/adi")).toBe(false);
+    expect(valid("kopya adi")).toBe(false);
+    expect(valid("kopya/adi")).toBe(false);
   });
 });
 
 describe("yeniAkisGecerliMi — 'Oluştur ve düzenle' düğmesinin etkinlik kararı", () => {
-  const gecerli = (ad: string, mevcut: string[]): boolean =>
+  const valid = (ad: string, mevcut: string[]): boolean =>
     fonksiyonlar<(a: string, m: string[]) => boolean>(
       renderPage("t"), ["akisAdiGecerliMi", "yeniAkisGecerliMi"], "yeniAkisGecerliMi",
     )(ad, mevcut);
 
   it("geçerli ve benzersiz adı kabul eder", () => {
-    expect(gecerli("yeni-akis", ["test", "ikinci"])).toBe(true);
+    expect(valid("yeni-akis", ["test", "ikinci"])).toBe(true);
   });
 
   it("zaten var olan adı reddeder (benzersizlik)", () => {
-    expect(gecerli("test", ["test", "ikinci"])).toBe(false);
+    expect(valid("test", ["test", "ikinci"])).toBe(false);
   });
 
   it("geçersiz karakterli adı reddeder, listede olmasa bile", () => {
-    expect(gecerli("Yeni Akis", ["test"])).toBe(false);
+    expect(valid("Yeni Akis", ["test"])).toBe(false);
   });
 });
 
@@ -2179,18 +2179,18 @@ type AjanKart = {
 };
 
 describe("ajanGuncelKart — rolün 'güncel' kartı", () => {
-  const guncel = (rolId: string, cards: AjanKart[]): AjanKart | null =>
+  const current = (rolId: string, cards: AjanKart[]): AjanKart | null =>
     fonksiyonlar<(r: string, c: AjanKart[]) => AjanKart | null>(
       renderPage("t"), ["rolunAcikKartlari", "ajanGuncelKart"], "ajanGuncelKart",
     )(rolId, cards);
 
   it("hiç kart yoksa null", () => {
-    expect(guncel("coder", [])).toBeNull();
+    expect(current("coder", [])).toBeNull();
   });
 
   it("koşan kart varsa ONU verir — kuyruktaki/bitmiş kartları saymaz", () => {
     const kosan: AjanKart = { role: "coder", state: "active", title: "x" };
-    expect(guncel("coder", [
+    expect(current("coder", [
       { role: "coder", state: "done", title: "bitmiş" },
       kosan,
       { role: "coder", state: "queued", title: "kuyrukta" },
@@ -2199,7 +2199,7 @@ describe("ajanGuncelKart — rolün 'güncel' kartı", () => {
 
   it("koşan yoksa KAPIDA bekleyen kartı verir", () => {
     const kapida: AjanKart = { role: "coder", state: "gate", gate: "approval", title: "k" };
-    expect(guncel("coder", [kapida])).toEqual(kapida);
+    expect(current("coder", [kapida])).toEqual(kapida);
   });
 
   // ÖNCELİK: ikisi de varsa (nadir ama olanaklı — toplu alım yapan bir
@@ -2209,17 +2209,17 @@ describe("ajanGuncelKart — rolün 'güncel' kartı", () => {
   it("hem koşan hem kapıda kart varsa KOŞAN kazanır", () => {
     const kosan: AjanKart = { role: "coder", state: "active", title: "koşan" };
     const kapida: AjanKart = { role: "coder", state: "gate", gate: "approval", title: "kapıda" };
-    expect(guncel("coder", [kapida, kosan])).toEqual(kosan);
+    expect(current("coder", [kapida, kosan])).toEqual(kosan);
   });
 
   it("ne koşan ne kapıda varsa (yalnızca kuyrukta) null", () => {
-    expect(guncel("coder", [{ role: "coder", state: "queued", title: "x" }])).toBeNull();
+    expect(current("coder", [{ role: "coder", state: "queued", title: "x" }])).toBeNull();
   });
 
   // YETİM kartlar rolün KARTI SAYILMAZ — formasyon düğümüyle AYNI filtre
   // (rolunAcikKartlari), ikinci bir "bu role ait mi" yorumu YOK.
   it("yetim kart sayılmaz, başka rolün kartı sayılmaz", () => {
-    expect(guncel("coder", [
+    expect(current("coder", [
       { role: "coder", state: "active", orphan: true, title: "yetim" },
       { role: "reviewer", state: "active", title: "başka rol" },
     ])).toBeNull();

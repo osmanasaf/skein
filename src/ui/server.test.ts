@@ -1050,7 +1050,7 @@ describe("serveUi — yeni rol", () => {
    * YOK, YAML DEĞİŞMEMİŞ.
    */
   it("geçersiz akış üretirse rol VE prompt dosyası İKİSİ DE GERİ ALINIR", async () => {
-    const onceYaml = await readFile(gercekFlow.path, "utf8");
+    const beforeYaml = await readFile(gercekFlow.path, "utf8");
 
     const res = await gonder({
       id: "reviewer", provider: "claude", workspace: "main", sonra: "coder",
@@ -1061,7 +1061,7 @@ describe("serveUi — yeni rol", () => {
     expect(v.hata).toContain("kural 2");
 
     // YAML DEĞİŞMEMİŞ.
-    expect(await readFile(gercekFlow.path, "utf8")).toBe(onceYaml);
+    expect(await readFile(gercekFlow.path, "utf8")).toBe(beforeYaml);
     // Dosya diskte YOK — GERİ ALINDI, kalıcı bırakılmadı.
     await expect(readFile(yeniRolYolu(), "utf8")).rejects.toThrow();
   });
@@ -1077,7 +1077,7 @@ describe("serveUi — yeni rol", () => {
   });
 
   it("bilinmeyen 'sonra' reddedilir, hiçbir şey değişmez", async () => {
-    const onceYaml = await readFile(gercekFlow.path, "utf8");
+    const beforeYaml = await readFile(gercekFlow.path, "utf8");
     const res = await gonder({
       id: "reviewer", provider: "claude", workspace: "reviewer", sonra: "boyle-bir-rol-yok",
     });
@@ -1085,23 +1085,23 @@ describe("serveUi — yeni rol", () => {
 
     expect(res.status).toBe(400);
     expect(v.hata).toContain("Bilinmeyen rol");
-    expect(await readFile(gercekFlow.path, "utf8")).toBe(onceYaml);
+    expect(await readFile(gercekFlow.path, "utf8")).toBe(beforeYaml);
     await expect(readFile(yeniRolYolu(), "utf8")).rejects.toThrow();
   });
 
   it("jetonsuz istek 403, hiçbir şey değişmez", async () => {
-    const onceYaml = await readFile(gercekFlow.path, "utf8");
+    const beforeYaml = await readFile(gercekFlow.path, "utf8");
     const res = await fetch(`${s.url}rol/yeni`, {
       method: "POST",
       body: JSON.stringify({ id: "reviewer", provider: "claude", workspace: "reviewer", sonra: "coder" }),
     });
     expect(res.status).toBe(403);
-    expect(await readFile(gercekFlow.path, "utf8")).toBe(onceYaml);
+    expect(await readFile(gercekFlow.path, "utf8")).toBe(beforeYaml);
     await expect(readFile(yeniRolYolu(), "utf8")).rejects.toThrow();
   });
 
   it("başka kaynaktan gelen istek reddedilir, hiçbir şey değişmez", async () => {
-    const onceYaml = await readFile(gercekFlow.path, "utf8");
+    const beforeYaml = await readFile(gercekFlow.path, "utf8");
     const res = await fetch(`${s.url}rol/yeni`, {
       method: "POST",
       headers: {
@@ -1111,21 +1111,21 @@ describe("serveUi — yeni rol", () => {
       body: JSON.stringify({ id: "reviewer", provider: "claude", workspace: "reviewer", sonra: "coder" }),
     });
     expect(res.status).toBe(403);
-    expect(await readFile(gercekFlow.path, "utf8")).toBe(onceYaml);
+    expect(await readFile(gercekFlow.path, "utf8")).toBe(beforeYaml);
     await expect(readFile(yeniRolYolu(), "utf8")).rejects.toThrow();
   });
 });
 
 describe("serveUi — yeni rol, salt okunur ekran", () => {
   it("düzenleme kapalıysa POST /rol/yeni 404, hiçbir şey değişmez", async () => {
-    const onceYaml = await readFile(join(root, "hub", "flows", "test.yaml"), "utf8");
+    const beforeYaml = await readFile(join(root, "hub", "flows", "test.yaml"), "utf8");
     const res = await fetch(`${server.url}rol/yeni`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-skein-token": server.token },
       body: JSON.stringify({ id: "reviewer", provider: "claude", workspace: "reviewer", sonra: "coder" }),
     });
     expect(res.status).toBe(404);
-    expect(await readFile(join(root, "hub", "flows", "test.yaml"), "utf8")).toBe(onceYaml);
+    expect(await readFile(join(root, "hub", "flows", "test.yaml"), "utf8")).toBe(beforeYaml);
     await expect(readFile(join(root, "roles", "reviewer.md"), "utf8")).rejects.toThrow();
   });
 });
@@ -1173,7 +1173,7 @@ roles:
     return serveUi({
       root, queue, topology, flowName: "test", flowHash: gercekFlow.hash, live,
       akisSecimi: {
-        listele: async () => ["test", "ikinci"],
+        list: async () => ["test", "ikinci"],
         ac: async (ad) => {
           const l = await LiveFlow.open(join(root, "hub", "flows", `${ad}.yaml`), {
             root, providers: knownProviderSet(),
@@ -1241,7 +1241,7 @@ roles:
     const s = await serveUi({
       root, queue, topology, flowName: "test", flowHash: gercekFlow.hash, live,
       akisSecimi: {
-        listele: async () => ["test", "ikinci", "bozuk"],
+        list: async () => ["test", "ikinci", "bozuk"],
         ac: async (ad) => {
           const l = await LiveFlow.open(join(root, "hub", "flows", `${ad}.yaml`), {
             root, providers: knownProviderSet(),
@@ -1330,7 +1330,7 @@ roles:
       akisSecimi: {
         // "bozuk" listede VAR, yani üyelik denetimini geçiyor — asıl
         // sınanan şey `ac()`in kendi reddi.
-        listele: async () => ["test", "bozuk"],
+        list: async () => ["test", "bozuk"],
         ac: async (ad) => {
           if (ad === "bozuk") throw new Error("[kural 4] tam olarak bir rolün next değeri done olmalı");
           const l = await LiveFlow.open(join(root, "hub", "flows", `${ad}.yaml`), {
@@ -1395,7 +1395,7 @@ roles:
     return serveUi({
       root, queue, topology, flowName: "test", flowHash: gercekFlow.hash, live,
       akisSecimi: {
-        listele: async () => ["test", "ikinci"],
+        list: async () => ["test", "ikinci"],
         ac: async () => {
           throw new Error("ac() ÇAĞRILMAMALIYDI — ad listede yoktu, üyelik denetimi onu ac'e hiç ulaştırmamalı");
         },
@@ -1512,7 +1512,7 @@ describe("serveUi — yeni akış oluşturma (yeniAd)", () => {
       loadOptions: opts(),
       providerIds: ["claude"],
       akisSecimi: {
-        listele: async () => ["test"],
+        list: async () => ["test"],
         ac: async () => { throw new Error("ac() bu describe'da ÇAĞRILMAMALI"); },
       },
     });
@@ -1543,8 +1543,8 @@ describe("serveUi — yeni akış oluşturma (yeniAd)", () => {
     const res = await gonder("akis/yaz", { ...yeniDraft("kopya"), yeniAd: "kopya" });
     expect(res.status).toBe(200);
 
-    const yeniYol = join(root, "hub", "flows", "kopya.yaml");
-    expect(await readFile(yeniYol, "utf8")).toContain("id: coder");
+    const newPath = join(root, "hub", "flows", "kopya.yaml");
+    expect(await readFile(newPath, "utf8")).toContain("id: coder");
     // Aktif akış (test.yaml) AYNEN duruyor — yazma BAŞKA bir dosyaya gitti.
     const eskiIcerik = await readFile(gercekFlow.path, "utf8");
     expect(eskiIcerik).not.toContain("kopya");
@@ -1558,8 +1558,8 @@ describe("serveUi — yeni akış oluşturma (yeniAd)", () => {
     const res = await gonder("akis/onizleme", { ...yeniDraft("kopya"), yeniAd: "kopya" });
     const v = (await res.json()) as { ok: boolean; yaml: string };
     expect(v.ok).toBe(true);
-    const yeniYol = join(root, "hub", "flows", "kopya.yaml");
-    await expect(readFile(yeniYol, "utf8")).rejects.toThrow();
+    const newPath = join(root, "hub", "flows", "kopya.yaml");
+    await expect(readFile(newPath, "utf8")).rejects.toThrow();
   });
 
   it("zaten var olan bir ad reddedilir, hiçbir dosya değişmez", async () => {
@@ -1579,8 +1579,8 @@ describe("serveUi — yeni akış oluşturma (yeniAd)", () => {
     const v = (await res.json()) as { hata: string };
     expect(res.status).toBe(400);
     expect(v.hata).toContain("a-z0-9-");
-    const yeniYol = join(root, "hub", "flows", "Kopya Adı.yaml");
-    await expect(readFile(yeniYol, "utf8")).rejects.toThrow();
+    const newPath = join(root, "hub", "flows", "Kopya Adı.yaml");
+    await expect(readFile(newPath, "utf8")).rejects.toThrow();
   });
 
   it("akisSecimi verilmemişse yeniAd 404 değil 400 ile reddedilir, hiçbir dosya yazılmaz", async () => {
@@ -1597,8 +1597,8 @@ describe("serveUi — yeni akış oluşturma (yeniAd)", () => {
         body: JSON.stringify({ ...yeniDraft("kopya"), yeniAd: "kopya" }),
       });
       expect(res.status).toBe(400);
-      const yeniYol = join(root, "hub", "flows", "kopya.yaml");
-      await expect(readFile(yeniYol, "utf8")).rejects.toThrow();
+      const newPath = join(root, "hub", "flows", "kopya.yaml");
+      await expect(readFile(newPath, "utf8")).rejects.toThrow();
     } finally {
       await saltAkisSecimsiz.close();
     }

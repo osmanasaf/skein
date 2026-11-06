@@ -16,12 +16,12 @@
 /** "#RRGGBB" formatını kanallara ayırır. Kısa "#RGB" formu desteklenmiyor — bu dosyada hiç üretilmiyor. */
 function kanallaraAyir(hex: string): [number, number, number] {
   const temiz = hex.trim();
-  const esle = /^#([0-9A-Fa-f]{6})$/.exec(temiz);
-  if (!esle) throw new Error("gecersiz renk: " + hex + " (beklenen: #RRGGBB)");
+  const match = /^#([0-9A-Fa-f]{6})$/.exec(temiz);
+  if (!match) throw new Error("gecersiz renk: " + hex + " (beklenen: #RRGGBB)");
   // Yakalama grubu desenin kendisinde zorunlu (altındaki alternatif yok),
   // yani eşleşme varsa bu grup da var — ama noUncheckedIndexedAccess
   // bunu bilmiyor, o yüzden açıkça doğrulanıyor.
-  const deger = esle[1];
+  const deger = match[1];
   if (deger === undefined) throw new Error("gecersiz renk: " + hex);
   return [
     parseInt(deger.slice(0, 2), 16),

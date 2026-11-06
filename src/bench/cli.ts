@@ -718,12 +718,12 @@ async function doctor(spec: string): Promise<void> {
   // ama hiçbir şey ölçemedim" gibi görünüyordu. Token sayısı, modelin
   // gerçekten çağrıldığının kanıtı ve çapraz satıcı karşılaştırmasında
   // doların yerini tutan tek ortak birim.
-  const olcu = r.usage?.costUsd !== undefined
+  const measure = r.usage?.costUsd !== undefined
     ? `  maliyet=$${r.usage.costUsd.toFixed(4)}`
     : r.usage?.inputTokens !== undefined || r.usage?.outputTokens !== undefined
       ? `  token=${r.usage.inputTokens ?? "?"}→${r.usage.outputTokens ?? "?"} (dolar maliyeti yok: abonelik kimliği)`
       : "  ÖLÇÜ YOK: ne maliyet ne token okunabildi";
-  console.log(`  exit=${r.exitCode}  süre=${(r.durationMs / 1000).toFixed(1)}s${olcu}`);
+  console.log(`  exit=${r.exitCode}  süre=${(r.durationMs / 1000).toFixed(1)}s${measure}`);
   if (r.exitCode === 0) {
     // Çıkış kodu sıfır olabilir ama model hiç çalışmamış olabilir: sıfır tur,
     // boş modelUsage. Operatörün makinesinde tam olarak bu oldu ve "başarılı"

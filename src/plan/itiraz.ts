@@ -33,7 +33,7 @@ export interface Itiraz {
 export interface ItirazDosyasi {
   itirazlar: Itiraz[];
   /** Biçimi tutan itirazlar. */
-  gecerli: Itiraz[];
+  valid: Itiraz[];
   acik: Itiraz[];
   kabul: Itiraz[];
   insana: Itiraz[];
@@ -257,7 +257,7 @@ export interface ParseOptions {
    * `varMi()` geçiyordu. Oysa kuralın gerekçesi "model tüketici modülü
    * okudu mu" idi; plan belgesini göstermek bunu hiç göstermiyor.
    */
-  kendiBelgeleri?: string[];
+  ownDocs?: string[];
 }
 
 /**
@@ -317,13 +317,13 @@ export function parseItirazlar(text: string, options: ParseOptions = {}): Itiraz
 
 /** Sayılmış listeden türev alanları kurar. */
 function topla(itirazlar: Itiraz[]): ItirazDosyasi {
-  const gecerli = itirazlar.filter((i) => i.gecersiz === undefined);
+  const valid = itirazlar.filter((i) => i.gecersiz === undefined);
   return {
     itirazlar,
-    gecerli,
-    acik: gecerli.filter((i) => i.durum === "acik"),
-    kabul: gecerli.filter((i) => i.durum === "kabul"),
-    insana: gecerli.filter((i) => i.durum === "insana"),
+    valid,
+    acik: valid.filter((i) => i.durum === "acik"),
+    kabul: valid.filter((i) => i.durum === "kabul"),
+    insana: valid.filter((i) => i.durum === "insana"),
   };
 }
 
@@ -383,7 +383,7 @@ function kur(no: number, role: string, alan: Map<string, string>, options: Parse
         gecersiz: `\`Neyi yanlışlar\` depoda olmayan bir yola işaret ediyor: ${yollar.join(", ")}`,
       };
     }
-    const kendi = new Set(options.kendiBelgeleri ?? []);
+    const kendi = new Set(options.ownDocs ?? []);
     if (depoda.every((y) => kendi.has(y))) {
       return {
         ...taban,

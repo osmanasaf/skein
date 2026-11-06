@@ -376,9 +376,9 @@ function obligationStats(runs: ArmRun[]): ObligationStats {
   // değeri tam orada: bir maddenin karşılanmadıdan karşılandıya geçişi.
   const son = new Map<string, ObligationRecord>();
   for (const o of records) son.set(`${o.runId}\u0000${o.id}`, o);
-  const guncel = [...son.values()];
-  const met = guncel.filter((o) => o.durum === "karsilandi").length;
-  const unmet = guncel.filter((o) => o.durum === "karsilanmadi").length;
+  const current = [...son.values()];
+  const met = current.filter((o) => o.durum === "karsilandi").length;
+  const unmet = current.filter((o) => o.durum === "karsilanmadi").length;
   return { total: met + unmet, met, unmet, records };
 }
 

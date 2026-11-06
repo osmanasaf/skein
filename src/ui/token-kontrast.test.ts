@@ -92,9 +92,9 @@ function cozumle(harita: Map<string, string>, ad: string, derinlik = 0): string 
   if (derinlik > 8) throw new Error("var() zinciri cok derin (dongu?): " + ad);
   const deger = harita.get(ad);
   if (deger === undefined) throw new Error("token bulunamadi: " + ad);
-  const esle = /^var\(--([a-z0-9-]+)\)$/.exec(deger);
-  if (esle) {
-    const ic = esle[1];
+  const match = /^var\(--([a-z0-9-]+)\)$/.exec(deger);
+  if (match) {
+    const ic = match[1];
     if (ic === undefined) throw new Error("gecersiz var() referansi: " + deger);
     return cozumle(harita, ic, derinlik + 1);
   }
@@ -373,9 +373,9 @@ describe("token kontrastı — koyu tema", () => {
 
 /** "#RRGGBB" metninden 0-255 arası ORTALAMA kanal (kaba parlaklık) — tarayici.test.ts'teki `parlaklik()`'in AYNI formülü, ama "rgb(r, g, b)" DEĞİL kaynak metnin kendi hex'i üzerinde. */
 function parlaklikHex(hex: string): number {
-  const esle = /^#([0-9A-Fa-f]{6})$/.exec(hex);
-  if (!esle) throw new Error("gecersiz renk: " + hex);
-  const deger = esle[1];
+  const match = /^#([0-9A-Fa-f]{6})$/.exec(hex);
+  if (!match) throw new Error("gecersiz renk: " + hex);
+  const deger = match[1];
   if (deger === undefined) throw new Error("gecersiz renk: " + hex);
   const r = parseInt(deger.slice(0, 2), 16);
   const g = parseInt(deger.slice(2, 4), 16);

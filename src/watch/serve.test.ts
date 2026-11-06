@@ -267,19 +267,19 @@ describe("serve — yetim kart", () => {
   it("süpürülmeyen kartı duyurur", async () => {
     await yetimKoy();
     const stop = new AbortController();
-    const gorulen: { id: string; role: string }[] = [];
+    const seen: { id: string; role: string }[] = [];
 
     const running = serve({ topology }, {
       ...base,
       signal: stop.signal,
-      onOrphan: (c) => gorulen.push({ id: c.id, role: c.role }),
+      onOrphan: (c) => seen.push({ id: c.id, role: c.role }),
     });
     await new Promise((r) => setTimeout(r, 60));
     stop.abort();
     await running;
 
-    expect(gorulen).toHaveLength(1);
-    expect(gorulen[0]?.role).toBe("tester");
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.role).toBe("tester");
   });
 
   // Her geçişte tekrarlanan uyarı, asıl çıktıyı okunmaz hâle getirirdi.
@@ -356,39 +356,39 @@ describe("serve — akışı yeniden yükleme", () => {
 
   it("hata değişirse yeniden duyurulur", async () => {
     const stop = new AbortController();
-    const gorulen: string[] = [];
+    const seen: string[] = [];
     let n = 0;
 
     const running = serve({ topology }, {
       ...base,
       signal: stop.signal,
       refresh: async () => ({ kind: "failed" as const, message: `hata ${++n > 2 ? "B" : "A"}` }),
-      onReload: (r) => gorulen.push(r.kind === "failed" ? r.message : r.kind),
+      onReload: (r) => seen.push(r.kind === "failed" ? r.message : r.kind),
     });
     await new Promise((r) => setTimeout(r, 140));
     stop.abort();
     await running;
 
-    expect(gorulen).toEqual(["hata A", "hata B"]);
+    expect(seen).toEqual(["hata A", "hata B"]);
   });
 
   it("yeniden yükleme sonucu bildirilir, `unchanged` bildirilmez", async () => {
     const stop = new AbortController();
-    const gorulen: string[] = [];
+    const seen: string[] = [];
 
     const running = serve({ topology }, {
       ...base,
       signal: stop.signal,
       refresh: async () =>
-        gorulen.length === 0
+        seen.length === 0
           ? { kind: "failed" as const, message: "yarım YAML" }
           : { kind: "unchanged" as const },
-      onReload: (r) => gorulen.push(r.kind),
+      onReload: (r) => seen.push(r.kind),
     });
     await new Promise((r) => setTimeout(r, 80));
     stop.abort();
     await running;
 
-    expect(gorulen).toEqual(["failed"]);
+    expect(seen).toEqual(["failed"]);
   });
 });

@@ -467,8 +467,8 @@ describe("buildDetail — planlama alışverişi", () => {
 
     const detail = await buildDetail({ ...base, numstat }, card.id);
 
-    const kayit = detail?.history.find((h) => h.event === "plan");
-    expect(kayit?.plan).toEqual({
+    const record = detail?.history.find((h) => h.event === "plan");
+    expect(record?.plan).toEqual({
       action: "yazdi",
       round: 0,
       objections: null,
@@ -493,8 +493,8 @@ describe("buildDetail — planlama alışverişi", () => {
 
     const detail = await buildDetail({ ...base, numstat }, card.id);
 
-    const kayit = detail?.history.find((h) => h.event === "plan");
-    expect(kayit?.plan).toEqual({
+    const record = detail?.history.find((h) => h.event === "plan");
+    expect(record?.plan).toEqual({
       action: "itiraz",
       round: 1,
       objections: 2,
@@ -520,9 +520,9 @@ describe("buildDetail — planlama alışverişi", () => {
 
     const detail = await buildDetail({ ...base, numstat }, card.id);
 
-    const kayit = detail?.history.find((h) => h.event === "plan");
-    expect(kayit?.plan?.invalid).toBe(0);
-    expect(kayit?.plan).toEqual({
+    const record = detail?.history.find((h) => h.event === "plan");
+    expect(record?.plan?.invalid).toBe(0);
+    expect(record?.plan).toEqual({
       action: "cevap",
       round: 1,
       objections: 2,

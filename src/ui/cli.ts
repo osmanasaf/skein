@@ -249,17 +249,17 @@ async function main(argv: string[]): Promise<number> {
     // baktığı akışta aynen kalıyor — `LiveFlow.open` zaten bu kuralı
     // taşıyor, burada tekrar uygulanmıyor.
     akisSecimi: {
-      listele: () => listFlowNames(root),
+      list: () => listFlowNames(root),
       ac: async (ad: string): Promise<{ live: CanliAkis; flowPath: string }> => {
-        const yeniYol = join(root, "hub", "flows", `${ad}.yaml`);
-        const yeniLive = await LiveFlow.open(yeniYol, loadOptions);
+        const newPath = join(root, "hub", "flows", `${ad}.yaml`);
+        const yeniLive = await LiveFlow.open(newPath, loadOptions);
         // Kayıt YALNIZCA açılış BAŞARILIYSA güncelleniyor — yukarıdaki satır
         // fırlasa buraya hiç ulaşılmaz. Bu, ekrandaki seçiciden akış
         // değiştirmenin "son açılan" hafızasını da güncellediği tek yer:
         // yapmazsak seçiciyle geçilen akış ekranda görünür ama bir sonraki
         // `npm start` hâlâ eski kaydı okur — "son açılan" yalan olurdu.
         await sonAkisiYaz(root, ad);
-        return { live: yeniLive, flowPath: yeniYol };
+        return { live: yeniLive, flowPath: newPath };
       },
     },
     // Akış düzenleme açık: ekranın ürettiği dosya tam olarak bu yol.
