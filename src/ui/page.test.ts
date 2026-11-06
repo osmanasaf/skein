@@ -2358,3 +2358,249 @@ describe("ajanCanliMi — 'canlı' etiketi ve /adimlar yoklama kararı", () => {
     expect(canli({ role: "coder", state: "gate", gate: "approval" }, { alive: true })).toBe(false);
   });
 });
+
+/**
+ * GÖVDEYOLU — devredilen bir kartın uçuş yolu (kart c-20261106-d6e795,
+ * "kuşlar V üzerinde yol alsın"). `planlamaBandYolu`nun aynı "tepeden
+ * dolan" kuralının YÖNDEN BAĞIMSIZ hâli — devir (ret) kaynaktan hedefe
+ * GERİYE de gidebilir, planlama bandı gibi hep zincir sırasıyla değil.
+ */
+describe("govdeYolu — uçuşun gövde çizgisi üzerindeki yolu", () => {
+  type Konum = { x: number; y: number; kol: string };
+  const tepe: Konum = { x: 500, y: 480, kol: "tepe" };
+  const yol = (a: Konum, b: Konum): Konum[] =>
+    fonksiyon<(a: Konum, b: Konum, t: Konum) => Konum[]>(renderPage("t"), "govdeYolu")(a, b, tepe);
+
+  it("aynı koldaki iki nokta DÜZ yol alır (2 nokta), tepeden dolanmaz", () => {
+    const a = { x: 230, y: 110, kol: "sol" };
+    const b = { x: 365, y: 295, kol: "sol" };
+    expect(yol(a, b)).toEqual([a, b]);
+  });
+
+  it("farklı kollardaki iki nokta TEPEDEN dolanır (3 nokta)", () => {
+    const a = { x: 230, y: 110, kol: "sol" };
+    const b = { x: 770, y: 110, kol: "sag" };
+    expect(yol(a, b)).toEqual([a, tepe, b]);
+  });
+
+  // YÖNDEN BAĞIMSIZ: ret bir kartı SAĞ koldan SOL koldaki bir role
+  // geri gönderebilir — planlamaBandYolu'nun "ilk sol, son sağ" varsayımı
+  // burada YOK, hangisi önce verilirse verilsin aynı dolanma üretilir.
+  it("YÖN TERS OLSA DA (sağdan sola) aynı dolanmayı üretir", () => {
+    const a = { x: 770, y: 110, kol: "sag" };
+    const b = { x: 230, y: 110, kol: "sol" };
+    expect(yol(a, b)).toEqual([a, tepe, b]);
+  });
+
+  it("biri tepedeyse dolanmaz (zaten aynı doğru üzerinde)", () => {
+    const a = { x: 230, y: 110, kol: "sol" };
+    expect(yol(a, tepe)).toEqual([a, tepe]);
+  });
+});
+
+/**
+ * UCUSSURESIMS — SAPMALAR.md §2.7'nin "nitelik doğru, ekranda doğru
+ * değil" sınıfına düşmeyecek kadar BASİT bir karar: iki hâl, mutasyona
+ * açık tek bir karşılaştırma.
+ */
+describe("ucusSuresiMs — uçuşun süresi", () => {
+  type Konum = { x: number; y: number };
+  const sure = (yol: Konum[]): number =>
+    fonksiyon<(y: Konum[]) => number>(renderPage("t"), "ucusSuresiMs")(yol);
+
+  it("düz yol (2 nokta) KISA sürede uçar (600ms)", () => {
+    expect(sure([{ x: 0, y: 0 }, { x: 10, y: 0 }])).toBe(600);
+  });
+
+  // SINIR: "yol.length > 2" ters çevrilirse (örn. ">=" ya da "< 2")
+  // bu sınama ya ÖNCEKİ testle ya da bununla düşer.
+  it("tepeden dolanan yol (3 nokta) UZUN sürede uçar (900ms)", () => {
+    expect(sure([{ x: 0, y: 0 }, { x: 5, y: 5 }, { x: 10, y: 0 }])).toBe(900);
+  });
+});
+
+/**
+ * YUMUSAKILERLEME — DEVIR görevinin "yumuşak giriş/çıkış" istediği eğri
+ * (smoothstep). Doğrusal ilerlemenin KENDİSİ olmadığını (ease-in/out
+ * gerçekten var) üç noktada pinler.
+ */
+describe("yumusakIlerleme — ease-in/out eğrisi", () => {
+  const ilerleme = (t: number): number =>
+    fonksiyon<(t: number) => number>(renderPage("t"), "yumusakIlerleme")(t);
+
+  it("uçlarda (0 ve 1) sınır değerleri korunur", () => {
+    expect(ilerleme(0)).toBe(0);
+    expect(ilerleme(1)).toBe(1);
+  });
+
+  it("ortada (0.5) doğrusalla AYNI noktaya düşer (simetrik eğri)", () => {
+    expect(ilerleme(0.5)).toBeCloseTo(0.5);
+  });
+
+  // EASE-IN: başta doğrusaldan YAVAŞ — t=0.25 doğrusal olsaydı 0.25
+  // olurdu, smoothstep'te DAHA AZ. Doğrusal t kullanılsaydı (mutasyon:
+  // "return t;") bu sınama düşer.
+  it("başta doğrusaldan YAVAŞ (ease-in), t=0.25 < 0.25 döner", () => {
+    expect(ilerleme(0.25)).toBeLessThan(0.25);
+    expect(ilerleme(0.25)).toBeCloseTo(0.15625);
+  });
+});
+
+/**
+ * UCUSKONUMU — bir uçuş yolu üzerinde YAY UZUNLUĞUNA göre örnekleme
+ * (SAPMALAR.md §2.7'nin asıl uyardığı yer: "nitelik doğru" ile "ekranda
+ * doğru" ayrı iddialardır — bu fonksiyon o ikincisinin SAF, ölçülebilir
+ * karşılığı; GERÇEK tarayıcıda ARA KAREDE ÖLÇÜLEN hâli tarayici.test.ts'te).
+ */
+describe("ucusKonumu — yol üzerindeki ara nokta", () => {
+  type Nokta = { x: number; y: number };
+  const konum = (yol: Nokta[], t: number): Nokta =>
+    fonksiyon<(y: Nokta[], t: number) => Nokta>(renderPage("t"), "ucusKonumu")(yol, t);
+
+  it("t=0 KAYNAKTA, t=1 HEDEFTE durur (2 noktalı düz yol)", () => {
+    const yol = [{ x: 0, y: 0 }, { x: 10, y: 0 }];
+    expect(konum(yol, 0)).toEqual({ x: 0, y: 0 });
+    expect(konum(yol, 1)).toEqual({ x: 10, y: 0 });
+  });
+
+  it("t=0.5 KAYNAK İLE HEDEF ARASINDA durur, İKİSİNE DE eşit DEĞİL", () => {
+    const yol = [{ x: 0, y: 0 }, { x: 10, y: 0 }];
+    const nokta = konum(yol, 0.5);
+    expect(nokta).toEqual({ x: 5, y: 0 });
+    expect(nokta).not.toEqual(yol[0]);
+    expect(nokta).not.toEqual(yol[1]);
+  });
+
+  // EŞİT SEGMENTLİ 3 noktalı yol (tepeden dolanan bir uçuşun tipik
+  // şekli): t=0.5 TAM ORTA noktaya (yol[1], "tepe") düşer — YAY UZUNLUĞU
+  // eşit bölündüğü için.
+  it("eşit segmentli 3 noktalı yolda t=0.5 TAM ORTA noktaya (tepeye) düşer", () => {
+    const yol = [{ x: 0, y: 0 }, { x: 0, y: 10 }, { x: 10, y: 10 }];
+    expect(konum(yol, 0.5)).toEqual({ x: 0, y: 10 });
+  });
+
+  // YAY UZUNLUĞU, SEGMENT İNDEKSİ DEĞİL: segmentler FARKLI uzunlukta
+  // (10 ve 20, toplam 30). "t"yi segment indeksine göre bölen bir
+  // mutasyon (örn. "t<0.5 ise ilk segment, değilse ikinci") burada
+  // YANLIŞ bir nokta üretirdi — t=0.5 yay uzunluğuna göre tam ikinci
+  // segmentin İÇİNDE (toplam*0.5=15, ilk segment 10'u geçiyor) durmalı,
+  // segment sınırında (10,0) DEĞİL.
+  it("FARKLI uzunluktaki segmentlerde YAY UZUNLUĞUNA göre örnekler, segment İNDEKSİNE göre DEĞİL", () => {
+    const yol = [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 30, y: 0 }];
+    const nokta = konum(yol, 0.5);
+    // toplam=30, kalan=15; ilk segment(10) tükenir, ikinci segmentte
+    // kalan 5/20 oranı: x = 10 + 20*0.25 = 15.
+    expect(nokta.x).toBeCloseTo(15);
+    expect(nokta.x).not.toBeCloseTo(10);
+  });
+});
+
+/**
+ * ROLHARITASICIKAR — devir tespitinin "önceki" anlık görüntüsü.
+ */
+describe("rolHaritasiCikar — kart→rol haritası", () => {
+  type Kart = { id: string; role: string; orphan: boolean };
+  const harita = (kartlar: Kart[]): Map<string, string> =>
+    fonksiyon<(k: Kart[]) => Map<string, string>>(renderPage("t"), "rolHaritasiCikar")(kartlar);
+
+  it("her kartın id'sini rolüne eşler", () => {
+    const h = harita([{ id: "c1", role: "coder", orphan: false }]);
+    expect(h.get("c1")).toBe("coder");
+  });
+
+  // YETİM kartlar ELENİR: akışta artık karşılığı olmayan bir rolden
+  // "uçmak" anlamsız — hedef düğüm yok.
+  it("yetim kartları haritaya KOYMAZ", () => {
+    const h = harita([{ id: "c1", role: "hayalet", orphan: true }]);
+    expect(h.has("c1")).toBe(false);
+  });
+});
+
+/**
+ * KARTDEVIRLERINIBUL — kart c-20261106-d6e795'in ana karar noktası:
+ * iki yoklama arasında HANGİ kartların rolü DEĞİŞTİ.
+ */
+describe("kartDevirleriniBul — iki yoklama arasındaki devirler", () => {
+  type Kart = { id: string; role: string; orphan: boolean };
+  const devirler = (onceki: Map<string, string>, kartlar: Kart[]) =>
+    fonksiyon<(o: Map<string, string>, k: Kart[]) => { cardId: string; from: string; to: string }[]>(
+      renderPage("t"), "kartDevirleriniBul",
+    )(onceki, kartlar);
+
+  it("rolü değişen BİLİNEN bir kart için devir bildirir", () => {
+    const onceki = new Map([["c1", "coder"]]);
+    expect(devirler(onceki, [{ id: "c1", role: "reviewer", orphan: false }])).toEqual([
+      { cardId: "c1", from: "coder", to: "reviewer" },
+    ]);
+  });
+
+  it("rolü AYNI kalan bir kart için devir bildirmez", () => {
+    const onceki = new Map([["c1", "coder"]]);
+    expect(devirler(onceki, [{ id: "c1", role: "coder", orphan: false }])).toEqual([]);
+  });
+
+  // YENİ görünen bir kart "hiçbir yerden" uçmaz — önceden BİLİNMİYORSA
+  // (haritada hiç yok) devir sayılmaz, konumunda zaten BELİRİR.
+  it("önceden BİLİNMEYEN (yeni) bir kart için devir bildirmez", () => {
+    const onceki = new Map<string, string>();
+    expect(devirler(onceki, [{ id: "c1", role: "coder", orphan: false }])).toEqual([]);
+  });
+
+  // YETİM bir kart, rolü (teorik olarak) değişmiş olsa bile ELENİR.
+  it("yetim bir kart için rolü değişmiş olsa bile devir bildirmez", () => {
+    const onceki = new Map([["c1", "coder"]]);
+    expect(devirler(onceki, [{ id: "c1", role: "reviewer", orphan: true }])).toEqual([]);
+  });
+
+  it("BİRDEN ÇOK kart aynı anda devredilirse hepsini AYRI AYRI bildirir", () => {
+    const onceki = new Map([["c1", "coder"], ["c2", "coder"]]);
+    const sonuc = devirler(onceki, [
+      { id: "c1", role: "reviewer", orphan: false },
+      { id: "c2", role: "reviewer", orphan: false },
+    ]);
+    expect(sonuc).toHaveLength(2);
+    expect(sonuc).toEqual(expect.arrayContaining([
+      { cardId: "c1", from: "coder", to: "reviewer" },
+      { cardId: "c2", from: "coder", to: "reviewer" },
+    ]));
+  });
+});
+
+/**
+ * UCUSPLANLARINIKUR — devir listesini TAM uçuş planına bağlayan
+ * orkestrasyon. rolKonumu/FORMASYON_GOVDE/govdeYolu/ucusSuresiMs'e
+ * bağlı, `fonksiyonlar` ile BİRLİKTE çıkarılıyor.
+ */
+describe("ucusPlanlariniKur — devirlerden uçuş planına", () => {
+  type Rol = { id: string };
+  type Plan = { cardId: string; yol: { x: number; y: number }[]; sure: number };
+  const planlar = (devirler: { cardId: string; from: string; to: string }[], roller: Rol[]): Plan[] =>
+    fonksiyonlar<(d: typeof devirler, r: Rol[]) => Plan[]>(
+      renderPage("t"),
+      ["FORMASYON_GOVDE", "rolKonumu", "govdeYolu", "ucusSuresiMs", "ucusPlanlariniKur"],
+      "ucusPlanlariniKur",
+    )(devirler, roller);
+
+  it("farklı kollardaki (sol/sağ) iki rol arasında UZUN (900ms) bir plan üretir", () => {
+    const roller = [{ id: "coder" }, { id: "reviewer" }];
+    const sonuc = planlar([{ cardId: "c1", from: "coder", to: "reviewer" }], roller);
+    expect(sonuc).toHaveLength(1);
+    expect(sonuc[0]?.cardId).toBe("c1");
+    expect(sonuc[0]?.sure).toBe(900);
+    expect(sonuc[0]?.yol).toHaveLength(3); // tepeden dolanıyor
+  });
+
+  it("aynı koldaki (sol/tepe) iki rol arasında KISA (600ms) bir plan üretir", () => {
+    const roller = [{ id: "a" }, { id: "b" }, { id: "c" }]; // a=sol, b=tepe, c=sağ
+    const sonuc = planlar([{ cardId: "c1", from: "a", to: "b" }], roller);
+    expect(sonuc[0]?.sure).toBe(600);
+    expect(sonuc[0]?.yol).toHaveLength(2);
+  });
+
+  // OLMAYAN bir role (akış değişti, rol silindi) devir SESSİZCE elenir.
+  it("kaynak ya da hedef rol artık yoksa o devri ATLAR", () => {
+    const roller = [{ id: "coder" }, { id: "reviewer" }];
+    const sonuc = planlar([{ cardId: "c1", from: "coder", to: "hayalet" }], roller);
+    expect(sonuc).toEqual([]);
+  });
+});

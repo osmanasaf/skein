@@ -688,6 +688,15 @@ const PAGE = `<!doctype html>
   @media (prefers-reduced-motion: reduce) {
     .formasyonKus.kanatCirpiyor, .ajanKus.kanatCirpiyor { animation: none; }
   }
+  /*
+   * UÇAN KUŞ — devredilen bir kartın kaynak düğümden hedef düğüme
+   * uçuşunu taşıyan overlay (bkz. JS tarafı ucanKusKur). "kanatCirpiyor"
+   * sınıfı BİLEREK eklenmiyor: DEVIR görevi hareket bitene kadar kanat
+   * çırpmasın diyor, kanat çırpma hedef düğümde (bu overlay silindikten
+   * SONRA) normal koşulla kendiliğinden başlıyor. pointer-events:none —
+   * kayan bir kuş altındaki düğümün tıklanmasını ENGELLEMEMELİ.
+   */
+  .ucanKus { pointer-events: none; }
   .formasyonGiris, .formasyonCikis { cursor: default; }
   .formasyonGiris { cursor: pointer; }
   .formasyonGiris text, .formasyonCikis text { font-family: var(--font-heading); font-weight: 700; fill: #fff; }
@@ -3329,6 +3338,30 @@ async function yokla() {
     const veri = await cevap.json();
     if (!cevap.ok) throw new Error(veri.hata || cevap.status);
     uyari.replaceChildren();
+    // UÇUŞ TESPİTİ — "kart devredilince kuş V üzerinden uçsun" (bkz.
+    // formasyonSvgKur'un üstündeki "UÇUŞ" bölümü). KASITLI OLARAK burada,
+    // ciz() İÇİNDE DEĞİL: ciz() SON_MODEL'le tekrar tekrar çağrılıyor
+    // (sekme değişince, RAIL geçişinde, ...) ve o çağrılarda VERİ
+    // DEĞİŞMİYOR — tespit orada yapılsaydı AYNI devir her yeniden
+    // çizimde bir YENİ uçuş sayılırdı. Burada yalnızca GERÇEK bir /durum
+    // yanıtı geldiğinde bir kez çalışır.
+    //
+    // SAPMALAR.md §2.2: prefers-reduced-motion'da uçuş hiç KURULMUYOR —
+    // "anında ışınlan" diye ayrı bir dal YAZMAYA gerek yok, kuş zaten
+    // normal şekilde (statik düğüm rengi/konumu) hedefte BELİRİR.
+    const azaltilmisHareket = typeof matchMedia === "function" &&
+      matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!azaltilmisHareket) {
+      const devirler = kartDevirleriniBul(KART_SON_ROL, veri.cards);
+      if (devirler.length) {
+        ucusPlanlariniKur(devirler, veri.roles).forEach((plan) => {
+          UCUSLAR.push({
+            cardId: plan.cardId, yol: plan.yol, sure: plan.sure, baslangic: performance.now(),
+          });
+        });
+      }
+    }
+    KART_SON_ROL = rolHaritasiCikar(veri.cards);
     ciz(veri);
   } catch (e) {
     // Okuma koptuğunda ekranı boşaltmak, "iş yok" ile "bakamıyorum"u
@@ -3861,11 +3894,247 @@ function railYenidenCiz() {
 // bir değişken (let) olarak duruyor.
 let FORMASYON_RET_GOSTER = true;
 
+// --- UÇUŞ — kart devredildiğinde kuşun V üzerinden kayması ---
+//
+// Yeni görev: kuşlar artık düğümlerde SABİT durmuyor, bir kartın rolü
+// DEĞİŞTİĞİNDE (devir) o kartın kuşu kaynak düğümden hedef düğüme,
+// gövde çizgisinin ÜZERİNDEN (düz çizgi DEĞİL) kayarak gidiyor.
+//
+// Karar noktaları (hangi kuş uçacak, nereden nereye, ne kadar sürede)
+// AŞAĞIDAKİ SAF fonksiyonlara çıkarıldı — formasyonSvgKur'un kendisi
+// (DOM kuran taraf) yalnızca bunları ÇAĞIRIYOR, karar vermiyor.
+
+/**
+ * Her kartın rolünü bir haritaya çıkarır — SAF, DOM yok. kartDevirleriniBul
+ * için "önceki" anlık görüntüyü üretir (bkz. yokla(), aşağıda). Yetim
+ * kartlar (orphan) elenir: akışta artık karşılığı olmayan bir rolden
+ * "uçmak" anlamsız, hedef düğüm yok.
+ */
+function rolHaritasiCikar(kartlar) {
+  const harita = new Map();
+  kartlar.forEach((k) => { if (!k.orphan) harita.set(k.id, k.role); });
+  return harita;
+}
+
+/**
+ * İki ardışık "/durum" anlık görüntüsü arasında HANGİ kartların rolü
+ * DEĞİŞTİ — SAF, DOM yok. DEVIR görevinin "kart bir rolden diğerine
+ * devredilince" koşulunun karşılığı.
+ *
+ * Yalnızca ÖNCEDEN BİLİNEN bir kart sayılıyor ("oncekiRoller.get(id)
+ * !== undefined"): az önce açılan bir kart "hiçbir yerden" uçmaz,
+ * konumunda zaten BELİRİR — bu AYRI bir karar, olmayan bir hareketi
+ * varmış gibi göstermemek.
+ */
+function kartDevirleriniBul(oncekiRoller, kartlar) {
+  const devirler = [];
+  kartlar.forEach((k) => {
+    if (k.orphan) return;
+    const onceki = oncekiRoller.get(k.id);
+    if (onceki !== undefined && onceki !== k.role) {
+      devirler.push({ cardId: k.id, from: onceki, to: k.role });
+    }
+  });
+  return devirler;
+}
+
+/**
+ * İki rol konumu arasında GÖVDE ÇİZGİSİ ÜZERİNDEN giden yol — SAF, DOM
+ * yok. planlamaBandYolu'nun AYNI "tepeden dolan" kuralı, ama YÖNDEN
+ * BAĞIMSIZ: planlama bandı her zaman ZİNCİR SIRASIYLA (ilk sol/tepe, son
+ * sağ) çağrılıyordu; devir ("rol değişti") kaynak/hedef ileri de geri de
+ * olabilir (ret, kartı bir ÖNCEKİ role döndürür). "a.kol !== b.kol" —
+ * ikisi de "tepe" OLMADIĞI sürece — YÖNDEN bağımsız çalışır: hangisi
+ * kaynak hangisi hedef verilirse verilsin AYNI dolanmayı üretir.
+ *
+ * Dönen DİZİ bir nokta listesi, SVG "d" dizesi DEĞİL: ucusKonumu
+ * segmentleri kendi uzunluklarıyla tartarak örnekliyor, bir dizeyi
+ * yeniden ayrıştırmaya gerek yok.
+ */
+function govdeYolu(a, b, tepe) {
+  const ayriKollarda = a.kol !== b.kol && a.kol !== "tepe" && b.kol !== "tepe";
+  return ayriKollarda ? [a, tepe, b] : [a, b];
+}
+
+/**
+ * Bir uçuşun SÜRESİ (ms) — SAF, DOM yok. DEVIR görevi "~600-900ms"
+ * aralığını veriyor, biçimi vermiyor: burada İKİLİ bir seçim var — AYNI
+ * koldaki devir (düz kayış, govdeYolu 2 nokta döner) KISA (600ms),
+ * tepeden dolanan devir (3 nokta, daha uzun mesafe) UZUN (900ms). Bu
+ * basit tutuyor VE mutasyon sınamasına açık: "yol.length > 2" ters
+ * çevrilirse kısa/uzun yer değiştirir, sınama hemen düşer.
+ */
+function ucusSuresiMs(yol) {
+  return yol.length > 2 ? 900 : 600;
+}
+
+/**
+ * Doğrusal ilerlemeyi (0..1) YUMUŞAK giriş/çıkışa çeviren eğri — SAF,
+ * DOM yok. Klasik "smoothstep" (3t²-2t³): t=0 ve t=1'de hız sıfır, t=0.5
+ * civarında en hızlı — DEVIR görevinin "yumuşak giriş/çıkış" istediği
+ * yer. Doğrusal t'nin KENDİSİ kullanılsaydı kuş sabit hızla kayardı,
+ * "yumuşak" hiçbir şey olmazdı.
+ */
+function yumusakIlerleme(t) {
+  return t * t * (3 - 2 * t);
+}
+
+/**
+ * Bir uçuş yolu üzerinde, YAY UZUNLUĞUNA göre t (0..1) ilerlemesindeki
+ * nokta — SAF, DOM yok. "t" burada DOĞRUSAL ZAMAN DEĞİL: çağıran
+ * (ucanKusKur, aşağıda) zaten yumusakIlerleme'den geçirilmiş değeri
+ * verir; bu fonksiyon yalnızca GEOMETRİYİ bilir.
+ *
+ * YAY UZUNLUĞU, SEGMENT SAYISI DEĞİL: govdeYolu tepeden dolanan yolda
+ * İKİ segment döndürür (sol-uç→tepe, tepe→sağ-uç) ve bu ikisi FARKLI
+ * uzunlukta olabilir (roller eşit aralıklı değilse, bkz. rolKonumu'nun
+ * lerp'i). "t"yi segment İNDEKSİNE göre bölmek (örn. t<0.5 ilk segment)
+ * kuşu yanlış hızda gösterirdi — SAPMALAR.md §2.7'nin uyardığı sınıf:
+ * "nitelik doğru" (iki segment de var) ama "ekranda doğru" değil (kuş
+ * bir segmentte sürünür, öbüründe fırlar). Bu iddianın GERÇEK tarayıcıda
+ * ölçülen hâli tarayici.test.ts'te; bu fonksiyon o ölçümün ALTINDAKİ
+ * saf karardır.
+ */
+function ucusKonumu(yol, t) {
+  const tt = Math.max(0, Math.min(1, t));
+  const uzunluklar = [];
+  let toplam = 0;
+  for (let i = 1; i < yol.length; i++) {
+    const dx = yol[i].x - yol[i - 1].x;
+    const dy = yol[i].y - yol[i - 1].y;
+    const uzunluk = Math.sqrt(dx * dx + dy * dy);
+    uzunluklar.push(uzunluk);
+    toplam += uzunluk;
+  }
+  if (toplam === 0) return { x: yol[0].x, y: yol[0].y };
+  let kalan = tt * toplam;
+  for (let i = 0; i < uzunluklar.length; i++) {
+    const uzunluk = uzunluklar[i];
+    if (kalan <= uzunluk || i === uzunluklar.length - 1) {
+      const oran = uzunluk === 0 ? 0 : Math.min(1, kalan / uzunluk);
+      const a = yol[i];
+      const b = yol[i + 1];
+      return { x: a.x + (b.x - a.x) * oran, y: a.y + (b.y - a.y) * oran };
+    }
+    kalan -= uzunluk;
+  }
+  const son = yol[yol.length - 1];
+  return { x: son.x, y: son.y };
+}
+
+/**
+ * Devir listesinden TAM uçuş planına — SAF, DOM yok. Üç kararı (hangi
+ * kuş, nereden nereye, ne kadar sürede) BİR ARAYA getiriyor ama HER
+ * BİRİNİN kendi küçük, bağımsız sınaması var (govdeYolu/ucusSuresiMs);
+ * bu fonksiyon yalnızca onları BAĞLIYOR.
+ *
+ * Kaynak ya da hedef rol artık topolojide YOKSA (akış değişti, rol
+ * silindi — nadir ama teorik) o devir SESSİZCE elenir: olmayan bir
+ * düğüme uçtuğunu göstermek, hiç göstermemekten daha kötü bir hata
+ * modu olurdu (bkz. planlamaKatilimciKonumlari'nin AYNI ilkesi).
+ */
+function ucusPlanlariniKur(devirler, roller) {
+  const n = roller.length;
+  const konumHaritasi = new Map(roller.map((r, i) => [r.id, rolKonumu(i, n)]));
+  const tepe = { x: FORMASYON_GOVDE[2][0], y: FORMASYON_GOVDE[2][1] };
+  const planlar = [];
+  devirler.forEach((d) => {
+    const a = konumHaritasi.get(d.from);
+    const b = konumHaritasi.get(d.to);
+    if (!a || !b) return;
+    const yol = govdeYolu(a, b, tepe);
+    planlar.push({ cardId: d.cardId, yol: yol, sure: ucusSuresiMs(yol) });
+  });
+  return planlar;
+}
+
+/**
+ * Son GERÇEK "/durum" yoklamasında görülen kart→rol haritası —
+ * kartDevirleriniBul'un "önceki" girdisi. yokla() dışında HİÇBİR
+ * yer bunu güncellemez: ciz(SON_MODEL) ile tekrar tekrar çağrılan
+ * yeniden çizimler (sekme değişimi, RAIL geçişi) AYNI veriyle çalışır,
+ * onlarda devir tespiti YENİDEN yapılmaz — yoksa AYNI devir her
+ * yeniden çizimde bir YENİ uçuş sayılırdı.
+ */
+let KART_SON_ROL = new Map();
+
+/**
+ * Şu an havada olan uçuşlar. Her biri "{cardId, yol, sure, baslangic}":
+ * baslangic performance.now() anıdır — konum DOM'dan değil GERÇEK
+ * GEÇEN ZAMANDAN türetildiği için (bkz. ucanKusKur) formasyonun HER
+ * yoklamada baştan kurulması uçuşu BAŞA SARMAZ, yalnızca doğru anın
+ * doğru noktasında yeni bir öğe doğar. Birden çok devir AYNI ANDA
+ * olursa her biri kendi girdisiyle burada durur — "hepsi ayrı ayrı
+ * uçsun, birbirini ezmesin" (DEVIR görevi) bu listenin her öğesinin
+ * BAĞIMSIZ olmasından geliyor, ortak bir "tekil uçan kuş" durumu YOK.
+ */
+let UCUSLAR = [];
+
+/**
+ * Bir uçuş için DOM overlay'i kurar — tek bir SMIL/CSS animasyonuna
+ * değil, requestAnimationFrame ile KENDİ konumunu her karede yeniden
+ * hesaplayan bir <g>'ye dayanıyor (DEVIR görevinin iki seçeneğinden
+ * ikincisi: "JS ile polyline üzerinde örnekleme"). SMIL'in begin zaman
+ * çizelgesi DOKÜMANIN YAŞINA göre çözülür; formasyon HER yoklamada
+ * baştan kurulduğu için ortada kesilip yeniden eklenen bir
+ * animateMotion'ı doğru noktadan devam ettirmek "negatif begin" gibi
+ * dokümanın yaşına bağlı bir hesap gerektirirdi. Burada konum HER KARE
+ * performance.now() - u.baslangic'ten yeniden hesaplanıyor, yani hangi
+ * <g> (eski ya da yeni) ekranda olursa olsun AYNI doğru noktayı
+ * gösterir.
+ *
+ * Döngü kendi kendini durduruyor: süre dolunca YA DA düğüm artık belgede
+ * DEĞİLSE (g.isConnected === false — bir sonraki yoklama SVG'yi baştan
+ * kurdu, bu <g> atıldı). Bu kontrol yalnızca SONRAKİ (rAF ile ERTELENMİŞ)
+ * karelerde çalışıyor — İLK çağrı formasyonSvgKur'un KENDİSİ hâlâ bu
+ * <g>'yi kuruyorken, yani svg DOM'a eklenmeden (board.replaceChildren
+ * daha koşmadan) GERÇEKLEŞİYOR. İlk çağrıda da "isConnected" kontrolü
+ * olsaydı (ÖLÇÜLDÜ: bu kartın kendi 1. turunda tam buydu) kuş HİÇBİR
+ * ZAMAN konumunu almazdı — transform hiç YAZILMAZ, kuş SVG'nin
+ * köşesinde (varsayılan konumda) donup kalırdı.
+ *
+ * Renk hep accent: uçuşun kendisi zaten "iş aktif/devrediliyor" sinyali,
+ * kusRengi'nin üç hâlini burada tekrarlamak (bu kartın rolde kaç kart
+ * daha var, hangisi aktif) uçuşun ANLAMINI değiştirmez, yalnızca
+ * karmaşıklık ekler.
+ */
+function ucanKusKur(u) {
+  const g = sv("g", { class: "ucanKus" });
+  g.dataset.kart = u.cardId;
+  const kus = sv("svg", { x: -23, y: -11.5, width: 46, height: 23, viewBox: "0 0 46 23" });
+  kus.classList.add("formasyonKus", "ucanKusGovde");
+  const kusCizgi = sv("polyline", { points: "2,5 13,9 24,19 35,9 46,5", fill: "none" });
+  kusCizgi.style.stroke = "var(--color-accent)";
+  kusCizgi.style.strokeWidth = "4";
+  kusCizgi.style.strokeLinejoin = "miter";
+  kus.append(kusCizgi);
+  g.append(kus);
+
+  let ilkKare = true;
+  const adimAt = () => {
+    if (!ilkKare && !g.isConnected) return;
+    ilkKare = false;
+    const gecenMs = performance.now() - u.baslangic;
+    const dogrusal = Math.max(0, Math.min(1, gecenMs / u.sure));
+    const nokta = ucusKonumu(u.yol, yumusakIlerleme(dogrusal));
+    g.setAttribute("transform", "translate(" + nokta.x + " " + nokta.y + ")");
+    if (gecenMs < u.sure) requestAnimationFrame(adimAt);
+  };
+  adimAt();
+  return g;
+}
+
 /**
  * Pano'nun V formasyonu. Akışlar sekmesindeki diyagramSvgKur gibi HER
  * ÇAĞRIDA baştan kuruluyor — kimlik koruma (eski kartYerlestir/
- * KART_DUGUM) burada YOK: DEVIR.md'nin V formasyonu bir "devir hareketi"
- * istemiyor, "iş sürüyor" sinyali artık kanat çırpmanın kendisi.
+ * KART_DUGUM) burada YOK.
+ *
+ * Bu, UÇUŞ overlay'ini (yukarıdaki "UÇUŞ" bölümü) İMKANSIZ KILMIYOR: bir
+ * uçuşun konumu DOM kimliğinden değil GERÇEK GEÇEN ZAMANDAN türetiliyor
+ * (bkz. ucanKusKur), yani her yeniden kuruluş (bir yoklama, bir sekme
+ * değişimi) uçuşu BAŞA SARMIYOR — yalnızca aynı anın doğru noktasında
+ * yeni bir öğe doğuyor. "İş sürüyor" sinyali hâlâ kanat çırpmanın
+ * kendisi; uçuş yalnızca DEVİR ANINI gösteriyor.
  */
 function formasyonSvgKur(m) {
   const roller = m.roles;
@@ -4059,6 +4328,14 @@ function formasyonSvgKur(m) {
     g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); secimDegistir(); } });
     svg.append(g);
   });
+
+  // UÇUŞLAR — en üstte: rol düğümlerinin bile üzerinden kaysın diye SON
+  // ekleniyor (SVG'de sonraki öğe öncekinin ÜSTÜNE çizilir). Süresi
+  // dolanlar burada BUDANIYOR: yokla() ekliyor, hiçbir yer tek tek
+  // SİLMİYOR — her çizimde elenen liste tek doğru kaynağı tutuyor.
+  const simdi = performance.now();
+  UCUSLAR = UCUSLAR.filter((u) => simdi - u.baslangic < u.sure);
+  UCUSLAR.forEach((u) => svg.append(ucanKusKur(u)));
 
   return svg;
 }

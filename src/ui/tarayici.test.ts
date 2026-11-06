@@ -69,8 +69,12 @@ type El = {
   /** Rol düğümünün "data-rol"u, kart karesinin sınıfı vb. okumak için. */
   getAttribute: (ad: string) => string | null;
   querySelector: (s: string) => El | null;
-  /** Yalnızca formasyon genişliği sınaması için. */
-  getBoundingClientRect: () => { top: number; left: number; width: number };
+  /**
+   * Formasyon genişliği sınaması `width` ister; uçuş sınamaları (düğüm
+   * MERKEZİNİ bulmak için) `height` de ister — ikisi AYNI alanın parçası,
+   * ikinci bir "ölçü" türü İCAT ETMEDEN burada genişletildi.
+   */
+  getBoundingClientRect: () => { top: number; left: number; width: number; height: number };
   /** Yalnızca akış düzenleyicisinin 'change' dinleyicisini elle tetiklemek
    * için — bkz. "Ham YAML" sınaması: 'fill' yalnızca 'input' yayıyor. */
   dispatchEvent: (e: unknown) => void;
@@ -3445,6 +3449,208 @@ roles:
         expect(hatalar).toEqual([]);
       } finally {
         await page.close();
+      }
+    }, 60_000);
+  });
+
+  /**
+   * UÇUŞ — kart devredilince kuşun V üzerinden kaynaktan hedefe kayması
+   * (kart c-20261106-d6e795, "kuşlar V üzerinde yol alsın"). `page.test.ts`
+   * yalnızca SAF fonksiyonları (govdeYolu/ucusKonumu/...) sınıyor; "ekranda
+   * GERÇEKTEN bir kuş kayıyor mu, bu düz bir çizgi mi yoksa V'nin kendisi
+   * mi" sorusu SAPMALAR.md §2.7'nin tam uyardığı sınıf — ancak gerçek
+   * tarayıcıda, ARA KAREDE ÖLÇÜLEREK cevaplanabilir.
+   *
+   * İki rollü (coder→reviewer) özel bir akış gerekiyor: dış beforeEach'in
+   * "test" akışı tek rollü, devredilecek bir İKİNCİ rol yok. `queue` ve
+   * `root` dış beforeEach'ten PAYLAŞILIYOR (yukarıdaki "seçiciden akış
+   * değiştirince" sınamasının AYNI deseni); yalnızca sunucu bu YENİ
+   * topolojiyle açılıyor.
+   */
+  describe("Uçuş — devredilen kartın V üzerinde uçması", () => {
+    const FLOW_IKI = `
+name: iki
+constitution:
+  - ../prompts/base.md
+roles:
+  - id: coder
+    provider: claude
+    workspace: main
+    prompt: ../../roles/coder.prompt
+    next: reviewer
+  - id: reviewer
+    provider: claude
+    workspace: reviewer
+    prompt: ../../roles/coder.prompt
+    next: done
+`;
+
+    /** İki rollü akışı yazar, topolojisini çıkarır ve ONUNLA bir sunucu açar. */
+    async function ikiRoluSunucuAc(): Promise<{ s: UiServer; topologyIki: TopologySnapshot }> {
+      await writeFile(join(root, "hub", "flows", "iki.yaml"), FLOW_IKI);
+      const flowIki = await loadFlow(join(root, "hub", "flows", "iki.yaml"), {
+        root, providers: knownProviderSet(),
+      });
+      const topologyIki = snapshot(flowIki, root);
+      const s = await serveUi({
+        root, queue, topology: topologyIki, flowName: flowIki.name, flowHash: flowIki.hash,
+      });
+      return { s, topologyIki };
+    }
+
+    /**
+     * Bir düğümün EKRANDAKİ merkezi (getBoundingClientRect'ten). Seçici
+     * BİLEREK satır içinde (ikisi de bu describe'ın sabit rolleri,
+     * "coder"/"reviewer") — bu dosyadaki `Sayfa.evaluate` türü tek
+     * argümanlı, bir parametre geçirmeyi desteklemiyor (bkz. yukarıdaki
+     * `El`/`Sayfa` bildirimleri); o türü BURADA genişletmek bu kartın
+     * kapsamı dışında bir altyapı değişikliği olurdu.
+     */
+    async function dugumMerkeziCoder(page: Sayfa): Promise<{ x: number; y: number }> {
+      return page.evaluate(() => {
+        const r = document.querySelector('.formasyonDugum[data-rol="coder"]')!.getBoundingClientRect();
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      });
+    }
+    async function dugumMerkeziReviewer(page: Sayfa): Promise<{ x: number; y: number }> {
+      return page.evaluate(() => {
+        const r = document.querySelector('.formasyonDugum[data-rol="reviewer"]')!.getBoundingClientRect();
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      });
+    }
+
+    it("ara karede kuş kaynak İLE hedef ARASINDA durur, GERÇEKTEN V'nin üzerinden (düz çizgi DEĞİL)", async () => {
+      const { s, topologyIki } = await ikiRoluSunucuAc();
+      const card = newCard({ title: "devir-ucusu", task: "iş", topology: topologyIki });
+      await queue.add(card);
+      const taken = await al(queue, "coder");
+
+      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const hatalar: string[] = [];
+      page.on("pageerror", (e) => hatalar.push(String(e)));
+      try {
+        await page.goto(s.url, { waitUntil: "networkidle" });
+        await page.waitForSelector('.formasyonDugum[data-rol="coder"] .kare-calisiyor', { timeout: 15_000 });
+
+        const coderMerkez = await dugumMerkeziCoder(page);
+        const reviewerMerkez = await dugumMerkeziReviewer(page);
+
+        // DEVİR — kart artık "coder" DEĞİL, "reviewer" rolünde.
+        await queue.handoff(taken, {});
+
+        await page.waitForSelector(".ucanKus", { timeout: 5_000 });
+        // Uçuş ~900ms (coder/reviewer FARKLI kollarda, tepeden dolanıyor —
+        // bkz. govdeYolu/ucusSuresiMs). 400ms, başa ya da sona YAPIŞMAYAN
+        // güvenli bir ARA KARE.
+        await page.waitForTimeout(400);
+        const araKonum = await page.evaluate(() => {
+          const el = document.querySelector(".ucanKus svg.formasyonKus");
+          if (!el) return null;
+          const r = el.getBoundingClientRect();
+          return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width };
+        });
+        expect(araKonum).not.toBeNull();
+
+        // SAPMALAR.md §2.7'nin asıl iddiası: KONUM ölçülüyor, nitelik/
+        // sınıf değil. x KAYNAK İLE HEDEF ARASINDA, İKİSİNE DE eşit DEĞİL.
+        const solX = Math.min(coderMerkez.x, reviewerMerkez.x);
+        const sagX = Math.max(coderMerkez.x, reviewerMerkez.x);
+        expect(araKonum!.x).toBeGreaterThan(solX + 5);
+        expect(araKonum!.x).toBeLessThan(sagX - 5);
+
+        // DÜZ ÇİZGİ DEĞİL: coder ve reviewer AYNI satırda (ekranda aynı Y),
+        // düz bir çizgi ara karede de O satırda kalırdı. Gerçek yol
+        // tepeden (daha AŞAĞIDA, SVG'de y=480) dolandığı için ara karenin
+        // Y'si ikisininkinden GÖZLE GÖRÜLÜR ölçüde BÜYÜK (ekranda AŞAĞIDA)
+        // olmalı.
+        expect(Math.abs(coderMerkez.y - reviewerMerkez.y)).toBeLessThan(15);
+        expect(araKonum!.y).toBeGreaterThan(coderMerkez.y + 20);
+        expect(araKonum!.y).toBeGreaterThan(reviewerMerkez.y + 20);
+
+        // SAPMALAR.md §2.7'nin ikinci dersi (21 kat büyüme kusuru): bu YENİ
+        // öğe de kendi nominal (46x23) ölçüsünde kalmalı, diyagramı
+        // kaplamamalı.
+        expect(araKonum!.w).toBeLessThan(120);
+        expect(araKonum!.w).toBeGreaterThan(10);
+
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+        await s.close();
+      }
+    }, 60_000);
+
+    it("hareket bitince kuş hedefte KALIR ve normal koşulla kanat çırpmaya başlar", async () => {
+      await acquireLock(join(root, ".skein", "daemon.json"), {
+        pid: process.pid, startedAt: new Date().toISOString(), flow: "iki", hash: "abc", mode: "serve",
+      });
+      const { s, topologyIki } = await ikiRoluSunucuAc();
+      const card = newCard({ title: "devir-inis", task: "iş", topology: topologyIki });
+      await queue.add(card);
+      const taken = await al(queue, "coder");
+
+      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const hatalar: string[] = [];
+      page.on("pageerror", (e) => hatalar.push(String(e)));
+      try {
+        await page.goto(s.url, { waitUntil: "networkidle" });
+        await page.waitForSelector('.formasyonDugum[data-rol="coder"] .kare-calisiyor', { timeout: 15_000 });
+
+        await queue.handoff(taken, {});
+        await al(queue, "reviewer"); // reviewer'ı da ALMADAN "active" olmaz, kanat çırpma koşulu bunu ister.
+
+        // Uçuş biter (900ms) VE bir sonraki yoklama ÇOKTAN geçmiştir —
+        // hedefte artık NORMAL (statik) düğüm kuşu kanat çırpıyor olmalı,
+        // AYNI kanatCirpiyorMu koşuluyla (DEVIR görevinin istediği gibi).
+        await page.waitForSelector(".formasyonDugum[data-rol=\"reviewer\"] .formasyonKus.kanatCirpiyor", {
+          timeout: 15_000,
+        });
+        // UÇUŞ overlay'i artık YOK — kalıcı bir "hayalet kuş" bırakmıyor.
+        await page.waitForTimeout(1_200);
+        const ucanKusSayisi = await page.evaluate(() => document.querySelectorAll(".ucanKus").length);
+        expect(ucanKusSayisi).toBe(0);
+
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+        await s.close();
+      }
+    }, 60_000);
+
+    /**
+     * SAPMALAR.md §2.2 — prefers-reduced-motion'da UÇUŞ OLMAZ, kuş hedefte
+     * ANINDA belirir. Kanat çırpmanın AYNI korumasının (acHareket("reduce"))
+     * bu YENİ harekete de uygulandığının sınaması.
+     */
+    it("prefers-reduced-motion'da UÇUŞ overlay'i HİÇ kurulmaz", async () => {
+      const { s, topologyIki } = await ikiRoluSunucuAc();
+      const card = newCard({ title: "devir-azalt", task: "iş", topology: topologyIki });
+      await queue.add(card);
+      const taken = await al(queue, "coder");
+
+      const page = await (browser as Tarayici).newPage({
+        viewport: { width: 1280, height: 900 }, reducedMotion: "reduce",
+      });
+      const hatalar: string[] = [];
+      page.on("pageerror", (e) => hatalar.push(String(e)));
+      try {
+        await page.goto(s.url, { waitUntil: "networkidle" });
+        await page.waitForSelector('.formasyonDugum[data-rol="coder"] .kare-calisiyor', { timeout: 15_000 });
+
+        await queue.handoff(taken, {});
+        await al(queue, "reviewer");
+        // Devrin POLL'a yakalanıp ekranın hedefte GERÇEKTEN belirdiğini
+        // bekliyoruz — bu an geçtiyse, bir uçuş OLACAKSA çoktan olmuş
+        // olurdu (reduced-motion dalı uçuşu hiç KURMUYOR, zamanlamaya
+        // bağlı bir yarış DEĞİL).
+        await page.waitForSelector('.formasyonDugum[data-rol="reviewer"] .kare-calisiyor', { timeout: 15_000 });
+
+        const ucanKusSayisi = await page.evaluate(() => document.querySelectorAll(".ucanKus").length);
+        expect(ucanKusSayisi).toBe(0);
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+        await s.close();
       }
     }, 60_000);
   });
