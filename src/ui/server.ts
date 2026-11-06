@@ -207,6 +207,73 @@ function rolPromptSablonu(id: string): string {
 }
 
 /**
+ * Bir akışın ÖZETİ — Akışlar sekmesinin kart ızgarası için (DEVIR.md §4,
+ * kart c-20261105-d36e37: her kartta açıklama, rol sayısı ve "planner →
+ * … → bitti" zinciri).
+ *
+ * SALT OKUNUR ve yazma yetkisinden BAĞIMSIZ: ekran salt okunur açılmış
+ * olsa bile (ne `flowPath` ne `loadOptions` verilmiş) liste yine akışların
+ * GERÇEK dosyalarından türüyor — görüntülemek düzenlemekten ayrı bir
+ * yetki, `diyagramSvgKur`/`akisAc`'ın editable ayrımıyla AYNI ilke. Bu
+ * yüzden `loadOptions` yoksa burada kendi (aynı türde) varsayılanı
+ * kuruluyor, `/kart/.../kapat`ın `closeOrphan` çağrısındaki desenin aynısı.
+ *
+ * Akış BOZUKSA (geçersiz YAML, kural ihlali) PATLAMIYOR — `hata` alanıyla
+ * dönüyor: bir akışın bozulması listenin GERİ KALANINI göstermeyi
+ * engellememeli, `m.bozuk`/`m.engeller`in "izole et ama SAKLAMA" ilkesinin
+ * aynısı burada da geçerli.
+ */
+async function akisOzetiYukle(
+  root: string, ad: string, loadOptions: LoadOptions | undefined,
+): Promise<{ ad: string; draft: FlowDraft | null; hata?: string }> {
+  const secenekler = loadOptions ?? { root, providers: knownProviderSet() };
+  try {
+    const flow = await loadFlow(join(root, "hub", "flows", `${ad}.yaml`), secenekler);
+    return { ad, draft: fromFlow(flow) };
+  } catch (error) {
+    return { ad, draft: null, hata: (error as Error).message };
+  }
+}
+
+/**
+ * `POST /akis/onizleme` ve `POST /akis/yaz`ın YAZDIĞI/DOĞRULADIĞI yol.
+ *
+ * `yeniAd` YOKSA davranış ESKİSİYLE AYNEN: ekranın O AN baktığı akışın
+ * yolu (`aktifYol`) — bu dal mevcut hiçbir sınamayı DEĞİŞTİRMEZ.
+ *
+ * `yeniAd` VARSA — DEVIR.md §4'ün "Yeni akış" iletişim kutusu ve kart
+ * ızgarasındaki "Kopyala" düğmesinin ihtiyacı: YENİ bir dosyaya yazmak.
+ * Bu, ARCHITECTURE.md'nin "yazma tek yoldan" kısıtını (bkz. bu dosyadaki
+ * "diyagramdan rol çıkarma" describe'ının yorumu) ikinci bir uç AÇARAK
+ * değil, AYNI /akis/yaz + /akis/onizleme çiftini genişleterek koruyor —
+ * DEVIR.md'nin kendi notu da bu üçünü "zaten var" sayıyor.
+ *
+ * Güvenlik ÜYELİKLE: `yeniAd` önce karakter kümesine (DEVIR.md §3: yalnız
+ * `a-z0-9-`, akış düzenleyicideki rol adı kısıtının AYNISI), sonra
+ * BENZERSİZLİĞE (akış seçiminin listesinde AYNEN yok mu) karşı
+ * doğrulanıyor — `/akis/sec`in "ad listede var mı" kuralının simetriği:
+ * orada "varsa kabul", burada "varsa reddet" (benzersizlik), ikisi de
+ * dizgi temizlemiyor, üyelikle karar veriyor.
+ */
+async function hedefAkisYolu(
+  yeniAd: string | undefined, aktifYol: string, options: ServeUiOptions,
+): Promise<string> {
+  if (yeniAd === undefined) return aktifYol;
+  if (!/^[a-z0-9-]+$/.test(yeniAd)) {
+    throw new Error("Akış adı yalnızca a-z0-9- içerebilir.");
+  }
+  const ayar = options.akisSecimi;
+  if (ayar === undefined) {
+    throw new Error("Bu ekran yeni akış oluşturmaya açık değil.");
+  }
+  const mevcutAdlar = await ayar.listele();
+  if (mevcutAdlar.includes(yeniAd)) {
+    throw new Error(`Bu ad zaten kullanılıyor: ${yeniAd}`);
+  }
+  return join(options.root, "hub", "flows", `${yeniAd}.yaml`);
+}
+
+/**
  * `abs` yolunu `flowDir`e göre göreli, POSIX ayracıyla yazar.
  *
  * `flow/draft.ts`'teki `fromFlow`'un özel (dışa açılmamış) `goreli`
@@ -679,23 +746,39 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
       const yaz = path === "/akis/yaz";
       readBody(req)
         .then(async (body) => {
-          const draft = JSON.parse(body === "" ? "{}" : body) as FlowDraft;
+          // `yeniAd`: DEVIR.md §4'ün "Yeni akış" iletişim kutusu ve
+          // "Kopyala" düğmesi — FlowDraft'ın MODELLEDİĞİ bir alan değil
+          // (bkz. draftAlanlari, flow/draft.ts), yalnızca BU isteğin hedef
+          // dosyasını seçiyor. `govde`nin tipi `FlowDraft`in bir ÜST KÜMESİ
+          // (yeniAd ek alanıyla), yani checkDraft/writeDraft'a AYRI bir
+          // `as FlowDraft` dökümü GEREKMEDEN geçebiliyor (intersection zaten
+          // uyumlu) — fazladan `yeniAd` anahtarı orada görmezden gelinir
+          // (draftAlanlari kendi beyaz listesini okur, zararsız).
+          const govde = JSON.parse(body === "" ? "{}" : body) as FlowDraft & { yeniAd?: unknown };
+          const yeniAd = typeof govde.yeniAd === "string" ? govde.yeniAd : undefined;
+          const hedefYol = await hedefAkisYolu(yeniAd, flowPath, options);
           // Önizleme YAZMAZ: ekranda denenen her taslak diske düşseydi gözcü
-          // yarım taslakları okurdu.
+          // yarım taslakları okurdu. `yeniAd`'lı önizleme de aynı kuralı
+          // taşıyor — benzersizlik/karakter kümesi hatası burada da ERKEN
+          // yakalanır, ama dosyaya hiçbir koşulda dokunulmaz.
           if (!yaz) {
-            const sonuc = await checkDraft(flowPath, draft, loadOptions);
+            const sonuc = await checkDraft(hedefYol, govde, loadOptions);
             res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
             res.end(JSON.stringify(sonuc));
             return;
           }
-          const sonuc = await writeDraft(flowPath, draft, loadOptions);
+          const sonuc = await writeDraft(hedefYol, govde, loadOptions);
           if (!sonuc.ok) {
             res.writeHead(409, { "content-type": "application/json; charset=utf-8" });
             res.end(JSON.stringify({ hata: sonuc.message }));
             return;
           }
           // Yazdıktan sonra model YENİDEN kuruluyor: yeni topoloji zaten
-          // `live.refresh()` ile okunacak, ekran onu çizsin.
+          // `live.refresh()` ile okunacak, ekran onu çizsin. `yeniAd`'lı bir
+          // yazmada bu BİLEREK hâlâ ESKİ aktif akışın modeli: akış seçimi
+          // AYRI ve AÇIK bir eylem (`/akis/sec`), bir dosya yazmak kendi
+          // başına "şuna geç" demez — istemci yeni akışı açmak istiyorsa
+          // bunu ayrıca ister.
           const model = await buildModel(await guncel());
           res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
           res.end(JSON.stringify({ ...sonuc, model }));
@@ -1021,19 +1104,30 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
       // seçiciyi bu uca bakarak ÇİZEBİLMELİ, uç yoksa seçici hiç çıkmaz.
       const ayar = options.akisSecimi;
       const listele = ayar === undefined ? Promise.resolve<string[]>([]) : ayar.listele();
-      Promise.all([listele, guncel()]).then(
-        ([akislar, o]) => {
-          res.writeHead(200, {
-            "content-type": "application/json; charset=utf-8",
-            "cache-control": "no-store",
-          });
-          res.end(JSON.stringify({ akislar, aktif: o.flowName }));
-        },
-        (error: unknown) => {
-          res.writeHead(500, { "content-type": "application/json; charset=utf-8" });
-          res.end(JSON.stringify({ hata: (error as Error).message }));
-        },
-      );
+      Promise.all([listele, guncel()])
+        .then(async ([akislar, o]) => {
+          // `ozet`: Akışlar sekmesinin kart ızgarası (DEVIR.md §4) için —
+          // bkz. `akisOzetiYukle` yorumu. `akislar` BOŞSA (uç verilmemiş)
+          // `Promise.all([])` anında çözülür, tek bir fazladan dosya
+          // okuması olmaz.
+          const ozet = await Promise.all(
+            akislar.map((ad) => akisOzetiYukle(options.root, ad, options.loadOptions)),
+          );
+          return { akislar, aktif: o.flowName, ozet };
+        })
+        .then(
+          (payload) => {
+            res.writeHead(200, {
+              "content-type": "application/json; charset=utf-8",
+              "cache-control": "no-store",
+            });
+            res.end(JSON.stringify(payload));
+          },
+          (error: unknown) => {
+            res.writeHead(500, { "content-type": "application/json; charset=utf-8" });
+            res.end(JSON.stringify({ hata: (error as Error).message }));
+          },
+        );
       return;
     }
 

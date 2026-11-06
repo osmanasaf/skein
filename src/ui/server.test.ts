@@ -1042,6 +1042,73 @@ roles:
     }
   });
 
+  /**
+   * ÖZET — Akışlar sekmesinin kart ızgarası (DEVIR.md §4): her akışın
+   * kendi ROL ZİNCİRİ (`draft.roles`, zincir sırasında — `fromFlow` zaten
+   * `flow.roles`'tan türüyor, bu testin ikinci bir ayrıştırıcı yazmasına
+   * gerek yok) ekranın O AN baktığı akıştan BAĞIMSIZ okunabilmeli — aktif
+   * akış "test" olsa bile "ikinci"nin de rolleri burada.
+   */
+  it("GET /akislar her akış için rol zincirini özetliyor", async () => {
+    const s = await akisSecerSunucu();
+    try {
+      const v = (await (await fetch(`${s.url}akislar`)).json()) as {
+        ozet: { ad: string; draft: { roles: { id: string }[] } | null; hata?: string }[];
+      };
+      const test = v.ozet.find((o) => o.ad === "test");
+      const ikinci = v.ozet.find((o) => o.ad === "ikinci");
+      expect(test?.draft?.roles.map((r) => r.id)).toEqual(["coder"]);
+      expect(ikinci?.draft?.roles.map((r) => r.id)).toEqual(["analiz"]);
+      expect(test?.hata).toBeUndefined();
+    } finally {
+      await s.close();
+    }
+  });
+
+  // Bir akışın bozulması listenin GERİ KALANINI göstermeyi engellememeli —
+  // `m.bozuk`/`m.engeller`in "izole et ama SAKLAMA" ilkesinin aynısı.
+  it("GET /akislar bozuk bir akışı 'hata' ile taşır, diğerlerini göstermeyi sürdürür", async () => {
+    await writeFile(join(root, "hub", "flows", "ikinci.yaml"), FLOW2);
+    await writeFile(join(root, "hub", "flows", "bozuk.yaml"), `
+name: bozuk
+constitution:
+  - ../prompts/base.md
+roles:
+  - id: coder
+    provider: claude
+    workspace: main
+    prompt: ../../roles/coder.prompt
+    next: coder
+`);
+    const live = await LiveFlow.open(join(root, "hub", "flows", "test.yaml"), {
+      root, providers: knownProviderSet(),
+    });
+    const s = await serveUi({
+      root, queue, topology, flowName: "test", flowHash: gercekFlow.hash, live,
+      akisSecimi: {
+        listele: async () => ["test", "ikinci", "bozuk"],
+        ac: async (ad) => {
+          const l = await LiveFlow.open(join(root, "hub", "flows", `${ad}.yaml`), {
+            root, providers: knownProviderSet(),
+          });
+          return { live: l, flowPath: l.flow.path };
+        },
+      },
+    });
+    try {
+      const v = (await (await fetch(`${s.url}akislar`)).json()) as {
+        ozet: { ad: string; draft: unknown; hata?: string }[];
+      };
+      const bozukOzet = v.ozet.find((o) => o.ad === "bozuk");
+      const digerleri = v.ozet.filter((o) => o.ad !== "bozuk");
+      expect(bozukOzet?.draft).toBeNull();
+      expect(bozukOzet?.hata).toContain("kural");
+      expect(digerleri.every((o) => o.draft !== null)).toBe(true);
+    } finally {
+      await s.close();
+    }
+  });
+
   // OKUMA UCU: `akisSecimi` verilmemiş bir ekranda 404 değil boş liste —
   // ekran seçiciyi bu uca bakarak çizebilmeli.
   it("akisSecimi verilmemişse GET /akislar boş liste döner (404 değil)", async () => {
@@ -1262,6 +1329,136 @@ roles:
     } finally {
       await s.close();
     }
+  });
+});
+
+/**
+ * YENİ AKIŞ OLUŞTURMA — `/akis/yaz` ve `/akis/onizleme`nin `yeniAd` alanı.
+ *
+ * DEVIR.md §4'ün "Yeni akış" iletişim kutusu ve "Kopyala" düğmesi YENİ bir
+ * dosya yazmak istiyor, ama SAPMALAR.md §3 bu ikisini de "zaten var olan
+ * uçlar" tablosunda sayıyor. Çözüm İKİNCİ bir yazma ucu AÇMIYOR — AYNI
+ * /akis/yaz + /akis/onizleme çiftini, hedef dosyayı seçen isteğe bağlı bir
+ * `yeniAd` alanıyla genişletiyor (bkz. `hedefAkisYolu`, server.ts). Bu
+ * describe hiçbir eski sınamayı bozmadan (üsttekiler hâlâ yeşil) üç şeyi
+ * kanıtlıyor: ESKİ davranış `yeniAd` yokken AYNEN duruyor, YENİ dosya
+ * gerçekten yazılıyor ve aktif akışı DEĞİŞTİRMİYOR, ve güvenlik (karakter
+ * kümesi + benzersizlik) dizgi temizlemeden, üyelikle çalışıyor.
+ */
+describe("serveUi — yeni akış oluşturma (yeniAd)", () => {
+  let s: UiServer;
+  const opts = () => ({ root, providers: knownProviderSet() });
+
+  beforeEach(async () => {
+    s = await serveUi({
+      root, queue, topology, flowName: "test", flowHash: gercekFlow.hash,
+      live: { topology, flow: gercekFlow, error: null, refresh: async () => {} },
+      flowPath: gercekFlow.path,
+      loadOptions: opts(),
+      providerIds: ["claude"],
+      akisSecimi: {
+        listele: async () => ["test"],
+        ac: async () => { throw new Error("ac() bu describe'da ÇAĞRILMAMALI"); },
+      },
+    });
+  });
+  afterEach(async () => {
+    await s.close();
+  });
+
+  const gonder = (yol: string, govde: unknown) =>
+    fetch(`${s.url}${yol}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-skein-token": s.token },
+      body: JSON.stringify(govde),
+    });
+
+  const yeniDraft = (ad: string): FlowDraft => ({
+    name: ad,
+    constitution: ["../prompts/base.md"],
+    roles: [{
+      id: "coder", provider: "claude", workspace: "main",
+      prompt: "../../roles/coder.prompt", next: "done",
+    }],
+    reject: { limit: 2, onExhausted: "gate" },
+    audit: { enabled: true, fingerprint: ["task"] },
+  });
+
+  it("geçerli yeniAd ile YENİ dosyayı yazar, aktif akışa DOKUNMAZ", async () => {
+    const res = await gonder("akis/yaz", { ...yeniDraft("kopya"), yeniAd: "kopya" });
+    expect(res.status).toBe(200);
+
+    const yeniYol = join(root, "hub", "flows", "kopya.yaml");
+    expect(await readFile(yeniYol, "utf8")).toContain("id: coder");
+    // Aktif akış (test.yaml) AYNEN duruyor — yazma BAŞKA bir dosyaya gitti.
+    const eskiIcerik = await readFile(gercekFlow.path, "utf8");
+    expect(eskiIcerik).not.toContain("kopya");
+    const v = (await res.json()) as { model: { flow: { name: string } } };
+    expect(v.model.flow.name).toBe("test");
+  });
+
+  // Önizleme hiçbir koşulda dosyaya dokunmaz — `yeniAd`'lı dal da aynı
+  // kuralı taşıyor.
+  it("geçerli yeniAd ile önizleme hiçbir dosyaya YAZMAZ", async () => {
+    const res = await gonder("akis/onizleme", { ...yeniDraft("kopya"), yeniAd: "kopya" });
+    const v = (await res.json()) as { ok: boolean; yaml: string };
+    expect(v.ok).toBe(true);
+    const yeniYol = join(root, "hub", "flows", "kopya.yaml");
+    await expect(readFile(yeniYol, "utf8")).rejects.toThrow();
+  });
+
+  it("zaten var olan bir ad reddedilir, hiçbir dosya değişmez", async () => {
+    const once = await readFile(gercekFlow.path, "utf8");
+    const res = await gonder("akis/yaz", { ...yeniDraft("test"), yeniAd: "test" });
+    const v = (await res.json()) as { hata: string };
+    expect(res.status).toBe(400);
+    expect(v.hata).toContain("zaten kullanılıyor");
+    expect(await readFile(gercekFlow.path, "utf8")).toBe(once);
+  });
+
+  // Karakter kümesi DİZGİ TEMİZLEYEREK değil REDDEDİLEREK uygulanıyor —
+  // `duzenleAdSanitize` (page.ts) ekranda zaten temizliyor, sunucu burada
+  // ikinci bir savunma hattı.
+  it("geçersiz karakter içeren yeniAd reddedilir", async () => {
+    const res = await gonder("akis/yaz", { ...yeniDraft("Kopya Adı"), yeniAd: "Kopya Adı" });
+    const v = (await res.json()) as { hata: string };
+    expect(res.status).toBe(400);
+    expect(v.hata).toContain("a-z0-9-");
+    const yeniYol = join(root, "hub", "flows", "Kopya Adı.yaml");
+    await expect(readFile(yeniYol, "utf8")).rejects.toThrow();
+  });
+
+  it("akisSecimi verilmemişse yeniAd 404 değil 400 ile reddedilir, hiçbir dosya yazılmaz", async () => {
+    const saltAkisSecimsiz = await serveUi({
+      root, queue, topology, flowName: "test", flowHash: gercekFlow.hash,
+      live: { topology, flow: gercekFlow, error: null, refresh: async () => {} },
+      flowPath: gercekFlow.path,
+      loadOptions: opts(),
+    });
+    try {
+      const res = await fetch(`${saltAkisSecimsiz.url}akis/yaz`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-skein-token": saltAkisSecimsiz.token },
+        body: JSON.stringify({ ...yeniDraft("kopya"), yeniAd: "kopya" }),
+      });
+      expect(res.status).toBe(400);
+      const yeniYol = join(root, "hub", "flows", "kopya.yaml");
+      await expect(readFile(yeniYol, "utf8")).rejects.toThrow();
+    } finally {
+      await saltAkisSecimsiz.close();
+    }
+  });
+
+  // `yeniAd` YOKKEN davranış ESKİSİYLE AYNEN — bu describe'ın eklediği
+  // dal hiçbir eski isteği etkilememeli.
+  it("yeniAd verilmezse davranış AYNEN eski: aktif akışın dosyasına yazar", async () => {
+    const veri = ((await (await fetch(`${s.url}akis`)).json()) as {
+      draft: { description?: string };
+    }).draft;
+    veri.description = "yeniAd olmadan";
+    const res = await gonder("akis/yaz", veri);
+    expect(res.status).toBe(200);
+    expect(await readFile(gercekFlow.path, "utf8")).toContain("yeniAd olmadan");
   });
 });
 

@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
 import { createRequire } from "node:module";
 import { writeFileSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { knownProviderSet } from "../adapters/factory.js";
@@ -86,10 +86,16 @@ declare const document: {
   /** Yalnızca bildirim ve "Rol kaybolursa" sınamaları için. */
   getElementById: (id: string) => El | null;
   body: unknown;
+  /** Yalnızca "Akışlar sekmesi" describe'ındaki Escape sınaması için. */
+  dispatchEvent: (e: unknown) => void;
 };
 /** Yalnızca 'change' olayını elle kurup yaymak için — bkz. yukarıdaki not. */
 declare class Event {
   constructor(type: string, init?: { bubbles?: boolean });
+}
+/** Yalnızca Escape tuşunu ELLE kurup yaymak için — bkz. "Akışlar sekmesi" describe'ındaki Escape sınaması. */
+declare class KeyboardEvent extends Event {
+  constructor(type: string, init?: { key?: string; bubbles?: boolean });
 }
 /**
  * Zemin rengi, kuş işaretinin GERÇEK rengi (currentColor'ın çözüldüğü
@@ -2540,6 +2546,188 @@ roles:
         expect(vurgulanan).toBe("guard");
         // Panel KAPANMADI — hâlâ üç blok duruyor.
         expect(await page.evaluate(() => document.querySelectorAll(".duzenleRol").length)).toBe(3);
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+        await s.close();
+      }
+    }, 60_000);
+  });
+
+  /**
+   * AKIŞLAR SEKMESİ — DEVIR.md §4, kart c-20261105-d36e37.
+   *
+   * page.test.ts yalnızca SAF karar fonksiyonlarını (akisOzetBul,
+   * akisZinciriMetni, akisKartSinifi, akisAdiGecerliMi,
+   * yeniAkisGecerliMi) kaynaktan çıkarıp sınıyor; kart ızgarasının
+   * GERÇEKTEN birden çok akışı DOM'a çizdiği, "Panoda aç"ın GERÇEKTEN
+   * akış değiştirdiği ve "Yeni akış" kutusunun GERÇEKTEN yeni bir dosya
+   * yazıp onu rol düzenleyicisinde açtığı yalnızca burada görünür.
+   */
+  describe("Akışlar sekmesi", () => {
+    const ikinciFlowYaml = `
+name: ikinci
+description: ikinci akış
+constitution:
+  - ../prompts/base.md
+roles:
+  - id: analiz
+    provider: claude
+    workspace: main
+    prompt: ../../roles/coder.prompt
+    next: done
+`;
+
+    /** Akış seçimine VE düzenlemeye açık bir ekran — "ikinci" adlı ikinci akışla. */
+    async function akislarSunucusuAc() {
+      await writeFile(join(root, "hub", "flows", "ikinci.yaml"), ikinciFlowYaml);
+      const live = await LiveFlow.open(join(root, "hub", "flows", "test.yaml"), {
+        root, providers: knownProviderSet(),
+      });
+      return serveUi({
+        root, queue, topology, flowName: "test", flowHash: live.flow.hash, live,
+        flowPath: live.flow.path,
+        loadOptions: { root, providers: knownProviderSet() },
+        providerIds: knownProviderSet().ids(),
+        akisSecimi: {
+          // GERÇEK dizini okuyor (production'daki listFlowNames'in AYNISI)
+          // — sabit bir dizi, "Yeni akış" kutusunun yazdığı dosyayı asla
+          // GÖRMEZDİ ve /akis/sec "Bilinmeyen akış" diye reddederdi.
+          listele: async () => {
+            const girdiler = await readdir(join(root, "hub", "flows"));
+            return girdiler.filter((e) => e.endsWith(".yaml")).map((e) => e.slice(0, -".yaml".length)).sort();
+          },
+          ac: async (ad) => {
+            const l = await LiveFlow.open(join(root, "hub", "flows", `${ad}.yaml`), {
+              root, providers: knownProviderSet(),
+            });
+            return { live: l, flowPath: l.flow.path };
+          },
+        },
+      });
+    }
+
+    it("kart ızgarası her akışı gösterir: panoda etiketi, rol sayısı ve zincir gerçek veriden", async () => {
+      const s = await akislarSunucusuAc();
+      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const hatalar: string[] = [];
+      page.on("pageerror", (e) => hatalar.push(String(e)));
+      try {
+        await page.goto(s.url, { waitUntil: "networkidle" });
+        await page.click('.navSekme:has-text("Akışlar")');
+        await page.waitForSelector(".akisKart", { timeout: 10_000 });
+
+        const kartlar = await page.evaluate(() =>
+          Array.from(document.querySelectorAll(".akisKart")).map((k) => ({
+            ad: k.getAttribute("data-akis"),
+            panoda: k.classList.contains("akisKart-panoda"),
+            metin: k.textContent,
+          })));
+        const test = kartlar.find((k) => k.ad === "test");
+        const ikinci = kartlar.find((k) => k.ad === "ikinci");
+        expect(test?.panoda).toBe(true);
+        expect(ikinci?.panoda).toBe(false);
+        expect(test?.metin).toContain("coder");
+        expect(test?.metin).toContain("bitti");
+        expect(ikinci?.metin).toContain("analiz");
+        expect(ikinci?.metin).toContain("ikinci akış");
+        // Her kartın mini formasyonu gerçekten çizildi (iki akış, iki SVG).
+        expect(await page.evaluate(() => document.querySelectorAll(".akisKartFormasyon").length)).toBe(2);
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+        await s.close();
+      }
+    }, 60_000);
+
+    it("'Panoda aç' başka bir akışın kartından panoyu o akışa geçirir", async () => {
+      const s = await akislarSunucusuAc();
+      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const hatalar: string[] = [];
+      page.on("pageerror", (e) => hatalar.push(String(e)));
+      try {
+        await page.goto(s.url, { waitUntil: "networkidle" });
+        await page.click('.navSekme:has-text("Akışlar")');
+        await page.waitForSelector(".akisKart", { timeout: 10_000 });
+
+        await page.click('.akisKart[data-akis="ikinci"] button:has-text("Panoda aç")');
+        await page.waitForSelector('.formasyonDugum[data-rol="analiz"]', { timeout: 10_000 });
+        // "Panoda aç" PANO'ya GEÇMELİ — Akışlar sekmesinde kalıp arkada
+        // akış DEĞİŞTİRMEMELİ, yoksa operatör hangi akışa baktığını
+        // GÖREMEZ.
+        expect(await page.evaluate(() =>
+          document.querySelector(".navSekme-aktif")?.textContent ?? "")).toContain("Pano");
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+        await s.close();
+      }
+    }, 60_000);
+
+    it("'Yeni akış' kutusu şablondan YENİ bir dosya yazar ve onu rol düzenleyicisinde, PANO'DA açar", async () => {
+      const s = await akislarSunucusuAc();
+      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const hatalar: string[] = [];
+      page.on("pageerror", (e) => hatalar.push(String(e)));
+      try {
+        await page.goto(s.url, { waitUntil: "networkidle" });
+        await page.click('.navSekme:has-text("Akışlar")');
+        await page.waitForSelector(".akisKart", { timeout: 10_000 });
+
+        await page.click('button:has-text("Yeni akış")');
+        await page.waitForSelector(".dialog", { timeout: 10_000 });
+        // Modernist ".railBtn.primary" GERÇEKTEN uygulanıyor mu — düğme
+        // satırı ".exits" (ESKİ sistem) içinde dursaydı ".exits
+        // button.primary" (daha yüksek özgüllük) bunu ESKİ "gate" rengine
+        // EZERDİ; ölçüldü (bu sınama önce TAM BU KUSURLA kırmızıydı).
+        const olusturZemin = await page.evaluate(() =>
+          getComputedStyle(document.querySelector(".dialog .railBtn.primary")).backgroundColor);
+        expect(olusturZemin).toBe("rgb(174, 24, 0)"); // --color-accent-700
+        await page.fill(".dialog input", "ucuncu");
+        await page.selectOption(".dialog select", "test");
+        await page.click('button:has-text("Oluştur ve düzenle")');
+
+        // Editör PANO'da açılıyor — Akışlar sekmesinin kendi görünmez
+        // alt ağacında kalsaydı operatör hiçbir şey GÖRMEZDİ.
+        await page.waitForSelector(".duzenleRol", { timeout: 10_000 });
+        expect(await page.evaluate(() =>
+          document.querySelector(".navSekme-aktif")?.textContent ?? "")).toContain("Pano");
+        const akisMono = await page.evaluate(() =>
+          document.querySelector("#panoArac .mono")?.textContent ?? "");
+        expect(akisMono).toContain("ucuncu");
+
+        const yeniYol = join(root, "hub", "flows", "ucuncu.yaml");
+        expect(await readFile(yeniYol, "utf8")).toContain("id: coder");
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+        await s.close();
+      }
+    }, 60_000);
+
+    // kapat()'in YENİ dalı (bkz. page.ts yorumu): Akışlar sekmesinde
+    // açılan "Yeni akış" kutusu Escape'le kapanınca sekme DEĞİŞMEMELİ —
+    // ESKİ davranış (hash'i boşalt) burada Pano'ya SIÇRARDI, çünkü bu
+    // sekmede hash SEKMENİN KENDİSİ.
+    it("Akışlar sekmesinde 'Yeni akış' kutusu Escape'le kapanır, sekme DEĞİŞMEZ", async () => {
+      const s = await akislarSunucusuAc();
+      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const hatalar: string[] = [];
+      page.on("pageerror", (e) => hatalar.push(String(e)));
+      try {
+        await page.goto(s.url, { waitUntil: "networkidle" });
+        await page.click('.navSekme:has-text("Akışlar")');
+        await page.waitForSelector(".akisKart", { timeout: 10_000 });
+        await page.click('button:has-text("Yeni akış")');
+        await page.waitForSelector(".dialog", { timeout: 10_000 });
+
+        await page.evaluate(() =>
+          document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+
+        await page.waitForTimeout(150);
+        expect(await page.evaluate(() => document.querySelector(".dialog"))).toBeNull();
+        expect(await page.evaluate(() =>
+          document.querySelector(".navSekme-aktif")?.textContent ?? "")).toContain("Akışlar");
         expect(hatalar).toEqual([]);
       } finally {
         await page.close();

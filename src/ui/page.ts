@@ -935,6 +935,120 @@ const PAGE = `<!doctype html>
   }
   .promptAlan textarea:disabled { opacity: .6; }
 
+  /*
+   * AKIŞLAR SEKMESİ — DEVIR.md §4, kart c-20261105-d36e37. Modernist:
+   * sıfır köşe yarıçapı, tek vurgu rengi. Kart ızgarası bir TABLO gibi
+   * kuruluyor (ızgara üstte+solda, her hücre sağda+altta 2px çizgi) —
+   * "kartlar 2px ayırıcı çizgilerle bölünür" (DEVIR.md) boşluklu bir
+   * 'gap' ile değil, PAYLAŞILAN kenarlarla okunuyor; yoksa ya çift kalın
+   * bir dış çerçeve ya da hücreler arası kesik bir ayırıcı çıkardı.
+   *
+   * "#icerikAkislar"a açık bir --color-bg veriliyor — ".panoGovde"nin
+   * (yukarıda, satır ~363) AYNI gerekçesi: bu sekmenin içeriği Modernist
+   * token'larla çiziyor (accent-100 kart dahil) ve ALTINDAKİ zemin hâlâ
+   * ESKİ --bg olsaydı (body kuralı, henüz göçmedi) iki palet üst üste
+   * binerdi — token-kontrast.test.ts'teki "color-text/color-bg" ve
+   * "label-ink/color-bg" ölçümleri ESKİ --bg'ye karşı DEĞİL, bu token'a
+   * karşı geçerli.
+   */
+  #icerikAkislar { background: var(--color-bg); }
+  .akislarBaslik { padding: var(--space-6) 0 var(--space-5); max-width: 70ch; }
+  .akislarBaslik h1 {
+    font-family: var(--font-heading); font-weight: 800; font-size: var(--fs-40);
+    letter-spacing: -0.03em; margin: 0 0 var(--space-3); color: var(--color-text);
+  }
+  .akislarBaslik p { margin: 0 0 var(--space-5); font-size: var(--fs-14); color: var(--label-ink); max-width: 58ch; }
+  .akislarIzgara {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    border-top: var(--border-section) solid var(--color-text);
+    border-left: var(--border-section) solid var(--color-text);
+  }
+  .akisKart {
+    border-right: var(--border-section) solid var(--color-text);
+    border-bottom: var(--border-section) solid var(--color-text);
+    padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-3);
+  }
+  /*
+   * "Paneldeki akışın kartı accent-100 zeminli" — DEVIR.md §4. ".railKapiKutu"
+   * ile AYNI tuzak (yukarıdaki o yorum, satır ~447): --color-accent-100 koyu
+   * temada HİÇ dönmüyor (bkz. token tanımları, yalnızca ışık değerleri var —
+   * bu dosyada aratıldı, koyu ezmesi YOK), ama --color-text/--label-ink
+   * koyu temada AÇIK renge dönüyor (o kutuların KENDİ zemini de dönüyor
+   * diye). Bu kartın zemini KOŞULLU dönüyor (yalnızca "panoda") — o yüzden
+   * metin rengi de AYNI koşulla eşleşmeli: panoda İKEN --color-neutral-900/
+   * accent-800 (railBaslikBtn/railGerekce'nin kullandığı, tema tarafından
+   * HİÇ EZİLMEYEN çift), panoda DEĞİLKEN --color-text/--label-ink (normal
+   * sayfa zemini, bunlar zaten o zemine göre doğru dönüyor). Mini
+   * formasyonun kendi rengi de aynı kuralı izliyor (bkz. miniFormasyonSvg,
+   * ".akisKartFormasyonGovde/-Nokta" sınıfları, aşağıda).
+   */
+  .akisKart-panoda { background: var(--color-accent-100); }
+  .akisKartFormasyon { display: block; }
+  .akisKartFormasyonGovde { fill: none; stroke: var(--color-text); stroke-width: 2; }
+  .akisKartFormasyonNokta { fill: var(--color-text); }
+  .akisKart-panoda .akisKartFormasyonGovde { stroke: var(--color-neutral-900); }
+  .akisKart-panoda .akisKartFormasyonNokta { fill: var(--color-neutral-900); }
+  .akisKartUst { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
+  .akisKartAdBlok { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+  .akisKartAd {
+    font-family: var(--font-heading); font-weight: 800; font-size: var(--fs-20);
+    color: var(--color-text); margin: 0;
+  }
+  .akisKart-panoda .akisKartAd { color: var(--color-neutral-900); }
+  .akisKartRolSayisi { font-size: var(--fs-13); color: var(--label-ink); white-space: nowrap; }
+  .akisKart-panoda .akisKartRolSayisi { color: var(--color-accent-800); }
+  /* Bu etiket YALNIZCA panoda kartında görünür (bkz. akisKartKur) — accent-100 zemine karşı HER ZAMAN accent-800. */
+  .akisKartEtiket {
+    font-size: var(--fs-tag); font-weight: 600; letter-spacing: .07em; text-transform: uppercase;
+    color: var(--color-accent-800);
+  }
+  .akisKartAciklama { font-size: var(--fs-13); color: var(--color-text); margin: 0; }
+  .akisKart-panoda .akisKartAciklama { color: var(--color-neutral-900); }
+  .akisKartZincir { font-family: var(--mono); font-size: var(--fs-12); color: var(--label-ink); overflow-wrap: anywhere; }
+  .akisKart-panoda .akisKartZincir { color: var(--color-accent-800); }
+  /* Bozuk bir akışın gerekçesi SAKLANMIYOR — açıklama/zincirin yerine geçiyor. */
+  /*
+   * accent-700 metin ÇIPLAK --color-bg üstünde DEĞİL: ".railGozcuLogSatir
+   * .hata"nın (yukarıda, satır ~713) ÖLÇÜLMÜŞ kusurunun AYNISI — koyu
+   * temada 2.47:1, IKINCIL_ETIKET_ESIGI'nin (3:1) altında. Aynı çare:
+   * zemin metinle BİRLİKTE taşınıyor (token-kontrast.test.ts'teki TÜM
+   * accent-700 çiftleri accent-100 zeminle ölçülü, çıplak accent-700/bg
+   * HİÇ YOK) — yeni bir token İCAT ETMİYOR, var olan dolgulu rozet
+   * deseninin bir tekrarı.
+   */
+  .akisKartHata {
+    display: inline-block; font-size: var(--fs-13); color: var(--color-accent-700);
+    background: var(--color-accent-100); padding: var(--space-1) var(--space-2); margin: 0;
+  }
+  .akisKartDugmeler { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: auto; }
+
+  /*
+   * "YENİ AKIŞ" İLETİŞİM KUTUSU — DEVIR.md §4: ".dialog, üstte 4px text
+   * çizgisi". Mevcut ".ust/.panel" (yeniKartAc vb.) sağdan açılan bir
+   * ÇEKMECE; bu kutu ORTALANMIŞ bir modal olduğu için ".ust"a AYRI bir
+   * düzen varyantı (".ust-ortali") ekleniyor — ".ust"un KENDİSİ
+   * değişmiyor, eski çekmeceler aynen sağda açılmaya devam ediyor.
+   */
+  .ust-ortali { justify-content: center; align-items: center; padding: var(--space-5); }
+  .dialog {
+    width: min(480px, 100%); max-height: calc(100vh - 2 * var(--space-5)); overflow-y: auto;
+    background: var(--color-surface); color: var(--color-text);
+    border-top: var(--border-accent) solid var(--color-text);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, .22);
+    padding: var(--space-6); display: flex; flex-direction: column; gap: var(--space-4);
+  }
+  .dialog h2 {
+    font-family: var(--font-heading); font-weight: 800; font-size: var(--fs-26);
+    margin: 0; color: var(--color-text);
+  }
+  .dialog label {
+    display: flex; flex-direction: column; gap: var(--space-1); font-size: var(--fs-13); color: var(--label-ink);
+  }
+  .dialog input, .dialog select, .dialog textarea {
+    font: inherit; font-size: var(--fs-13); min-height: 38px; padding: 0 var(--space-3);
+    border: var(--border-row) solid var(--color-text); background: var(--color-bg); color: var(--color-text);
+  }
+  .dialog textarea { min-height: 72px; padding: var(--space-2) var(--space-3); resize: vertical; }
 </style>
 </head>
 <body>
@@ -953,12 +1067,7 @@ const PAGE = `<!doctype html>
       <aside class="sagPanel" id="sagPanel" aria-label="Kart ve rol ayrıntıları"></aside>
     </div>
   </div>
-  <div id="icerikAkislar" class="yerTutucu" style="display:none">
-    <h2>Akışlar</h2>
-    <p>Bu sekme henüz kurulmadı — akış listesi, "Yeni akış" ve akışlar
-    arası geçiş burada toplanacak. Şimdilik Pano'nun üst araç satırındaki
-    akış seçiciyi kullan.</p>
-  </div>
+  <div id="icerikAkislar" style="display:none"></div>
   <div id="icerikPromptlar" class="yerTutucu" style="display:none">
     <h2>Promptlar</h2>
     <p>Bu sekme henüz kurulmadı — anayasa ve rol promptları burada
@@ -1000,6 +1109,12 @@ let GOZCU_LOG = [];
 // akislarYukle). Dosya listesi koşarken değişmiyor; her yoklamada yeniden
 // istemek, değişmeyen bir şeyi saniyede bir sormak olurdu.
 let AKISLAR = [];
+// Her akışın ÖZETİ — Akışlar sekmesinin kart ızgarası (DEVIR.md §4, kart
+// c-20261105-d36e37): {ad, draft, hata?}[], AKISLAR'la AYNI anda, BİR
+// KEZ okunuyor (/akislar'ın 'ozet' alanı, bkz. server.ts akisOzetiYukle).
+// 'draft' null ise akış BOZUK — kart bunu SAKLAMIYOR, 'hata' alanını
+// gösteriyor (bkz. akisKartKur).
+let AKISLAR_OZET = [];
 // Seçicinin GERİ ALINACAĞI değer: çekirdek "/akis/sec"i reddederse (bozuk
 // YAML, bilinmeyen ad) kutuda yeni ad dururken pano hâlâ eskisini
 // gösteremez — ikisi aynı şeyi söylemek zorunda.
@@ -1810,7 +1925,26 @@ function kodDegisikligiKur(diff) {
   return kod;
 }
 
+/**
+ * ESCAPE'İN KAPATTIĞI ŞEY — Pano'nun kendi panelleri ("kart/", "akis",
+ * "prompt", "yeni" …) hash'in KENDİSİ, hash'i boşaltmak "Pano'ya dön"
+ * demek — ESKİ davranış, aynen duruyor.
+ *
+ * Akışlar/Promptlar/Ajanlar sekmelerinde ("akislar sekmesi", kart
+ * c-20261105-d36e37, "Yeni akış" iletişim kutusu) hash ZATEN sekmenin
+ * KENDİSİ ('#akislar') — onu boşaltmak sekmeyi DEĞİŞTİRİR (Pano'ya
+ * atlardı), oysa "Yeni akış" kutusu hash'i HİÇ DEĞİŞTİRMEDEN açılıyor
+ * (bkz. yeniAkisAc). O yüzden bu üç sekmede Escape yalnızca PANELİ
+ * boşaltıyor, hash'e DOKUNMUYOR — 'sekmeAdi' zaten bu ayrımı yapıyor
+ * (üç sekme adı dışındaki HER hash "pano" sayılıyor), burada İKİNCİ bir
+ * liste İCAT EDİLMİYOR.
+ */
 function kapat() {
+  const aktif = sekmeAdi(decodeURIComponent(location.hash.replace(/^#/, "")));
+  if (aktif !== "pano") {
+    document.getElementById("panel").replaceChildren();
+    return;
+  }
   if (location.hash) location.hash = "";
   else document.getElementById("panel").replaceChildren();
 }
@@ -1857,6 +1991,10 @@ function hashOku() {
   else if (h === "prompt/yeni") void yeniRolAc();
   else if (h === "yeni") yeniKartAc();
   else document.getElementById("panel").replaceChildren();
+  // Akışlar sekmesi Pano'nun bir sub-paneli DEĞİL (bkz. sekmeAdi) — kendi
+  // içeriğini YUKARIDAKİ dallardan BAĞIMSIZ kuruyor, #panel'i de aynen
+  // boşaltan dal (üstteki son 'else') zaten çalıştı.
+  if (h === "akislar") akislarEkraniCiz();
 }
 window.addEventListener("hashchange", hashOku);
 
@@ -2277,12 +2415,345 @@ async function akislarYukle() {
     const cevap = await fetch("/akislar", { cache: "no-store" });
     const veri = await cevap.json();
     AKISLAR = (cevap.ok && Array.isArray(veri.akislar)) ? veri.akislar : [];
+    // 'ozet': Akışlar sekmesinin kart ızgarası — AYNI istekten, İKİNCİ bir
+    // yoklama açmadan (bkz. AKISLAR_OZET yorumu).
+    AKISLAR_OZET = (cevap.ok && Array.isArray(veri.ozet)) ? veri.ozet : [];
   } catch (e) {
     // Liste okunamadıysa seçici hiç çıkmaz (AKISLAR boş kalır) — sessizce
     // "başarılı ama boş" ile gerçek bir okuma hatasını karıştırmıyoruz,
     // ama seçici YOKKEN ekranın asıl işi (pano) yine de çizilmeli.
     AKISLAR = [];
+    AKISLAR_OZET = [];
   }
+}
+
+// --- Akışlar sekmesi (DEVIR.md §4, kart c-20261105-d36e37) ---
+//
+// Kart ızgarası AKISLAR/AKISLAR_OZET'ten kuruluyor (bkz. akislarYukle) —
+// sayfa açılışında BİR KEZ okunan listeler, bu sekme açıldığında İKİNCİ
+// bir ağ isteği YOK. Aşağıdaki küçük SAF fonksiyonlar (DOM yok) kararları
+// taşıyor; DOM'a dokunan tek yer akisKartKur/akislarEkraniCiz/
+// yeniAkisAc — page.test.ts'teki 'fonksiyon'/'fonksiyonlar' aracının
+// izole edip sınayabildiği kısım SAF olanlar.
+
+/** 'ozetListesi' (AKISLAR_OZET) içinde 'ad'ı arar; yoksa null. SAF, DOM yok. */
+function akisOzetBul(ozetListesi, ad) {
+  return ozetListesi.find((o) => o.ad === ad) || null;
+}
+
+/**
+ * "planner → architect → … → bitti" zinciri — DEVIR.md §4. SAF, DOM yok.
+ * 'rolIdler' boşsa (akış bozuk, bkz. akisKartKur) bile "bitti" basıyor:
+ * her akış 'done'a varır, zincirin kendisi bilinmese de BU bilinir.
+ */
+function akisZinciriMetni(rolIdler) {
+  return rolIdler.length ? rolIdler.join(" → ") + " → bitti" : "bitti";
+}
+
+/**
+ * Kartın sınıfı — "Paneldeki akışın kartı accent-100 zeminli" (DEVIR.md
+ * §4). SAF, DOM yok.
+ */
+function akisKartSinifi(ad, aktifAd) {
+  return "akisKart" + (ad === aktifAd ? " akisKart-panoda" : "");
+}
+
+/**
+ * Akış adı geçerli mi — DEVIR.md §3/§4'ün kısıtı: yalnız 'a-z0-9-', boş
+ * değil. SAF, DOM yok. 'duzenleAdSanitize' (rol adı için, yukarıda)
+ * SESSİZCE temizler; burada REDDETMEK doğru — "Yeni akış" düğmesi
+ * kullanıcı hâlâ yazarken geçersiz bir ad YOLLAMAMALI, sanitize edilmiş
+ * hâli sessizce göndermek kullanıcının yazdığını değiştirirdi.
+ */
+function akisAdiGecerliMi(ad) {
+  return /^[a-z0-9-]+$/.test(ad);
+}
+
+/**
+ * "Oluştur ve düzenle" düğmesinin etkin olma koşulu — geçerli VE
+ * benzersiz. SAF, DOM yok.
+ */
+function yeniAkisGecerliMi(ad, mevcutAdlar) {
+  return akisAdiGecerliMi(ad) && !mevcutAdlar.includes(ad);
+}
+
+/**
+ * Akışlar sekmesinin kart ızgarasındaki 200×110 mini formasyon (DEVIR.md
+ * §4). Pano'nun CANLI V formasyonundan (formasyonSvgKur) KASITLI OLARAK
+ * FARKLI: bu sekme başka akışların kartlarını hiç okumuyor (bkz.
+ * /akislar'ın 'ozet'i, server.ts) — gösterecek "çalışıyor/kapıda" durumu
+ * YOK, o yüzden kuş hep --color-text, kanat çırpma yok. Konum matematiği
+ * YİNE DE AYNI kaynaktan (rolKonumu/FORMASYON_GOVDE, aşağıda tanımlı):
+ * iki ayrı "V nasıl çizilir" yorumu olmasın. 'preserveAspectRatio: none'
+ * DEVIR'in 200×110'unu (1000×640'tan FARKLI en-boy oranı) ZORLUYOR —
+ * aksi hâlde tarayıcı SVG'yi oranı KORUYARAK sığdırır ve kutunun bir
+ * kenarında boşluk kalır.
+ */
+function miniFormasyonSvg(rolSayisi) {
+  const svg = sv("svg", {
+    viewBox: "0 0 1000 640", width: "200", height: "110", preserveAspectRatio: "none",
+    role: "img", "aria-label": "Rol formasyonu önizlemesi",
+  });
+  svg.classList.add("akisKartFormasyon");
+  if (rolSayisi <= 0) return svg;
+  // Renk CSS SINIFINDAN geliyor, satır-içi style'dan DEĞİL: ".akisKart-panoda
+  // .akisKartFormasyonGovde/-Nokta" (yukarıda) kartın panoda OLUP OLMAMASINA
+  // göre --color-text/--color-neutral-900 arasında seçim yapıyor — bu
+  // fonksiyon o kararı BİLMİYOR (ad/aktifAd burada YOK), sınıf seçicisi
+  // bilsin diye DOM'da iki ayrı yer yerine TEK CSS kararı kalıyor.
+  const govde = sv("polyline", {
+    class: "akisKartFormasyonGovde",
+    points: FORMASYON_GOVDE.map((p) => p.join(",")).join(" "), "vector-effect": "non-scaling-stroke",
+  });
+  svg.append(govde);
+  for (let i = 0; i < rolSayisi; i++) {
+    const konum = rolKonumu(i, rolSayisi);
+    const nokta = sv("circle", { class: "akisKartFormasyonNokta", cx: konum.x, cy: konum.y, r: "20" });
+    svg.append(nokta);
+  }
+  return svg;
+}
+
+/**
+ * '/akis/sec'in SEÇİCİSİZ ikizi — Akışlar sekmesindeki kart düğmeleri bir
+ * select öğesi taşımıyor (bkz. akisSec, yukarıda), ama çekirdeğe giden
+ * komut AYNI olmalı; iki ayrı "akış nasıl değiştirilir" yorumu olmasın.
+ * Başarıyı boolean döndürüyor: çağıran (akisKartSecVeAc) reddedilince
+ * DEVAM ETMEMELİ (hash değişmemeli, editör açılmamalı).
+ */
+async function akisKartSec(ad) {
+  try {
+    const cevap = await fetch("/akis/sec", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-skein-token": JETON },
+      body: JSON.stringify({ ad }),
+    });
+    const veri = await cevap.json();
+    if (!cevap.ok) throw new Error(veri.hata || cevap.status);
+    ciz(veri.model);
+    return true;
+  } catch (e) {
+    bildirimGoster("Akış değiştirilemedi: " + e.message);
+    return false;
+  }
+}
+
+/**
+ * "Panoda aç" / "Rolleri düzenle" düğmeleri — akış ZATEN panodaysa
+ * GEREKSİZ bir /akis/sec isteği atılmıyor (hâlâ "hedef"e göre davranış
+ * aynı: Pano'ya git, istenirse editörü aç).
+ */
+async function akisKartSecVeAc(ad, hedef) {
+  if (ad !== AKTIF_AD) {
+    const basarili = await akisKartSec(ad);
+    if (!basarili) return;
+  }
+  location.hash = "";
+  if (hedef === "duzenle") duzenleAc();
+}
+
+/**
+ * Akışlar sekmesinin TEK kartı — DEVIR.md §4. 'ozet' AKISLAR_OZET'ten
+ * çıkarılmış: 'draft' varsa gerçek açıklama/rol sayısı/zincir, 'hata'
+ * varsa akış BOZUK (bkz. akisOzetiYukle, server.ts) — kart bunu
+ * SAKLAMIYOR, "bir akışın bozulması listenin GERİ KALANINI göstermeyi
+ * engellememeli" ilkesinin ekran tarafı (bkz. m.bozuk/m.engeller).
+ */
+function akisKartKur(ad, aktifAd) {
+  const ozet = akisOzetBul(AKISLAR_OZET, ad);
+  const draft = ozet ? ozet.draft : null;
+  const rolIdler = draft ? draft.roles.map((r) => r.id) : [];
+
+  const kart = el("div", akisKartSinifi(ad, aktifAd));
+  kart.dataset.akis = ad;
+  kart.append(miniFormasyonSvg(rolIdler.length));
+
+  const ust = el("div", "akisKartUst");
+  const adBlok = el("div", "akisKartAdBlok");
+  adBlok.append(el("h3", "akisKartAd", ad));
+  if (ad === aktifAd) adBlok.append(el("span", "akisKartEtiket", "panoda"));
+  ust.append(adBlok);
+  ust.append(el("div", "akisKartRolSayisi", rolIdler.length ? rolIdler.length + " rol" : "rol sayısı bilinmiyor"));
+  kart.append(ust);
+
+  if (ozet && ozet.hata) {
+    kart.append(el("p", "akisKartHata", ozet.hata));
+  } else if (draft) {
+    kart.append(el("p", "akisKartAciklama", draft.description || "(açıklama yok)"));
+    kart.append(el("div", "akisKartZincir", akisZinciriMetni(rolIdler)));
+  }
+
+  const dugmeler = el("div", "akisKartDugmeler");
+  const panodaAc = el("button", "railBtn primary", "Panoda aç");
+  panodaAc.type = "button";
+  panodaAc.addEventListener("click", () => void akisKartSecVeAc(ad, "pano"));
+  dugmeler.append(panodaAc);
+
+  const rolleriDuzenle = el("button", "railBtn", "Rolleri düzenle");
+  rolleriDuzenle.type = "button";
+  rolleriDuzenle.addEventListener("click", () => void akisKartSecVeAc(ad, "duzenle"));
+  dugmeler.append(rolleriDuzenle);
+
+  // "Kopyala": şablon taslağı bu kartın KENDİ taslağı — bozuksa (draft
+  // null) kopyalanacak bir yapı yok, düğme bunu VAAT ETMİYOR.
+  const kopyala = el("button", "railBtn", "Kopyala");
+  kopyala.type = "button";
+  kopyala.disabled = !draft;
+  if (!draft) kopyala.title = "Bu akış şu an geçersiz, şablon olarak kullanılamıyor.";
+  kopyala.addEventListener("click", () => { yeniAkisAc({ sablon: ad, onerilenAd: ad + "-kopya" }); });
+  dugmeler.append(kopyala);
+
+  kart.append(dugmeler);
+  return kart;
+}
+
+/**
+ * "Yeni akış" iletişim kutusu — DEVIR.md §4: ad (benzersiz, a-z0-9-),
+ * açıklama, şablon akış. "Oluştur ve düzenle" ÜÇ adımı tek tıkla yapıyor:
+ * şablonun TAM taslağını (AKISLAR_OZET'ten, sunucudan YENİDEN İSTEMEDEN
+ * — zaten orada) ad/açıklama değiştirilmiş bir KOPYASIYLA yeni bir
+ * dosyaya yazar (/akis/yaz + yeniAd, bkz. server.ts hedefAkisYolu),
+ * sonra ona GEÇER (/akis/sec) ve editörü açar (duzenleAc). "Kopyala"
+ * düğmesi (akisKartKur) AYNI kutuyu, şablonu ÖNCEDEN SEÇİLİ açarak
+ * kullanıyor — iki ayrı "yeni akış nasıl kurulur" akışı YOK.
+ *
+ * Hash'i HİÇ DEĞİŞTİRMİYOR (bkz. kapat() yorumu): bu kutu Akışlar
+ * sekmesinden açılıyor ve sekme hash'in KENDİSİ (#akislar) — Pano'nun
+ * sub-panelleri gibi davranıp hash'i "yeni"ye çevirseydi, Escape'in
+ * ("#" boşaltır) Pano'ya sıçraması gerekirdi.
+ */
+function yeniAkisAc(onerilenler) {
+  const sablonOnerisi = (onerilenler && onerilenler.sablon) || AKISLAR[0] || "";
+  const kap = document.getElementById("panel");
+  const kutu = el("div", "ust ust-ortali");
+  // '.panel' SINIFI BİLEREK YOK: o ESKİ çekmecenin kendi düzen kuralları
+  // var (height:100%, border-left, 620px genişlik — bkz. ".panel" kuralı,
+  // yukarıda) ve ".dialog" ile AYNI özgüllükte olduklarından kaynak
+  // SIRASINA göre çakışırdı. ".dialog" kendi tam düzenini taşıyor.
+  const ic = el("div", "dialog");
+  ic.append(el("h2", null, "Yeni akış"));
+
+  const adL = el("label", null);
+  adL.append(document.createTextNode("Ad"));
+  const adI = el("input");
+  adI.type = "text";
+  adI.setAttribute("pattern", "[a-z0-9-]+");
+  adI.value = (onerilenler && onerilenler.onerilenAd) || "";
+  adL.append(adI);
+  ic.append(adL);
+
+  const acL = el("label", null);
+  acL.append(document.createTextNode("Açıklama"));
+  const acI = el("textarea");
+  acI.rows = 3;
+  acL.append(acI);
+  ic.append(acL);
+
+  const sabL = el("label", null);
+  sabL.append(document.createTextNode("Şablon akış"));
+  const sabS = el("select");
+  AKISLAR.forEach((ad) => {
+    const o = el("option", null, ad);
+    o.value = ad;
+    if (ad === sablonOnerisi) o.selected = true;
+    sabS.append(o);
+  });
+  sabL.append(sabS);
+  ic.append(sabL);
+
+  const hataKutu = el("div", "err");
+  hataKutu.style.cssText = "display:none";
+  ic.append(hataKutu);
+
+  // '.railCikis' (sağ panelin kapı çıkışları için, YUKARIDA tanımlı) —
+  // '.exits' BURADA KASITLI OLARAK kullanılmıyor: o sınıfın KENDİ
+  // ".exits button" kuralı (ESKİ sistem, satır ~804) bu düğmelerin
+  // Modernist ".railBtn" biçimini EZERDİ (daha yüksek özgüllük, aynı
+  // kusur sınıfı — AJAN_AYRAC'ın kendi yorumunun uyardığı "iki yerde iki
+  // ayrı kural" türünden, burada renk/biçim için).
+  const satir = el("div", "railCikis");
+  const olustur = el("button", "railBtn primary", "Oluştur ve düzenle");
+  olustur.type = "button";
+  const vazgec = el("button", "railBtn", "Vazgeç");
+  vazgec.type = "button";
+  vazgec.addEventListener("click", () => { kap.replaceChildren(); });
+  satir.append(olustur, vazgec);
+  ic.append(satir);
+
+  const guncelle = () => { olustur.disabled = !yeniAkisGecerliMi(adI.value, AKISLAR); };
+  adI.addEventListener("input", () => { adI.value = duzenleAdSanitize(adI.value); guncelle(); });
+  guncelle();
+
+  olustur.addEventListener("click", async () => {
+    olustur.disabled = true;
+    hataKutu.style.cssText = "display:none";
+    try {
+      const sablonOzet = akisOzetBul(AKISLAR_OZET, sabS.value);
+      if (!sablonOzet || !sablonOzet.draft) throw new Error("Şablon akış şu an okunamıyor.");
+      // Derin kopya: sablonOzet.draft AKISLAR_OZET'in KENDİ nesnesi,
+      // üzerine doğrudan yazmak o listeyi de değiştirirdi.
+      const yeniTaslak = JSON.parse(JSON.stringify(sablonOzet.draft));
+      yeniTaslak.name = adI.value;
+      if (acI.value.trim()) yeniTaslak.description = acI.value.trim();
+      else delete yeniTaslak.description;
+
+      const yazCevap = await fetch("/akis/yaz", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-skein-token": JETON },
+        body: JSON.stringify({ ...yeniTaslak, yeniAd: adI.value }),
+      });
+      const yazVeri = await yazCevap.json();
+      if (!yazCevap.ok) throw new Error(yazVeri.hata || yazCevap.status);
+
+      const basarili = await akisKartSec(adI.value);
+      if (!basarili) return; // akisKartSec kendi bildirimini gösterdi
+      kap.replaceChildren();
+      // Sağ panel (duzenleAc'in açtığı yer) Pano'nun DOM alt ağacında —
+      // sekme hâlâ "akislar"ken açılsaydı #icerikPano'nun "display:none"ı
+      // onu GÖRÜNMEZ bırakırdı (bkz. akisKartSecVeAc'in AYNI deseni).
+      location.hash = "";
+      duzenleAc();
+    } catch (e) {
+      olustur.disabled = false;
+      hataKutu.textContent = e.message;
+      hataKutu.style.cssText = "display:block;white-space:pre-wrap";
+    }
+  });
+
+  kutu.addEventListener("click", (e) => { if (e.target === kutu) kap.replaceChildren(); });
+  kutu.append(ic);
+  kap.replaceChildren(kutu);
+  adI.focus();
+}
+
+/**
+ * Akışlar sekmesinin içeriği — sekme açıldığında BİR KEZ kuruluyor
+ * (bkz. hashOku'nun "akislar" dalı). AKISLAR/AKISLAR_OZET değişmediği
+ * için (sayfa açılışında bir kez okunan liste) saniyelik yoklamadan
+ * yeniden çağrılmıyor — formasyonSvgKur'un "her yoklamada yeniden kur"
+ * ilkesinin TERSİ: orada model saniyede değişiyor, burada liste HİÇ
+ * değişmiyor.
+ */
+function akislarEkraniCiz() {
+  const kok = document.getElementById("icerikAkislar");
+  const baslik = el("div", "akislarBaslik");
+  baslik.append(el("h1", null, "Akışlar"));
+  baslik.append(el("p", null,
+    "Depodaki her akış burada: hangi rollerden geçtiği, hangisinin şu an " +
+    "panoda açık olduğu, ve rollerini düzenlemek ya da kopyalamak için kısayollar."));
+  const yeniDugme = el("button", "railBtn primary", "Yeni akış");
+  yeniDugme.type = "button";
+  yeniDugme.addEventListener("click", () => { yeniAkisAc(null); });
+  baslik.append(yeniDugme);
+
+  const izgara = el("div", "akislarIzgara");
+  if (!AKISLAR.length) {
+    izgara.append(el("div", "ipucu", "Bu ekran akış listesine açık değil ya da hub/flows/ boş."));
+  } else {
+    AKISLAR.forEach((ad) => izgara.append(akisKartKur(ad, AKTIF_AD)));
+  }
+
+  kok.replaceChildren(baslik, izgara);
 }
 
 async function yokla() {

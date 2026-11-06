@@ -1609,3 +1609,102 @@ describe("duzenleNormallestir — kaydetmeden/önizlemeden önce uygulanan TAM n
     expect(() => normallestir({ roles: [{ id: "a" }] })).not.toThrow();
   });
 });
+
+/**
+ * AKIŞLAR SEKMESİ — SAF karar fonksiyonları (DEVIR.md §4, kart
+ * c-20261105-d36e37). DOM'a dokunan taraf (akisKartKur/
+ * akislarEkraniCiz/yeniAkisAc) burada DEĞİL — gerçek tarayıcı gerektiren
+ * kısım tarayici.test.ts'te (bkz. o dosyadaki "Akışlar sekmesi" describe).
+ */
+describe("akisOzetBul — AKISLAR_OZET içinde ad arama", () => {
+  type Ozet = { ad: string; draft: unknown; hata?: string };
+  const bul = (liste: Ozet[], ad: string): Ozet | null =>
+    fonksiyon<(l: Ozet[], a: string) => Ozet | null>(renderPage("t"), "akisOzetBul")(liste, ad);
+
+  it("ad listede varsa o kaydı döner", () => {
+    const liste = [{ ad: "a", draft: 1 }, { ad: "b", draft: 2 }];
+    expect(bul(liste, "b")).toEqual({ ad: "b", draft: 2 });
+  });
+
+  it("ad listede yoksa null döner (başka bir kayıt UYDURMAZ)", () => {
+    const liste = [{ ad: "a", draft: 1 }];
+    expect(bul(liste, "yok")).toBeNull();
+  });
+
+  it("boş listede null döner", () => {
+    expect(bul([], "a")).toBeNull();
+  });
+});
+
+describe("akisZinciriMetni — 'planner → … → bitti' metni", () => {
+  const zincir = (rolIdler: string[]): string =>
+    fonksiyon<(r: string[]) => string>(renderPage("t"), "akisZinciriMetni")(rolIdler);
+
+  it("roller varsa sırayla birleştirip 'bitti' ile biter", () => {
+    expect(zincir(["planner", "architect", "coder"])).toBe("planner → architect → coder → bitti");
+  });
+
+  it("tek rolde de 'bitti' eklenir", () => {
+    expect(zincir(["coder"])).toBe("coder → bitti");
+  });
+
+  // Akış bozuksa rol listesi bilinmiyor (bkz. akisKartKur) ama "bitti"
+  // yine de doğru — mutasyon: "" dönmek ya da çökmek burada YAKALANIR.
+  it("boş listede de yalnızca 'bitti' döner, çökmez", () => {
+    expect(zincir([])).toBe("bitti");
+  });
+});
+
+describe("akisKartSinifi — 'panoda' zemin kararı", () => {
+  const sinif = (ad: string, aktifAd: string): string =>
+    fonksiyon<(a: string, b: string) => string>(renderPage("t"), "akisKartSinifi")(ad, aktifAd);
+
+  it("aktif akışın kartı 'akisKart-panoda' taşır", () => {
+    expect(sinif("test", "test")).toBe("akisKart akisKart-panoda");
+  });
+
+  it("başka bir akışın kartı taşımaz", () => {
+    expect(sinif("test", "ikinci")).toBe("akisKart");
+  });
+});
+
+describe("akisAdiGecerliMi — DEVIR.md §3/§4'ün a-z0-9- kısıtı", () => {
+  const gecerli = (ad: string): boolean =>
+    fonksiyon<(a: string) => boolean>(renderPage("t"), "akisAdiGecerliMi")(ad);
+
+  it("küçük harf, sayı ve tire kabul edilir", () => {
+    expect(gecerli("ab-planli-2")).toBe(true);
+  });
+
+  it("boş ad reddedilir", () => {
+    expect(gecerli("")).toBe(false);
+  });
+
+  it("büyük harf reddedilir (sessizce düşürülmez, dizge TAMAMEN düşer)", () => {
+    expect(gecerli("Kopya")).toBe(false);
+  });
+
+  it("boşluk ve diğer özel karakterler reddedilir", () => {
+    expect(gecerli("kopya adi")).toBe(false);
+    expect(gecerli("kopya/adi")).toBe(false);
+  });
+});
+
+describe("yeniAkisGecerliMi — 'Oluştur ve düzenle' düğmesinin etkinlik kararı", () => {
+  const gecerli = (ad: string, mevcut: string[]): boolean =>
+    fonksiyonlar<(a: string, m: string[]) => boolean>(
+      renderPage("t"), ["akisAdiGecerliMi", "yeniAkisGecerliMi"], "yeniAkisGecerliMi",
+    )(ad, mevcut);
+
+  it("geçerli ve benzersiz adı kabul eder", () => {
+    expect(gecerli("yeni-akis", ["test", "ikinci"])).toBe(true);
+  });
+
+  it("zaten var olan adı reddeder (benzersizlik)", () => {
+    expect(gecerli("test", ["test", "ikinci"])).toBe(false);
+  });
+
+  it("geçersiz karakterli adı reddeder, listede olmasa bile", () => {
+    expect(gecerli("Yeni Akis", ["test"])).toBe(false);
+  });
+});
