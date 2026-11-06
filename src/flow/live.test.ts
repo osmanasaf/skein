@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { knownProviderSet } from "../adapters/factory.js";
 import { LiveFlow } from "./live.js";
 
-const IKI_ROL = `
+const TWO_ROLES = `
 name: test
 constitution:
   - ../prompts/base.md
@@ -24,7 +24,7 @@ roles:
     next: done
 `;
 
-const UC_ROL = IKI_ROL.replace(
+const THREE_ROLES = TWO_ROLES.replace(
   `    reject: coder
     next: done`,
   `    reject: coder
@@ -51,7 +51,7 @@ beforeEach(async () => {
   await writeFile(join(root, "roles", "coder.prompt"), "# coder\n");
   await writeFile(join(root, "roles", "reviewer.prompt"), "# reviewer\n");
   path = join(root, "hub", "flows", "test.yaml");
-  await writeFile(path, IKI_ROL);
+  await writeFile(path, TWO_ROLES);
   opts = { root, providers: knownProviderSet() };
 });
 afterEach(async () => {
@@ -79,7 +79,7 @@ describe("LiveFlow", () => {
   it("rol eklenince yeni topolojiyi alır", async () => {
     const live = await LiveFlow.open(path, opts);
     const previous = live.flow.hash;
-    await writeFile(path, UC_ROL);
+    await writeFile(path, THREE_ROLES);
 
     const result = await live.refresh();
 
@@ -91,13 +91,13 @@ describe("LiveFlow", () => {
   // Editör yarım kaydetmiş olabilir; yarım bir YAML gözcüyü düşürmemeli.
   it("geçersiz içerikte ELDEKİ topoloji aynen durur", async () => {
     const live = await LiveFlow.open(path, opts);
-    const saglam = live.flow.hash;
+    const robust = live.flow.hash;
     await writeFile(path, "name: test\nroles:\n  - id: coder\n    provider: yok-boyle\n");
 
     const result = await live.refresh();
 
     expect(result.kind).toBe("failed");
-    expect(live.flow.hash).toBe(saglam);
+    expect(live.flow.hash).toBe(robust);
     expect(live.topology.roles.map((r) => r.id)).toEqual(["coder", "reviewer"]);
     expect(live.error).not.toBeNull();
   });
@@ -109,7 +109,7 @@ describe("LiveFlow", () => {
     expect((await live.refresh()).kind).toBe("failed");
     expect(live.error).not.toBeNull();
 
-    await writeFile(path, UC_ROL);
+    await writeFile(path, THREE_ROLES);
     const result = await live.refresh();
 
     expect(result.kind).toBe("reloaded");
@@ -129,7 +129,7 @@ describe("LiveFlow", () => {
   // yükleme sayılmamalı, yoksa her kaydetmede "akış değişti" denirdi.
   it("yalnızca yorum değişirse `unchanged` döner", async () => {
     const live = await LiveFlow.open(path, opts);
-    await writeFile(path, `# yeni bir yorum\n${IKI_ROL}`);
+    await writeFile(path, `# yeni bir yorum\n${TWO_ROLES}`);
 
     expect(await live.refresh()).toEqual({ kind: "unchanged" });
   });
@@ -143,7 +143,7 @@ describe("LiveFlow", () => {
     expect((await live.refresh()).kind).toBe("failed");
     expect(live.error).not.toBeNull();
 
-    await writeFile(path, IKI_ROL);
+    await writeFile(path, TWO_ROLES);
     const result = await live.refresh();
 
     expect(result).toEqual({ kind: "unchanged" });

@@ -191,10 +191,10 @@ export function bestEffortUsage(stdout: string): Usage | undefined {
     try {
       const doc = JSON.parse(text) as Record<string, unknown>;
       const u = (doc["usage"] ?? doc) as Record<string, unknown>;
-      const inTok = u["input_tokens"] ?? u["prompt_tokens"];
-      const outTok = u["output_tokens"] ?? u["completion_tokens"];
-      if (typeof inTok === "number") usage.inputTokens = inTok;
-      if (typeof outTok === "number") usage.outputTokens = outTok;
+      const inTokens = u["input_tokens"] ?? u["prompt_tokens"];
+      const outTokens = u["output_tokens"] ?? u["completion_tokens"];
+      if (typeof inTokens === "number") usage.inputTokens = inTokens;
+      if (typeof outTokens === "number") usage.outputTokens = outTokens;
     } catch {
       // JSON değil; bir sonraki satır.
     }

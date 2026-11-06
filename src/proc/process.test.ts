@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { girisNoktasiMi, tsxCliYolu } from "./process.js";
+import { isEntryPoint, tsxCliPath } from "./process.js";
 
 /**
  * `tsxCliYolu` köke doğru GERÇEK `tsx` kurulumuna bakmadan da sınanabilir:
@@ -33,13 +33,13 @@ afterEach(async () => {
 
 describe("tsxCliYolu", () => {
   it("çağıranın KENDİ node_modules'ü olmasa da ÜST dizindeki tsx'i bulur", () => {
-    const beklenen = join(root, "node_modules", "tsx", "dist", "cli.mjs");
-    expect(tsxCliYolu(join(root, "calisma-agaci", "alt"))).toBe(beklenen);
+    const expected = join(root, "node_modules", "tsx", "dist", "cli.mjs");
+    expect(tsxCliPath(join(root, "calisma-agaci", "alt"))).toBe(expected);
   });
 
   it("node_modules doğrudan kökte olduğunda da aynı sonucu verir", () => {
-    const beklenen = join(root, "node_modules", "tsx", "dist", "cli.mjs");
-    expect(tsxCliYolu(root)).toBe(beklenen);
+    const expected = join(root, "node_modules", "tsx", "dist", "cli.mjs");
+    expect(tsxCliPath(root)).toBe(expected);
   });
 });
 
@@ -56,14 +56,14 @@ describe("tsxCliYolu", () => {
  * "içe alınınca false" VE "giriş noktasıyken true".
  */
 describe("girisNoktasiMi", () => {
-  const eskiArgv = process.argv[1];
+  const oldArgv = process.argv[1];
   afterEach(() => {
-    process.argv[1] = eskiArgv as string;
+    process.argv[1] = oldArgv as string;
   });
 
   it("BAŞKA bir dosya giriş noktasıysa false — içe alma yan etki yapmaz", () => {
     process.argv[1] = join(root, "baska-giris.mjs");
-    expect(girisNoktasiMi(pathToFileURL(join(root, "modul.ts")).href)).toBe(false);
+    expect(isEntryPoint(pathToFileURL(join(root, "modul.ts")).href)).toBe(false);
   });
 
   // ASIL SINAV: bu yön düşerse CLI'lar SESSİZCE hiç koşmaz.
@@ -71,19 +71,19 @@ describe("girisNoktasiMi", () => {
     const entry = join(root, "giris.mjs");
     await writeFile(entry, "export {};\n");
     process.argv[1] = entry;
-    expect(girisNoktasiMi(pathToFileURL(entry).href)).toBe(true);
+    expect(isEntryPoint(pathToFileURL(entry).href)).toBe(true);
   });
 
   it("göreli yazılmış giriş yolunu da tanır — `resolve`'dan geçiyor", async () => {
     const entry = join(root, "goreli.mjs");
     await writeFile(entry, "export {};\n");
-    const eskiCwd = process.cwd();
+    const oldCwd = process.cwd();
     process.chdir(root);
     try {
       process.argv[1] = "goreli.mjs";
-      expect(girisNoktasiMi(pathToFileURL(entry).href)).toBe(true);
+      expect(isEntryPoint(pathToFileURL(entry).href)).toBe(true);
     } finally {
-      process.chdir(eskiCwd);
+      process.chdir(oldCwd);
     }
   });
 
@@ -91,16 +91,16 @@ describe("girisNoktasiMi", () => {
   // yazar, `argv[1]` ise bağı. Tek biçimle karşılaştırmak o kurulumda
   // CLI'ı sessizce öldürürdü.
   it("giriş sembolik bağla verilse de GERÇEK yolu tanır", async () => {
-    const gercek = join(root, "gercek.mjs");
-    await writeFile(gercek, "export {};\n");
+    const actual = join(root, "gercek.mjs");
+    await writeFile(actual, "export {};\n");
     const bag = join(root, "bag.mjs");
-    await symlink(gercek, bag);
+    await symlink(actual, bag);
     process.argv[1] = bag;
-    expect(girisNoktasiMi(pathToFileURL(gercek).href)).toBe(true);
+    expect(isEntryPoint(pathToFileURL(actual).href)).toBe(true);
   });
 
   it("giriş noktası yoksa (`node -e`) false", () => {
     delete process.argv[1];
-    expect(girisNoktasiMi(pathToFileURL(join(root, "modul.ts")).href)).toBe(false);
+    expect(isEntryPoint(pathToFileURL(join(root, "modul.ts")).href)).toBe(false);
   });
 });

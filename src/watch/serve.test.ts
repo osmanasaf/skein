@@ -255,11 +255,11 @@ describe("serve — durum süreçte tutulmaz", () => {
 describe("serve — yetim kart", () => {
   /** `topology` iki rol tanıyor; bu kart üçüncü bir rolde bekliyor. */
   async function yetimKoy(): Promise<void> {
-    const yabanci: TopologySnapshot = {
+    const foreign: TopologySnapshot = {
       ...topology,
       roles: [{ ...(topology.roles[0] as TopologySnapshot["roles"][number]), id: "tester" }],
     };
-    await queue.add(newCard({ title: "yetim iş", task: "x", topology: yabanci }));
+    await queue.add(newCard({ title: "yetim iş", task: "x", topology: foreign }));
   }
 
   // `sweep()` yalnızca kendi topolojisindeki rolleri geziyor; bu kart hiçbir

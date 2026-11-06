@@ -82,7 +82,7 @@ export async function serve(
   let idling = false;
   // Kart başına bir kez: her geçişte tekrarlanan uyarı, asıl çıktıyı
   // okunmaz hâle getirirdi.
-  const duyurulan = new Set<string>();
+  const announced = new Set<string>();
   // Aynı hata her yoklamada tekrarlanırsa terminal okunmaz olur: canlı
   // koşuda 3 saniyede 48 kez yazdı. Yalnızca DEĞİŞEN hata duyurulur.
   let sonHata: string | null = null;
@@ -109,7 +109,7 @@ export async function serve(
     const result = await sweep(topology, options);
     options.onSweep?.(result, sweeps);
     sweeps += 1;
-    await duyurYetimleri(topology, options, duyurulan);
+    await duyurYetimleri(topology, options, announced);
 
     if (result.moved) {
       idling = false;
@@ -192,7 +192,7 @@ async function waitForWork(dir: string | undefined, pollMs: number, signal?: Abo
 async function duyurYetimleri(
   topology: TopologySnapshot,
   options: ServeOptions,
-  duyurulan: Set<string>,
+  announced: Set<string>,
 ): Promise<void> {
   if (options.onOrphan === undefined) return;
   let cards;
@@ -204,8 +204,8 @@ async function duyurYetimleri(
     return;
   }
   for (const card of cards) {
-    if (!isOrphan(card, topology) || duyurulan.has(card.id)) continue;
-    duyurulan.add(card.id);
+    if (!isOrphan(card, topology) || announced.has(card.id)) continue;
+    announced.add(card.id);
     options.onOrphan({ id: card.id, title: card.title, role: card.role });
   }
 }

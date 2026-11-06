@@ -363,8 +363,8 @@ function parsePlan(
   // yok — ama alan yine kabul ediliyor: varsayılanı reddetmek saçma
   // olurdu. Etkin olup olmadığı `plan.round` olayına `blind` diye
   // yazılıyor, yani günlük atıl körlemeyi çalışıyor göstermiyor.
-  const korRaw = raw["ilk-tur-kor"] ?? true;
-  if (typeof korRaw !== "boolean") {
+  const blindRaw = raw["ilk-tur-kor"] ?? true;
+  if (typeof blindRaw !== "boolean") {
     throw new FlowError(file, rule(18, "`planlama.ilk-tur-kor` mantıksal değer olmalı"));
   }
 
@@ -436,13 +436,13 @@ function parsePlan(
   // Alan isteğe bağlı: yoksa yükümlülük kapısı kapalı ve mekanizma eski
   // hâliyle çalışır. Varsa KATI, çünkü yarım bir denetçi beyanı "kabul
   // edilmiş itiraz denetleniyor" izlenimi verip denetlemez.
-  const denetciRaw = raw["denetci"];
+  const auditorRaw = raw["denetci"];
   let denetci: string | undefined;
-  if (denetciRaw !== undefined && denetciRaw !== null) {
-    if (typeof denetciRaw !== "string" || denetciRaw.trim() === "") {
+  if (auditorRaw !== undefined && auditorRaw !== null) {
+    if (typeof auditorRaw !== "string" || auditorRaw.trim() === "") {
       throw new FlowError(file, rule(23, "`planlama.denetci` boş olmayan bir rol adı olmalı"));
     }
-    denetci = denetciRaw.trim();
+    denetci = auditorRaw.trim();
     if (!ids.has(denetci)) {
       throw new FlowError(
         file,
@@ -460,8 +460,8 @@ function parsePlan(
     }
     // Zincirde katılımcıların ARKASINDA olmalı: yükümlülük, iş yapıldıktan
     // sonra denetlenir. Kural 19'un kardeşi.
-    const sonKatilimci = order.indexOf(katilimcilar[katilimcilar.length - 1] as string);
-    if (order.indexOf(denetci) <= sonKatilimci) {
+    const lastParticipant = order.indexOf(katilimcilar[katilimcilar.length - 1] as string);
+    if (order.indexOf(denetci) <= lastParticipant) {
       throw new FlowError(
         file,
         rule(23, `\`planlama.denetci\` planlama katılımcılarından SONRA gelmeli: ` +
@@ -471,7 +471,7 @@ function parsePlan(
   }
 
   return {
-    katilimcilar, plan: yol, tur: turRaw, itiraz, ilkTurKor: korRaw,
+    katilimcilar, plan: yol, tur: turRaw, itiraz, ilkTurKor: blindRaw,
     ...(denetci === undefined ? {} : { denetci }),
   };
 }
@@ -677,7 +677,7 @@ export async function loadFlow(path: string, options: LoadOptions): Promise<Flow
   }
 
   const plan = parsePlan(doc, order, ids, file);
-  const katilimci = (id: string): boolean => plan?.katilimcilar.includes(id) ?? false;
+  const participant = (id: string): boolean => plan?.katilimcilar.includes(id) ?? false;
 
   // --- kural 12, 13, 14, 22: ret hedefi ---
   const rejectPolicy = parseRejectPolicy(doc, file);
@@ -702,7 +702,7 @@ export async function loadFlow(path: string, options: LoadOptions): Promise<Flow
     //
     // Kural 21'in kardeşi: orada katılımcıya konan KAPI hiç ateşlenmiyordu,
     // burada katılımcıya konan RET yanlış mekanizmayı ateşliyor.
-    if (katilimci(id)) {
+    if (participant(id)) {
       if (role.rejectRaw !== undefined) {
         throw new FlowError(
           file,

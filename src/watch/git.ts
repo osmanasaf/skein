@@ -43,7 +43,7 @@ export async function currentBranch(dir: string): Promise<string | null> {
  * `.gitignore`'una güvenmek yerine adıyla eleniyor — orkestratörün kendi
  * bıraktığı iz, ajanın yarım bıraktığı iş sanılmamalı.
  */
-export class GitDurumHatasi extends Error {
+export class GitStatusError extends Error {
   constructor(dir: string, err: string) {
     super(`ağacın durumu okunamadı (${dir}): ${err || "git status başarısız"}`);
     this.name = "GitDurumHatasi";
@@ -67,7 +67,7 @@ export class GitDurumHatasi extends Error {
  */
 export async function dirtyPaths(dir: string, ignore: string[] = []): Promise<string[]> {
   const { ok, out, err } = await git(dir, ["status", "--porcelain"]);
-  if (!ok) throw new GitDurumHatasi(dir, err);
+  if (!ok) throw new GitStatusError(dir, err);
   if (out === "") return [];
   const ignored = ignore.map((path) => path.replace(/\/+$/, ""));
   return out
@@ -140,11 +140,11 @@ export async function mergeForward(opts: {
   for (const yol of yoksay) {
     if (yol === "" || yol.endsWith("/")) continue;
     if (!(await isTracked(opts.toDir, yol))) continue;
-    const kirli = await git(opts.toDir, ["status", "--porcelain", "--", yol]);
+    const dirtyFiles = await git(opts.toDir, ["status", "--porcelain", "--", yol]);
     // `ok` de sorulmak zorunda: aynı dosyada iki satır yukarıda düzeltilen
     // kusurun aynısı, git hatası "değişmemiş" diye okunurdu.
-    if (!kirli.ok) return { kind: "blocked", reason: new GitDurumHatasi(opts.toDir, kirli.err).message };
-    if (kirli.out === "") continue;
+    if (!dirtyFiles.ok) return { kind: "blocked", reason: new GitStatusError(opts.toDir, dirtyFiles.err).message };
+    if (dirtyFiles.out === "") continue;
     return {
       kind: "blocked",
       reason: `hedef ağaçta \`${yol}\` git tarafından İZLENİYOR ve değişmiş: ` +

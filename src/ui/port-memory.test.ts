@@ -3,13 +3,13 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  portuHatirlayarakAc,
-  sonAkisiOku,
-  sonAkisiYaz,
-  sonPortuOku,
-  sonPortuYaz,
-  sonTemaOku,
-  sonTemaYaz,
+  openRememberingPort,
+  readLastFlow,
+  writeLastFlow,
+  readLastPort,
+  writeLastPort,
+  readLastTheme,
+  writeLastTheme,
 } from "./port-memory.js";
 
 let root: string;
@@ -23,24 +23,24 @@ afterEach(async () => {
 
 describe("sonPortuOku", () => {
   it("dosya yoksa undefined döner — ilk açılışta hafıza boş sayılır", async () => {
-    expect(await sonPortuOku(root)).toBeUndefined();
+    expect(await readLastPort(root)).toBeUndefined();
   });
 
   it("sonPortuYaz ile yazılan port geri okunur", async () => {
-    await sonPortuYaz(root, 7799);
-    expect(await sonPortuOku(root)).toBe(7799);
+    await writeLastPort(root, 7799);
+    expect(await readLastPort(root)).toBe(7799);
   });
 
   it("bozuk JSON engel olmuyor — undefined döner, fırlatmaz", async () => {
     await mkdir(join(root, ".skein"), { recursive: true });
     await writeFile(join(root, ".skein", "ekran.json"), "{ bu json degil", "utf8");
-    await expect(sonPortuOku(root)).resolves.toBeUndefined();
+    await expect(readLastPort(root)).resolves.toBeUndefined();
   });
 
   it("port alanı sayı değilse yok sayılır", async () => {
     await mkdir(join(root, ".skein"), { recursive: true });
     await writeFile(join(root, ".skein", "ekran.json"), JSON.stringify({ port: "7799" }), "utf8");
-    expect(await sonPortuOku(root)).toBeUndefined();
+    expect(await readLastPort(root)).toBeUndefined();
   });
 
   /**
@@ -67,7 +67,7 @@ describe("sonPortuOku", () => {
     it(`port alanı geçersizse yok sayılır: ${name}`, async () => {
       await mkdir(join(root, ".skein"), { recursive: true });
       await writeFile(join(root, ".skein", "ekran.json"), JSON.stringify({ port: value }), "utf8");
-      expect(await sonPortuOku(root)).toBeUndefined();
+      expect(await readLastPort(root)).toBeUndefined();
     });
   }
 
@@ -76,26 +76,26 @@ describe("sonPortuOku", () => {
   it("üst sınır DAHİL — 65535 geçerli bir porttur", async () => {
     await mkdir(join(root, ".skein"), { recursive: true });
     await writeFile(join(root, ".skein", "ekran.json"), JSON.stringify({ port: 65535 }), "utf8");
-    expect(await sonPortuOku(root)).toBe(65535);
+    expect(await readLastPort(root)).toBe(65535);
   });
 
   it("JSON dizi (nesne değil) ise yok sayılır", async () => {
     await mkdir(join(root, ".skein"), { recursive: true });
     await writeFile(join(root, ".skein", "ekran.json"), "[1,2,3]", "utf8");
-    expect(await sonPortuOku(root)).toBeUndefined();
+    expect(await readLastPort(root)).toBeUndefined();
   });
 });
 
 describe("sonPortuYaz", () => {
   it("atomik yazıyor — yarım dosya (tmp) kalmıyor", async () => {
-    await sonPortuYaz(root, 1234);
+    await writeLastPort(root, 1234);
     const entries = await import("node:fs/promises").then((m) =>
       m.readdir(join(root, ".skein")));
     expect(entries).toEqual(["ekran.json"]);
   });
 
   it("dizin yoksa kendisi yaratıyor", async () => {
-    await sonPortuYaz(root, 4321);
+    await writeLastPort(root, 4321);
     const text = await readFile(join(root, ".skein", "ekran.json"), "utf8");
     expect(JSON.parse(text)).toEqual({ port: 4321 });
   });
@@ -110,30 +110,30 @@ describe("sonPortuYaz", () => {
  */
 describe("sonAkisiOku", () => {
   it("dosya yoksa undefined döner — ilk açılışta hafıza boş sayılır", async () => {
-    expect(await sonAkisiOku(root)).toBeUndefined();
+    expect(await readLastFlow(root)).toBeUndefined();
   });
 
   it("sonAkisiYaz ile yazılan ad geri okunur", async () => {
-    await sonAkisiYaz(root, "gunluk-tek");
-    expect(await sonAkisiOku(root)).toBe("gunluk-tek");
+    await writeLastFlow(root, "gunluk-tek");
+    expect(await readLastFlow(root)).toBe("gunluk-tek");
   });
 
   it("bozuk JSON engel olmuyor — undefined döner, fırlatmaz", async () => {
     await mkdir(join(root, ".skein"), { recursive: true });
     await writeFile(join(root, ".skein", "ekran.json"), "{ bu json degil", "utf8");
-    await expect(sonAkisiOku(root)).resolves.toBeUndefined();
+    await expect(readLastFlow(root)).resolves.toBeUndefined();
   });
 
   it("akis alanı metin değilse yok sayılır", async () => {
     await mkdir(join(root, ".skein"), { recursive: true });
     await writeFile(join(root, ".skein", "ekran.json"), JSON.stringify({ akis: 7 }), "utf8");
-    expect(await sonAkisiOku(root)).toBeUndefined();
+    expect(await readLastFlow(root)).toBeUndefined();
   });
 
   it("akis alanı boş/boşluk metinse yok sayılır", async () => {
     await mkdir(join(root, ".skein"), { recursive: true });
     await writeFile(join(root, ".skein", "ekran.json"), JSON.stringify({ akis: "   " }), "utf8");
-    expect(await sonAkisiOku(root)).toBeUndefined();
+    expect(await readLastFlow(root)).toBeUndefined();
   });
 });
 
@@ -147,22 +147,22 @@ describe("sonAkisiOku", () => {
  */
 describe("port ve akış hafızası birbirini EZMİYOR", () => {
   it("port yazıldıktan sonra akış yazmak portu SİLMİYOR", async () => {
-    await sonPortuYaz(root, 7777);
-    await sonAkisiYaz(root, "gunluk-tek");
-    expect(await sonPortuOku(root)).toBe(7777);
-    expect(await sonAkisiOku(root)).toBe("gunluk-tek");
+    await writeLastPort(root, 7777);
+    await writeLastFlow(root, "gunluk-tek");
+    expect(await readLastPort(root)).toBe(7777);
+    expect(await readLastFlow(root)).toBe("gunluk-tek");
   });
 
   it("akış yazıldıktan sonra port yazmak akışı SİLMİYOR", async () => {
-    await sonAkisiYaz(root, "gunluk-tek");
-    await sonPortuYaz(root, 7777);
-    expect(await sonAkisiOku(root)).toBe("gunluk-tek");
-    expect(await sonPortuOku(root)).toBe(7777);
+    await writeLastFlow(root, "gunluk-tek");
+    await writeLastPort(root, 7777);
+    expect(await readLastFlow(root)).toBe("gunluk-tek");
+    expect(await readLastPort(root)).toBe(7777);
   });
 
   it("ikisi de aynı dosyaya yazılıyor — iki ayrı dosya yok", async () => {
-    await sonPortuYaz(root, 7777);
-    await sonAkisiYaz(root, "gunluk-tek");
+    await writeLastPort(root, 7777);
+    await writeLastFlow(root, "gunluk-tek");
     const entries = await import("node:fs/promises").then((m) => m.readdir(join(root, ".skein")));
     expect(entries).toEqual(["ekran.json"]);
   });
@@ -179,56 +179,56 @@ describe("port ve akış hafızası birbirini EZMİYOR", () => {
  */
 describe("sonTemaOku", () => {
   it("dosya yoksa undefined döner — ilk açılışta hafıza boş sayılır", async () => {
-    expect(await sonTemaOku(root)).toBeUndefined();
+    expect(await readLastTheme(root)).toBeUndefined();
   });
 
   it("sonTemaYaz ile yazılan tema geri okunur", async () => {
-    await sonTemaYaz(root, "koyu");
-    expect(await sonTemaOku(root)).toBe("koyu");
+    await writeLastTheme(root, "koyu");
+    expect(await readLastTheme(root)).toBe("koyu");
   });
 
   it("üç geçerli değerin hepsi kabul edilir", async () => {
     for (const tema of ["sistem", "acik", "koyu"] as const) {
-      await sonTemaYaz(root, tema);
-      expect(await sonTemaOku(root)).toBe(tema);
+      await writeLastTheme(root, tema);
+      expect(await readLastTheme(root)).toBe(tema);
     }
   });
 
   it("bozuk JSON engel olmuyor — undefined döner, fırlatmaz", async () => {
     await mkdir(join(root, ".skein"), { recursive: true });
     await writeFile(join(root, ".skein", "ekran.json"), "{ bu json degil", "utf8");
-    await expect(sonTemaOku(root)).resolves.toBeUndefined();
+    await expect(readLastTheme(root)).resolves.toBeUndefined();
   });
 
   it("tema alanı geçersiz bir metinse (üç değerden biri DEĞİLSE) yok sayılır", async () => {
     await mkdir(join(root, ".skein"), { recursive: true });
     await writeFile(join(root, ".skein", "ekran.json"), JSON.stringify({ tema: "açık" }), "utf8");
-    expect(await sonTemaOku(root)).toBeUndefined();
+    expect(await readLastTheme(root)).toBeUndefined();
   });
 
   it("tema alanı metin değilse yok sayılır", async () => {
     await mkdir(join(root, ".skein"), { recursive: true });
     await writeFile(join(root, ".skein", "ekran.json"), JSON.stringify({ tema: 1 }), "utf8");
-    expect(await sonTemaOku(root)).toBeUndefined();
+    expect(await readLastTheme(root)).toBeUndefined();
   });
 });
 
 describe("port/akış/tema hafızası birbirini EZMİYOR", () => {
   it("üçü de bağımsız — biri yazılınca ötekiler SİLİNMİYOR", async () => {
-    await sonPortuYaz(root, 7777);
-    await sonAkisiYaz(root, "gunluk-tek");
-    await sonTemaYaz(root, "koyu");
-    expect(await sonPortuOku(root)).toBe(7777);
-    expect(await sonAkisiOku(root)).toBe("gunluk-tek");
-    expect(await sonTemaOku(root)).toBe("koyu");
+    await writeLastPort(root, 7777);
+    await writeLastFlow(root, "gunluk-tek");
+    await writeLastTheme(root, "koyu");
+    expect(await readLastPort(root)).toBe(7777);
+    expect(await readLastFlow(root)).toBe("gunluk-tek");
+    expect(await readLastTheme(root)).toBe("koyu");
   });
 });
 
 describe("portuHatirlayarakAc", () => {
   it("explicitPort verilmişse hatırlanan port HİÇ okunmuyor, ac AYNEN explicit ile çağrılıyor", async () => {
-    await sonPortuYaz(root, 1111);
+    await writeLastPort(root, 1111);
     const seenList: (number | undefined)[] = [];
-    const result = await portuHatirlayarakAc(root, 9999, async (p) => {
+    const result = await openRememberingPort(root, 9999, async (p) => {
       seenList.push(p);
       return { port: 9999 };
     });
@@ -237,14 +237,14 @@ describe("portuHatirlayarakAc", () => {
   });
 
   it("explicitPort verilmişse hatırlanan kayıt EZİLİR — sonraki okuma explicit'i verir", async () => {
-    await sonPortuYaz(root, 1111);
-    await portuHatirlayarakAc(root, 9999, async (p) => ({ port: p ?? 0 }));
-    expect(await sonPortuOku(root)).toBe(9999);
+    await writeLastPort(root, 1111);
+    await openRememberingPort(root, 9999, async (p) => ({ port: p ?? 0 }));
+    expect(await readLastPort(root)).toBe(9999);
   });
 
   it("explicit yok, hafıza boş → ac undefined (boş port) ile çağrılır", async () => {
     const seenList: (number | undefined)[] = [];
-    await portuHatirlayarakAc(root, undefined, async (p) => {
+    await openRememberingPort(root, undefined, async (p) => {
       seenList.push(p);
       return { port: 5050 };
     });
@@ -252,9 +252,9 @@ describe("portuHatirlayarakAc", () => {
   });
 
   it("explicit yok, hafızada port VAR → ac önce o port ile çağrılır", async () => {
-    await sonPortuYaz(root, 7777);
+    await writeLastPort(root, 7777);
     const seenList: (number | undefined)[] = [];
-    await portuHatirlayarakAc(root, undefined, async (p) => {
+    await openRememberingPort(root, undefined, async (p) => {
       seenList.push(p);
       return { port: 7777 };
     });
@@ -262,9 +262,9 @@ describe("portuHatirlayarakAc", () => {
   });
 
   it("hatırlanan port DOLUYSA (EADDRINUSE) sessizce boş porta düşer", async () => {
-    await sonPortuYaz(root, 7777);
+    await writeLastPort(root, 7777);
     const seenList: (number | undefined)[] = [];
-    const result = await portuHatirlayarakAc(root, undefined, async (p) => {
+    const result = await openRememberingPort(root, undefined, async (p) => {
       seenList.push(p);
       if (p === 7777) {
         const error = new Error("in use") as NodeJS.ErrnoException;
@@ -279,8 +279,8 @@ describe("portuHatirlayarakAc", () => {
   });
 
   it("düşülen boş port yeni hafıza olarak kaydedilir", async () => {
-    await sonPortuYaz(root, 7777);
-    await portuHatirlayarakAc(root, undefined, async (p) => {
+    await writeLastPort(root, 7777);
+    await openRememberingPort(root, undefined, async (p) => {
       if (p === 7777) {
         const error = new Error("in use") as NodeJS.ErrnoException;
         error.code = "EADDRINUSE";
@@ -288,11 +288,11 @@ describe("portuHatirlayarakAc", () => {
       }
       return { port: 8080 };
     });
-    expect(await sonPortuOku(root)).toBe(8080);
+    expect(await readLastPort(root)).toBe(8080);
   });
 
   it("DOLU DIŞINDA bir hata ÖRTÜLMEZ, olduğu gibi fırlar", async () => {
-    await sonPortuYaz(root, 7777);
+    await writeLastPort(root, 7777);
     const baskaHata = new Error("izin yok") as NodeJS.ErrnoException;
     baskaHata.code = "EACCES";
     // `ac` yalnızca HATIRLANAN portla çağrıldığında fırlatıyor — "düş"
@@ -302,7 +302,7 @@ describe("portuHatirlayarakAc", () => {
     // dolu sayan bir mutasyonu YAKALAMAZDI (ac zaten her çağrıda fırlasa
     // sonuç değişmezdi).
     await expect(
-      portuHatirlayarakAc(root, undefined, async (p) => {
+      openRememberingPort(root, undefined, async (p) => {
         if (p === 7777) throw baskaHata;
         return { port: p ?? 0 };
       }),
@@ -321,7 +321,7 @@ describe("portuHatirlayarakAc", () => {
     await mkdir(join(root, ".skein"), { recursive: true });
     await writeFile(join(root, ".skein", "ekran.json"), JSON.stringify({ port: 70000 }), "utf8");
     const seenList: (number | undefined)[] = [];
-    const result = await portuHatirlayarakAc(root, undefined, async (p) => {
+    const result = await openRememberingPort(root, undefined, async (p) => {
       seenList.push(p);
       return { port: 4040 };
     });
@@ -334,7 +334,7 @@ describe("portuHatirlayarakAc", () => {
     await mkdir(join(root, ".skein"), { recursive: true });
     await writeFile(join(root, ".skein", "ekran.json"), "bozuk", "utf8");
     const seenList: (number | undefined)[] = [];
-    const result = await portuHatirlayarakAc(root, undefined, async (p) => {
+    const result = await openRememberingPort(root, undefined, async (p) => {
       seenList.push(p);
       return { port: 3030 };
     });

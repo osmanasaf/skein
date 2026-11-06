@@ -5,9 +5,9 @@ import { knownProviderSet } from "../adapters/factory.js";
 import { CardQueue } from "../card/queue.js";
 import { FlowError, loadFlow, type LoadOptions } from "../flow/load.js";
 import { LiveFlow } from "../flow/live.js";
-import { girisNoktasiMi, tsxCliYolu } from "../proc/process.js";
-import { tarayiciyiAc } from "./open-browser.js";
-import { portuHatirlayarakAc, sonAkisiOku, sonAkisiYaz } from "./port-memory.js";
+import { isEntryPoint, tsxCliPath } from "../proc/process.js";
+import { openBrowser } from "./open-browser.js";
+import { openRememberingPort, readLastFlow, writeLastFlow } from "./port-memory.js";
 import { serveUi, type CanliAkis } from "./server.js";
 
 /** Akış argümanı verilmediğinde, hatırlanan kayıt da yoksa/bozuksa düşülecek akış. */
@@ -113,12 +113,12 @@ async function listFlowNames(root: string): Promise<string[]> {
 async function varsayilanAkisAdi(
   root: string, flows: readonly string[], loadOptions: LoadOptions,
 ): Promise<string> {
-  const adaylar: string[] = [];
-  const hatirlanan = await sonAkisiOku(root);
-  if (hatirlanan !== undefined) adaylar.push(hatirlanan);
-  adaylar.push(GUNLUK_TEK);
+  const candidates: string[] = [];
+  const remembered = await readLastFlow(root);
+  if (remembered !== undefined) candidates.push(remembered);
+  candidates.push(GUNLUK_TEK);
 
-  for (const name of adaylar) {
+  for (const name of candidates) {
     // YOKSA bu adım hiç denenmiyor — "bozuk" ile "hiç yok" burada aynı
     // kapıdan geçiyor, ikisi de sıradaki kurala düşüyor.
     if (!flows.includes(name)) continue;
@@ -226,7 +226,7 @@ async function main(argv: string[]): Promise<number> {
   // bakılmadan (argüman, hatırlanan, varsayılan ya da son çare). Açılış
   // BAŞARISIZSA (yukarıdaki satır fırlatır) buraya hiç ulaşılmıyor, yani
   // bozuk bir akış hiçbir zaman "son açılan" olarak kaydedilmiyor.
-  await sonAkisiYaz(root, flowName);
+  await writeLastFlow(root, flowName);
 
   const queue = new CardQueue(join(root, ".skein"));
   // `init` yalnızca eksik dizinleri yaratır — kuyruğa dokunmaz. `recover()`
@@ -258,7 +258,7 @@ async function main(argv: string[]): Promise<number> {
         // değiştirmenin "son açılan" hafızasını da güncellediği tek yer:
         // yapmazsak seçiciyle geçilen akış ekranda görünür ama bir sonraki
         // `npm start` hâlâ eski kaydı okur — "son açılan" yalan olurdu.
-        await sonAkisiYaz(root, name);
+        await writeLastFlow(root, name);
         return { live: yeniLive, flowPath: newPath };
       },
     },
@@ -282,7 +282,7 @@ async function main(argv: string[]): Promise<number> {
             // eskisini başlatırdı.
             command: [
               process.execPath,
-              tsxCliYolu(root),
+              tsxCliPath(root),
               join(root, "src", "watch", "cli.ts"),
             ],
             bayraklar: gozcuBayraklari,
@@ -295,7 +295,7 @@ async function main(argv: string[]): Promise<number> {
   // doluysa (`EADDRINUSE`) sessizce boş bir porta düşülür — tarayıcı sekmesi
   // açılışlar arasında aynı adreste çalışmaya devam eder, ama ekranın
   // açılması o portun o anki durumuna BAĞLI olamaz.
-  const server = await portuHatirlayarakAc(root, port, (p) =>
+  const server = await openRememberingPort(root, port, (p) =>
     serveUi(p === undefined ? serverOptions : { ...serverOptions, port: p }));
 
   console.log(`ekran açık: ${server.url}`);
@@ -314,7 +314,7 @@ async function main(argv: string[]): Promise<number> {
   // araçta başlamanın kendisi en zor adım olmamalı. Bu HİÇBİR KOŞULDA
   // ekranı düşürmez (`tarayiciyiAc` kendi içinde yutuyor); yalnızca
   // `--tarayici-yok` ile (uzaktan/konteyner koşumu) devre dışı.
-  if (!tarayiciYok) tarayiciyiAc(server.url);
+  if (!tarayiciYok) openBrowser(server.url);
 
   const stop = (): void => {
     void server.close().then(() => process.exit(0));
@@ -328,7 +328,7 @@ async function main(argv: string[]): Promise<number> {
 }
 
 // İçe almanın yan etkisi olmamalı — gözcü CLI'ındaki kuralın aynısı.
-if (girisNoktasiMi(import.meta.url)) {
+if (isEntryPoint(import.meta.url)) {
   main(process.argv.slice(2)).then(
     (code) => process.exit(code),
     (error: unknown) => {

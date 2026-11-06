@@ -8,7 +8,7 @@ import { knownProviderSet } from "../adapters/factory.js";
 import { loadFlow } from "../flow/load.js";
 import { snapshot, type TopologySnapshot } from "../flow/snapshot.js";
 import { newCard, rejectCount, serializeCard, type Card } from "./card.js";
-import { CardQueue, kapiKarari, QueueError } from "./queue.js";
+import { CardQueue, gateDecision, QueueError } from "./queue.js";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -97,10 +97,10 @@ describe("CardQueue — temel hareket", () => {
   });
 
   it("FIFO: önce açılan kart önce alınır", async () => {
-    const eski = await put(daily, "eski", new Date("2026-09-01T10:00:00Z"));
+    const old = await put(daily, "eski", new Date("2026-09-01T10:00:00Z"));
     const fresh = await put(daily, "yeni", new Date("2026-09-02T10:00:00Z"));
 
-    expect((await al(queue, "coder")).id).toBe(eski.id);
+    expect((await al(queue, "coder")).id).toBe(old.id);
     expect((await al(queue, "coder")).id).toBe(fresh.id);
   });
 });
@@ -369,10 +369,10 @@ describe("CardQueue — çökme ve yarış", () => {
     "taramada kaybolmuş dosya kartı düşürmez, çökmez",
     async () => {
       const card = await put(daily);
-      const [gercek] = await copiesOf(card.id);
+      const [actual] = await copiesOf(card.id);
       // Aynı dizinde, var olmayan bir hedefe işaret eden bir `.json`.
-      await symlink(join(dirname(gercek as string), "yok.json"),
-        join(dirname(gercek as string), "0-kopuk.json"));
+      await symlink(join(dirname(actual as string), "yok.json"),
+        join(dirname(actual as string), "0-kopuk.json"));
 
       // Kopuk bağ atlanıyor, gerçek kart alınıyor.
       expect((await al(queue, "coder")).id).toBe(card.id);
@@ -423,14 +423,14 @@ describe("CardQueue — çökme ve yarış", () => {
   // Bir kart alınırken BAŞKA kartın alınamaması da kaybolmamalı.
   it("alınan kart engelleri gizlemiyor", async () => {
     const engelli = await put(daily, "engelli", new Date("2026-01-01T00:00:00Z"));
-    const saglam = await put(daily, "sağlam", new Date("2026-01-02T00:00:00Z"));
+    const robust = await put(daily, "sağlam", new Date("2026-01-02T00:00:00Z"));
     await mkdir(join(root, ".skein", "active", "coder", `${engelli.id}.json`), { recursive: true });
 
     const result = await queue.take("coder");
 
     expect(result.kind).toBe("alindi");
     if (result.kind !== "alindi") throw new Error("alindi beklendi");
-    expect(result.card.id).toBe(saglam.id);
+    expect(result.card.id).toBe(robust.id);
     expect(result.blockages.map((e) => e.path.includes(engelli.id))).toEqual([true]);
   });
 
@@ -443,11 +443,11 @@ describe("CardQueue — çökme ve yarış", () => {
   // sonraki ilk iş yine `recover()` olduğu için gözcü artık hiçbir akış
   // için açılamıyordu.
   it("bozuk dosya ilgisiz kartı engellemiyor", async () => {
-    const saglam = await put(daily);
+    const robust = await put(daily);
     await writeFile(join(root, ".skein", "queue", "coder", "0-000000000000000-c-bozuk.json"), "{ değil");
 
     // Sağlam kart alınabiliyor: bir bozuk dosya kuyruğu tutmuyor.
-    expect((await al(queue, "coder")).id).toBe(saglam.id);
+    expect((await al(queue, "coder")).id).toBe(robust.id);
   });
 
   it("bozuk dosya SESSİZ geçmiyor: yolu bildiriliyor", async () => {
@@ -555,12 +555,12 @@ describe("CardQueue — listeleme", () => {
  */
 describe("kapiKarari", () => {
   /** Kartı `role` üzerinde kaçış kapısına koyar. */
-  async function atGate(topology: TopologySnapshot, zincir: string[]): Promise<Card> {
+  async function atGate(topology: TopologySnapshot, chain: string[]): Promise<Card> {
     await put(topology);
-    let card = await al(queue, zincir[0] as string);
-    for (const sonraki of zincir.slice(1)) {
+    let card = await al(queue, chain[0] as string);
+    for (const nextOne of chain.slice(1)) {
       await queue.handoff(card, {});
-      card = await al(queue, sonraki);
+      card = await al(queue, nextOne);
     }
     return queue.escalate(card, "verdikt yok");
   }
@@ -568,7 +568,7 @@ describe("kapiKarari", () => {
   it("hedefi olmayan back retry olur ve ADI da retry'dir", async () => {
     const card = await atGate(daily, ["coder"]);
 
-    const karar = kapiKarari(card, "back");
+    const karar = gateDecision(card, "back");
 
     expect(karar).toMatchObject({
       kind: "escalation",
@@ -581,7 +581,7 @@ describe("kapiKarari", () => {
   it("hedefi olan back aynen uygulanır", async () => {
     const card = await atGate(daily, ["coder", "reviewer"]);
 
-    const karar = kapiKarari(card, "back");
+    const karar = gateDecision(card, "back");
 
     expect(karar).toMatchObject({ requested: "back", applied: "back", target: "coder" });
   });
@@ -589,14 +589,14 @@ describe("kapiKarari", () => {
   // Varsayılan artık tek yerde: kaçışta `retry`, diğerlerinde `forward`.
   it("karar verilmezse kapının varsayılanı kullanılır", async () => {
     const card = await atGate(daily, ["coder"]);
-    expect(kapiKarari(card)).toMatchObject({ requested: "retry", applied: "retry" });
+    expect(gateDecision(card)).toMatchObject({ requested: "retry", applied: "retry" });
   });
 
   // `release` ile AYNI kaynaktan okunduğunun kanıtı: hedef gerçekten
   // kartın gittiği yer olmalı.
   it("hedef, kartın gerçekten gittiği rol", async () => {
     const card = await atGate(daily, ["coder", "reviewer"]);
-    const karar = kapiKarari(card, "back");
+    const karar = gateDecision(card, "back");
 
     const released = await queue.release(card.id, { decision: "back" });
 
@@ -605,7 +605,7 @@ describe("kapiKarari", () => {
 
   it("hedefsiz back'te de hedef kartın gittiği rol", async () => {
     const card = await atGate(daily, ["coder"]);
-    const karar = kapiKarari(card, "back");
+    const karar = gateDecision(card, "back");
 
     const released = await queue.release(card.id, { decision: "back" });
 
@@ -630,7 +630,7 @@ describe("close — kopya kartlar", () => {
    * Gerçekte bu, yeniden adlandırma ile unlink arasında çöken bir sürecin
    * bıraktığı hâl (bkz. recover sınaması).
    */
-  async function bayatKopya(card: Card, field: string, rol: string): Promise<string> {
+  async function staleCopy(card: Card, field: string, rol: string): Promise<string> {
     const yol = join(root, ".skein", field, rol, `${card.id}.json`);
     await mkdir(dirname(yol), { recursive: true });
     await writeFile(yol, serializeCard(card));
@@ -639,34 +639,34 @@ describe("close — kopya kartlar", () => {
 
   it("geçmişi uzun olanı kapatıyor, bayatı kapatmıyor", async () => {
     await put(daily);
-    const taze = await al(queue, "coder");
-    const ilerlemis = await queue.handoff(taze, { commit: "abc" });
+    const recent = await al(queue, "coder");
+    const advanced = await queue.handoff(recent, { commit: "abc" });
     // `taze` geçmişi KISA olan kopya; `ilerlemis` uzun olan.
-    await bayatKopya(taze, "active", "coder");
-    expect(await copiesOf(taze.id)).toHaveLength(2);
+    await staleCopy(recent, "active", "coder");
+    expect(await copiesOf(recent.id)).toHaveLength(2);
 
-    const kapali = await queue.close(taze.id, "akışta karşılığı yok");
+    const closed = await queue.close(recent.id, "akışta karşılığı yok");
 
     // Kapatılan şey İLERLEMİŞ kart olmalı: bayat kopya arşivlenirse
     // kartın gerçek geçmişi çöpe gider.
-    expect(kapali.history.length).toBeGreaterThan(taze.history.length);
-    expect(kapali.history.at(-1)).toMatchObject({ event: "done", reason: "akışta karşılığı yok" });
+    expect(closed.history.length).toBeGreaterThan(recent.history.length);
+    expect(closed.history.at(-1)).toMatchObject({ event: "done", reason: "akışta karşılığı yok" });
   });
 
   it("kapatma gerçekten kapatıyor: kopya kuyrukta kalmıyor", async () => {
     await put(daily);
-    const taze = await al(queue, "coder");
-    await queue.handoff(taze, { commit: "abc" });
-    await bayatKopya(taze, "active", "coder");
+    const recent = await al(queue, "coder");
+    await queue.handoff(recent, { commit: "abc" });
+    await staleCopy(recent, "active", "coder");
 
-    await queue.close(taze.id, "akışta karşılığı yok");
+    await queue.close(recent.id, "akışta karşılığı yok");
 
     // Tek kopya kalmalı ve o da `done/` altında. Eskiden bayat kopya
     // kuyrukta kalıyor, kart panoda durmaya devam ediyordu.
-    const kalanlar = await copiesOf(taze.id);
-    expect(kalanlar).toHaveLength(1);
-    expect(kalanlar[0]).toContain(join(".skein", "done"));
-    expect((await queue.list()).filter((c) => c.id === taze.id && c.state !== "done")).toEqual([]);
+    const remaining = await copiesOf(recent.id);
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]).toContain(join(".skein", "done"));
+    expect((await queue.list()).filter((c) => c.id === recent.id && c.state !== "done")).toEqual([]);
   });
 
   /**
@@ -680,16 +680,16 @@ describe("close — kopya kartlar", () => {
    */
   it("bayat aktif kopya kapatmayı engellemiyor", async () => {
     await put(daily);
-    const taze = await al(queue, "coder");
-    const ilerlemis = await queue.handoff(taze, { commit: "abc" });
-    expect(ilerlemis.state).toBe("queued");
+    const recent = await al(queue, "coder");
+    const advanced = await queue.handoff(recent, { commit: "abc" });
+    expect(advanced.state).toBe("queued");
     // `taze` zaten `state: "active"`: gerçek çökme kalıntısı böyle görünür.
-    await bayatKopya(taze, "active", "coder");
+    await staleCopy(recent, "active", "coder");
 
-    const kapali = await queue.close(taze.id, "akışta karşılığı yok");
+    const closed = await queue.close(recent.id, "akışta karşılığı yok");
 
-    expect(kapali.state).toBe("done");
-    expect(await copiesOf(taze.id)).toHaveLength(1);
+    expect(closed.state).toBe("done");
+    expect(await copiesOf(recent.id)).toHaveLength(1);
   });
 
   // KAZANAN aktifse kapatma yok: o turun parası ödeniyor olabilir.
@@ -698,7 +698,7 @@ describe("close — kopya kartlar", () => {
     const active = await al(queue, "coder");
     // Kazanan `active/` altında ve geçmişi en uzun; kuyrukta kısa geçmişli
     // bir kopya var.
-    await bayatKopya({ ...active, history: active.history.slice(0, 1), state: "queued" },
+    await staleCopy({ ...active, history: active.history.slice(0, 1), state: "queued" },
       "queue", "coder");
 
     await expect(queue.close(active.id, "gerekçe")).rejects.toThrow(/koşuyor/);

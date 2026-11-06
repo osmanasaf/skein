@@ -76,7 +76,7 @@ export interface DraftRole {
  */
 export function fromFlow(flow: Flow): FlowDraft {
   const dir = dirname(flow.path);
-  const goreli = (abs: string): string => {
+  const relativeTo = (abs: string): string => {
     const r = relative(dir, abs).split(sep).join("/");
     return r.startsWith(".") ? r : `./${r}`;
   };
@@ -84,12 +84,12 @@ export function fromFlow(flow: Flow): FlowDraft {
   return {
     name: flow.name,
     ...(flow.description === undefined ? {} : { description: flow.description }),
-    constitution: flow.constitution.map(goreli),
+    constitution: flow.constitution.map(relativeTo),
     roles: flow.roles.map((role) => ({
       id: role.id,
       provider: role.provider,
       workspace: role.workspace,
-      prompt: goreli(role.promptPath),
+      prompt: relativeTo(role.promptPath),
       receive: role.receive,
       next: role.next,
       ...(role.syncBack.length > 0 ? { syncBack: [...role.syncBack] } : {}),
@@ -158,25 +158,25 @@ export type DraftCheck =
  * içindeki yorumlar korunuyor.
  */
 export function toYaml(draft: FlowDraft, mevcut?: string): string {
-  const alanlar = draftAlanlari(draft);
+  const fields = draftAlanlari(draft);
   if (mevcut !== undefined && mevcut.trim() !== "") {
     try {
-      const belge = parseDocument(mevcut);
+      const document = parseDocument(mevcut);
       // Bozuk bir dosyadan düzenleme taşımak, bozukluğu yeni dosyaya
       // taşımak olurdu: o hâlde sıfırdan kuruluyor.
-      if (belge.errors.length === 0 && belge.contents !== null) {
-        for (const [ad, value] of Object.entries(alanlar)) {
-          if (value === undefined) belge.delete(ad);
-          else belge.set(ad, value);
+      if (document.errors.length === 0 && document.contents !== null) {
+        for (const [ad, value] of Object.entries(fields)) {
+          if (value === undefined) document.delete(ad);
+          else document.set(ad, value);
         }
-        return belge.toString({ lineWidth: 0 });
+        return document.toString({ lineWidth: 0 });
       }
     } catch {
       // düşerse sıfırdan kur
     }
   }
   const doc: Record<string, unknown> = {};
-  for (const [ad, value] of Object.entries(alanlar)) {
+  for (const [ad, value] of Object.entries(fields)) {
     if (value !== undefined) doc[ad] = value;
   }
   return `${stringify(doc, { lineWidth: 0 })}`;

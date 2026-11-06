@@ -33,8 +33,8 @@ export async function sweep(topology: TopologySnapshot, options: TickOptions): P
   // ilerlemediği hâlde "bir şey oldu" deyip sonsuza kadar geçiş yapardı:
   // alınamayan bir dosya, gözcüyü boşa döndüren bir çarka dönüşürdü.
   // Teşhis `report()` ile yine basılıyor, yalnızca döngüyü beslemiyor.
-  const hareket = (r: TickResult): boolean => r.status !== "idle" && r.status !== "engelli";
-  return { results, moved: results.some((r) => hareket(r.result)) };
+  const motion = (r: TickResult): boolean => r.status !== "idle" && r.status !== "engelli";
+  return { results, moved: results.some((r) => motion(r.result)) };
 }
 
 export interface LoopOptions extends TickOptions {

@@ -289,7 +289,7 @@ describe("serveUi — tema anahtarı", () => {
 });
 
 describe("serveUi — kapıyı açmak", () => {
-  const birak = (id: string, decision?: string, baslik?: Record<string, string>) =>
+  const release = (id: string, decision?: string, baslik?: Record<string, string>) =>
     fetch(`${server.url}kart/${id}/birak`, {
       method: "POST",
       headers: { "content-type": "application/json", ...(baslik ?? { "x-skein-token": server.token }) },
@@ -308,7 +308,7 @@ describe("serveUi — kapıyı açmak", () => {
   it("jetonsuz yazma reddedilir", async () => {
     const id = await atGate();
 
-    const res = await birak(id, "retry", {});
+    const res = await release(id, "retry", {});
 
     expect(res.status).toBe(403);
     // Kart yerinde kaldı: reddedilen bir komut hiçbir şeyi oynatmamalı.
@@ -318,12 +318,12 @@ describe("serveUi — kapıyı açmak", () => {
   it("yanlış jeton reddedilir", async () => {
     const id = await atGate();
     // Jeton hex; başlık değerleri ByteString olmak zorunda.
-    expect((await birak(id, "retry", { "x-skein-token": "deadbeef" })).status).toBe(403);
+    expect((await release(id, "retry", { "x-skein-token": "deadbeef" })).status).toBe(403);
   });
 
   it("başka kaynaktan gelen istek reddedilir", async () => {
     const id = await atGate();
-    const res = await birak(id, "retry", {
+    const res = await release(id, "retry", {
       "x-skein-token": server.token,
       origin: "https://kotu-site.example",
     });
@@ -333,7 +333,7 @@ describe("serveUi — kapıyı açmak", () => {
   it("jetonla kapıyı açar ve yeni modeli döndürür", async () => {
     const id = await atGate();
 
-    const res = await birak(id, "retry");
+    const res = await release(id, "retry");
     const data = (await res.json()) as { card: { state: string; role: string }; model: { cards: unknown[] } };
 
     expect(res.status).toBe(200);
@@ -348,7 +348,7 @@ describe("serveUi — kapıyı açmak", () => {
   it("kaçış kapısından ileri bırakma 409 ve gerekçeyle reddedilir", async () => {
     const id = await atGate();
 
-    const res = await birak(id, "forward");
+    const res = await release(id, "forward");
     const data = (await res.json()) as { error: string };
 
     expect(res.status).toBe(409);
@@ -359,14 +359,14 @@ describe("serveUi — kapıyı açmak", () => {
 
   it("bilinmeyen karar reddedilir", async () => {
     const id = await atGate();
-    const res = await birak(id, "sallama");
+    const res = await release(id, "sallama");
     expect(res.status).toBe(409);
     expect((await queue.get(id))?.state).toBe("gate");
   });
 
   it("kapıda olmayan kart 409", async () => {
     const card = await queue.add(newCard({ title: "x", task: "iş", topology }));
-    expect((await birak(card.id, "retry")).status).toBe(409);
+    expect((await release(card.id, "retry")).status).toBe(409);
   });
 
   it("jeton sayfaya gömülü gelir", async () => {
@@ -380,11 +380,11 @@ describe("serveUi — yetim kart", () => {
   // Rolü yaşayan akışta olmayan kart hiçbir sütuna düşmüyor; model onu yine
   // döndürmeli ve işaretlemeli, yoksa ekrandan sessizce kaybolur.
   it("yetim kart modelde işaretli gelir", async () => {
-    const yabanci: TopologySnapshot = {
+    const foreign: TopologySnapshot = {
       ...topology,
       roles: [{ ...(topology.roles[0] as TopologySnapshot["roles"][number]), id: "analyst" }],
     };
-    await queue.add(newCard({ title: "yetim", task: "iş", topology: yabanci }));
+    await queue.add(newCard({ title: "yetim", task: "iş", topology: foreign }));
 
     const model = (await (await fetch(`${server.url}durum`)).json()) as {
       cards: { orphan: boolean; role: string }[];
@@ -396,11 +396,11 @@ describe("serveUi — yetim kart", () => {
   });
 
   it("yetim kart jetonla kapatılabilir", async () => {
-    const yabanci: TopologySnapshot = {
+    const foreign: TopologySnapshot = {
       ...topology,
       roles: [{ ...(topology.roles[0] as TopologySnapshot["roles"][number]), id: "analyst" }],
     };
-    const card = await queue.add(newCard({ title: "yetim", task: "iş", topology: yabanci }));
+    const card = await queue.add(newCard({ title: "yetim", task: "iş", topology: foreign }));
 
     const res = await fetch(`${server.url}kart/${card.id}/kapat`, {
       method: "POST",
@@ -505,10 +505,10 @@ describe("serveUi — akış düzenleme", () => {
     await s.close();
   });
 
-  const gonder = (yol: string, govde: unknown, jeton?: string) =>
+  const send = (yol: string, govde: unknown, token?: string) =>
     fetch(`${s.url}${yol}`, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-skein-token": jeton ?? s.token },
+      headers: { "content-type": "application/json", "x-skein-token": token ?? s.token },
       body: JSON.stringify(govde),
     });
 
@@ -524,7 +524,7 @@ describe("serveUi — akış düzenleme", () => {
   it("geçerli taslakta maliyet ve yaml döner", async () => {
     const draft = ((await (await fetch(`${s.url}akis`)).json()) as { draft: unknown }).draft;
 
-    const v = (await (await gonder("akis/onizleme", draft)).json()) as {
+    const v = (await (await send("akis/onizleme", draft)).json()) as {
       ok: boolean; yaml: string; cost: { base: number };
     };
 
@@ -535,7 +535,7 @@ describe("serveUi — akış düzenleme", () => {
 
   // Kural numaraları kullanıcıya AYNEN gitmeli.
   it("geçersiz taslakta kural numarası döner", async () => {
-    const v = (await (await gonder("akis/onizleme", {
+    const v = (await (await send("akis/onizleme", {
       name: "test", constitution: ["../prompts/base.md"],
       roles: [{ id: "coder", provider: "claude", workspace: "main", prompt: "../../roles/coder.prompt", next: "coder" }],
     })).json()) as { ok: boolean; message: string };
@@ -547,7 +547,7 @@ describe("serveUi — akış düzenleme", () => {
   // Ekranda denenen her taslak diske düşseydi gözcü yarım taslakları okurdu.
   it("önizleme dosyaya dokunmaz", async () => {
     const once = await readFile(gercekFlow.path, "utf8");
-    await gonder("akis/onizleme", { name: "x", constitution: [], roles: [] });
+    await send("akis/onizleme", { name: "x", constitution: [], roles: [] });
     expect(await readFile(gercekFlow.path, "utf8")).toBe(once);
   });
 
@@ -557,7 +557,7 @@ describe("serveUi — akış düzenleme", () => {
     };
     data.draft.description = "ekrandan yazıldı";
 
-    const res = await gonder("akis/yaz", data.draft);
+    const res = await send("akis/yaz", data.draft);
 
     expect(res.status).toBe(200);
     expect(await readFile(gercekFlow.path, "utf8")).toContain("ekrandan yazıldı");
@@ -568,7 +568,7 @@ describe("serveUi — akış düzenleme", () => {
   it("geçersiz taslağı YAZMAZ", async () => {
     const once = await readFile(gercekFlow.path, "utf8");
 
-    const res = await gonder("akis/yaz", { name: "test", constitution: [], roles: [] });
+    const res = await send("akis/yaz", { name: "test", constitution: [], roles: [] });
 
     expect(res.status).toBe(409);
     expect(await readFile(gercekFlow.path, "utf8")).toBe(once);
@@ -662,19 +662,19 @@ roles:
     const taslak = data.draft;
     const giden = taslak.roles.find((r) => r.id === "reviewer");
     if (giden === undefined) throw new Error("reviewer taslakta yok");
-    const kalanlar = taslak.roles.filter((r) => r.id !== "reviewer").map((r) => {
+    const remaining = taslak.roles.filter((r) => r.id !== "reviewer").map((r) => {
       // `exactOptionalPropertyTypes` altında `reject`i `undefined`a
       // ATAMAK yerine ANAHTARI hiç taşımıyoruz — page.ts'teki `rolSil`in
       // JS'te yaptığı "sil" burada tip düzeyinde "alanı hiç yazma" olur.
-      const { reject, ...kalan } = r;
+      const { reject, ...left } = r;
       return {
-        ...kalan,
+        ...left,
         next: r.next === giden.id ? giden.next : r.next,
         ...(reject !== undefined && reject !== giden.id ? { reject } : {}),
         ...(r.syncBack ? { syncBack: r.syncBack.filter((x) => x !== giden.id) } : {}),
       };
     });
-    return { ...taslak, roles: kalanlar };
+    return { ...taslak, roles: remaining };
   }
 
   it("doğru BAĞLANMIŞ taslak (next kaydırılmış, reject temizlenmiş) doğrulamadan GEÇER", async () => {
@@ -694,12 +694,12 @@ roles:
     // "çıkarılan role işaret eden kenarlar temizlenmezse ne olur" sorusunun
     // kanıtı. Diyagramın `rolSil`i bunu asla üretmemeli; bu taslak onun
     // YOKLUĞUNDA ortaya çıkacak hâli taşıyor.
-    const temizlenmemis: FlowDraft = {
+    const notCleaned: FlowDraft = {
       ...taslak,
       roles: taslak.roles.map((r) => (r.id === "gatekeeper" ? { ...r, reject: "reviewer" } : r)),
     };
 
-    const v = (await (await gonder2("akis/onizleme", temizlenmemis)).json()) as {
+    const v = (await (await gonder2("akis/onizleme", notCleaned)).json()) as {
       ok: boolean; message?: string;
     };
     expect(v.ok).toBe(false);
@@ -709,12 +709,12 @@ roles:
   it("geçersiz (temizlenmemiş) taslak YAZILMAZ, ESKİ akış (3 rol) aynen durur", async () => {
     const once = await readFile(cokluPath, "utf8");
     const taslak = await reviewerCikarilmisTaslak();
-    const temizlenmemis: FlowDraft = {
+    const notCleaned: FlowDraft = {
       ...taslak,
       roles: taslak.roles.map((r) => (r.id === "gatekeeper" ? { ...r, reject: "reviewer" } : r)),
     };
 
-    const res = await gonder2("akis/yaz", temizlenmemis);
+    const res = await gonder2("akis/yaz", notCleaned);
 
     expect(res.status).toBe(409);
     expect(await readFile(cokluPath, "utf8")).toBe(once);
@@ -763,10 +763,10 @@ describe("serveUi — rol promptları", () => {
     await s.close();
   });
 
-  const promptGonder = (govde: unknown, jeton?: string) =>
+  const promptGonder = (govde: unknown, token?: string) =>
     fetch(`${s.url}prompt/yaz`, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-skein-token": jeton ?? s.token },
+      headers: { "content-type": "application/json", "x-skein-token": token ?? s.token },
       body: JSON.stringify(govde),
     });
 
@@ -865,11 +865,11 @@ describe("serveUi — rol promptları", () => {
   const disKurban = async () => {
     const dir = await mkdtemp(join(tmpdir(), "skein-kurban-"));
     await mkdir(join(dir, "roles"), { recursive: true });
-    const dosya = join(dir, "roles", "coder.prompt");
-    await writeFile(dosya, "KURBAN\n");
+    const file = join(dir, "roles", "coder.prompt");
+    await writeFile(file, "KURBAN\n");
     // Köke göreli ama kökün DIŞINA çıkan yol; listedeki "roles/coder.prompt"
     // ile bitiyor, dolayısıyla gevşek bir kapıyı geçerdi.
-    return { dir, dosya, path: relative(root, dosya).split(sep).join("/") };
+    return { dir, file, path: relative(root, file).split(sep).join("/") };
   };
 
   it("GET /prompt listedeki yolla BİTEN ama kök dışına çıkan yolu reddeder", async () => {
@@ -896,7 +896,7 @@ describe("serveUi — rol promptları", () => {
       expect(res.status).toBe(400);
       expect(((await res.json()) as { error: string }).error).toContain("Bilinmeyen prompt yolu");
       // İDDİA sunucunun söylediği değil, DİSKTE ne olduğu.
-      expect(await readFile(k.dosya, "utf8")).toBe("KURBAN\n");
+      expect(await readFile(k.file, "utf8")).toBe("KURBAN\n");
     } finally {
       await rm(k.dir, { recursive: true, force: true });
     }
@@ -1001,10 +1001,10 @@ describe("serveUi — yeni rol", () => {
     await s.close();
   });
 
-  const gonder = (govde: unknown, jeton?: string) =>
+  const send = (govde: unknown, token?: string) =>
     fetch(`${s.url}rol/yeni`, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-skein-token": jeton ?? s.token },
+      headers: { "content-type": "application/json", "x-skein-token": token ?? s.token },
       body: JSON.stringify(govde),
     });
 
@@ -1015,7 +1015,7 @@ describe("serveUi — yeni rol", () => {
   const yeniRolYolu = () => join(root, "roles", "reviewer.md");
 
   it("rol VE promptu BİRLİKTE yaratılır, zincire 'sonra'nın ARDINA bağlanır", async () => {
-    const res = await gonder({
+    const res = await send({
       id: "reviewer", provider: "claude", workspace: "reviewer", sonra: "coder",
     });
     const v = (await res.json()) as { model: { roles: { id: string }[] } };
@@ -1024,9 +1024,9 @@ describe("serveUi — yeni rol", () => {
     expect(v.model.roles.map((r) => r.id)).toEqual(["coder", "reviewer"]);
 
     // Prompt BOŞ değil — ŞABLONDAN yazıldı (gövde prompt vermedi).
-    const promptMetni = await readFile(yeniRolYolu(), "utf8");
-    expect(promptMetni).toContain("Rolün: reviewer");
-    expect(promptMetni.trim()).not.toBe("");
+    const promptText = await readFile(yeniRolYolu(), "utf8");
+    expect(promptText).toContain("Rolün: reviewer");
+    expect(promptText.trim()).not.toBe("");
 
     // YAML da GERÇEKTEN değişti — yeni rol, eski rolün next'i, ikisi de.
     const yaml = await readFile(gercekFlow.path, "utf8");
@@ -1035,7 +1035,7 @@ describe("serveUi — yeni rol", () => {
   });
 
   it("gövdede verilen prompt metni ŞABLON YERİNE yazılır", async () => {
-    const res = await gonder({
+    const res = await send({
       id: "reviewer", provider: "claude", workspace: "reviewer", sonra: "coder",
       prompt: "# özel prompt\nbaştan yazıldı\n",
     });
@@ -1052,7 +1052,7 @@ describe("serveUi — yeni rol", () => {
   it("geçersiz akış üretirse rol VE prompt dosyası İKİSİ DE GERİ ALINIR", async () => {
     const beforeYaml = await readFile(gercekFlow.path, "utf8");
 
-    const res = await gonder({
+    const res = await send({
       id: "reviewer", provider: "claude", workspace: "main", sonra: "coder",
     });
     const v = (await res.json()) as { error: string };
@@ -1067,7 +1067,7 @@ describe("serveUi — yeni rol", () => {
   });
 
   it("AYNI ID reddedilir, dosya YAZILMADAN", async () => {
-    const res = await gonder({ id: "coder", provider: "claude", workspace: "x", sonra: "coder" });
+    const res = await send({ id: "coder", provider: "claude", workspace: "x", sonra: "coder" });
     const v = (await res.json()) as { error: string };
 
     expect(res.status).toBe(400);
@@ -1078,7 +1078,7 @@ describe("serveUi — yeni rol", () => {
 
   it("bilinmeyen 'sonra' reddedilir, hiçbir şey değişmez", async () => {
     const beforeYaml = await readFile(gercekFlow.path, "utf8");
-    const res = await gonder({
+    const res = await send({
       id: "reviewer", provider: "claude", workspace: "reviewer", sonra: "boyle-bir-rol-yok",
     });
     const v = (await res.json()) as { error: string };
@@ -1521,7 +1521,7 @@ describe("serveUi — yeni akış oluşturma (yeniAd)", () => {
     await s.close();
   });
 
-  const gonder = (yol: string, govde: unknown) =>
+  const send = (yol: string, govde: unknown) =>
     fetch(`${s.url}${yol}`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-skein-token": s.token },
@@ -1540,7 +1540,7 @@ describe("serveUi — yeni akış oluşturma (yeniAd)", () => {
   });
 
   it("geçerli yeniAd ile YENİ dosyayı yazar, aktif akışa DOKUNMAZ", async () => {
-    const res = await gonder("akis/yaz", { ...yeniDraft("kopya"), newName: "kopya" });
+    const res = await send("akis/yaz", { ...yeniDraft("kopya"), newName: "kopya" });
     expect(res.status).toBe(200);
 
     const newPath = join(root, "hub", "flows", "kopya.yaml");
@@ -1555,7 +1555,7 @@ describe("serveUi — yeni akış oluşturma (yeniAd)", () => {
   // Önizleme hiçbir koşulda dosyaya dokunmaz — `yeniAd`'lı dal da aynı
   // kuralı taşıyor.
   it("geçerli yeniAd ile önizleme hiçbir dosyaya YAZMAZ", async () => {
-    const res = await gonder("akis/onizleme", { ...yeniDraft("kopya"), newName: "kopya" });
+    const res = await send("akis/onizleme", { ...yeniDraft("kopya"), newName: "kopya" });
     const v = (await res.json()) as { ok: boolean; yaml: string };
     expect(v.ok).toBe(true);
     const newPath = join(root, "hub", "flows", "kopya.yaml");
@@ -1564,7 +1564,7 @@ describe("serveUi — yeni akış oluşturma (yeniAd)", () => {
 
   it("zaten var olan bir ad reddedilir, hiçbir dosya değişmez", async () => {
     const once = await readFile(gercekFlow.path, "utf8");
-    const res = await gonder("akis/yaz", { ...yeniDraft("test"), newName: "test" });
+    const res = await send("akis/yaz", { ...yeniDraft("test"), newName: "test" });
     const v = (await res.json()) as { error: string };
     expect(res.status).toBe(400);
     expect(v.error).toContain("zaten kullanılıyor");
@@ -1575,7 +1575,7 @@ describe("serveUi — yeni akış oluşturma (yeniAd)", () => {
   // `duzenleAdSanitize` (page.ts) ekranda zaten temizliyor, sunucu burada
   // ikinci bir savunma hattı.
   it("geçersiz karakter içeren yeniAd reddedilir", async () => {
-    const res = await gonder("akis/yaz", { ...yeniDraft("Kopya Adı"), newName: "Kopya Adı" });
+    const res = await send("akis/yaz", { ...yeniDraft("Kopya Adı"), newName: "Kopya Adı" });
     const v = (await res.json()) as { error: string };
     expect(res.status).toBe(400);
     expect(v.error).toContain("a-z0-9-");
@@ -1611,7 +1611,7 @@ describe("serveUi — yeni akış oluşturma (yeniAd)", () => {
       draft: { description?: string };
     }).draft;
     data.description = "yeniAd olmadan";
-    const res = await gonder("akis/yaz", data);
+    const res = await send("akis/yaz", data);
     expect(res.status).toBe(200);
     expect(await readFile(gercekFlow.path, "utf8")).toContain("yeniAd olmadan");
   });
@@ -1731,7 +1731,7 @@ describe("adres kapıları", () => {
   // `http.request` ile sınanamıyor: boş `Host` verince node onu kendisi
   // dolduruyor. Başlıksız istek ancak ham soketle kurulabiliyor.
   it("Host başlığı olmayan istek reddedilir", async () => {
-    const cevap = await new Promise<string>((resolve, reject) => {
+    const answer = await new Promise<string>((resolve, reject) => {
       const s = connect(server.port, "127.0.0.1", () => {
         s.write("GET /durum HTTP/1.1\r\n\r\n");
       });
@@ -1744,7 +1744,7 @@ describe("adres kapıları", () => {
     });
     // 403 bizim kapımız, 400 node'un kendi `Host` zorunluluğu — ikisi de
     // RET. Geçmemesi gereken şey 200.
-    expect(cevap).toMatch(/^HTTP\/1\.1 (400|403)/);
+    expect(answer).toMatch(/^HTTP\/1\.1 (400|403)/);
   });
 
   // Joker arayüzde hangi adla erişileceği bilinemez; basılan adres de
@@ -1844,20 +1844,20 @@ describe("serveUi — ekrandan gözcü", () => {
   const BEKLENEN = [...KOMUT, "test", "--serve", ...BAYRAKLAR];
 
   /** Başlatılan sahte süreçleri kaydeder. */
-  function sahte() {
-    const cagrilar: string[][] = [];
-    const oldurulen: (string | undefined)[] = [];
+  function stubbed() {
+    const calls: string[][] = [];
+    const killed: (string | undefined)[] = [];
     const bitirenler: (() => void)[] = [];
     return {
-      cagrilar,
-      oldurulen,
+      calls,
+      killed,
       /** Sürecin gerçekten bittiğini bildirir. */
-      bitir: () => bitirenler.forEach((cb) => cb()),
+      finish: () => bitirenler.forEach((cb) => cb()),
       spawn: (argv: string[]) => {
-        cagrilar.push(argv);
+        calls.push(argv);
         return {
           pid: 4242,
-          kill: (sig?: string) => oldurulen.push(sig),
+          kill: (sig?: string) => killed.push(sig),
           // Sahte süreç KENDİLİĞİNDEN bitmiyor: gerçeğinde de durdurma
           // anlık değil, gözcü süren turu bitirince çıkıyor.
           onExit: (cb: () => void) => bitirenler.push(cb),
@@ -1866,8 +1866,8 @@ describe("serveUi — ekrandan gözcü", () => {
     };
   }
 
-  async function gozculu(): Promise<{ srv: UiServer; s: ReturnType<typeof sahte> }> {
-    const s = sahte();
+  async function gozculu(): Promise<{ srv: UiServer; s: ReturnType<typeof stubbed> }> {
+    const s = stubbed();
     const srv = await serveUi({
       root, queue, topology, flowName: "test", flowHash: gercekFlow.hash,
       watcher: { command: KOMUT, bayraklar: BAYRAKLAR, spawn: s.spawn as never },
@@ -1886,7 +1886,7 @@ describe("serveUi — ekrandan gözcü", () => {
       // Akış adı ekranın baktığı akıştan, BAYRAKLAR terminalden —
       // düğme bayrakları ne seçiyor ne değiştiriyor. Düğmenin model
       // seçebilmesi, ekranın yetkisini sessizce büyütmek olurdu.
-      expect(s.cagrilar).toEqual([BEKLENEN]);
+      expect(s.calls).toEqual([BEKLENEN]);
     } finally {
       await srv.close();
     }
@@ -1897,7 +1897,7 @@ describe("serveUi — ekrandan gözcü", () => {
     try {
       const res = await fetch(`${srv.url}gozcu/baslat`, { method: "POST" });
       expect(res.status).toBe(403);
-      expect(s.cagrilar).toEqual([]);
+      expect(s.calls).toEqual([]);
     } finally {
       await srv.close();
     }
@@ -1911,7 +1911,7 @@ describe("serveUi — ekrandan gözcü", () => {
         headers: { "x-skein-token": srv.token, origin: "https://kotu-site.example" },
       });
       expect(res.status).toBe(403);
-      expect(s.cagrilar).toEqual([]);
+      expect(s.calls).toEqual([]);
     } finally {
       await srv.close();
     }
@@ -1940,7 +1940,7 @@ describe("serveUi — ekrandan gözcü", () => {
       expect(ikinci.status).toBe(409);
       expect((await ikinci.json() as { error: string }).error).toMatch(/Zaten bir gözcü açık/);
       // İkinci süreç BAŞLAMADI.
-      expect(s.cagrilar).toHaveLength(1);
+      expect(s.calls).toHaveLength(1);
     } finally {
       await srv.close();
     }
@@ -1954,7 +1954,7 @@ describe("serveUi — ekrandan gözcü", () => {
         method: "POST", headers: { "x-skein-token": srv.token },
       });
       expect(res.status).toBe(200);
-      expect(s.oldurulen).toEqual(["SIGTERM"]);
+      expect(s.killed).toEqual(["SIGTERM"]);
       // Durdurma ANLIK DEĞİL ve cevap bunu SÖYLEMEK zorunda: gözcü süren
       // turu bitirip çıkıyor. Söylemezsek kullanıcı hapta hâlâ "açık"
       // görüp düğmenin çalışmadığını sanar — gerçek tarayıcıda tam olarak
@@ -1983,7 +1983,7 @@ describe("serveUi — ekrandan gözcü", () => {
         method: "POST", headers: { "x-skein-token": srv.token },
       });
       expect(ikinci.status).toBe(200);
-      expect(s.oldurulen).toEqual(["SIGTERM", "SIGTERM"]);
+      expect(s.killed).toEqual(["SIGTERM", "SIGTERM"]);
     } finally {
       await srv.close();
     }
@@ -1995,7 +1995,7 @@ describe("serveUi — ekrandan gözcü", () => {
     const { srv, s } = await gozculu();
     try {
       await fetch(`${srv.url}gozcu/baslat`, { method: "POST", headers: { "x-skein-token": srv.token } });
-      s.bitir();
+      s.finish();
       const res = await fetch(`${srv.url}gozcu/durdur`, {
         method: "POST", headers: { "x-skein-token": srv.token },
       });
@@ -2055,7 +2055,7 @@ describe("serveUi — ekrandan gözcü", () => {
     const { srv, s } = await gozculu();
     await fetch(`${srv.url}gozcu/baslat`, { method: "POST", headers: { "x-skein-token": srv.token } });
     await srv.close();
-    expect(s.oldurulen).toEqual(["SIGTERM"]);
+    expect(s.killed).toEqual(["SIGTERM"]);
   });
 
   /**
@@ -2169,16 +2169,16 @@ describe("gozcuLogKuyruk — dosyadan son satırlar", () => {
  * çağrılarını yakalıyor — gerçek bir alt süreç başlatmadan.
  */
 describe("satirYaziciKur — alt süreç çıktısını saat damgalı satırlara böler", () => {
-  function sahteLog(): { yazilanlar: string[]; log: NodeJS.WritableStream } {
-    const yazilanlar: string[] = [];
-    return { yazilanlar, log: { write: (s: string) => { yazilanlar.push(s); return true; } } as NodeJS.WritableStream };
+  function sahteLog(): { writtenList: string[]; log: NodeJS.WritableStream } {
+    const writtenList: string[] = [];
+    return { writtenList, log: { write: (s: string) => { writtenList.push(s); return true; } } as NodeJS.WritableStream };
   }
 
   it("tamamlanmış satırı SAAT DAMGASIYLA yazar", () => {
-    const { yazilanlar, log } = sahteLog();
+    const { writtenList, log } = sahteLog();
     satirYaziciKur(log, false)(Buffer.from("kuyruk boş, bekleniyor\n"));
-    expect(yazilanlar).toHaveLength(1);
-    expect(yazilanlar[0]).toMatch(/^\d{2}:\d{2} kuyruk boş, bekleniyor\n$/);
+    expect(writtenList).toHaveLength(1);
+    expect(writtenList[0]).toMatch(/^\d{2}:\d{2} kuyruk boş, bekleniyor\n$/);
   });
 
   // STDERR kaynaklı satır "✗ " ile işaretlenir — gozcuLogSatiriAyristir
@@ -2187,38 +2187,38 @@ describe("satirYaziciKur — alt süreç çıktısını saat damgalı satırlara
   it("stdout satırını İŞARETLEMEZ, stderr satırını '✗ ' ile işaretler", () => {
     const stdout = sahteLog();
     satirYaziciKur(stdout.log, false)(Buffer.from("normal satır\n"));
-    expect(stdout.yazilanlar[0]).toMatch(/normal satır\n$/);
-    expect(stdout.yazilanlar[0]).not.toContain("✗");
+    expect(stdout.writtenList[0]).toMatch(/normal satır\n$/);
+    expect(stdout.writtenList[0]).not.toContain("✗");
 
     const stderr = sahteLog();
     satirYaziciKur(stderr.log, true)(Buffer.from("patladı\n"));
-    expect(stderr.yazilanlar[0]).toMatch(/✗ patladı\n$/);
+    expect(stderr.writtenList[0]).toMatch(/✗ patladı\n$/);
   });
 
   it("stderr satırı ZATEN '✗' ile başlıyorsa işareti ÇİFTLEMEZ", () => {
-    const { yazilanlar, log } = sahteLog();
+    const { writtenList, log } = sahteLog();
     satirYaziciKur(log, true)(Buffer.from("✗ kaçak döngü\n"));
-    expect(yazilanlar[0]).toMatch(/✗ kaçak döngü\n$/);
-    expect(yazilanlar[0]).not.toContain("✗ ✗");
+    expect(writtenList[0]).toMatch(/✗ kaçak döngü\n$/);
+    expect(writtenList[0]).not.toContain("✗ ✗");
   });
 
   // SATIR TAMAMLANMADAN yazılmaz: tek bir satır İKİ `data` olayına
   // bölünürse (büyük bir çıktı parçalanmışsa) ortasına saat damgası
   // SIKIŞMAMALI.
   it("satır İKİ 'data' olayına bölünse de TEK satır olarak yazar", () => {
-    const { yazilanlar, log } = sahteLog();
+    const { writtenList, log } = sahteLog();
     const yaz = satirYaziciKur(log, false);
     yaz(Buffer.from("yarım "));
-    expect(yazilanlar).toEqual([]); // satır sonu gelmeden HİÇ yazılmaz
+    expect(writtenList).toEqual([]); // satır sonu gelmeden HİÇ yazılmaz
     yaz(Buffer.from("satır\n"));
-    expect(yazilanlar).toHaveLength(1);
-    expect(yazilanlar[0]).toMatch(/yarım satır\n$/);
+    expect(writtenList).toHaveLength(1);
+    expect(writtenList[0]).toMatch(/yarım satır\n$/);
   });
 
   it("sonu '\\n' olmayan kalıntı yazılmaz", () => {
-    const { yazilanlar, log } = sahteLog();
+    const { writtenList, log } = sahteLog();
     satirYaziciKur(log, false)(Buffer.from("tamamlanmamış"));
-    expect(yazilanlar).toEqual([]);
+    expect(writtenList).toEqual([]);
   });
 });
 

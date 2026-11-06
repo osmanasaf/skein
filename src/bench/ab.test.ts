@@ -6,7 +6,7 @@ import type { Adapter, InvokeRequest, InvokeResult } from "../adapters/contract.
 import { readEvents } from "../events/log.js";
 import { VERDICT_FILE } from "../watch/verdict.js";
 import {
-  ArmError, armAdapters, armMetrics, onKontrol, prepareSandbox, requireAdapters, runArm,
+  ArmError, armAdapters, armMetrics, preCheck, prepareSandbox, requireAdapters, runArm,
   type Arm, type ArmResult,
 } from "./ab.js";
 
@@ -39,7 +39,7 @@ class RoleAdapter implements Adapter {
   readonly model = "sahte-1";
   readonly seen: string[] = [];
   /** Kodu yazan rol bunu `src/<entry>` olarak yazar. */
-  cozum = "export function topla(n: number[]): number {\n  return n.reduce((a, b) => a + b, 0);\n}\n";
+  resolution = "export function topla(n: number[]): number {\n  return n.reduce((a, b) => a + b, 0);\n}\n";
 
   async invoke(req: InvokeRequest): Promise<InvokeResult> {
     // Katman işareti rolün KİMLİĞİNİ taşıyor (`rol:architect`), prompt
@@ -60,7 +60,7 @@ class RoleAdapter implements Adapter {
         "# İtirazlar\n\nİtirazım yok.\n");
     } else if (rol === "coder") {
       await mkdir(join(req.workdir, "src"), { recursive: true });
-      await writeFile(join(req.workdir, "src/toplam.ts"), this.cozum);
+      await writeFile(join(req.workdir, "src/toplam.ts"), this.resolution);
     }
 
     // Gerçek koşuda commit'i ajan atar; burada taklit ediyoruz.
@@ -157,7 +157,7 @@ describe("6d koşum takımı", () => {
   // Kusurlu çözüm kırmızı kanca üretmeli; yoksa ölçümün ölçüm gücü yok.
   it("kusurlu çözümde kırmızı kanca çıkar", async () => {
     const adapter = new RoleAdapter();
-    adapter.cozum = "export function topla(n: number[]): number {\n  return n.length;\n}\n";
+    adapter.resolution = "export function topla(n: number[]): number {\n  return n.length;\n}\n";
     const result = await kos("plansiz", adapter);
 
     expect(result.ran).toBe(true);
@@ -178,7 +178,7 @@ describe("6d koşum takımı", () => {
         const text = await readFile(req.promptFile, "utf8");
         if (/rol:coder/.test(text)) {
           await mkdir(join(req.workdir, "src"), { recursive: true });
-          await writeFile(join(req.workdir, "src/toplam.ts"), adapter.cozum);
+          await writeFile(join(req.workdir, "src/toplam.ts"), adapter.resolution);
           await writeFile(join(req.workdir, VERDICT_FILE), JSON.stringify({
             decision: "accept", summary: "commit atmadım",
           }));
@@ -202,18 +202,18 @@ describe("6d koşum takımı", () => {
 
   it("gizli testler üretim sırasında kum havuzunda YOKTUR", async () => {
     const adapter = new RoleAdapter();
-    let gorduMu = true;
+    let didSee = true;
     const casus: Adapter = {
       id: "claude",
       model: "sahte-1",
       async invoke(req) {
         const { access } = await import("node:fs/promises");
-        gorduMu = await access(join(sandbox, "plansiz", "hidden")).then(() => true, () => false);
+        didSee = await access(join(sandbox, "plansiz", "hidden")).then(() => true, () => false);
         return adapter.invoke(req);
       },
     };
     await kos("plansiz", casus);
-    expect(gorduMu).toBe(false);
+    expect(didSee).toBe(false);
   });
 });
 
@@ -241,8 +241,8 @@ describe("sağlayıcı denetimi", () => {
   });
 
   it("adaptör varsa sessizce geçer", () => {
-    const sahte = { id: "claude", model: "m", invoke: async () => ({ exitCode: 0, stdout: "", stderr: "", durationMs: 1 }) };
-    expect(() => requireAdapters(["claude", "claude"], new Map([["claude", sahte]]))).not.toThrow();
+    const stubbed = { id: "claude", model: "m", invoke: async () => ({ exitCode: 0, stdout: "", stderr: "", durationMs: 1 }) };
+    expect(() => requireAdapters(["claude", "claude"], new Map([["claude", stubbed]]))).not.toThrow();
   });
 
   it("kol koşusu eksik adaptörle ÖLÇÜLEMEDİ döndürmez, hata atar", async () => {
@@ -292,12 +292,12 @@ describe("kol sürdürme", () => {
     const sandbox = join(sandbox2(), "surdur");
     const adapter = new RoleAdapter();
     // İlk geçiş: yalnızca bir süpürme — kart `coder`dan sonra yarıda kalır.
-    const yarim = await runArm({
+    const halfDone = await runArm({
       repo: REPO, taskId: "toplam", taskDir: dir, arm: "plansiz",
       sandbox, adapters: new Map([["claude", adapter]]),
       logPath, runId: "t-surdur", timeoutMs: 20_000, maxSweeps: 1,
     });
-    expect(yarim.cardState).not.toBe("done");
+    expect(halfDone.cardState).not.toBe("done");
     expect(adapter.seen).toEqual(["coder"]);
 
     // İkinci geçiş: AYNI kum havuzu, aynı runId, kurulum yok.
@@ -351,7 +351,7 @@ describe("onKontrol", () => {
   });
 
   it("süit koşmadıysa hiçbir okuma geçerli değil", () => {
-    const karar = onKontrol(kol({ ran: false, red: [] }));
+    const karar = preCheck(kol({ ran: false, red: [] }));
     expect(karar.kind).toBe("olculemedi");
     // "Kusur yok" diye okunmaması gerektiği SÖYLENİYOR: bildirilmemiş
     // sıfır değildir.
@@ -359,7 +359,7 @@ describe("onKontrol", () => {
   });
 
   it("kart done değilse ŞÜPHELİ — ÖLÇER demiyor", () => {
-    const karar = onKontrol(kol({ cardState: "gate", escalation: "işlenmemiş değişiklik var" }));
+    const karar = preCheck(kol({ cardState: "gate", escalation: "işlenmemiş değişiklik var" }));
     expect(karar.kind).toBe("kuskulu");
     if (karar.kind !== "kuskulu") throw new Error("kuskulu beklendi");
     // Sebep satırı insana GİDİYOR: iki zıt durumu yalnızca o ayırt ediyor.
@@ -377,25 +377,25 @@ describe("onKontrol", () => {
    * işin hiç yapılmamış olmasından kaynaklanıyor olabilir.
    */
   it("kart done değil ve kanca yoksa da ŞÜPHELİ, ÖLÇEMEZ değil", () => {
-    const karar = onKontrol(kol({ cardState: "gate", red: [], escalation: "ret limiti doldu" }));
+    const karar = preCheck(kol({ cardState: "gate", red: [], escalation: "ret limiti doldu" }));
     expect(karar.kind).toBe("kuskulu");
   });
 
   it("iş bitti ve kanca yoksa ÖLÇEMEZ", () => {
-    const karar = onKontrol(kol({ red: [] }));
+    const karar = preCheck(kol({ red: [] }));
     expect(karar.kind).toBe("olcemez");
     expect(karar.kind === "olcemez" && karar.reason).toMatch(/azalma olmaz/);
   });
 
   it("iş bitti ve kanıtlanmış kusur varsa ÖLÇER", () => {
-    const karar = onKontrol(kol({ red: ["a", "b"] }));
+    const karar = preCheck(kol({ red: ["a", "b"] }));
     expect(karar).toEqual({ kind: "olcer", red: ["a", "b"] });
   });
 
   // `escalation` yoksa da sebep satırı kartın durumunu söylemek zorunda:
   // "ŞÜPHELİ" tek başına operatöre hiçbir şey anlatmaz.
   it("escalation yoksa bile durum adı sebepte", () => {
-    const karar = onKontrol(kol({ cardState: "active" }));
+    const karar = preCheck(kol({ cardState: "active" }));
     expect(karar.kind === "kuskulu" && karar.reason).toContain("active");
   });
 });

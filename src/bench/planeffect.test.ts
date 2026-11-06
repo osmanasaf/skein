@@ -6,7 +6,7 @@ import type { PlanEffectReport, PlanGroup } from "./planeffect.js";
 const ev = (e: Record<string, unknown>, runId: string): SkeinEvent =>
   ({ v: 1, at: "2026-01-01T00:00:00.000Z", runId, ...e }) as SkeinEvent;
 
-interface KosuSpec {
+interface RunSpec {
   red: number;
   /** Kırmızı kancaların ADLARI; verilmezse `kanca-1..N`. */
   redNames?: string[];
@@ -20,7 +20,7 @@ interface KosuSpec {
 }
 
 /** Bir kol koşusunun günlüğü. */
-function kosu(runId: string, taskId: string, arm: "planli" | "plansiz", s: KosuSpec): SkeinEvent[] {
+function kosu(runId: string, taskId: string, arm: "planli" | "plansiz", s: RunSpec): SkeinEvent[] {
   const hooks = s.hooks ?? 10;
   const out: SkeinEvent[] = [
     ev({ type: "ab.arm", taskId, arm, flow: `ab-${arm}`, model: s.model ?? "m1" }, runId),
@@ -52,12 +52,12 @@ function kosu(runId: string, taskId: string, arm: "planli" | "plansiz", s: KosuS
 }
 
 /** Üç tekrar: kontrol kolu 4/10 kırmızı, planlı kol `planliRed`. */
-const ucTekrar = (planliRed: number, taskId = "gorev-1", model = "m1"): SkeinEvent[] =>
+const ucTekrar = (plannedRed: number, taskId = "gorev-1", model = "m1"): SkeinEvent[] =>
   // Koşu kimliği göreve göre değişmeli: aynı kimlik iki görevde kullanılırsa
   // koşular tek koşu sanılır (ilk hâlinde tam bu oldu ve iki görev tek
   // gruba eridi).
   [1, 2, 3].flatMap((k) => [
-    ...kosu(`${taskId}-${model}-p${k}`, taskId, "planli", { red: planliRed, model, activations: 4, planning: { objections: 1, accepted: 1, invalid: 0 } }),
+    ...kosu(`${taskId}-${model}-p${k}`, taskId, "planli", { red: plannedRed, model, activations: 4, planning: { objections: 1, accepted: 1, invalid: 0 } }),
     ...kosu(`${taskId}-${model}-s${k}`, taskId, "plansiz", { red: 4, model, activations: 2 }),
   ]);
 
@@ -152,7 +152,7 @@ describe("kararlilikDamgasi", () => {
 });
 
 describe("ölçü — bildirilmeyen boş kalıyor", () => {
-  const kosuOlcu = (runId: string, usage?: Record<string, number>): SkeinEvent[] => [
+  const runMeasure = (runId: string, usage?: Record<string, number>): SkeinEvent[] => [
     ev({ type: "ab.arm", taskId: "g", arm: "planli", flow: "f", model: "m1" }, runId),
     ev({ type: "agent.finished", cell: "c", exitCode: 0, durationMs: 1,
       ...(usage === undefined ? {} : { usage }) }, runId),
@@ -160,19 +160,19 @@ describe("ölçü — bildirilmeyen boş kalıyor", () => {
   ];
 
   it("dolar bildirilmediyse costUsd BOŞ, sıfır değil", () => {
-    const [run] = armRuns(kosuOlcu("r1", { inputTokens: 100, outputTokens: 5 }));
+    const [run] = armRuns(runMeasure("r1", { inputTokens: 100, outputTokens: 5 }));
     expect(run?.usage.costUsd).toBeUndefined();
     expect(run?.usage.inputTokens).toBe(100);
   });
 
   it("hiç ölçü bildirilmediyse hepsi boş", () => {
-    const [run] = armRuns(kosuOlcu("r1"));
+    const [run] = armRuns(runMeasure("r1"));
     expect(run?.usage).toEqual({});
   });
 
   it("dolar bildiren ve bildirmeyen çağrılar karışırsa dolar toplanıyor", () => {
     const [run] = armRuns([
-      ...kosuOlcu("r1", { costUsd: 0.25, inputTokens: 10 }),
+      ...runMeasure("r1", { costUsd: 0.25, inputTokens: 10 }),
       ev({ type: "agent.finished", cell: "d", exitCode: 0, durationMs: 1,
         usage: { inputTokens: 90 } }, "r1"),
     ]);
@@ -360,7 +360,7 @@ describe("downstream ret metriği", () => {
 });
 
 describe("obligationStats — madde başına son karar", () => {
-  const olay = (runId: string, id: string, durum: string): SkeinEvent =>
+  const event = (runId: string, id: string, durum: string): SkeinEvent =>
     ev({ type: "plan.obligation", card: "k", role: "reviewer", id, objector: "analyst", durum }, runId);
 
   it("aynı maddeye iki karar düşerse maddeyi bir sayar", () => {
@@ -370,8 +370,8 @@ describe("obligationStats — madde başına son karar", () => {
       })),
       ...[1, 2, 3].flatMap((k) => kosu(`s${k}`, "g", "plansiz", { red: 4 })),
       // `p1` koşusu kapıya çıktı, `retry` ile baştan koştu: ikinci karar.
-      olay("p1", "analyst#1", "karsilanmadi"),
-      olay("p1", "analyst#1", "karsilandi"),
+      event("p1", "analyst#1", "karsilanmadi"),
+      event("p1", "analyst#1", "karsilandi"),
     ]);
     const o = r.groups[0]?.obligations;
     expect(o?.total).toBe(1);
@@ -387,8 +387,8 @@ describe("obligationStats — madde başına son karar", () => {
         red: 0, planning: { objections: 1, accepted: 1, invalid: 0 },
       })),
       ...[1, 2, 3].flatMap((k) => kosu(`s${k}`, "g", "plansiz", { red: 4 })),
-      olay("p1", "analyst#1", "karsilandi"),
-      olay("p2", "analyst#1", "karsilanmadi"),
+      event("p1", "analyst#1", "karsilandi"),
+      event("p2", "analyst#1", "karsilanmadi"),
     ]);
     const o = r.groups[0]?.obligations;
     expect(o?.total).toBe(2);
@@ -464,9 +464,9 @@ describe("planEffect", () => {
   // alışverişle "OLUMSUZ" dedi. Kapının kendisi artık sınanıyor, çünkü
   // ölçütün prozada durup karar yolunda durmaması bu projede ikinci kez oldu.
   it("alışverişlerin yarısından çoğu itirazsızsa ürün farkını okumaz", () => {
-    const sessiz = { objections: 0, accepted: 0, invalid: 0 };
+    const quiet = { objections: 0, accepted: 0, invalid: 0 };
     const r = planEffect([
-      ...[1, 2, 3].flatMap((k) => kosu(`p${k}`, "g", "planli", { red: 0, planning: sessiz })),
+      ...[1, 2, 3].flatMap((k) => kosu(`p${k}`, "g", "planli", { red: 0, planning: quiet })),
       ...[1, 2, 3].flatMap((k) => kosu(`s${k}`, "g", "plansiz", { red: 4 })),
     ]);
     // Azalma %100: eski karar yolu bunu "olumlu" diye okurdu.
@@ -509,9 +509,9 @@ describe("planEffect", () => {
   // Sıra: kusur üretmeyen görev mekanizmadan ÖNCE sorulur. Tersi olsa, güç
   // sorunu olan hücre "mekanizma bozuk" diye teşhis edilirdi.
   it("kontrol kolu temizse tören değil tanımsızlık der", () => {
-    const sessiz = { objections: 0, accepted: 0, invalid: 0 };
+    const quiet = { objections: 0, accepted: 0, invalid: 0 };
     const r = planEffect([
-      ...[1, 2, 3].flatMap((k) => kosu(`p${k}`, "g", "planli", { red: 0, planning: sessiz })),
+      ...[1, 2, 3].flatMap((k) => kosu(`p${k}`, "g", "planli", { red: 0, planning: quiet })),
       ...[1, 2, 3].flatMap((k) => kosu(`s${k}`, "g", "plansiz", { red: 0 })),
     ]);
     expect(r.groups[0]?.verdict.reason).toMatch(/tanımsız/);
@@ -520,9 +520,9 @@ describe("planEffect", () => {
   // Mekanizma kapısı k'den ÖNCE: alışveriş törenselse "k artırılmalı"
   // yanlış tavsiye, çünkü kollar kurgu gereği aynı.
   it("tören k eksikliğinden önce teşhis edilir", () => {
-    const sessiz = { objections: 0, accepted: 0, invalid: 0 };
+    const quiet = { objections: 0, accepted: 0, invalid: 0 };
     const r = planEffect([
-      ...kosu("p1", "g", "planli", { red: 0, planning: sessiz }),
+      ...kosu("p1", "g", "planli", { red: 0, planning: quiet }),
       ...kosu("s1", "g", "plansiz", { red: 4 }),
     ]);
     expect(r.groups[0]?.repeats).toBe(1);
@@ -583,11 +583,11 @@ describe("planEffect — grup anahtarı görev × model", () => {
   // Eski günlüklerde alan yok; onları yeni bir modelin grubuna karıştırmak
   // tam olarak bu düzeltmenin önlediği şey olurdu.
   it("modeli yazılmamış eski koşular ayrı bir gruba düşer", () => {
-    const eski = [
+    const old = [
       ev({ type: "ab.arm", taskId: "gorev-1", arm: "plansiz", flow: "ab-plansiz" }, "eski-1"),
       ev({ type: "hooks.measured", cell: "olcum/plansiz", ran: true, total: 10, red: ["k1"] }, "eski-1"),
     ];
-    const r = planEffect([...eski, ...ucTekrar(1, "gorev-1", "sonnet")]);
+    const r = planEffect([...old, ...ucTekrar(1, "gorev-1", "sonnet")]);
     expect(r.groups.map((g) => g.model).sort()).toEqual(["(bilinmiyor)", "sonnet"]);
   });
 });
@@ -621,7 +621,7 @@ describe("planEffect — ölçülemezliğin sebebi doğru söylenir", () => {
 });
 
 /** `noUncheckedIndexedAccess` altında tek grubu dönüştürmeden almak için. */
-function tekGrup(r: PlanEffectReport): PlanGroup {
+function singleGroup(r: PlanEffectReport): PlanGroup {
   const g = r.groups[0];
   if (g === undefined) throw new Error("rapor boş: grup bekleniyordu");
   return g;
@@ -637,10 +637,10 @@ describe("planEffect — kanca KİMLİĞİ, sayı değil", () => {
       ...kosu("s1", "g", "plansiz", { red: 2, redNames: ["A", "B"] }),
       ...kosu("p1", "g", "planli", { red: 2, redNames: ["A", "C"] }),
     ]);
-    const h = tekGrup(r).hooks;
-    expect(h.ortak).toEqual(["A"]);
-    expect(h.yalnizPlansiz).toEqual(["B"]);
-    expect(h.yalnizPlanli).toEqual(["C"]);
+    const h = singleGroup(r).hooks;
+    expect(h.shared).toEqual(["A"]);
+    expect(h.onlyUnplanned).toEqual(["B"]);
+    expect(h.onlyPlanned).toEqual(["C"]);
   });
 
   // Sayı aynı kalırken kusur sınıfı değişebilir: "daha az kusur" ile
@@ -650,9 +650,9 @@ describe("planEffect — kanca KİMLİĞİ, sayı değil", () => {
       ...kosu("s1", "g", "plansiz", { red: 2, redNames: ["A", "B"] }),
       ...kosu("p1", "g", "planli", { red: 2, redNames: ["C", "D"] }),
     ]);
-    const h = tekGrup(r).hooks;
-    expect(h.ortak).toEqual([]);
-    expect(h.yalnizPlanli).toEqual(["C", "D"]);
+    const h = singleGroup(r).hooks;
+    expect(h.shared).toEqual([]);
+    expect(h.onlyPlanned).toEqual(["C", "D"]);
     // Göreli azalma SIFIR ama kusurların hiçbiri aynı değil.
     expect(r.groups[0]?.relativeReduction).toBe(0);
   });
@@ -664,10 +664,10 @@ describe("planEffect — kanca KİMLİĞİ, sayı değil", () => {
       ...kosu("s3", "g", "plansiz", { red: 1, redNames: ["A"] }),
       ...kosu("p1", "g", "planli", { red: 1, redNames: ["A"] }),
     ]);
-    const h = tekGrup(r).hooks;
+    const h = singleGroup(r).hooks;
     // `B` iki koşuda var, üçüncüde yok → her koşuda değil.
     expect(h.plansiz).toEqual(["A", "B"]);
-    expect(h.herKosudaPlansiz).toEqual(["A"]);
+    expect(h.everyRunUnplanned).toEqual(["A"]);
   });
 
   // Ölçülmüş koşu yoksa kesişim TANIMSIZ; "hepsinde var" demek yanlış olurdu.
@@ -676,8 +676,8 @@ describe("planEffect — kanca KİMLİĞİ, sayı değil", () => {
       ...kosu("s1", "g", "plansiz", { red: 1, redNames: ["A"] }),
       ...kosu("p1", "g", "planli", { red: 0, ran: false }),
     ]);
-    const h = tekGrup(r).hooks;
-    expect(h.herKosudaPlanli).toEqual([]);
+    const h = singleGroup(r).hooks;
+    expect(h.everyRunPlanned).toEqual([]);
     expect(h.planli).toEqual([]);
   });
 });
@@ -702,7 +702,7 @@ describe("planEffect — yükümlülük sonuçları", () => {
       }),
       ...kosu("s1", "g", "plansiz", { red: 4 }),
     ]);
-    expect(tekGrup(r).obligations).toEqual({
+    expect(singleGroup(r).obligations).toEqual({
       total: 3,
       met: 2,
       unmet: 1,
@@ -722,7 +722,7 @@ describe("planEffect — yükümlülük sonuçları", () => {
       }),
       ...kosu("s1", "g", "plansiz", { red: 4 }),
     ]);
-    expect(tekGrup(r).obligations.records).toEqual([
+    expect(singleGroup(r).obligations.records).toEqual([
       { runId: "p1", id: "reviewer#1", objector: "reviewer", auditor: "verifier", durum: "karsilandi" },
     ]);
   });
@@ -744,7 +744,7 @@ describe("planEffect — yükümlülük sonuçları", () => {
       ...kosu("s1", "g", "plansiz", { red: 4 }),
       ...kosu("s2", "g", "plansiz", { red: 4 }),
     ]);
-    const kayitlar = tekGrup(r).obligations.records.filter((x) => x.id === "analyst#1");
+    const kayitlar = singleGroup(r).obligations.records.filter((x) => x.id === "analyst#1");
     expect(kayitlar).toHaveLength(2);
     expect(kayitlar.map((x) => x.runId).sort()).toEqual(["p1", "p2"]);
     expect(kayitlar.find((x) => x.runId === "p1")?.durum).toBe("karsilandi");
@@ -756,6 +756,6 @@ describe("planEffect — yükümlülük sonuçları", () => {
       ...kosu("p1", "g", "planli", { red: 1 }),
       ...kosu("s1", "g", "plansiz", { red: 4 }),
     ]);
-    expect(tekGrup(r).obligations).toEqual({ total: 0, met: 0, unmet: 0, records: [] });
+    expect(singleGroup(r).obligations).toEqual({ total: 0, met: 0, unmet: 0, records: [] });
   });
 });

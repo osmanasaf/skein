@@ -88,7 +88,7 @@ export interface ArmResult {
 }
 
 /** Ön kontrolün kararı — dört sonuç, sırası önemli. */
-export type OnKontrol =
+export type PreCheck =
   /** Gizli süit hiç koşmadı: yer gerçeği yok, hiçbir okuma geçerli değil. */
   | { kind: "olculemedi"; reason: string }
   /** Kırmızı kanca var AMA iş bitmedi: hangisi olduğuna insan karar verir. */
@@ -122,9 +122,9 @@ export type OnKontrol =
  * satır insana veriliyor. Burada körü körüne bloke etmek, geçerli bir
  * ölçümü çöpe atmak olurdu.
  */
-export function onKontrol(
+export function preCheck(
   r: Pick<ArmResult, "ran" | "cardState" | "red" | "escalation">,
-): OnKontrol {
+): PreCheck {
   if (!r.ran) {
     return {
       kind: "olculemedi",
@@ -227,10 +227,10 @@ export class ArmError extends Error {
  * döndü. Para harcanmadı ama sonuç yanıltıcıydı.
  */
 export function requireAdapters(providers: string[], adapters: Map<string, Adapter>): void {
-  const eksik = [...new Set(providers)].filter((p) => !adapters.has(p));
-  if (eksik.length === 0) return;
+  const missing = [...new Set(providers)].filter((p) => !adapters.has(p));
+  if (missing.length === 0) return;
   throw new ArmError(
-    `Şu sağlayıcı(lar) için adaptör yok: ${eksik.join(", ")}. ` +
+    `Şu sağlayıcı(lar) için adaptör yok: ${missing.join(", ")}. ` +
       `Verilen: ${[...adapters.keys()].join(", ") || "(hiç)"}. ` +
       `Model biçimi \`sağlayıcı:model\` olmalı, ör. \`claude:claude-sonnet-5\`.`,
   );
@@ -279,13 +279,13 @@ export async function runArm(options: ArmOptions): Promise<ArmResult> {
   // kalmışı kuyruğa geri koyuyor ve kaldığı rolden devam ediliyor.
   if (options.resume === true) {
     await queue.recover();
-    const bekleyen = (await queue.list()).find((c) => c.state !== "done") ?? (await queue.list())[0];
-    if (bekleyen === undefined) {
+    const pending = (await queue.list()).find((c) => c.state !== "done") ?? (await queue.list())[0];
+    if (pending === undefined) {
       throw new ArmError(
         `\`${sandbox}\` içinde sürdürülecek kart yok. Kol ya hiç başlamamış ya kum havuzu silinmiş.`,
       );
     }
-    return await finishArm(options, task, topology, queue, bekleyen, log);
+    return await finishArm(options, task, topology, queue, pending, log);
   }
 
   const card = await queue.add(newCard({
@@ -329,8 +329,8 @@ async function finishArm(
   // ağacında duruyor — `main`de değil. İlk hâli `main`den kopyalıyordu ve
   // planlı kolda orada yalnızca plan belgesi vardı: süit hiç koşmuyor,
   // sonuç "ÖLÇÜLEMEDİ" görünüyordu.
-  const sonRol = topology.roles[topology.roles.length - 1];
-  const source = sonRol === undefined ? sandbox : workspacePath(sandbox, sonRol.workspace);
+  const lastRole = topology.roles[topology.roles.length - 1];
+  const source = lastRole === undefined ? sandbox : workspacePath(sandbox, lastRole.workspace);
   const cellDir = join(sandbox, ".skein", "olcum", arm);
   await mkdir(join(cellDir, "artifact"), { recursive: true });
   await cp(join(source, "src"), join(cellDir, "artifact", "src"), { recursive: true })
@@ -343,7 +343,7 @@ async function finishArm(
 
   const { events } = await readEvents(logPath);
   const own = events.filter((e) => e.runId === runId);
-  const kacis = [...own].reverse().find(
+  const escape = [...own].reverse().find(
     (e): e is Extract<SkeinEvent, { type: "card.settled" }> =>
       e.type === "card.settled" && e.outcome === "escalated",
   );
@@ -353,7 +353,7 @@ async function finishArm(
     red: h.red,
     total: h.hooks.length,
     cardState: last?.state ?? "yok",
-    ...(kacis?.reason === undefined ? {} : { escalation: kacis.reason }),
+    ...(escape?.reason === undefined ? {} : { escalation: escape.reason }),
     ...armMetrics(own),
   };
 }

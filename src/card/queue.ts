@@ -21,7 +21,7 @@ export type ReleaseDecision = "forward" | "back" | "retry";
  * Yarışı kaybetmek (ENOENT) normaldir ve sessizdir; gerisi gerçek bir
  * engeldir ve kart kuyrukta kalır.
  */
-export interface KuyrukEngeli {
+export interface QueueBlockage {
   /** Alınamayan kart dosyasının yolu. */
   path: string;
   /** `errno` kodu; yoksa "?". */
@@ -31,11 +31,11 @@ export interface KuyrukEngeli {
 
 export type TakeResult =
   /** Kart alındı. `engeller` boş olmayabilir: başka kartlar alınamamış olabilir. */
-  | { kind: "alindi"; card: Card; blockages: KuyrukEngeli[] }
+  | { kind: "alindi"; card: Card; blockages: QueueBlockage[] }
   /** Kuyrukta kart yok. Engel de yok — alan bilerek bulunmuyor. */
   | { kind: "bos" }
   /** Kuyrukta kart VAR ama hiçbiri alınamadı. */
-  | { kind: "engel"; blockages: KuyrukEngeli[] };
+  | { kind: "engel"; blockages: QueueBlockage[] };
 
 export class QueueError extends Error {
   constructor(message: string) {
@@ -45,7 +45,7 @@ export class QueueError extends Error {
 }
 
 /** Kapı kararının GERÇEKTEN ne yaptığı. */
-export interface KapiKarari {
+export interface GateDecision {
   kind: "approval" | "deadlock" | "escalation";
   /** İnsanın istediği karar; verilmediyse kapının varsayılanı. */
   requested: ReleaseDecision;
@@ -72,13 +72,13 @@ export interface KapiKarari {
  * retry : forward`) iki dosyada ayrı ayrı yazılıydı. "Aynı bilgi iki
  * yerde" bu depoda tekrarlayan kusur sınıfı; ikisi de buradan okuyor.
  */
-export function kapiKarari(card: Card, istenenGiris?: ReleaseDecision): KapiKarari {
+export function gateDecision(card: Card, requestedEntry?: ReleaseDecision): GateDecision {
   const role = roleOf(card.topology, card.role);
   if (role === null) {
     throw new QueueError(`Kartın rolü topolojisinde yok: ${card.role} (kart ${card.id})`);
   }
   const kind = gateKind(card) ?? "approval";
-  const requested = istenenGiris ?? (kind === "escalation" ? "retry" : "forward");
+  const requested = requestedEntry ?? (kind === "escalation" ? "retry" : "forward");
 
   // Planlama kilidinden ileri bırakmak, alışverişten SONRAKİ role gider:
   // zincirdeki ardıl itiraz eden roldür ve oraya dönmek, insanın "planı
@@ -247,9 +247,9 @@ export class CardQueue {
     for (const entry of entries.sort((a, b) => (a.name < b.name ? -1 : 1))) {
       const path = join(dir, entry.name);
       if (entry.isDirectory()) {
-        const alt = await this.#scan(path);
-        cards.push(...alt.cards);
-        corrupt.push(...alt.corrupt);
+        const sub = await this.#scan(path);
+        cards.push(...sub.cards);
+        corrupt.push(...sub.corrupt);
       } else if (entry.name.endsWith(".json") && !entry.name.startsWith(".tmp-")) {
         // Dosya tarandıktan sonra kaybolmuş olabilir: öteki koşucu aldı.
         try {
@@ -353,7 +353,7 @@ export class CardQueue {
   async take(role: string): Promise<TakeResult> {
     const dir = this.#activeDir(role);
     await mkdir(dir, { recursive: true });
-    const blockages: KuyrukEngeli[] = [];
+    const blockages: QueueBlockage[] = [];
 
     for (const { card, path } of (await this.#scan(this.#queueDir(role))).cards) {
       const dest = join(dir, `${card.id}.json`);
@@ -495,9 +495,9 @@ export class CardQueue {
     // Alışveriş zincirin SONUNDA kapanıyorsa kart biter. `queue/done` diye
     // bir rol kuyruğu açmak, kartı var olmayan bir role göndermek olurdu.
     if (to === DONE) {
-      const kayitli = this.#push(withPlan, entry);
+      const stored = this.#push(withPlan, entry);
       const done = {
-        ...this.#push(kayitli, { at: now(), event: "done", from: card.role }),
+        ...this.#push(stored, { at: now(), event: "done", from: card.role }),
         state: "done" as const,
       };
       return this.#move(done, join(this.#root, "done"), `${card.id}.json`, path);
@@ -603,9 +603,9 @@ export class CardQueue {
   ): Promise<Card> {
     const { role, path } = this.#requireActive(card);
     const planli = plan === undefined ? card : { ...card, plan };
-    const kayitli = entry === undefined ? planli : this.#push(planli, entry);
+    const stored = entry === undefined ? planli : this.#push(planli, entry);
     const gated = {
-      ...this.#push(kayitli, { at: now(), event: "gate", role: role.id, reason, kind: "deadlock" }),
+      ...this.#push(stored, { at: now(), event: "gate", role: role.id, reason, kind: "deadlock" }),
       state: "gate" as const,
     };
     return this.#move(gated, join(this.#root, "gate"), `${card.id}.json`, path);
@@ -643,7 +643,7 @@ export class CardQueue {
       throw new QueueError(`Kartın rolü topolojisinde yok: ${card.role} (kart ${id})`);
     }
 
-    const karar = kapiKarari(card, opts.decision);
+    const karar = gateDecision(card, opts.decision);
     const kind = karar.kind;
     const decision = karar.requested;
     // Kaçış kapısında tur TAMAMLANMADI: kod bir sonraki worktree'ye hiç

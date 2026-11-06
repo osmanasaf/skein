@@ -104,9 +104,9 @@ describe("yarım ölçü (kismi)", () => {
   // BİLDİRMİYOR (ücretsiz olabilir), yarım ölçüde ise dolar hiç
   // ÜRETİLMEDİ çünkü tur bitmedi (kesinlikle ücretsiz değil).
   it("dolarsız yarım ölçüyü abonelik kimliğinden AYIRIR", () => {
-    const yarim = formatUsage({ inputTokens: 3000, outputTokens: 30, partial: true });
-    expect(yarim).toContain("tur yar\u0131da kesildi");
-    expect(yarim).not.toContain("abonelik");
+    const halfDone = formatUsage({ inputTokens: 3000, outputTokens: 30, partial: true });
+    expect(halfDone).toContain("tur yar\u0131da kesildi");
+    expect(halfDone).not.toContain("abonelik");
 
     const abonelik = formatUsage({ inputTokens: 3000, outputTokens: 30 });
     expect(abonelik).toContain("abonelik");

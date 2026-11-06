@@ -137,10 +137,10 @@ export function capture(
  * deterministik başarısız kılmak isteyebiliyor; `npx` komutunun kendisi de
  * `PATH`te bulunduğundan bu ihtiyaçla çakışırdı) aynı sonucu üretiyoruz.
  */
-export function tsxCliYolu(root: string): string {
+export function tsxCliPath(root: string): string {
   const req = createRequire(join(root, "package.json"));
-  const paketYolu = req.resolve("tsx/package.json");
-  return join(dirname(paketYolu), "dist", "cli.mjs");
+  const packagePath = req.resolve("tsx/package.json");
+  return join(dirname(packagePath), "dist", "cli.mjs");
 }
 
 /**
@@ -164,17 +164,17 @@ export function tsxCliYolu(root: string): string {
  * CLI'ı SESSİZCE hiç çalışmaz hâle getirirdi — düzelttiğimiz kusurun tam
  * olarak aynısı, bu kez bizim elimizden.
  */
-export function girisNoktasiMi(moduleUrl: string): boolean {
+export function isEntryPoint(moduleUrl: string): boolean {
   const entry = process.argv[1];
   if (entry === undefined || entry === "") return false;
   // `resolve` bir dizge için ASLA atmaz — bu yüzden try/catch'i yok ve
   // yukarıdaki undefined/boş denetimi TAŞIYICI: onu kaldıran bir mutasyon
   // burada yakalanıyor, sessizce yutulmuyor.
-  const adaylar = new Set<string>([pathToFileURL(resolve(entry)).href]);
+  const candidates = new Set<string>([pathToFileURL(resolve(entry)).href]);
   try {
-    adaylar.add(pathToFileURL(realpathSync(entry)).href);
+    candidates.add(pathToFileURL(realpathSync(entry)).href);
   } catch {
     // Dosya yok (ör. `node -e`); diğer adaya bak.
   }
-  return adaylar.has(moduleUrl);
+  return candidates.has(moduleUrl);
 }

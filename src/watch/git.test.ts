@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { capture } from "../proc/process.js";
-import { addWorktree, currentBranch, dirtyPaths, GitDurumHatasi, head, isTracked, mergeForward, ORCHESTRATOR_PATHS } from "./git.js";
+import { addWorktree, currentBranch, dirtyPaths, GitStatusError, head, isTracked, mergeForward, ORCHESTRATOR_PATHS } from "./git.js";
 
 let root: string;
 let main: string;
@@ -242,10 +242,10 @@ describe("addWorktree", () => {
  */
 describe("dirtyPaths — bilmiyorsak temiz demiyoruz", () => {
   it("git deposu olmayan dizinde FIRLATIR", async () => {
-    const yok = join(root, "depo-degil");
-    await mkdir(yok, { recursive: true });
-    await expect(dirtyPaths(yok)).rejects.toThrow(GitDurumHatasi);
-    await expect(dirtyPaths(yok)).rejects.toThrow(/durumu okunamadı/);
+    const absent = join(root, "depo-degil");
+    await mkdir(absent, { recursive: true });
+    await expect(dirtyPaths(absent)).rejects.toThrow(GitStatusError);
+    await expect(dirtyPaths(absent)).rejects.toThrow(/durumu okunamadı/);
   });
 
   it("gerçek depoda temiz ağaç boş liste verir", async () => {
@@ -255,9 +255,9 @@ describe("dirtyPaths — bilmiyorsak temiz demiyoruz", () => {
 
   // `mergeForward` de aynı kapıdan geçiyor: bilmiyorsa birleştirmiyor.
   it("hedef ağacın durumu okunamazsa birleştirme engellenir", async () => {
-    const yok = join(root, "hedef-degil");
-    await mkdir(yok, { recursive: true });
-    const result = await mergeForward({ fromDir: main, toDir: yok, message: "x" });
+    const absent = join(root, "hedef-degil");
+    await mkdir(absent, { recursive: true });
+    const result = await mergeForward({ fromDir: main, toDir: absent, message: "x" });
     expect(result.kind).toBe("blocked");
     expect(result.kind === "blocked" && result.reason).toMatch(/durumu okunamadı/);
   });

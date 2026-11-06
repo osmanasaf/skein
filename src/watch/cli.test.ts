@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { spawnPortable, tsxCliYolu } from "../proc/process.js";
+import { spawnPortable, tsxCliPath } from "../proc/process.js";
 import { parseArgs, zamanAsimiSecenegi } from "./cli.js";
 
 /**
@@ -129,13 +129,13 @@ describe("giriş noktası — İÇE ALMAK gözcüyü başlatmaz", () => {
     const dir = await mkdtemp(join(tmpdir(), "skein-iceal-"));
     try {
       const modul = pathToFileURL(join(process.cwd(), "src", "watch", "cli.ts")).href;
-      const betik = join(dir, "iceal.mjs");
+      const script = join(dir, "iceal.mjs");
       await writeFile(
-        betik,
+        script,
         `const m = await import(${JSON.stringify(modul)});\n` +
           `console.log("ICE_ALINDI:" + typeof m.parseArgs);\n`,
       );
-      const child = spawnPortable(process.execPath, [tsxCliYolu(process.cwd()), betik], {
+      const child = spawnPortable(process.execPath, [tsxCliPath(process.cwd()), script], {
         cwd: process.cwd(),
       });
       let cikti = "";
@@ -158,7 +158,7 @@ describe("giriş noktası — main GERÇEKTEN koşuyor", () => {
   it("süreç olarak çağrıldığında ayrıştırma çalışır (koruma doğru tarafta)", async () => {
     const child = spawnPortable(
       process.execPath,
-      [tsxCliYolu(process.cwd()), join(process.cwd(), "src", "watch", "cli.ts"), "akis", "--yok-boyle"],
+      [tsxCliPath(process.cwd()), join(process.cwd(), "src", "watch", "cli.ts"), "akis", "--yok-boyle"],
       { cwd: process.cwd() },
     );
     let cikti = "";

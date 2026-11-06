@@ -34,19 +34,19 @@ export interface UsageTotal {
  * Projenin kendi kuralının aynısı: iki ayrı yer gerçeği harmanlanmıyor.
  */
 export function totalUsage(list: readonly (Usage | undefined)[]): UsageTotal {
-  const topla = (sec: (u: Usage) => number | undefined): number | undefined => {
-    let toplam: number | undefined;
+  const sum = (choose: (u: Usage) => number | undefined): number | undefined => {
+    let totalOf: number | undefined;
     for (const u of list) {
       if (u === undefined) continue;
-      const v = sec(u);
+      const v = choose(u);
       if (typeof v !== "number") continue;
-      toplam = (toplam ?? 0) + v;
+      totalOf = (totalOf ?? 0) + v;
     }
-    return toplam;
+    return totalOf;
   };
-  const costUsd = topla((u) => u.costUsd);
-  const inputTokens = topla((u) => u.inputTokens);
-  const outputTokens = topla((u) => u.outputTokens);
+  const costUsd = sum((u) => u.costUsd);
+  const inputTokens = sum((u) => u.inputTokens);
+  const outputTokens = sum((u) => u.outputTokens);
   // Tek bir yarım çağrı bütün toplamı alt sınıra çevirir: kirlilik yukarı
   // taşınır, aşağı değil.
   const partial = list.some((u) => u?.partial === true);
@@ -77,8 +77,8 @@ export function formatUsage(t: UsageTotal): string {
   // kırpıldığında bile "en az" okunur kalmalı.
   const en = t.partial === true ? "≥" : "";
   if (t.costUsd !== undefined) {
-    const dolar = `${en}$${t.costUsd.toFixed(4)}`;
-    return token === undefined ? dolar : `${dolar} · ${en}${token}`;
+    const usd = `${en}$${t.costUsd.toFixed(4)}`;
+    return token === undefined ? usd : `${usd} · ${en}${token}`;
   }
   if (token !== undefined) {
     // İki ayrı "dolar yok" sebebi var ve karıştırılmamalı: abonelik kimliği

@@ -165,7 +165,7 @@ export function planPathFor(topology: TopologySnapshot, cardId: string): string 
  * sonunda N ağaç yazarın ağacına birleşiyor ve aynı yolu yazan iki ağaç
  * her birleşmede çakışırdı.
  */
-export function itirazPathFor(
+export function objectionPathFor(
   topology: TopologySnapshot, cardId: string, roleId: string,
 ): string | null {
   const plan = topology.plan;
@@ -186,11 +186,11 @@ export function planAuditor(topology: TopologySnapshot): string | null {
 }
 
 /** Bütün itirazcıların dosyaları, zincir sırasında. */
-export function itirazPathsFor(
+export function objectionPathsFor(
   topology: TopologySnapshot, cardId: string,
 ): { role: string; path: string }[] {
   return planObjectors(topology).flatMap((role) => {
-    const path = itirazPathFor(topology, cardId, role);
+    const path = objectionPathFor(topology, cardId, role);
     return path === null ? [] : [{ role, path }];
   });
 }

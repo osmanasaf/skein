@@ -73,7 +73,7 @@ afterEach(async () => {
 });
 
 /** Kuyrukta bir kart bırakır ve onu ALINAMAZ yapar. */
-async function engelliKart(): Promise<string> {
+async function blockedCards(): Promise<string> {
   const card = await queue.add(newCard({ title: "iş", task: "bir şey", topology }));
   // Hedef adı bir dizin: `rename` oraya taşıyamaz.
   await mkdir(join(root, ".skein", "active", "coder", `${card.id}.json`), { recursive: true });
@@ -92,7 +92,7 @@ async function engelliKart(): Promise<string> {
  */
 describe("sweep — kuyruk engeli", () => {
   it("engelli tur hareket saymıyor", async () => {
-    await engelliKart();
+    await blockedCards();
 
     const s = await sweep(topology, options);
 
@@ -101,7 +101,7 @@ describe("sweep — kuyruk engeli", () => {
   });
 
   it("runUntilIdle engelde boşa dönmüyor", async () => {
-    await engelliKart();
+    await blockedCards();
 
     const sweeps = await runUntilIdle(topology, { ...options, maxSweeps: 20 });
 

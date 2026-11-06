@@ -34,7 +34,7 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-async function kacisKapisinda(): Promise<Card> {
+async function atEscapeGate(): Promise<Card> {
   await queue.add(newCard({ title: "jitter", task: "iş", topology: daily }));
   const taken = await al(queue, "coder");
   return queue.escalate(taken, "ağaçta işlenmemiş değişiklik var");
@@ -44,7 +44,7 @@ describe("releaseCard", () => {
   // "İnsan ne sıklıkla araya girdi" sorusu kartları tek tek açmadan
   // cevaplanabilmeli.
   it("kararı olay günlüğüne düşürür", async () => {
-    const card = await kacisKapisinda();
+    const card = await atEscapeGate();
 
     const result = await releaseCard(root, queue, card.id, undefined, logPath);
 
@@ -72,10 +72,10 @@ describe("releaseCard", () => {
       card = await al(queue, "coder");
     }
     await queue.handoff(card, {});
-    const kilitli = await queue.reject(await al(queue, "reviewer"), { reason: "yine olmadı" });
-    expect(kilitli.state).toBe("gate");
+    const locked = await queue.reject(await al(queue, "reviewer"), { reason: "yine olmadı" });
+    expect(locked.state).toBe("gate");
 
-    const result = await releaseCard(root, queue, kilitli.id, undefined, logPath);
+    const result = await releaseCard(root, queue, locked.id, undefined, logPath);
 
     // Kilit kapısında tur tamamlandı ve kod yerinde: varsayılan ileri.
     expect(result).toMatchObject({ kind: "deadlock", decision: "forward" });
@@ -93,7 +93,7 @@ describe("releaseCard", () => {
    * hiç geri gitmemiş kartlar `back` olarak sayılıyordu.
    */
   it("hedefi olmayan back, retry olarak kaydedilir", async () => {
-    const card = await kacisKapisinda();
+    const card = await atEscapeGate();
 
     const result = await releaseCard(root, queue, card.id, "back", logPath);
 
@@ -128,7 +128,7 @@ describe("releaseCard", () => {
 
   // Çekirdeğin reddi yardımcıdan da geçmeli: reddedilen komut kayıt bırakmaz.
   it("reddedilen karar günlüğe yazılmaz", async () => {
-    const card = await kacisKapisinda();
+    const card = await atEscapeGate();
 
     await expect(releaseCard(root, queue, card.id, "forward", logPath)).rejects.toThrow(
       /kaçış kapısında/,

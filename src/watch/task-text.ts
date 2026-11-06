@@ -1,6 +1,6 @@
-import type { Card, PlanKabul } from "../card/card.js";
+import type { Card, PlanAcceptance } from "../card/card.js";
 import {
-  isPlanner, itirazPathFor, itirazPathsFor, planAuditor, planBlind, planPathFor, type SnapshotRole,
+  isPlanner, objectionPathFor, objectionPathsFor, planAuditor, planBlind, planPathFor, type SnapshotRole,
 } from "../flow/snapshot.js";
 import { planPhase } from "../plan/phase.js";
 import { verdictInstructions, VERDICT_FILE } from "./verdict.js";
@@ -60,7 +60,7 @@ function lastHandoffTo(card: Card, roleId: string): Extract<Card["history"][numb
   return null;
 }
 
-const planYazBolumu = (planPath: string): string[] => [
+const writePlanSection = (planPath: string): string[] => [
   "",
   "## Planı yaz",
   "",
@@ -73,7 +73,7 @@ const planYazBolumu = (planPath: string): string[] => [
   "Kod yazma — bu tur planlama turu.",
 ];
 
-const planOkuBolumu = (planPath: string, card: Card): string[] => [
+const readPlanSection = (planPath: string, card: Card): string[] => [
   "",
   "## Plan",
   "",
@@ -103,7 +103,7 @@ const planOkuBolumu = (planPath: string, card: Card): string[] => [
  * yerlere karşı körleştirebilir. İki sonuç ayrı tutulmazsa o yanlılık
  * ölçüye karışır.
  */
-const yukumlulukBolumu = (kabuller: PlanKabul[]): string[] => [
+const obligationSection = (kabuller: PlanAcceptance[]): string[] => [
   "",
   "## İtiraz üzerine değişen maddeler",
   "",
@@ -136,14 +136,14 @@ const yukumlulukBolumu = (kabuller: PlanKabul[]): string[] => [
   "denetliyorsan denetle; bu liste ek bir yükümlülük.",
 ];
 
-const itirazBolumu = (
-  planPath: string, itirazPath: string, roleId: string, round: number, blind: boolean,
+const objectionSection = (
+  planPath: string, objectionPath: string, roleId: string, round: number, blind: boolean,
 ): string[] => [
   "",
   `## Plana itiraz et${round > 1 ? ` (tur ${round})` : ""}`,
   "",
   `Bu tur **kod yazma turu değil.** \`${planPath}\` dosyasındaki planı oku,`,
-  `itirazlarını \`${itirazPath}\` dosyasına yaz ve **commit'le**.`,
+  `itirazlarını \`${objectionPath}\` dosyasına yaz ve **commit'le**.`,
   "",
   // Dosya rolün KENDİSİNE ait: başkasının dosyasına yazmak, turun sonundaki
   // birleştirmede çakışma üretir.
@@ -188,16 +188,16 @@ const itirazBolumu = (
 ];
 
 /** Cevap turu: her açık itiraz üç cevaptan birini alır. */
-const cevapBolumu = (
-  planPath: string, itirazDosyalari: { role: string; path: string }[], round: number, limit: number,
+const answerSection = (
+  planPath: string, objectionFiles: { role: string; path: string }[], round: number, limit: number,
 ): string[] => [
   "",
   "## İtirazları yanıtla",
   "",
   // Her itirazcının kendi dosyası var ve HEPSİ yanıtlanmak zorunda: biri
   // atlanırsa itirazları açık sayılır ve kart kapıya çıkar.
-  `Planına itirazlar ${itirazDosyalari.length === 1 ? "şu dosyada" : "şu dosyalarda"}:`,
-  ...itirazDosyalari.map((d) => `- \`${d.path}\`  (${d.role})`),
+  `Planına itirazlar ${objectionFiles.length === 1 ? "şu dosyada" : "şu dosyalarda"}:`,
+  ...objectionFiles.map((d) => `- \`${d.path}\`  (${d.role})`),
   "",
   "Her itirazın `**Durum:**` satırını düzenleyerek yanıtla, sonra",
   "**commit'le**. Dosyaların HEPSİNİ yanıtla — atladığın itiraz açık",
@@ -278,26 +278,26 @@ export function buildTaskText(card: Card, role: SnapshotRole): string {
   if (planPath !== null) {
     const phase = planPhase(card, role.id, card.topology);
     const limit = card.topology.plan?.tur ?? 1;
-    const benim = phase.kind === "itiraz"
-      ? itirazPathFor(card.topology, card.id, role.id)
+    const ours = phase.kind === "itiraz"
+      ? objectionPathFor(card.topology, card.id, role.id)
       : null;
-    if (phase.kind === "yaz") parts.push(...planYazBolumu(planPath));
-    else if (phase.kind === "itiraz" && benim !== null) {
-      parts.push(...itirazBolumu(
-        planPath, benim, role.id, phase.round, planBlind(card.topology, phase.round),
+    if (phase.kind === "yaz") parts.push(...writePlanSection(planPath));
+    else if (phase.kind === "itiraz" && ours !== null) {
+      parts.push(...objectionSection(
+        planPath, ours, role.id, phase.round, planBlind(card.topology, phase.round),
       ));
     } else if (phase.kind === "cevap") {
-      parts.push(...cevapBolumu(
-        planPath, itirazPathsFor(card.topology, card.id), phase.round, limit,
+      parts.push(...answerSection(
+        planPath, objectionPathsFor(card.topology, card.id), phase.round, limit,
       ));
     } else if (!isPlanner(card.topology, role.id)) {
-      parts.push(...planOkuBolumu(planPath, card));
+      parts.push(...readPlanSection(planPath, card));
       // Yükümlülük bölümü yalnızca beyan edilmiş denetçiye ve yalnızca
       // kart gerçekten yükümlülük taşıyorsa. Boş liste için başlık basmak,
       // olmayan bir şeyi varmış gibi okutur.
       const kabuller = card.plan?.kabuller ?? [];
       if (planAuditor(card.topology) === role.id && kabuller.length > 0) {
-        parts.push(...yukumlulukBolumu(kabuller));
+        parts.push(...obligationSection(kabuller));
       }
     }
   }

@@ -131,7 +131,7 @@ export interface Card {
    * sonradan düzenlense bile sonradan bilinebilsin. Sonraki roller planı
    * dosyadan okur; bu alan "hangi sürümünü okuması gerekiyordu"nun kaydı.
    */
-  plan?: { path: string; hash: string; kabuller?: PlanKabul[] };
+  plan?: { path: string; hash: string; kabuller?: PlanAcceptance[] };
 }
 
 /**
@@ -148,7 +148,7 @@ export interface Card {
  * sözleşmedir ve sözleşmenin tek başına yetip yetmediği ancak üretici
  * yalnızca onu okursa ölçülebilir.
  */
-export interface PlanKabul {
+export interface PlanAcceptance {
   /**
    * `rol#no` — itiraz dosyaları birleşince `no` ÇAKIŞABİLİYOR.
    *
@@ -360,7 +360,7 @@ export function parseCard(text: string): Card {
   // Plan isteğe bağlı ama varsa KATI: yarım bir plan kaydı, "hangi planla
   // yürüdü" sorusunu cevaplıyormuş gibi görünüp cevaplamaz.
   const planRaw = doc["plan"];
-  let plan: { path: string; hash: string; kabuller?: PlanKabul[] } | undefined;
+  let plan: { path: string; hash: string; kabuller?: PlanAcceptance[] } | undefined;
   if (planRaw !== undefined && planRaw !== null) {
     const rec = planRaw as Record<string, unknown>;
     if (typeof rec["path"] !== "string" || typeof rec["hash"] !== "string"
@@ -371,13 +371,13 @@ export function parseCard(text: string): Card {
     // kaydı, denetçiye eksik liste verip kapıyı eksik kurar. Boş liste ile
     // alanın hiç olmaması ayrı tutuluyor — biri "itiraz kabul edilmedi",
     // öteki "bu kart yükümlülük taşımıyor".
-    const kabulRaw = rec["kabuller"];
-    let kabuller: PlanKabul[] | undefined;
-    if (kabulRaw !== undefined && kabulRaw !== null) {
-      if (!Array.isArray(kabulRaw)) {
+    const acceptanceRaw = rec["kabuller"];
+    let kabuller: PlanAcceptance[] | undefined;
+    if (acceptanceRaw !== undefined && acceptanceRaw !== null) {
+      if (!Array.isArray(acceptanceRaw)) {
         throw new CardError("Kart alanı geçersiz: `plan.kabuller` bir dizi olmalı");
       }
-      kabuller = kabulRaw.map((ham) => {
+      kabuller = acceptanceRaw.map((ham) => {
         const k = ham as Record<string, unknown>;
         for (const alan of ["id", "role", "ne", "kanit"] as const) {
           if (typeof k[alan] !== "string" || (k[alan] as string).trim() === "") {

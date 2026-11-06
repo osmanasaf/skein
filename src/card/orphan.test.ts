@@ -42,38 +42,38 @@ afterEach(async () => {
 });
 
 /** `spec` akışıyla açılmış kart; `daily` akışında `analyst` rolü yok. */
-const specKart = (): Promise<Card> =>
+const specCard = (): Promise<Card> =>
   queue.add(newCard({ title: "spec kartı", task: "iş", topology: spec }));
 
 describe("isOrphan", () => {
   it("rolü yaşayan akışta olmayan kart yetimdir", async () => {
-    const card = await specKart();
+    const card = await specCard();
     expect(card.role).toBe("analyst");
     expect(isOrphan(card, daily)).toBe(true);
   });
 
   it("rolü duran kart yetim değildir", async () => {
-    const card = await specKart();
+    const card = await specCard();
     expect(isOrphan(card, spec)).toBe(false);
   });
 
   // Bitmiş kartın gideceği yer yok; yetimlik onu ilgilendirmiyor.
   it("bitmiş kart yetim sayılmaz", async () => {
-    const card = await specKart();
-    const bitmis: Card = { ...card, state: "done" };
-    expect(isOrphan(bitmis, daily)).toBe(false);
+    const card = await specCard();
+    const finished: Card = { ...card, state: "done" };
+    expect(isOrphan(finished, daily)).toBe(false);
   });
 
   // Akış dosyası silinmişse gidecek rol listesi yok.
   it("akış hiç okunamıyorsa kart yetimdir", async () => {
-    const card = await specKart();
+    const card = await specCard();
     expect(isOrphan(card, null)).toBe(true);
   });
 });
 
 describe("closeOrphan — akış okunamıyorsa", () => {
   it("gerekçe akışı işaret eder", async () => {
-    const card = await specKart();
+    const card = await specCard();
 
     const result = await closeOrphan(root, queue, null, card.id, logPath);
 
@@ -84,7 +84,7 @@ describe("closeOrphan — akış okunamıyorsa", () => {
 
 describe("isStale", () => {
   it("farklı damgayla başlamış kartı işaretler", async () => {
-    const card = await specKart();
+    const card = await specCard();
     expect(isStale(card, daily.hash)).toBe(true);
     expect(isStale(card, spec.hash)).toBe(false);
   });
@@ -92,7 +92,7 @@ describe("isStale", () => {
 
 describe("closeOrphan", () => {
   it("yetim kartı gerekçesiyle kapatır ve günlüğe düşürür", async () => {
-    const card = await specKart();
+    const card = await specCard();
 
     const result = await closeOrphan(root, queue, daily, card.id, logPath);
 
@@ -107,7 +107,7 @@ describe("closeOrphan", () => {
   // Genel bir "kartı iptal et" düğmesi olsaydı, sürtünmesi olması gereken
   // bir şey sürtünmesiz olurdu.
   it("yetim olmayan kartı kapatmayı reddeder", async () => {
-    const card = await specKart();
+    const card = await specCard();
 
     await expect(closeOrphan(root, queue, spec, card.id, logPath)).rejects.toThrow(/yetim değil/);
 
@@ -121,7 +121,7 @@ describe("closeOrphan", () => {
 
   // Altından kartı çekmek, parası ödenmiş bir turu ortada bırakmak olurdu.
   it("koşan kart kapatılamaz", async () => {
-    await specKart();
+    await specCard();
     await al(queue, "analyst");
     const active = (await queue.list())[0] as Card;
     expect(active.state).toBe("active");
@@ -130,7 +130,7 @@ describe("closeOrphan", () => {
   });
 
   it("kapıdaki yetim kart kapatılabilir", async () => {
-    await specKart();
+    await specCard();
     const taken = await al(queue, "analyst");
     const gated = await queue.escalate(taken, "verdikt yok");
     expect(gated.state).toBe("gate");

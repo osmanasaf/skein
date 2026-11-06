@@ -87,8 +87,8 @@ describe("eşikler WCAG AA'nın kendisidir", () => {
  */
 describe("kontrastOrani bilinen-kötü çifti REDDEDER", () => {
   it("açık gri üstünde beyaz AA'yı geçemez", () => {
-    const oran = kontrastOrani("#ffffff", "#bbbbbb");
-    expect(oran).toBeLessThan(NORMAL_METIN_ESIGI);
+    const ratio = kontrastOrani("#ffffff", "#bbbbbb");
+    expect(ratio).toBeLessThan(NORMAL_METIN_ESIGI);
   });
 
   it("aynı renk 1:1'dir — ayırt edilemez", () => {

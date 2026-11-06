@@ -42,7 +42,7 @@ afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-async function kilit(pid: number): Promise<void> {
+async function lock(pid: number): Promise<void> {
   await writeFile(
     join(dir, ".skein", "daemon.json"),
     JSON.stringify({ pid, startedAt: "2026-11-02T10:00:00.000Z", flow: "daily", hash: "abc", mode: "serve" }),
@@ -59,7 +59,7 @@ async function kilit(pid: number): Promise<void> {
  */
 describe("card CLI — gözcü kilidi", () => {
   it("canlı gözcü varken take reddediyor", async () => {
-    await kilit(process.pid);
+    await lock(process.pid);
     const { code, out } = await card(dir, "take", "kodlayici");
     expect(code).toBe(1);
     expect(out).toContain("gözcü açık");
@@ -68,7 +68,7 @@ describe("card CLI — gözcü kilidi", () => {
   });
 
   it("canlı gözcü varken recover reddediyor", async () => {
-    await kilit(process.pid);
+    await lock(process.pid);
     const { code, out } = await card(dir, "recover");
     expect(code).toBe(1);
     expect(out).toContain("gözcü açık");
@@ -78,7 +78,7 @@ describe("card CLI — gözcü kilidi", () => {
   // gereken şeydir. Kilit kalıcı engele dönüşürse çözdüğü sorundan büyük
   // bir sorun olur.
   it("bayat kilit recover'ı engellemiyor", async () => {
-    await kilit(4_194_305);
+    await lock(4_194_305);
     const { code, out } = await card(dir, "recover");
     expect(code).toBe(0);
     expect(out).toContain("yarıda kalan kart yok");

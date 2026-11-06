@@ -183,7 +183,7 @@ export class ClaudeCliAdapter implements Adapter {
     let streamed: ClaudeJsonResult | undefined;
     // Akış sürerken toplanan token'lar — kapanış kaydı hiç gelmezse ölçünün
     // TEK kalıntısı bu olur (bkz. `Usage.kismi`).
-    const biriken = yeniBirikim();
+    const biriken = newTally();
     if (req.onStep !== undefined) {
       const onStep = req.onStep;
       const splitter = new LineSplitter((line) => {
@@ -193,7 +193,7 @@ export class ClaudeCliAdapter implements Adapter {
           streamed = record.value as ClaudeJsonResult;
           return;
         }
-        birikimeEkle(biriken, record);
+        addToTally(biriken, record);
         for (const step of stepsOf(record, req.workdir)) onStep(step);
       });
       child.stdout.on("data", (c: string) => {
@@ -240,7 +240,7 @@ export class ClaudeCliAdapter implements Adapter {
     // Kapanış kaydı GELDİYSE ölçü odur — yarım toplam onu EZMEZ.
     // Gelmediyse (zaman aşımı/öldürme) akıştan toplanan alt sınır yazılır:
     // bildirilmeyen sıfır değildir, ama uydurulmuş bir dolar da olmaz.
-    const usage = toUsage(parsed) ?? (parsed === undefined ? kismiKullanim(biriken) : undefined);
+    const usage = toUsage(parsed) ?? (parsed === undefined ? partialUsage(biriken) : undefined);
     if (usage) result.usage = usage;
     // Ajanın son mesajı: tur sonuçsuz bittiğinde sebebi çoğu zaman burada.
     if (typeof parsed?.result === "string" && parsed.result.trim() !== "") {
@@ -307,17 +307,17 @@ function parseResult(stdout: string): ClaudeJsonResult | undefined {
  * yazması ~1.25x); burada toplanan şey HACİM, para değil — dolar zaten
  * `total_cost_usd`'den geliyor.
  */
-function girdiToplami(u: NonNullable<ClaudeJsonResult["usage"]>): number | undefined {
-  const parcalar = [u.input_tokens, u.cache_read_input_tokens, u.cache_creation_input_tokens]
+function inputTotal(u: NonNullable<ClaudeJsonResult["usage"]>): number | undefined {
+  const parts = [u.input_tokens, u.cache_read_input_tokens, u.cache_creation_input_tokens]
     .filter((v): v is number => typeof v === "number");
-  return parcalar.length === 0 ? undefined : parcalar.reduce((a, b) => a + b, 0);
+  return parts.length === 0 ? undefined : parts.reduce((a, b) => a + b, 0);
 }
 
 function toUsage(parsed: ClaudeJsonResult | undefined): Usage | undefined {
   if (!parsed) return undefined;
   const usage: Usage = {};
   if (parsed.usage !== undefined) {
-    const girdi = girdiToplami(parsed.usage);
+    const girdi = inputTotal(parsed.usage);
     if (girdi !== undefined) usage.inputTokens = girdi;
   }
   if (typeof parsed.usage?.output_tokens === "number") usage.outputTokens = parsed.usage.output_tokens;
@@ -333,13 +333,13 @@ function toUsage(parsed: ClaudeJsonResult | undefined): Usage | undefined {
  * böyle sayıyor. `sayac` ayrı tutuluyor: hiç mesaj görülmediyse "sıfır
  * token" demek yanlış olurdu, ÖLÇÜ YOK demek doğru.
  */
-export interface AkisBirikimi {
+export interface FlowTally {
   input: number;
   cikti: number;
   counter: number;
 }
 
-export function yeniBirikim(): AkisBirikimi {
+export function newTally(): FlowTally {
   return { input: 0, cikti: 0, counter: 0 };
 }
 
@@ -352,14 +352,14 @@ export function yeniBirikim(): AkisBirikimi {
  * görülmemiş bir ölçüyü görülmüş saymak, yarım toplamı olduğundan büyük
  * gösterirdi.
  */
-export function birikimeEkle(b: AkisBirikimi, record: StreamRecord): void {
+export function addToTally(b: FlowTally, record: StreamRecord): void {
   if (record.type !== "assistant") return;
   const message = record.value["message"];
   if (message === null || typeof message !== "object") return;
   const u = (message as Record<string, unknown>)["usage"];
   if (u === null || typeof u !== "object") return;
   const blok = u as NonNullable<ClaudeJsonResult["usage"]>;
-  const girdi = girdiToplami(blok);
+  const girdi = inputTotal(blok);
   const cikti = blok.output_tokens;
   if (girdi === undefined && typeof cikti !== "number") return;
   b.input += girdi ?? 0;
@@ -374,7 +374,7 @@ export function birikimeEkle(b: AkisBirikimi, record: StreamRecord): void {
  * kaydında veriyor ve onu buradan hesaplamak bir fiyat tablosu uydurmak
  * olurdu — bayatlayan, ama kesin görünen bir sayı.
  */
-export function kismiKullanim(b: AkisBirikimi): Usage | undefined {
+export function partialUsage(b: FlowTally): Usage | undefined {
   if (b.counter === 0) return undefined;
   return { inputTokens: b.input, outputTokens: b.cikti, partial: true };
 }
@@ -449,14 +449,14 @@ function relativize(value: string, workdir?: string): string {
   // Karşılaştırma TEK bir ayraç biçiminde yapılıyor. Windows'ta `join`
   // ters eğik çizgi üretiyor, önek ise eğik çizgiyle kuruluyordu: hiçbir
   // yol kısalmıyor ve ekranda her satır mutlak yolla doluyordu.
-  const duz = (x: string): string => x.split("\\").join("/");
-  const baseline = duz(workdir).replace(/\/+$/u, "");
-  const yol = duz(value);
-  const onek = `${baseline}/`;
+  const plain = (x: string): string => x.split("\\").join("/");
+  const baseline = plain(workdir).replace(/\/+$/u, "");
+  const yol = plain(value);
+  const prefix = `${baseline}/`;
   // Kısalan yol POSIX ayraçlı dönüyor: ekranda ve günlükte tek biçim.
   // Eşleşmezse değer OLDUĞU GİBİ kalıyor — dizin dışındaki bir yolu
   // yeniden yazmak bilgi kaybı olurdu.
-  return yol.startsWith(onek) ? yol.slice(onek.length) : value;
+  return yol.startsWith(prefix) ? yol.slice(prefix.length) : value;
 }
 
 /**

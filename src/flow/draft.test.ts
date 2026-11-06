@@ -127,15 +127,15 @@ describe("checkDraft", () => {
   });
 
   it("maliyet rol sayısıyla büyür", async () => {
-    const dortRol = taslak();
-    dortRol.roles = [
+    const fourRoles = taslak();
+    fourRoles.roles = [
       { id: "analyst", provider: "claude", workspace: "main", prompt: "../../roles/coder.prompt", next: "coder" },
       { id: "coder", provider: "codex", workspace: "coder", prompt: "../../roles/coder.prompt", next: "reviewer" },
       { id: "reviewer", provider: "claude", workspace: "reviewer", prompt: "../../roles/reviewer.prompt", receive: "batch", next: "guard" },
       { id: "guard", provider: "codex", workspace: "guard", prompt: "../../roles/reviewer.prompt", receive: "batch", next: "done" },
     ];
 
-    const result = await checkDraft(path, dortRol, opts);
+    const result = await checkDraft(path, fourRoles, opts);
 
     expect(result.ok && result.cost.base).toBe(4);
     expect(result.ok && result.cost.rejectEdges).toHaveLength(3);
@@ -144,7 +144,7 @@ describe("checkDraft", () => {
 
 describe("fromFlow — gidiş dönüş", () => {
   const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-  const gercek = { root: repoRoot, providers: knownProviderSet() };
+  const actual = { root: repoRoot, providers: knownProviderSet() };
 
   // En sert sınav: deponun KENDİ akış dosyaları taslağa çevrilip geri
   // yazıldığında topoloji hash'i DEĞİŞMEMELİ. Değişirse ekrandan yapılan ilk
@@ -154,10 +154,10 @@ describe("fromFlow — gidiş dönüş", () => {
   for (const ad of ["daily", "spec", "plan4"]) {
     it(`${ad}: taslağa çevrilip geri yazılınca hash aynı kalır`, async () => {
       const yol = join(repoRoot, "hub", "flows", `${ad}.yaml`);
-      const once = await loadFlow(yol, gercek);
+      const once = await loadFlow(yol, actual);
 
       const draft = fromFlow(once);
-      const sonra = await loadFlow(yol, { ...gercek, text: toYaml(draft) });
+      const sonra = await loadFlow(yol, { ...actual, text: toYaml(draft) });
 
       expect(sonra.hash).toBe(once.hash);
       expect(sonra.roles.map((r) => r.id)).toEqual(once.roles.map((r) => r.id));
@@ -168,26 +168,26 @@ describe("fromFlow — gidiş dönüş", () => {
   // çünkü sessizce silinmesi en kolay alan.
   it("spec: kapı mesajı korunur", async () => {
     const yol = join(repoRoot, "hub", "flows", "spec.yaml");
-    const flow = await loadFlow(yol, gercek);
+    const flow = await loadFlow(yol, actual);
     expect(flow.gates[0]?.message).toBeDefined();
 
-    const yeniden = await loadFlow(yol, { ...gercek, text: toYaml(fromFlow(flow)) });
+    const again = await loadFlow(yol, { ...actual, text: toYaml(fromFlow(flow)) });
 
-    expect(yeniden.gates[0]?.message).toBe(flow.gates[0]?.message);
+    expect(again.gates[0]?.message).toBe(flow.gates[0]?.message);
   });
 
   it("spec: açıklama korunur", async () => {
     const yol = join(repoRoot, "hub", "flows", "spec.yaml");
-    const flow = await loadFlow(yol, gercek);
-    const yeniden = await loadFlow(yol, { ...gercek, text: toYaml(fromFlow(flow)) });
-    expect(yeniden.description).toBe(flow.description);
+    const flow = await loadFlow(yol, actual);
+    const again = await loadFlow(yol, { ...actual, text: toYaml(fromFlow(flow)) });
+    expect(again.description).toBe(flow.description);
   });
 
   // Varsayılan ret hedefini dosyaya yazmak, `reject: coder` satırlarının
   // "bu kasıtlı" anlamını sulandırırdı.
   it("yazılmamış ret hedefi taslağa da yazılmaz", async () => {
     const yol = join(repoRoot, "hub", "flows", "daily.yaml");
-    const flow = await loadFlow(yol, gercek);
+    const flow = await loadFlow(yol, actual);
     const draft = fromFlow(flow);
 
     const isOpen = flow.roles.filter((r) => r.rejectExplicit).map((r) => r.id);
@@ -213,10 +213,10 @@ describe("ekranın modellemediği bloklar korunuyor", () => {
     const result = await writeDraft(path, fresh, opts);
 
     expect(result.ok).toBe(true);
-    const yazilan = await readFile(path, "utf8");
-    expect(yazilan).toContain("deneysel:");
-    expect(yazilan).toContain("ileride: eklenecek");
-    expect(yazilan).toContain("ekrandan düzenlendi");
+    const written = await readFile(path, "utf8");
+    expect(written).toContain("deneysel:");
+    expect(written).toContain("ileride: eklenecek");
+    expect(written).toContain("ekrandan düzenlendi");
   });
 
   // YORUMLAR da korunuyor. Ölçüldü: plan4.yaml için 96 satır / 34 yorum
@@ -231,10 +231,10 @@ ${toYaml(taslak())}`);
     fresh.description = "ekrandan düzenlendi";
     expect((await writeDraft(path, fresh, opts)).ok).toBe(true);
 
-    const yazilan = await readFile(path, "utf8");
-    expect(yazilan).toContain("# Üst başlık yorumu");
-    expect(yazilan).toContain("# İkinci satır");
-    expect(yazilan).toContain("ekrandan düzenlendi");
+    const written = await readFile(path, "utf8");
+    expect(written).toContain("# Üst başlık yorumu");
+    expect(written).toContain("# İkinci satır");
+    expect(written).toContain("ekrandan düzenlendi");
   });
 
   // Silinen isteğe bağlı alan dosyadan da düşmeli: belgeyi yerinde
@@ -256,7 +256,7 @@ ${toYaml(taslak())}`);
 // verdiği, modellemenin kendisinin round-trip ve silme/ekleme yollarının
 // doğru çalıştığı sınanıyor.
 describe("planlama bloğu — taşıma ve round-trip", () => {
-  const planBlok = (): NonNullable<FlowDraft["planlama"]> => ({
+  const planBlock = (): NonNullable<FlowDraft["planlama"]> => ({
     katilimcilar: ["coder"],
     plan: "docs/plan/{kart}.md",
     tur: 1,
@@ -268,13 +268,13 @@ describe("planlama bloğu — taşıma ve round-trip", () => {
     await writeFile(path, toYaml(taslak()));
 
     const fresh = taslak();
-    fresh.planlama = planBlok();
+    fresh.planlama = planBlock();
     const result = await writeDraft(path, fresh, opts);
 
     expect(result.ok).toBe(true);
-    const yazilan = await readFile(path, "utf8");
-    expect(yazilan).toContain("planlama:");
-    expect(yazilan).toContain("denetci: reviewer");
+    const written = await readFile(path, "utf8");
+    expect(written).toContain("planlama:");
+    expect(written).toContain("denetci: reviewer");
     const flow = await loadFlow(path, opts);
     expect(flow.plan?.denetci).toBe("reviewer");
     expect(flow.plan?.katilimcilar).toEqual(["coder"]);
@@ -288,7 +288,7 @@ describe("planlama bloğu — taşıma ve round-trip", () => {
     await writeFile(path, toYaml(taslak()));
 
     const fresh = taslak();
-    fresh.planlama = planBlok(); // "coder"a işaret ediyor
+    fresh.planlama = planBlock(); // "coder"a işaret ediyor
     (fresh.roles[0] as { id: string }).id = "yazar"; // ama rol "yazar" oldu
     (fresh.roles[1] as { reject?: string }).reject = "yazar";
     (fresh.roles[1] as { syncBack?: string[] }).syncBack = ["yazar"];
@@ -356,8 +356,8 @@ describe("writeDraft", () => {
   // Gözcü her geçişte bu dosyayı okuyor; yarı yazılmış bir hâli görmemeli.
   it("yazma sonrası yan dosya bırakmaz", async () => {
     await writeDraft(path, taslak(), opts);
-    const dosyalar = await readdir(join(root, "hub", "flows"));
-    expect(dosyalar).toEqual(["test.yaml"]);
+    const files = await readdir(join(root, "hub", "flows"));
+    expect(files).toEqual(["test.yaml"]);
   });
 
   it("yazılan dosya yeniden yüklenebilir", async () => {

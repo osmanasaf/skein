@@ -288,7 +288,7 @@ export function groupRuns<T extends { runId: string; taskId: string; producer: s
    * ELDE KALAN hücrelerinden türetiliyor ve puanlama kayıpları grup
    * kimliğini değiştiriyor — bkz. `runModels`.
    */
-  kurgu?: Map<string, string[]>,
+  scenario?: Map<string, string[]>,
 ): Grouped<T>[] {
   const byRun = new Map<string, T[]>();
   for (const c of cells) {
@@ -300,7 +300,7 @@ export function groupRuns<T extends { runId: string; taskId: string; producer: s
   const byGroup = new Map<string, Grouped<T>>();
   for (const [runId, own] of byRun) {
     const first = own[0] as T;
-    const models = kurgu?.get(runId) ?? modelsOf(own);
+    const models = scenario?.get(runId) ?? modelsOf(own);
     const k = key(first.taskId, ...models);
     const g = byGroup.get(k);
     if (g) g.cells.push(...own);
@@ -309,8 +309,8 @@ export function groupRuns<T extends { runId: string; taskId: string; producer: s
   return [...byGroup.values()];
 }
 
-export function groupCells(cells: ScoredCell[], kurgu?: Map<string, string[]>): GroupReport[] {
-  return groupRuns(cells, kurgu).map((g) => {
+export function groupCells(cells: ScoredCell[], scenario?: Map<string, string[]>): GroupReport[] {
+  return groupRuns(cells, scenario).map((g) => {
     const a = analyse(g.cells);
     return {
       taskId: g.taskId, models: g.models, ...a,

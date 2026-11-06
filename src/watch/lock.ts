@@ -162,12 +162,12 @@ export async function acquireLock(
  * engel sanan bir süreç hiçbir iş yapamazdı.
  */
 export async function liveLock(
-  path: string, options: LockOptions & { bizimPid?: number } = {},
+  path: string, options: LockOptions & { ourPid?: number } = {},
 ): Promise<LockInfo | null> {
   const alive = options.alive ?? pidAlive;
   const holder = await readLock(path);
   if (holder === null) return null;
-  if (options.bizimPid !== undefined && holder.pid === options.bizimPid) return null;
+  if (options.ourPid !== undefined && holder.pid === options.ourPid) return null;
   return alive(holder.pid) ? holder : null;
 }
 

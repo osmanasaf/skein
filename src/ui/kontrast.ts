@@ -15,8 +15,8 @@
 
 /** "#RRGGBB" formatını kanallara ayırır. Kısa "#RGB" formu desteklenmiyor — bu dosyada hiç üretilmiyor. */
 function kanallaraAyir(hex: string): [number, number, number] {
-  const temiz = hex.trim();
-  const match = /^#([0-9A-Fa-f]{6})$/.exec(temiz);
+  const clean = hex.trim();
+  const match = /^#([0-9A-Fa-f]{6})$/.exec(clean);
   if (!match) throw new Error("gecersiz renk: " + hex + " (beklenen: #RRGGBB)");
   // Yakalama grubu desenin kendisinde zorunlu (altındaki alternatif yok),
   // yani eşleşme varsa bu grup da var — ama noUncheckedIndexedAccess
@@ -32,8 +32,8 @@ function kanallaraAyir(hex: string): [number, number, number] {
 
 /** sRGB kanalını (0-255) WCAG'ın doğrusal uzayına taşır. */
 function dogrusallastir(kanal: number): number {
-  const oran = kanal / 255;
-  return oran <= 0.03928 ? oran / 12.92 : Math.pow((oran + 0.055) / 1.055, 2.4);
+  const ratio = kanal / 255;
+  return ratio <= 0.03928 ? ratio / 12.92 : Math.pow((ratio + 0.055) / 1.055, 2.4);
 }
 
 /** WCAG göreli parlaklığı (relative luminance), 0 (siyah) ile 1 (beyaz) arasında. */
@@ -52,8 +52,8 @@ export function kontrastOrani(renk1: string, renk2: string): number {
   const l1 = goreliParlaklik(renk1);
   const l2 = goreliParlaklik(renk2);
   const isOpen = Math.max(l1, l2);
-  const koyu = Math.min(l1, l2);
-  return (isOpen + 0.05) / (koyu + 0.05);
+  const darkBlock = Math.min(l1, l2);
+  return (isOpen + 0.05) / (darkBlock + 0.05);
 }
 
 /** Normal metin eşiği — WCAG AA, 4.5:1. */

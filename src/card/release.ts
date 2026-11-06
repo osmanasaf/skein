@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { EventLog } from "../events/log.js";
 import type { Card } from "./card.js";
-import { kapiKarari, type CardQueue, type ReleaseDecision } from "./queue.js";
+import { gateDecision, type CardQueue, type ReleaseDecision } from "./queue.js";
 
 export interface ReleaseResult {
   card: Card;
@@ -41,7 +41,7 @@ export async function releaseCard(
   // Hesabı `kapiKarari` yapıyor — `queue.release` de aynı yerden okuyor,
   // böylece günlüğe yazılan karar ile kartın gittiği yer AYNI kaynaktan
   // geliyor. Eskiden ikisi ayrı ayrı hesaplanıyordu ve ayrışıyorlardı.
-  const karar = before === null ? null : kapiKarari(before, decision);
+  const karar = before === null ? null : gateDecision(before, decision);
 
   const card = await queue.release(id, decision === undefined ? {} : { decision });
 

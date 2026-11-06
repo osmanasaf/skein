@@ -43,9 +43,9 @@ describe("estimateCost", () => {
   it("audit bayrağı bugün maliyeti değiştirmez", async () => {
     const flow = await load("daily");
     const isOpen = estimateCost({ ...flow, audit: { ...flow.audit, enabled: true } });
-    const kapali = estimateCost({ ...flow, audit: { ...flow.audit, enabled: false } });
+    const closed = estimateCost({ ...flow, audit: { ...flow.audit, enabled: false } });
     expect(isOpen.perRole).toBe(1);
-    expect(isOpen.base).toBe(kapali.base);
+    expect(isOpen.base).toBe(closed.base);
   });
 
   // syncBack bir git birleştirmesi; ajan çağrısı değil. `daily`'nin bir

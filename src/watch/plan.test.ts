@@ -57,7 +57,7 @@ let topology: TopologySnapshot;
 let claude: FakeAdapter;
 let options: TickOptions;
 /** Plan dosyası "diskte" var mı — tick'e enjekte ediliyor. */
-let planlar: Map<string, string>;
+let plans: Map<string, string>;
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "skein-plan-"));
@@ -78,7 +78,7 @@ beforeEach(async () => {
   topology = snapshot(flow, root);
 
   claude = new FakeAdapter();
-  planlar = new Map();
+  plans = new Map();
   options = {
     root,
     queue,
@@ -88,7 +88,7 @@ beforeEach(async () => {
     isTracked: async () => false,
     mergeForward: async () => ({ kind: "merged" as const }),
     readPlan: async (path) => {
-      const text = planlar.get(path);
+      const text = plans.get(path);
       if (text === undefined) throw new Error("ENOENT");
       return text;
     },
@@ -174,7 +174,7 @@ describe("tick — plan kapısı", () => {
 
   it("boş plan dosyası da kabul edilmez", async () => {
     const card = await put();
-    planlar.set(join(root, `docs/plan/${card.id}.md`), "   \n");
+    plans.set(join(root, `docs/plan/${card.id}.md`), "   \n");
     claude.answer = writes({ decision: "accept" });
 
     const result = await tick("planner", options);
@@ -184,7 +184,7 @@ describe("tick — plan kapısı", () => {
 
   it("plan varsa kart ilerler ve plan karta donar", async () => {
     const card = await put();
-    planlar.set(join(root, `docs/plan/${card.id}.md`), "# Plan\nselector.ts sürüme bakıyor.\n");
+    plans.set(join(root, `docs/plan/${card.id}.md`), "# Plan\nselector.ts sürüme bakıyor.\n");
     claude.answer = writes({ decision: "accept", summary: "plan yazıldı" });
 
     const result = await tick("planner", options);
@@ -199,7 +199,7 @@ describe("tick — plan kapısı", () => {
 
   it("planı yazmayan rol için kapı işlemez", async () => {
     const card = await put();
-    planlar.set(join(root, `docs/plan/${card.id}.md`), "# Plan\n");
+    plans.set(join(root, `docs/plan/${card.id}.md`), "# Plan\n");
     claude.answer = writes({ decision: "accept" });
     await tick("planner", options);
 
@@ -212,7 +212,7 @@ describe("tick — plan kapısı", () => {
 
   it("plan günlüğe düşer", async () => {
     const card = await put();
-    planlar.set(join(root, `docs/plan/${card.id}.md`), "# Plan\n");
+    plans.set(join(root, `docs/plan/${card.id}.md`), "# Plan\n");
     claude.answer = writes({ decision: "accept" });
 
     const logPath = join(root, "olaylar.jsonl");

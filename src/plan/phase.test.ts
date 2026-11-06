@@ -55,7 +55,7 @@ describe("planPhase — alışveriş kapandıktan sonra", () => {
   const t = topology(2);
   const taken = (role: string): HistoryEntry =>
     ({ at: "2026-01-01T00:00:00.000Z", event: "taken", role });
-  const ret = (from: string, to: string): HistoryEntry =>
+  const rejectCount = (from: string, to: string): HistoryEntry =>
     ({ at: "2026-01-01T00:00:00.000Z", event: "reject", from, to, round: 1, reason: "testler kırık" });
 
   it("kod reti yazara dönünce cevap turu AÇILMAZ", () => {
@@ -68,7 +68,7 @@ describe("planPhase — alışveriş kapandıktan sonra", () => {
       plan("analyst", "itiraz", 2, 1),
       // Doğal son: kart `coder`'a gitti, `coder` aldı ve reddetti.
       taken("coder"),
-      ret("coder", "planner"),
+      rejectCount("coder", "planner"),
     );
     expect(planPhase(c, "planner", t)).toEqual({ kind: "yok" });
   });
@@ -80,7 +80,7 @@ describe("planPhase — alışveriş kapandıktan sonra", () => {
       plan("analyst", "itiraz", 1, 1),
       plan("planner", "cevap", 1, 1),
       taken("coder"),
-      ret("coder", "architect"),
+      rejectCount("coder", "architect"),
     );
     expect(planPhase(c, "architect", t)).toEqual({ kind: "yok" });
   });
@@ -147,12 +147,12 @@ describe("planPhase — turun sırası", () => {
   });
 
   it("tavan dolduysa kimsenin turu yok — alışveriş kapandı", () => {
-    const tek = topology(1);
-    const c = card(tek,
+    const single = topology(1);
+    const c = card(single,
       plan("planner", "yazdi", 0), plan("architect", "itiraz", 1, 1),
       plan("analyst", "itiraz", 1, 2), plan("planner", "cevap", 1, 2));
     for (const rol of ["planner", "architect", "analyst", "coder"]) {
-      expect(planPhase(c, rol, tek)).toEqual({ kind: "yok" });
+      expect(planPhase(c, rol, single)).toEqual({ kind: "yok" });
     }
   });
 
@@ -173,7 +173,7 @@ describe("planPhase — turun sırası", () => {
 
 describe("planPhase — insan kapıdan yeniden açarsa", () => {
   const t = topology(1);
-  const kapi = (role: string): HistoryEntry =>
+  const gate = (role: string): HistoryEntry =>
     ({ at: "2026-01-01T00:01:00.000Z", event: "gate", role, reason: "kilit", kind: "deadlock" });
   const birakildi = (role: string): HistoryEntry =>
     ({ at: "2026-01-01T00:02:00.000Z", event: "released", role });
@@ -182,7 +182,7 @@ describe("planPhase — insan kapıdan yeniden açarsa", () => {
     const c = card(t,
       plan("planner", "yazdi", 0), plan("architect", "itiraz", 1, 1),
       plan("analyst", "itiraz", 1, 2), plan("planner", "cevap", 1, 2),
-      kapi("planner"), birakildi("planner"));
+      gate("planner"), birakildi("planner"));
     expect(planPhase(c, "planner", t)).toEqual({ kind: "cevap", round: 1 });
     // Sıra ilerlemiyor: insanın "bunu düzelt" dediği tur atlanmaz.
     expect(planPhase(c, "architect", t)).toEqual({ kind: "yok" });
@@ -191,7 +191,7 @@ describe("planPhase — insan kapıdan yeniden açarsa", () => {
   it("retry itirazcıyı AYNI itiraz turuna geri koyar", () => {
     const c = card(t,
       plan("planner", "yazdi", 0), plan("architect", "itiraz", 1, 1),
-      kapi("architect"), birakildi("architect"));
+      gate("architect"), birakildi("architect"));
     expect(planPhase(c, "architect", t)).toEqual({ kind: "itiraz", round: 1 });
     expect(planPhase(c, "analyst", t)).toEqual({ kind: "yok" });
   });
@@ -207,7 +207,7 @@ describe("planPhase — insan kapıdan yeniden açarsa", () => {
       plan("analyst", "itiraz", 1, 2), plan("planner", "cevap", 1, 2),
       // Alışveriş kapandı, kart zincirden devam etti, coder kapıya çıktı.
       { at: "t5", event: "taken", role: "coder" },
-      kapi("coder"), birakildi("planner"));
+      gate("coder"), birakildi("planner"));
     // Yazar sıradan rol turunu koşar; "itirazları yanıtla" turu almaz.
     expect(planPhase(c, "planner", t)).toEqual({ kind: "yok" });
   });
@@ -218,7 +218,7 @@ describe("planPhase — insan kapıdan yeniden açarsa", () => {
     const c = card(t,
       plan("planner", "yazdi", 0), plan("architect", "itiraz", 1, 1),
       plan("analyst", "itiraz", 1, 2), plan("planner", "cevap", 1, 2),
-      kapi("planner"), birakildi("coder"));
+      gate("planner"), birakildi("coder"));
     for (const rol of ["planner", "architect", "analyst"]) {
       expect(planPhase(c, rol, t)).toEqual({ kind: "yok" });
     }

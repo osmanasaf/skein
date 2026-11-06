@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { join, resolve } from "node:path";
-import { girisNoktasiMi } from "../proc/process.js";
+import { isEntryPoint } from "../proc/process.js";
 import type { Adapter } from "../adapters/contract.js";
 import { adapterFor, knownProviderSet } from "../adapters/factory.js";
 import { CardQueue } from "../card/queue.js";
@@ -450,7 +450,7 @@ async function run(root: string, live: LiveFlow, queue: CardQueue, args: Args): 
 
 // `parseArgs`/`zamanAsimiSecenegi` sınanabilsin diye bu modül içe
 // alınabiliyor; içe almak GÖZCÜYÜ BAŞLATMAMALI. Bkz. `girisNoktasiMi`.
-if (girisNoktasiMi(import.meta.url)) {
+if (isEntryPoint(import.meta.url)) {
   main(process.argv.slice(2)).then(
     (code) => process.exit(code),
     (error: unknown) => {

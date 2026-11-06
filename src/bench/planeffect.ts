@@ -115,19 +115,19 @@ export interface HookSets {
   /** Deney kolunda en az bir koşuda kırmızı olan kancalar. */
   planli: string[];
   /** İki kolda da görülen — planlamanın dokunmadığı kusurlar. */
-  ortak: string[];
+  shared: string[];
   /** Yalnızca kontrol kolunda — planlamanın ÇÖZDÜĞÜ. */
-  yalnizPlansiz: string[];
+  onlyUnplanned: string[];
   /** Yalnızca deney kolunda — planlamanın GETİRDİĞİ. */
-  yalnizPlanli: string[];
+  onlyPlanned: string[];
   /**
    * Kolun her ÖLÇÜLMÜŞ koşusunda kırmızı olan kancalar.
    *
    * Kusurun belirlenimci olup olmadığını söylüyor: kontrol kolunda bu küme
    * birleşime eşitse hücre kararlı, yani ölçüm için elverişli.
    */
-  herKosudaPlansiz: string[];
-  herKosudaPlanli: string[];
+  everyRunUnplanned: string[];
+  everyRunPlanned: string[];
 }
 
 /**
@@ -266,11 +266,11 @@ export function armRuns(events: SkeinEvent[]): ArmRun[] {
 }
 
 /** Kanca kimliklerini iki kol üzerinden karşılaştırır. */
-function hookSets(plansizRuns: ArmRun[], planliRuns: ArmRun[]): HookSets {
+function hookSets(unplannedRuns: ArmRun[], plannedRuns: ArmRun[]): HookSets {
   // Teslim edilmeyen koşunun kancaları kolun kusur KİMLİĞİ de değil.
   const teslimli = (r: ArmRun): boolean => r.state === "done" || r.state === "yok";
-  plansizRuns = plansizRuns.filter(teslimli);
-  planliRuns = planliRuns.filter(teslimli);
+  unplannedRuns = unplannedRuns.filter(teslimli);
+  plannedRuns = plannedRuns.filter(teslimli);
   const birlesim = (runs: ArmRun[]): Set<string> => {
     const out = new Set<string>();
     for (const r of runs) if (r.ran) for (const name of r.redNames) out.add(name);
@@ -278,24 +278,24 @@ function hookSets(plansizRuns: ArmRun[], planliRuns: ArmRun[]): HookSets {
   };
   // Her koşuda kırmızı olanlar: ölçülmüş koşu yoksa boş küme (kesişim
   // tanımsız; "hepsinde var" demek yanlış olurdu).
-  const herKosuda = (runs: ArmRun[]): Set<string> => {
-    const olculen = runs.filter((r) => r.ran);
-    if (olculen.length === 0) return new Set();
-    let acc = new Set((olculen[0] as ArmRun).redNames);
-    for (const r of olculen.slice(1)) acc = new Set([...acc].filter((a) => r.redNames.includes(a)));
+  const everyRun = (runs: ArmRun[]): Set<string> => {
+    const measured = runs.filter((r) => r.ran);
+    if (measured.length === 0) return new Set();
+    let acc = new Set((measured[0] as ArmRun).redNames);
+    for (const r of measured.slice(1)) acc = new Set([...acc].filter((a) => r.redNames.includes(a)));
     return acc;
   };
-  const s = birlesim(plansizRuns);
-  const p = birlesim(planliRuns);
+  const s = birlesim(unplannedRuns);
+  const p = birlesim(plannedRuns);
   const sirala = (x: Set<string>): string[] => [...x].sort();
   return {
     plansiz: sirala(s),
     planli: sirala(p),
-    ortak: sirala(new Set([...s].filter((a) => p.has(a)))),
-    yalnizPlansiz: sirala(new Set([...s].filter((a) => !p.has(a)))),
-    yalnizPlanli: sirala(new Set([...p].filter((a) => !s.has(a)))),
-    herKosudaPlansiz: sirala(herKosuda(plansizRuns)),
-    herKosudaPlanli: sirala(herKosuda(planliRuns)),
+    shared: sirala(new Set([...s].filter((a) => p.has(a)))),
+    onlyUnplanned: sirala(new Set([...s].filter((a) => !p.has(a)))),
+    onlyPlanned: sirala(new Set([...p].filter((a) => !s.has(a)))),
+    everyRunUnplanned: sirala(everyRun(unplannedRuns)),
+    everyRunPlanned: sirala(everyRun(plannedRuns)),
   };
 }
 
@@ -313,16 +313,16 @@ function hookSets(plansizRuns: ArmRun[], planliRuns: ArmRun[]): HookSets {
  * iddiası en az İKİ ölçülmüş koşu istiyor.
  */
 export function kararlilikDamgasi(
-  olculenKosu: number, herKosuda: number, hepsi: number,
+  measuredRuns: number, everyRun: number, all: number,
 ): { stamp: string; stable: boolean } {
-  if (olculenKosu < 2) return { stamp: "TEK KOŞU — kararlılık ölçülmedi", stable: false };
-  const stable = hepsi > 0 && herKosuda === hepsi;
+  if (measuredRuns < 2) return { stamp: "TEK KOŞU — kararlılık ölçülmedi", stable: false };
+  const stable = all > 0 && everyRun === all;
   return { stamp: stable ? "KARARLI" : "değişken", stable };
 }
 
 function side(runs: ArmRun[]): ArmSide | null {
   if (runs.length === 0) return null;
-  const olculen = runs.filter((r) => r.ran);
+  const measured = runs.filter((r) => r.ran);
   // TESLİM EDİLMEYEN koşu kolun ürünü değil, o yüzden `!ran` ile aynı
   // muamele görüyor: paydadan düşüyor. Akışın kendisi "bu iş devredilemez"
   // demişse, o artefaktın kanca sayısını kolun doğruluğu diye okumak
@@ -333,7 +333,7 @@ function side(runs: ArmRun[]): ArmSide | null {
   // olmayan koşu dışlanıyor — aksi hâlde eski kampanya günlükleri (o
   // olayları taşımayan arşivler) topluca "teslim edilmedi" okunurdu ve
   // yeniden okunabilirliklerini kaybederlerdi.
-  const teslim = olculen.filter((r) => r.state === "done" || r.state === "yok");
+  const teslim = measured.filter((r) => r.state === "done" || r.state === "yok");
   const hooks = teslim.reduce((s, r) => s + r.hooks, 0);
   const red = teslim.reduce((s, r) => s + r.red, 0);
   return {
@@ -347,8 +347,8 @@ function side(runs: ArmRun[]): ArmSide | null {
     activations: runs.reduce((s, r) => s + r.activations, 0),
     usage: runs.reduce<UsageTotal>((u, r) => sumUsage(u, r.usage), {}),
     rejects: runs.reduce((s, r) => s + r.rejects, 0),
-    unmeasured: runs.length - olculen.length,
-    undelivered: olculen.length - teslim.length,
+    unmeasured: runs.length - measured.length,
+    undelivered: measured.length - teslim.length,
   };
 }
 
@@ -435,20 +435,20 @@ export function planEffect(events: SkeinEvent[]): PlanEffectReport {
 
   const groups: PlanGroup[] = [...byGroup.entries()].map(([key, own]) => {
     const [taskId, model] = key.split("\u0000") as [string, string];
-    const planliRuns = own.filter((r) => r.arm === "planli");
-    const plansizRuns = own.filter((r) => r.arm === "plansiz");
-    const planli = side(planliRuns);
-    const plansiz = side(plansizRuns);
+    const plannedRuns = own.filter((r) => r.arm === "planli");
+    const unplannedRuns = own.filter((r) => r.arm === "plansiz");
+    const planli = side(plannedRuns);
+    const plansiz = side(unplannedRuns);
 
     // Tekrar = kolların ikisinde de ölçülmüş koşu sayısının KÜÇÜĞÜ. Bir
     // kolda üç, ötekinde bir koşu varsa elde üç tekrar yok, bir tane var.
     const repeats = Math.min(planli?.runs ?? 0, plansiz?.runs ?? 0);
 
     // Koşu başına eşleştirme: aynı sıradaki koşular karşılaştırılıyor.
-    const perRun = planliRuns
+    const perRun = plannedRuns
       .filter((r) => r.ran)
       .map((r, i) => {
-        const karsi = plansizRuns.filter((x) => x.ran)[i];
+        const karsi = unplannedRuns.filter((x) => x.ran)[i];
         return {
           runId: r.runId,
           relativeReduction: karsi === undefined || karsi.hooks === 0 || karsi.red === 0
@@ -457,7 +457,7 @@ export function planEffect(events: SkeinEvent[]): PlanEffectReport {
         };
       });
 
-    const exchanges = planliRuns.filter((r) => r.planning !== undefined);
+    const exchanges = plannedRuns.filter((r) => r.planning !== undefined);
     const ceremony = {
       exchanges: exchanges.length,
       withoutObjection: exchanges.filter((r) => (r.planning?.objections ?? 0) === 0).length,
@@ -469,8 +469,8 @@ export function planEffect(events: SkeinEvent[]): PlanEffectReport {
     const relativeReduction = reduction(plansiz, planli);
     return {
       taskId, model, planli, plansiz, relativeReduction, perRun, repeats, ceremony,
-      hooks: hookSets(plansizRuns, planliRuns),
-      obligations: obligationStats(planliRuns),
+      hooks: hookSets(unplannedRuns, plannedRuns),
+      obligations: obligationStats(plannedRuns),
       verdict: decide(relativeReduction, repeats, perRun, plansiz, planli, ceremony,
         retReduction(plansiz, planli)),
     };
@@ -486,7 +486,7 @@ function decide(
   plansiz: ArmSide | null,
   planli: ArmSide | null,
   ceremony: Ceremony,
-  retAzalma: number | null,
+  rejectDrop: number | null,
 ): { code: VerdictCode; reason: string } {
   if (plansiz === null || plansiz.runs === 0) {
     return { code: "yetersiz", reason: "Kontrol kolu ölçülmedi; karşılaştırılacak bir şey yok." };
@@ -538,11 +538,11 @@ function decide(
           : ""),
     };
   }
-  const kabul = ceremony.objections === 0 ? 0 : ceremony.accepted / ceremony.objections;
-  if (kabul < NOISE_THRESHOLD) {
+  const acceptance = ceremony.objections === 0 ? 0 : ceremony.accepted / ceremony.objections;
+  if (acceptance < NOISE_THRESHOLD) {
     return {
       code: "yetersiz",
-      reason: `İtirazların ${pct(kabul)}'si kabul edildi ` +
+      reason: `İtirazların ${pct(acceptance)}'si kabul edildi ` +
         `(${ceremony.accepted}/${ceremony.objections}, eşik ${pct(NOISE_THRESHOLD)}): ` +
         "mekanizma GÜRÜLTÜ. Kabul edilmeyen itiraz planı değiştirmez, " +
         "değişmeyen plan da ürün farkına yazılamaz.",
@@ -551,7 +551,7 @@ function decide(
   // Teslim edilmeyen koşular paydadan düştü (bkz. `side`). Kalan koşu
   // yoksa okunacak ürün de yok.
   const teslimsiz = (plansiz.undelivered ?? 0) + (planli.undelivered ?? 0);
-  const teslimNotu = teslimsiz > 0
+  const handoverNote = teslimsiz > 0
     ? ` (${teslimsiz} koşu TESLİM EDİLMEDİ ve paydaya girmedi)`
     : "";
 
@@ -559,7 +559,7 @@ function decide(
     return {
       code: "yetersiz",
       reason: `k=${repeats}; karar için iki kolda da en az ${MIN_REPEATS} ölçülmüş koşu gerekiyor. ` +
-        "Aşağıdaki sayı sinyaldir, sonuç değildir." + teslimNotu,
+        "Aşağıdaki sayı sinyaldir, sonuç değildir." + handoverNote,
     };
   }
   const signs = perRun.map((r) => r.relativeReduction).filter((r): r is number => r !== null);
@@ -572,31 +572,31 @@ function decide(
   // ikisini bir ortalamaya eritmek kadar yanlış — bu projenin kurucu
   // kuralı iki yer gerçeğini harmanlamamak. `overall()`'ın görev sınıfları
   // çeliştiğinde yaptığının aynısı: ayrışmayı KARARA yazmak.
-  const retPct = retAzalma === null ? "—" : pct(retAzalma);
-  if (retAzalma !== null) {
+  const rejectPct = rejectDrop === null ? "—" : pct(rejectDrop);
+  if (rejectDrop !== null) {
     const kancaOlumlu = relative >= POSITIVE_THRESHOLD;
     const kancaOlumsuz = relative < NEGATIVE_THRESHOLD;
-    const retOlumlu = retAzalma >= POSITIVE_THRESHOLD;
-    const retOlumsuz = retAzalma < NEGATIVE_THRESHOLD;
-    if ((kancaOlumlu && retOlumsuz) || (kancaOlumsuz && retOlumlu)) {
+    const rejectPositive = rejectDrop >= POSITIVE_THRESHOLD;
+    const rejectNegative = rejectDrop < NEGATIVE_THRESHOLD;
+    if ((kancaOlumlu && rejectNegative) || (kancaOlumsuz && rejectPositive)) {
       return {
         code: "belirsiz",
         reason: "İlan edilmiş iki ürün metriği AYRIŞIYOR: kırmızı kanca " +
-          `${pct(relative)}, downstream ret ${retPct} (eşikler ` +
+          `${pct(relative)}, downstream ret ${rejectPct} (eşikler ` +
           `${pct(POSITIVE_THRESHOLD)} / ${pct(NEGATIVE_THRESHOLD)}). ` +
           "İkisini tek karara eritmek, iki ölçüyü harmanlamak olurdu; " +
-          "sonuç metrik başına okunmalı." + teslimNotu,
+          "sonuç metrik başına okunmalı." + handoverNote,
       };
     }
   }
-  const retNotu = ` Downstream ret azalması: ${retPct}.`;
+  const rejectNote = ` Downstream ret azalması: ${rejectPct}.`;
 
   if (relative >= POSITIVE_THRESHOLD && consistent) {
     return {
       code: "olumlu",
       reason: `Kırmızı kanca oranında ${pct(relative)} göreli azalma (eşik ` +
         `${pct(POSITIVE_THRESHOLD)}) ve azalma ${signs.length} tekrarın hepsinde aynı yönde.` +
-        retNotu + teslimNotu,
+        rejectNote + handoverNote,
     };
   }
   if (relative >= POSITIVE_THRESHOLD) {
@@ -604,7 +604,7 @@ function decide(
       code: "belirsiz",
       reason: `Azalma eşiğin üstünde (${pct(relative)}) ama tekrarlar arasında işaret ` +
         "tutarsız — en az bir tekrarda planlı kol daha ÇOK kusur üretti. k artırılmalı." +
-        retNotu + teslimNotu,
+        rejectNote + handoverNote,
     };
   }
   if (relative < NEGATIVE_THRESHOLD) {
@@ -612,13 +612,13 @@ function decide(
       code: "olumsuz",
       reason: `Göreli azalma ${pct(relative)}, eşiğin (${pct(NEGATIVE_THRESHOLD)}) altında. ` +
         "Planlama turu ürünü daha doğru yapmıyor; bedeli aktivasyon farkı kadar." +
-        retNotu + teslimNotu,
+        rejectNote + handoverNote,
     };
   }
   return {
     code: "belirsiz",
     reason: `Göreli azalma ${pct(relative)}: iki eşiğin arasında. k artırılmalı.` +
-      retNotu + teslimNotu,
+      rejectNote + handoverNote,
   };
 }
 

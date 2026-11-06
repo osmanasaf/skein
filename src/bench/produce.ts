@@ -92,7 +92,7 @@ export async function produce(options: ProduceOptions): Promise<ProduceResult> {
   // Kaçış denetimi için önceki hâl. Saat çözünürlüğüne güvenmek yerine
   // dosyanın kendi damgası kıyaslanıyor: aynı milisaniyede yazılan bir
   // dosya "eski" görünüp denetimden kaçardı.
-  const oncekiHal = await fileStamp(options.repo, task.entry);
+  const previousState = await fileStamp(options.repo, task.entry);
   const invoke = await adapter.invoke({ workdir: artifactDir, promptFile, taskText, timeoutMs });
 
   // Anlık görüntü gizli testler KOPYALANMADAN önce: sonra alınsaydı her
@@ -109,7 +109,7 @@ export async function produce(options: ProduceOptions): Promise<ProduceResult> {
   const entryWritten = filesWritten.includes(task.entry);
   const escapedTo = entryWritten
     ? undefined
-    : await findEscaped(options.repo, task.entry, oncekiHal);
+    : await findEscaped(options.repo, task.entry, previousState);
 
   return {
     cellDir, artifactDir, promptHash: prompt.hash, invoke,
@@ -141,8 +141,8 @@ async function findEscaped(
   previous: number | undefined,
 ): Promise<string | undefined> {
   if (repo === undefined) return undefined;
-  const simdi = await fileStamp(repo, entry);
-  if (simdi === undefined) return undefined;
-  return previous === undefined || simdi !== previous ? join(repo, entry) : undefined;
+  const nowAt = await fileStamp(repo, entry);
+  if (nowAt === undefined) return undefined;
+  return previous === undefined || nowAt !== previous ? join(repo, entry) : undefined;
 }
 

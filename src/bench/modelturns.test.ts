@@ -23,22 +23,22 @@ describe("modelTurns", () => {
   // `JSON.parse(stdout)` atıyor ve undefined dönüyordu; doctor "?" basıyor,
   // sıfır-tur koruması da codex'te HİÇ ateşlenemiyordu.
   describe("JSONL (codex)", () => {
-    const olay = (o: unknown): string => JSON.stringify(o);
+    const event = (o: unknown): string => JSON.stringify(o);
 
     it("turn.completed olaylarını sayar", () => {
       const out = [
-        olay({ type: "thread.started", thread_id: "x" }),
-        olay({ type: "turn.started" }),
-        olay({ type: "item.completed", item: { type: "agent_message", text: "4" } }),
-        olay({ type: "turn.completed", usage: { input_tokens: 13607, output_tokens: 11 } }),
+        event({ type: "thread.started", thread_id: "x" }),
+        event({ type: "turn.started" }),
+        event({ type: "item.completed", item: { type: "agent_message", text: "4" } }),
+        event({ type: "turn.completed", usage: { input_tokens: 13607, output_tokens: 11 } }),
       ].join("\n");
       expect(modelTurns(out)).toBe(1);
     });
 
     it("birden çok turu sayar", () => {
       const out = [
-        olay({ type: "turn.started" }), olay({ type: "turn.completed" }),
-        olay({ type: "turn.started" }), olay({ type: "turn.completed" }),
+        event({ type: "turn.started" }), event({ type: "turn.completed" }),
+        event({ type: "turn.started" }), event({ type: "turn.completed" }),
       ].join("\n");
       expect(modelTurns(out)).toBe(2);
     });
@@ -46,12 +46,12 @@ describe("modelTurns", () => {
     // Asıl kazanç: olay akışı var ama hiç tur tamamlanmamış. Artık 0 dönüyor,
     // yani doctor "model hiç çağrılmadı" diye durdurabiliyor.
     it("olay var ama tur yoksa SIFIR döner", () => {
-      const out = [olay({ type: "thread.started" }), olay({ type: "error", message: "boş" })].join("\n");
+      const out = [event({ type: "thread.started" }), event({ type: "error", message: "boş" })].join("\n");
       expect(modelTurns(out)).toBe(0);
     });
 
     it("JSON olmayan satırlar sayımı bozmaz", () => {
-      const out = ["uyarı: bir şey", olay({ type: "turn.completed" }), ""].join("\n");
+      const out = ["uyarı: bir şey", event({ type: "turn.completed" }), ""].join("\n");
       expect(modelTurns(out)).toBe(1);
     });
   });

@@ -41,10 +41,10 @@ export function modelTurns(stdout: string): number | undefined {
     const text = line.trim();
     if (!text.startsWith("{")) continue;
     try {
-      const olay = JSON.parse(text) as { type?: unknown };
-      if (typeof olay.type !== "string") continue;
+      const event = JSON.parse(text) as { type?: unknown };
+      if (typeof event.type !== "string") continue;
       olayli = true;
-      if (olay.type === "turn.completed") tur += 1;
+      if (event.type === "turn.completed") tur += 1;
     } catch {
       // JSON değil; bir sonraki satır.
     }

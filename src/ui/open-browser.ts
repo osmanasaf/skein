@@ -8,7 +8,7 @@ import { spawnPortable, type PipedChild } from "../proc/process.js";
  * boş dizge argümanı `start`ın ilk tırnaklı argümanı pencere başlığı sayma
  * kuralını atlatıyor (url tırnaksız gelirse başlık sanılabilir).
  */
-export function tarayiciKomutu(
+export function browserCommand(
   platform: NodeJS.Platform,
   url: string,
 ): { command: string; args: string[] } {
@@ -17,7 +17,7 @@ export function tarayiciKomutu(
   return { command: "xdg-open", args: [url] };
 }
 
-export interface TarayiciyiAcOptions {
+export interface OpenBrowserOptions {
   /** Varsayılan: gerçek platform (`process.platform`). */
   platform?: NodeJS.Platform;
   /** Test edilebilirlik için enjekte edilir; varsayılan `spawnPortable`. */
@@ -43,11 +43,11 @@ const BASARISIZLIK_SATIRI = "⚠ tarayıcı açılamadı, adresi elle aç";
  * Ekran zaten URL'yi bastı; bu fonksiyon başarısız olursa kullanıcı elle
  * açar, o yüzden ikinci yoldaki hata da SESSİZ KALMIYOR, bir satır basılıyor.
  */
-export function tarayiciyiAc(url: string, options: TarayiciyiAcOptions = {}): void {
+export function openBrowser(url: string, options: OpenBrowserOptions = {}): void {
   const platform = options.platform ?? process.platform;
   const spawn = options.spawn ?? ((command, args) => spawnPortable(command, args));
   const log = options.log ?? ((line) => console.warn(line));
-  const { command, args } = tarayiciKomutu(platform, url);
+  const { command, args } = browserCommand(platform, url);
   try {
     const child = spawn(command, args);
     child.on("error", () => log(BASARISIZLIK_SATIRI));

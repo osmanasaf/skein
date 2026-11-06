@@ -452,7 +452,7 @@ describe("loadFlow — gönderilen örnekler", () => {
 });
 
 /** Üç katılımcılı alışveriş için üç rollü akış (6c). */
-const UC_ROL = `
+const THREE_ROLES = `
 name: uc
 description: Üç rollü deneme akışı
 constitution:
@@ -481,16 +481,16 @@ gates: []
 
 // PLANLAMA.md 6a: tek rol planı yazar, alışveriş yok. Kurallar 17-20.
 describe("loadFlow — planlama (kural 17-22)", () => {
-  const withPlan = (blok: string) => `${VALID}\n${blok}\n`;
+  const withPlan = (block: string) => `${VALID}\n${block}\n`;
   // Çok katılımcılı testler ÜÇ rollü fikstürü kullanıyor: `VALID`'de
   // `reviewer` açık bir `reject: coder` taşıyor ve katılımcı olunca
   // kural 22'ye çarpıyor — bu doğru davranış, fikstürün sorunu.
-  const withPlanUc = (blok: string) => `${UC_ROL}\n${blok}\n`;
+  const withPlanUc = (block: string) => `${THREE_ROLES}\n${block}\n`;
 
   // KURAL 23 — yükümlülük denetçisi. Dört rollü fikstür: denetçi
   // katılımcıların ARKASINDA ve ret kenarı taşıyor, yani kuralın geçtiği
   // tek şekil.
-  const DORT_ROL = `
+  const FOUR_ROLES = `
 name: dort
 description: Dört rollü deneme akışı
 constitution:
@@ -529,7 +529,7 @@ audit:
   enabled: false
 `;
   const PLAN23 = "planlama:\n  katilimcilar: [analyst, architect]\n  plan: docs/plan/{kart}.md";
-  const dort = (blok: string): string => `${DORT_ROL}\n${blok}\n`;
+  const dort = (block: string): string => `${FOUR_ROLES}\n${block}\n`;
 
   it("yükümlülük denetçisini çözer — kural 23", async () => {
     const flow = await load(await write(dort(`${PLAN23}\n  denetci: reviewer`)));
@@ -568,7 +568,7 @@ audit:
   // yazılmıştı ve HİÇ ATEŞLENMEDİ; varsayılan ret kenarı davranışı bir gün
   // değişirse buradan haber gelsin diye özellik olarak sınanıyor.
   it("denetçi açık `reject` yazmasa da ret kenarı taşır", async () => {
-    const yaml = DORT_ROL.replace("    reject: coder\n", "");
+    const yaml = FOUR_ROLES.replace("    reject: coder\n", "");
     const flow = await load(await write(`${yaml}\n${PLAN23}\n  denetci: reviewer\n`));
     expect(flow.plan?.denetci).toBe("reviewer");
     expect(flow.roles.find((r) => r.id === "reviewer")?.reject).toBe("coder");
@@ -629,7 +629,7 @@ audit:
 
   it("üç katılımcıyı kabul eder — 6c", async () => {
     const flow = await load(await write(
-      `${UC_ROL}\nplanlama:\n  katilimcilar: [analyst, architect, coder]\n  tur: 2\n  plan: docs/plan/{kart}.md\n`,
+      `${THREE_ROLES}\nplanlama:\n  katilimcilar: [analyst, architect, coder]\n  tur: 2\n  plan: docs/plan/{kart}.md\n`,
       "uc.yaml",
     ));
     expect(flow.plan?.katilimcilar).toEqual(["analyst", "architect", "coder"]);
@@ -642,10 +642,10 @@ audit:
       "planlama:\n  katilimcilar: [analyst, architect]\n  plan: docs/plan/{kart}.md"), "kor-yok.yaml"));
     expect(isOpen.plan?.ilkTurKor).toBe(true);
 
-    const kapali = await load(await write(withPlanUc(
+    const closed = await load(await write(withPlanUc(
       "planlama:\n  katilimcilar: [analyst, architect]\n  ilk-tur-kor: false\n  plan: docs/plan/{kart}.md"),
       "kor-false.yaml"));
-    expect(kapali.plan?.ilkTurKor).toBe(false);
+    expect(closed.plan?.ilkTurKor).toBe(false);
   });
 
   it("körleme alanı mantıksal olmayan değeri reddeder", async () => {
@@ -685,7 +685,7 @@ audit:
   // 6d kampanyasından geliyor: itirazcı rolün hem `reject` kenarı hem
   // itiraz dosyası vardı ve model tanıdık olanı seçti (7 ret, 0 itiraz).
   it("katılımcıya yazılmış `reject`'i reddeder", async () => {
-    const yaml = `${UC_ROL.replace(
+    const yaml = `${THREE_ROLES.replace(
       "    prompt: ../../roles/architect.prompt\n",
       "    prompt: ../../roles/architect.prompt\n    reject: analyst\n",
     )}\nplanlama:\n  katilimcilar: [analyst, architect]\n  plan: docs/plan/{kart}.md\n`;
@@ -696,7 +696,7 @@ audit:
   // bir kenarın mekanizmayı baypas etmesi, sessiz arızanın tanımı.
   it("katılımcının VARSAYILAN ret kenarını da kaldırır", async () => {
     const flow = await load(await write(
-      `${UC_ROL}\nplanlama:\n  katilimcilar: [analyst, architect]\n  plan: docs/plan/{kart}.md\n`,
+      `${THREE_ROLES}\nplanlama:\n  katilimcilar: [analyst, architect]\n  plan: docs/plan/{kart}.md\n`,
       "k22-vars.yaml",
     ));
     const architect = flow.roles.find((r) => r.id === "architect");
@@ -707,7 +707,7 @@ audit:
 
   it("katılımcı olmayan rol katılımcıya ret edebilir — plan çürümesi yolu", async () => {
     const flow = await load(await write(
-      `${UC_ROL}\nplanlama:\n  katilimcilar: [analyst]\n  plan: docs/plan/{kart}.md\n`,
+      `${THREE_ROLES}\nplanlama:\n  katilimcilar: [analyst]\n  plan: docs/plan/{kart}.md\n`,
       "k22-hedef.yaml",
     ));
     // `architect` katılımcı değil; varsayılan reti `analyst`e (katılımcı)
@@ -718,9 +718,9 @@ audit:
 
   // Ret kenarları en kötü hâl maliyetine giriyor; kural 22 onu düşürüyor.
   it("katılımcının ret kenarı kalkınca en kötü maliyet düşer", async () => {
-    const plansiz = await load(await write(UC_ROL, "k22-m1.yaml"));
+    const plansiz = await load(await write(THREE_ROLES, "k22-m1.yaml"));
     const planli = await load(await write(
-      `${UC_ROL}\nplanlama:\n  katilimcilar: [analyst, architect]\n  plan: docs/plan/{kart}.md\n`,
+      `${THREE_ROLES}\nplanlama:\n  katilimcilar: [analyst, architect]\n  plan: docs/plan/{kart}.md\n`,
       "k22-m2.yaml",
     ));
     const { estimateCost } = await import("./cost.js");

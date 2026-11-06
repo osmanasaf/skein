@@ -12,7 +12,7 @@ import { snapshot, type TopologySnapshot } from "../flow/snapshot.js";
 import { acquireLock } from "../watch/lock.js";
 import { tick } from "../watch/tick.js";
 import {
-  activationSteps, buildDetail, buildModel, buildSteps, kartSayisi, kirliSuruyorMu,
+  activationSteps, buildDetail, buildModel, buildSteps, cardCount, kirliSuruyorMu,
   type BuildOptions, type UiEngel,
 } from "./model.js";
 
@@ -98,11 +98,11 @@ describe("buildModel — başka akışın kartı", () => {
     for (const ad of await readdir(dir)) {
       if (!ad.includes(id)) continue;
       const yol = join(dir, ad);
-      const ham = JSON.parse(await readFile(yol, "utf8")) as Record<string, unknown>;
-      const topo = ham["topology"] as Record<string, unknown>;
+      const raw = JSON.parse(await readFile(yol, "utf8")) as Record<string, unknown>;
+      const topo = raw["topology"] as Record<string, unknown>;
       topo["flow"] = "baska-akis";
       topo["hash"] = "f".repeat(64);
-      await writeFile(yol, JSON.stringify(ham));
+      await writeFile(yol, JSON.stringify(raw));
     }
   }
 
@@ -197,7 +197,7 @@ describe("buildModel — kapılar", () => {
     const kart = m.cards[0];
 
     expect(kart?.gate).toBe("approval");
-    expect(kart?.planKilidi).toBe(false);
+    expect(kart?.planLock).toBe(false);
   });
 
   it("kapıda olmayan kartın kapısı yoktur", async () => {
@@ -564,9 +564,9 @@ describe("buildDetail — iz ve diff", () => {
 
     const detail = await buildDetail({ ...base, numstat }, card.id);
 
-    const ret = detail?.history.find((h) => h.event === "reject");
-    expect(ret?.note).toBe("senkron çağrıda RangeError atıyor");
-    expect(ret?.who).toBe("reviewer → coder");
+    const rejectCount = detail?.history.find((h) => h.event === "reject");
+    expect(rejectCount?.note).toBe("senkron çağrıda RangeError atıyor");
+    expect(rejectCount?.who).toBe("reviewer → coder");
   });
 
   it("devir özeti de izde görünür", async () => {
@@ -640,7 +640,7 @@ describe("buildModel — geri hedefi", () => {
     const m = await buildModel(base);
 
     // reviewer'ın ret hedefi coder.
-    expect(m.cards.find((c) => c.id === kart.id)?.geriHedef).toBe("coder");
+    expect(m.cards.find((c) => c.id === kart.id)?.backTarget).toBe("coder");
   });
 
   it("zincirin başındaki rolde null", async () => {
@@ -649,7 +649,7 @@ describe("buildModel — geri hedefi", () => {
     const m = await buildModel(base);
 
     // coder'ın ret hedefi yok.
-    expect(m.cards.find((c) => c.id === kart.id)?.geriHedef).toBeNull();
+    expect(m.cards.find((c) => c.id === kart.id)?.backTarget).toBeNull();
   });
 });
 
@@ -911,12 +911,12 @@ describe("kartSayisi", () => {
 
   it("aynı rolün birden çok KIRLI kaydı TEK kart sayılır", () => {
     const blockages = [blockage({ path: "a" }), blockage({ path: "b" }), blockage({ path: "c" })];
-    expect(kartSayisi(blockages)).toBe(1);
+    expect(cardCount(blockages)).toBe(1);
   });
 
   it("farklı rollerin KIRLI kayıtları ayrı kart sayılır", () => {
     const blockages = [blockage({ path: "a", role: "coder" }), blockage({ path: "b", role: "reviewer" })];
-    expect(kartSayisi(blockages)).toBe(2);
+    expect(cardCount(blockages)).toBe(2);
   });
 
   it("KIRLI olmayan kodlarda yol kart sayar, eski anlam korunuyor", () => {
@@ -924,11 +924,11 @@ describe("kartSayisi", () => {
       blockage({ code: "EPERM", path: "x", role: "coder" }),
       blockage({ code: "EPERM", path: "y", role: "coder" }),
     ];
-    expect(kartSayisi(blockages)).toBe(2);
+    expect(cardCount(blockages)).toBe(2);
   });
 
   it("boş liste sıfır kart", () => {
-    expect(kartSayisi([])).toBe(0);
+    expect(cardCount([])).toBe(0);
   });
 });
 
@@ -1022,7 +1022,7 @@ describe("buildModel — KIRLI engeli", () => {
 
     const m = await buildModel(base);
     expect(m.blockages).toHaveLength(8);
-    expect(m.totals.engelliKart).toBe(1);
+    expect(m.totals.blockedCards).toBe(1);
   });
 
   // KIRLI olmayan engel (kuyruk dosyası engeli) eski davranışı korumalı:

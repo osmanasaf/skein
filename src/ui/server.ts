@@ -17,7 +17,7 @@ import { liveLock } from "../watch/lock.js";
 import { snapshot, type TopologySnapshot } from "../flow/snapshot.js";
 import { buildDetail, buildModel, buildSteps, type DetailOptions, type UiModel } from "./model.js";
 import { renderPage } from "./page.js";
-import { sonTemaOku, sonTemaYaz, type Tema } from "./port-memory.js";
+import { readLastTheme, writeLastTheme, type Theme } from "./port-memory.js";
 
 /** Ekranın baktığı akışın yaşayan hâli. */
 export interface CanliAkis {
@@ -263,11 +263,11 @@ async function hedefAkisYolu(
   if (!/^[a-z0-9-]+$/.test(newName)) {
     throw new Error("Akış adı yalnızca a-z0-9- içerebilir.");
   }
-  const ayar = options.flowChoice;
-  if (ayar === undefined) {
+  const setting = options.flowChoice;
+  if (setting === undefined) {
     throw new Error("Bu ekran yeni akış oluşturmaya açık değil.");
   }
-  const mevcutAdlar = await ayar.list();
+  const mevcutAdlar = await setting.list();
   if (mevcutAdlar.includes(newName)) {
     throw new Error(`Bu ad zaten kullanılıyor: ${newName}`);
   }
@@ -342,11 +342,11 @@ export async function gozcuLogKuyruk(path: string, n = 20): Promise<GozcuLogSati
  * tek tüketicisi (tail) zaten tamamlanmamış bir satırı gösteremez.
  */
 export function satirYaziciKur(log: NodeJS.WritableStream, hataKaynagi: boolean): (chunk: Buffer) => void {
-  let kalan = "";
+  let left = "";
   return (chunk: Buffer) => {
-    kalan += chunk.toString("utf8");
-    const parcalar = kalan.split("\n");
-    kalan = parcalar.pop() ?? "";
+    left += chunk.toString("utf8");
+    const parcalar = left.split("\n");
+    left = parcalar.pop() ?? "";
     for (const line of parcalar) {
       const saat = new Date().toTimeString().slice(0, 5);
       const gosterim = hataKaynagi && !line.startsWith("✗") ? `✗ ${line}` : line;
@@ -593,7 +593,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
 
     const path = (req.url ?? "/").split("?")[0];
 
-    const birak = path === undefined ? null : /^\/kart\/([^/]+)\/birak$/.exec(path);
+    const release = path === undefined ? null : /^\/kart\/([^/]+)\/birak$/.exec(path);
     const kapat = path === undefined ? null : /^\/kart\/([^/]+)\/kapat$/.exec(path);
 
     if (req.method === "POST" && (path === "/gozcu/baslat" || path === "/gozcu/durdur")) {
@@ -603,8 +603,8 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
         res.end(JSON.stringify({ hata }));
         return;
       }
-      const ayar = options.watcher;
-      if (ayar === undefined) {
+      const setting = options.watcher;
+      if (setting === undefined) {
         res.writeHead(404, { "content-type": "application/json; charset=utf-8" });
         res.end(JSON.stringify({
           error: "Bu ekran gözcü yönetimine açık değil — ekranı gözcü bayraklarıyla aç.",
@@ -627,10 +627,10 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
               `Zaten bir gözcü açık: pid ${tutan.pid}, akış ${tutan.flow}.`,
             );
           }
-          const spawn = ayar.spawn ?? gercekSpawn(o.root);
+          const spawn = setting.spawn ?? gercekSpawn(o.root);
           // Akış adı EKRANIN o an baktığı akıştan geliyor; bayraklar
           // terminalden. Akış değiştirince düğme doğru akışı koşturuyor.
-          const baslayan = spawn([...ayar.command, o.flowName, "--serve", ...ayar.bayraklar]);
+          const baslayan = spawn([...setting.command, o.flowName, "--serve", ...setting.bayraklar]);
           cocuk = baslayan;
           // Referans, süreç GERÇEKTEN bitince bırakılıyor — "durdur"
           // dediğimizde değil. İkisi aynı an değil.
@@ -809,8 +809,8 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
         res.end(JSON.stringify({ hata }));
         return;
       }
-      const ayar = options.flowChoice;
-      if (ayar === undefined) {
+      const setting = options.flowChoice;
+      if (setting === undefined) {
         res.writeHead(404, { "content-type": "application/json; charset=utf-8" });
         res.end(JSON.stringify({ error: "Bu ekran akış seçimine açık değil." }));
         return;
@@ -823,14 +823,14 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
           // temizleyerek" reddedilseydi, temizleme kuralı bir gün eksik
           // kalırdı — ÜYELİK asla eksik kalmaz: listede yoksa ad, hangi
           // şekilde yazılmış olursa olsun, burada reddedilir.
-          const flows = await ayar.list();
+          const flows = await setting.list();
           if (!flows.includes(ad)) {
             throw new Error(`Bilinmeyen akış: ${ad}`);
           }
           // `ac` BAŞARISIZSA FIRLATIR (bozuk YAML, kural ihlali) ve
           // `aktif` yalnızca BAŞARIDAN SONRA değişiyor — "yarı yüklenmiş
           // akış" diye bir durum yok, `LiveFlow`'un kendi kuralının aynısı.
-          const { live, flowPath } = await ayar.open(ad);
+          const { live, flowPath } = await setting.open(ad);
           active = { live, flowPath };
           const model = await buildModel(await current());
           return model;
@@ -878,8 +878,8 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
           if (!items.some((p) => p.path === yol)) {
             throw new Error(`Bilinmeyen prompt yolu: ${yol}`);
           }
-          const sorun = promptIcerigiSorunu(text);
-          if (sorun !== null) throw new Error(sorun);
+          const issue = promptIcerigiSorunu(text);
+          if (issue !== null) throw new Error(issue);
 
           await writeFile(join(o.root, yol), text, "utf8");
 
@@ -954,7 +954,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
           const promptRaw = request["prompt"];
           // Gövdede `prompt` VERİLMEDİYSE şablondan yazılıyor — BOŞ değil,
           // çünkü boş dosya kural 9'a takılır (bkz. yukarıdaki yorum).
-          const promptMetni = typeof promptRaw === "string" && promptRaw.trim() !== ""
+          const promptText = typeof promptRaw === "string" && promptRaw.trim() !== ""
             ? promptRaw
             : rolPromptSablonu(id || "yeni-rol");
 
@@ -988,14 +988,14 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
           const promptAbs = join(dirname(sonraRolTam.promptPath), `${id}.md`);
           const promptGoreli = goreliYol(dirname(flowPath), promptAbs);
 
-          const sorun = promptIcerigiSorunu(promptMetni);
-          if (sorun !== null) throw new Error(sorun);
+          const issue = promptIcerigiSorunu(promptText);
+          if (issue !== null) throw new Error(issue);
 
           // ATOMİKLİK, adım 1: prompt dosyasını YAZ. Eski içerik (varsa)
           // GERİ ALMA için saklanıyor — bu yol normalde yeni bir dosya ama
           // aynı ada rastlayan yetim bir dosya varsa onu da korumalıyız.
           const eskiMetin = await readFile(promptAbs, "utf8").catch(() => undefined);
-          await writeFile(promptAbs, promptMetni, "utf8");
+          await writeFile(promptAbs, promptText, "utf8");
 
           const yeniRol: DraftRole = {
             id, provider, workspace, prompt: promptGoreli,
@@ -1068,14 +1068,14 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
       return;
     }
 
-    if (req.method === "POST" && birak !== null) {
+    if (req.method === "POST" && release !== null) {
       const hata = yetkili(req, token, names, portu());
       if (hata !== null) {
         res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
         res.end(JSON.stringify({ hata }));
         return;
       }
-      const id = decodeURIComponent(birak[1] as string);
+      const id = decodeURIComponent(release[1] as string);
       readBody(req)
         .then(async (body) => {
           const decision = (JSON.parse(body === "" ? "{}" : body) as { decision?: unknown }).decision;
@@ -1125,7 +1125,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
           if (tema !== "sistem" && tema !== "acik" && tema !== "koyu") {
             throw new Error("Geçersiz tema: " + JSON.stringify(tema));
           }
-          await sonTemaYaz(options.root, tema as Tema);
+          await writeLastTheme(options.root, tema as Theme);
         })
         .then(() => {
           res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
@@ -1147,8 +1147,8 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
     if (path === "/akislar") {
       // OKUMA UCU: `akisSecimi` verilmemişse 404 değil boş liste — ekran
       // seçiciyi bu uca bakarak ÇİZEBİLMELİ, uç yoksa seçici hiç çıkmaz.
-      const ayar = options.flowChoice;
-      const list = ayar === undefined ? Promise.resolve<string[]>([]) : ayar.list();
+      const setting = options.flowChoice;
+      const list = setting === undefined ? Promise.resolve<string[]>([]) : setting.list();
       Promise.all([list, current()])
         .then(async ([flows, o]) => {
           // `ozet`: Akışlar sekmesinin kart ızgarası (DEVIR.md §4) için —
@@ -1296,7 +1296,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
       // fırlatmaz): dosya yoksa/bozuksa `undefined` döner, `renderPage`
       // onu "sistem" sayar — bir bozuk `ekran.json` ekranın AÇILMASINI
       // engellemez.
-      sonTemaOku(options.root).then((tema) => {
+      readLastTheme(options.root).then((tema) => {
         res.writeHead(200, {
           "content-type": "text/html; charset=utf-8",
           // Jeton gömülü: sayfa önbelleğe alınırsa eski jetonla açılır.

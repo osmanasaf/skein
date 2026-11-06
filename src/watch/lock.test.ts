@@ -88,11 +88,11 @@ describe("acquireLock", () => {
     const uzun: LockInfo = { ...info(100), flow: "f".repeat(8 * 1024 * 1024) };
 
     let bitti = false;
-    const kosu = acquireLock(path, uzun).then(() => {
+    const run = acquireLock(path, uzun).then(() => {
       bitti = true;
     });
 
-    let yarim = 0;
+    let halfDone = 0;
     let gozlem = 0;
     while (!bitti) {
       gozlem += 1;
@@ -102,12 +102,12 @@ describe("acquireLock", () => {
       } catch {
         present = false;
       }
-      if (present && (await readLock(path)) === null) yarim += 1;
+      if (present && (await readLock(path)) === null) halfDone += 1;
       await new Promise((r) => setImmediate(r));
     }
-    await kosu;
+    await run;
 
-    expect(yarim).toBe(0);
+    expect(halfDone).toBe(0);
     // Testin boşa dönmediğinin kanıtı: yazım sürerken gerçekten baktık.
     expect(gozlem).toBeGreaterThan(0);
     expect((await readLock(path))?.pid).toBe(100);
@@ -120,11 +120,11 @@ describe("acquireLock", () => {
       Array.from({ length: 12 }, (_, i) => acquireLock(path, info(100 + i), { alive: () => true })),
     );
 
-    const alanlar = sonuclar.filter((r) => r.kind === "acquired");
-    expect(alanlar).toHaveLength(1);
+    const fields = sonuclar.filter((r) => r.kind === "acquired");
+    expect(fields).toHaveLength(1);
     // Hiçbiri CANLI bir kilidi devralmış olmamalı: `took` yalnızca ölü
     // sahibi işaretler, burada herkes canlı.
-    expect(alanlar[0]).toEqual({ kind: "acquired" });
+    expect(fields[0]).toEqual({ kind: "acquired" });
     const sahip = await readLock(path);
     expect(sahip).not.toBeNull();
     for (const r of sonuclar) {
@@ -134,8 +134,8 @@ describe("acquireLock", () => {
 
   it("geçici dosya ardında kalmaz", async () => {
     await acquireLock(path, info(100));
-    const kalanlar = (await readdir(dir)).filter((name) => name.endsWith(".tmp"));
-    expect(kalanlar).toEqual([]);
+    const remaining = (await readdir(dir)).filter((name) => name.endsWith(".tmp"));
+    expect(remaining).toEqual([]);
   });
 
   // Mesaj "gözcü açık" ile "başka bir koşu sürüyor" arasında ayrım yapıyor;
@@ -209,7 +209,7 @@ describe("liveLock", () => {
   // Kendi kilidini engel sanan bir süreç hiçbir iş yapamazdı.
   it("kendi pid'imizi engel saymaz", async () => {
     await acquireLock(path, info(100), { alive: () => true });
-    expect(await liveLock(path, { alive: () => true, bizimPid: 100 })).toBeNull();
-    expect(await liveLock(path, { alive: () => true, bizimPid: 999 })).toEqual(info(100));
+    expect(await liveLock(path, { alive: () => true, ourPid: 100 })).toBeNull();
+    expect(await liveLock(path, { alive: () => true, ourPid: 999 })).toEqual(info(100));
   });
 });

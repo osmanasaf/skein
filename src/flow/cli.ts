@@ -73,19 +73,19 @@ function printFlow(flow: Flow, root: string): void {
         : ""),
   );
   if (flow.plan !== undefined) {
-    const [yazan, ...itirazcilar] = flow.plan.katilimcilar;
+    const [yazan, ...objectors] = flow.plan.katilimcilar;
     console.log(`plan:  ${yazan} yazar → ${flow.plan.plan}`);
     console.log(
-      itirazcilar.length === 0
+      objectors.length === 0
         ? "       alışveriş yok (tek katılımcı) — ayrı aktivasyon getirmiyor"
-        : `       ${itirazcilar.join(", ")} itiraz eder → ${flow.plan.itiraz}` +
+        : `       ${objectors.join(", ")} itiraz eder → ${flow.plan.itiraz}` +
           `\n       ${flow.plan.tur} tur (itiraz → cevap); açık itiraz kalırsa kilit kapısı` +
           // Körleme tek itirazcıda ATIL: kimsenin görmeyeceği bir itiraz
           // yok. Açık yazmak, çalışmayan bir şeyi çalışıyor göstermek olurdu.
           `\n       ilk tur ${
             !flow.plan.ilkTurKor
               ? "açık (ilk-tur-kor: false)"
-              : itirazcilar.length < 2
+              : objectors.length < 2
                 ? "açık — körleme tek itirazcıda atıl"
                 : "KÖR: her itirazcı yazarın ağacından dallanır, tur sonunda birleşir"
           }`,

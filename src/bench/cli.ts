@@ -16,7 +16,7 @@ import { TurnRecorder, diffLines, diffSnapshots, loadSnapshot,
   type Snapshot, type SnapshotDiff } from "./snapshot.js";
 import { selfTest } from "./selftest.js";
 import { networkFailure } from "./failure.js";
-import { armAdapters, onKontrol, runArm, ARM_FLOW, type Arm } from "./ab.js";
+import { armAdapters, preCheck, runArm, ARM_FLOW, type Arm } from "./ab.js";
 import { kararlilikDamgasi, planEffect, type PlanEffectReport, type PlanGroup } from "./planeffect.js";
 import { scoreTargets, scoreAll, classifyTargets, classifyAll } from "./score.js";
 import { effectReport, filterByTask, type EffectReport, type PairScore, type Side } from "./effect.js";
@@ -288,7 +288,7 @@ async function kalibre(taskId: string, modelSpec: string): Promise<void> {
   // (`onKontrol`). Eskiden bu blok `cardState`'i hiç sormuyordu: kartı
   // kapıda kalmış bir kolda da "ÖLÇER — sıradaki planab --k=3" yazıyordu
   // ve o satır para harcama kararı veriyor.
-  const decision = onKontrol(r);
+  const decision = preCheck(r);
   switch (decision.kind) {
     case "olculemedi":
       console.log(`\n  ÖLÇÜLEMEDİ — ${decision.reason}`);
@@ -429,23 +429,23 @@ async function planab(
   announceEnv();
   console.log();
 
-  const kokDizin = join(REPO, ".skein", "olcum");
+  const rootDir = join(REPO, ".skein", "olcum");
 
   if (devam) {
-    const kolAdi = kol ?? "planli";
-    const onek = `ab-${taskId}-${kolAdi}-`;
-    const adaylar = (await readdir(kokDizin).catch(() => [] as string[]))
-      .filter((d) => d.startsWith(onek))
+    const armName = kol ?? "planli";
+    const prefix = `ab-${taskId}-${armName}-`;
+    const candidates = (await readdir(rootDir).catch(() => [] as string[]))
+      .filter((d) => d.startsWith(prefix))
       .sort();
-    const sonKum = adaylar[adaylar.length - 1];
-    if (sonKum === undefined) {
-      console.error(`sürdürülecek kum havuzu yok: ${onek}*`);
+    const lastSand = candidates[candidates.length - 1];
+    if (lastSand === undefined) {
+      console.error(`sürdürülecek kum havuzu yok: ${prefix}*`);
       process.exit(1);
     }
-    console.log(`── sürdürülüyor · ${kolAdi} · ${sonKum} ──`);
+    console.log(`── sürdürülüyor · ${armName} · ${lastSand} ──`);
     const r = await runArm({
-      repo: REPO, taskId, arm: kolAdi, sandbox: join(kokDizin, sonKum),
-      adapters, logPath: LOG, runId: sonKum, resume: true, timeoutMs: 15 * 60_000,
+      repo: REPO, taskId, arm: armName, sandbox: join(rootDir, lastSand),
+      adapters, logPath: LOG, runId: lastSand, resume: true, timeoutMs: 15 * 60_000,
       onSweep: (sweep) => {
         for (const { role, result } of sweep.results) {
           if (result.status !== "idle") console.log(`   ${role}: ${result.status}`);
@@ -468,7 +468,7 @@ async function planab(
     for (const arm of (kol === undefined ? ["plansiz", "planli"] : [kol]) as Arm[]) {
       const stamp = new Date().toISOString().replace(/[:.]/g, "-");
       const runId = `ab-${taskId}-${arm}-${i}-${stamp}`;
-      const sandbox = join(kokDizin, runId);
+      const sandbox = join(rootDir, runId);
       console.log(`── tekrar ${i} · ${arm} ──`);
       const r = await runArm({
         repo: REPO, taskId, arm, sandbox, adapters, logPath: LOG, runId,
@@ -569,11 +569,11 @@ function printPlanEffect(r: PlanEffectReport): void {
       // sayı varsa çıkıyor.
       const kimlik = (count: number, ad: string, etiket: string): string =>
         count > 0 ? `${count} ${ad} (${etiket})` : `${count} ${ad}`;
-      console.log(`  kusur kimliği: ${h.ortak.length} ortak · ` +
-        `${kimlik(h.yalnizPlansiz.length, "yalnız kontrolde", "planlama çözdü")} · ` +
-        `${kimlik(h.yalnizPlanli.length, "yalnız planlıda", "planlama GETİRDİ")}`);
-      if (h.yalnizPlanli.length > 0) {
-        console.log(`    ⚠ planlamanın getirdiği: ${h.yalnizPlanli.join("; ")}`);
+      console.log(`  kusur kimliği: ${h.shared.length} ortak · ` +
+        `${kimlik(h.onlyUnplanned.length, "yalnız kontrolde", "planlama çözdü")} · ` +
+        `${kimlik(h.onlyPlanned.length, "yalnız planlıda", "planlama GETİRDİ")}`);
+      if (h.onlyPlanned.length > 0) {
+        console.log(`    ⚠ planlamanın getirdiği: ${h.onlyPlanned.join("; ")}`);
       }
       // Kontrol kolu her koşuda aynı kancaları düşürüyorsa hücre kararlı.
       //
@@ -582,15 +582,15 @@ function printPlanEffect(r: PlanEffectReport): void {
       // koşul daima doğru çıkıyordu. Bayrak "sayıdan kimliğe geçtik" diye
       // okunuyor ama hiçbir şey karşılaştırmıyordu, ve operatör ona bakıp
       // k=3 kampanyası parası harcıyor.
-      const olculenKosu = g.plansiz?.runs ?? 0;
+      const measuredRuns = g.plansiz?.runs ?? 0;
       // Kısayol alan açık yazıldı: özellik adı İngilizce, yerel ad
       // olduğu gibi — gölgeleme riski yok (bkz. DIL-GECISI.md).
       const { stamp: damga } = kararlilikDamgasi(
-        olculenKosu, h.herKosudaPlansiz.length, h.plansiz.length,
+        measuredRuns, h.everyRunUnplanned.length, h.plansiz.length,
       );
       console.log(`    kontrol kolu ${damga}: ` +
-        `${h.herKosudaPlansiz.length}/${h.plansiz.length} kanca ` +
-        `${olculenKosu < 2 ? "tek koşuda" : "her koşuda"}`);
+        `${h.everyRunUnplanned.length}/${h.plansiz.length} kanca ` +
+        `${measuredRuns < 2 ? "tek koşuda" : "her koşuda"}`);
     }
     console.log(`  karar: ${g.verdict.code.toUpperCase()} — ${g.verdict.reason}`);
   }
@@ -613,7 +613,7 @@ function printPlanEffect(r: PlanEffectReport): void {
  * Artık her turun kopyası diskte; bu komut kopyaları karşılaştırıyor,
  * günlüğün özetini değil — özet yanlış yazılmış olsa bile fark doğru kalır.
  */
-async function turlar(cellFilter: string | undefined, showDiff: boolean): Promise<void> {
+async function rounds(cellFilter: string | undefined, showDiff: boolean): Promise<void> {
   const { events } = await readEvents(LOG);
   const snaps = events.filter((e) => e.type === "artifact.snapshot");
   if (snaps.length === 0) {
@@ -852,9 +852,9 @@ async function matrix(taskId: string, a: string, b: string, force: boolean): Pro
   // Toplam dolar olarak basılamıyor: hücrelerin bir kısmı abonelik
   // kimliğiyle koşmuşsa dolar bildirmiyor ve `?? 0` ile toplamak eksik bir
   // toplamı tam gibi gösterirdi. `formatUsage` neyin bilinmediğini söylüyor.
-  const toplam = [...out.producers.map((p) => p.usage), ...out.cells.map((c) => c.usage)]
+  const totalOf = [...out.producers.map((p) => p.usage), ...out.cells.map((c) => c.usage)]
     .reduce((a, b) => sumUsage(a, b), {});
-  console.log(`\n  toplam: ${formatUsage(toplam)}`);
+  console.log(`\n  toplam: ${formatUsage(totalOf)}`);
   console.log("\nSıradaki: cli.ts puanla — kanıtlanmış kusuru hangi hücreler yakaladı?");
 }
 
@@ -1102,23 +1102,23 @@ if (cmd === "report") {
   // konumsallardan ÇIKARILIYOR ve model yalnızca `sağlayıcı:model`
   // biçimindeyse konumsal kabul ediliyor.
   const value = (ad: string): string | undefined => {
-    const esit = argv.find((a) => a.startsWith(`${ad}=`));
-    if (esit !== undefined) return esit.slice(ad.length + 1);
+    const equal = argv.find((a) => a.startsWith(`${ad}=`));
+    if (equal !== undefined) return equal.slice(ad.length + 1);
     const at = argv.indexOf(ad);
     return at === -1 ? undefined : argv[at + 1];
   };
   const tuketilen = new Set([value("--k"), value("--model"), value("--kol")].filter((x) => x !== undefined));
   const konumsal = rest.slice(1).filter((a) => !tuketilen.has(a));
-  const kolRaw = value("--kol");
-  if (kolRaw !== undefined && kolRaw !== "planli" && kolRaw !== "plansiz") {
-    console.error(`--kol yalnızca \`planli\` ya da \`plansiz\` olabilir (verilen: ${kolRaw})`);
+  const armRaw = value("--kol");
+  if (armRaw !== undefined && armRaw !== "planli" && armRaw !== "plansiz") {
+    console.error(`--kol yalnızca \`planli\` ya da \`plansiz\` olabilir (verilen: ${armRaw})`);
     process.exit(2);
   }
   await planab(
     gorev,
     Math.max(1, Number(value("--k") ?? 3)),
     value("--model") ?? konumsal.find((a) => a.includes(":")) ?? "claude:claude-sonnet-5",
-    kolRaw as Arm | undefined,
+    armRaw as Arm | undefined,
     argv.includes("--devam"),
   );
 } else if (cmd === "kalibre") {
@@ -1127,10 +1127,10 @@ if (cmd === "report") {
     console.error("kullanım: cli.ts kalibre <görev-id> [--model sağ:model]");
     process.exit(2);
   }
-  const esit = argv.find((a) => a.startsWith("--model="));
+  const equal = argv.find((a) => a.startsWith("--model="));
   const at = argv.indexOf("--model");
-  const model = esit !== undefined
-    ? esit.slice("--model=".length)
+  const model = equal !== undefined
+    ? equal.slice("--model=".length)
     : at === -1 ? undefined : argv[at + 1];
   await kalibre(gorev, model ?? rest.slice(1).find((a) => a.includes(":")) ?? "claude:claude-sonnet-5");
 } else if (cmd === "kalibre2x2") {
@@ -1139,21 +1139,21 @@ if (cmd === "report") {
     console.error("kullanım: cli.ts kalibre2x2 <görev-id> [--model sağ:model] [--hakem sağ:model]");
     process.exit(2);
   }
-  const bayrak = (ad: string): string | undefined => {
-    const esit = argv.find((a) => a.startsWith(`--${ad}=`));
-    if (esit !== undefined) return esit.slice(ad.length + 3);
+  const flag = (ad: string): string | undefined => {
+    const equal = argv.find((a) => a.startsWith(`--${ad}=`));
+    if (equal !== undefined) return equal.slice(ad.length + 3);
     const at = argv.indexOf(`--${ad}`);
     return at === -1 ? undefined : argv[at + 1];
   };
   await kalibre2x2(
     gorev,
-    bayrak("model") ?? rest.slice(1).find((a) => a.includes(":")) ?? "claude:claude-sonnet-5",
-    bayrak("hakem") ?? "claude:claude-opus-5",
+    flag("model") ?? rest.slice(1).find((a) => a.includes(":")) ?? "claude:claude-sonnet-5",
+    flag("hakem") ?? "claude:claude-opus-5",
   );
 } else if (cmd === "planrapor") {
   await planrapor();
 } else if (cmd === "turlar") {
-  await turlar(rest[0], argv.includes("--diff"));
+  await rounds(rest[0], argv.includes("--diff"));
 } else if (cmd === "siniflandir") {
   await siniflandir(rest[0] ?? "claude:claude-opus-5", argv.includes("--yeniden"), argv.includes("--kuru"));
 } else if (cmd === "puanla") {
@@ -1170,13 +1170,13 @@ if (cmd === "report") {
   const taskRoot = join(REPO, "bench/tasks");
   const present = await readdir(taskRoot).then((d) => d.includes(cmd)).catch(() => false);
   if (!present) {
-    const gorevler = await readdir(taskRoot, { withFileTypes: true })
+    const tasks = await readdir(taskRoot, { withFileTypes: true })
       .then((d) => d.filter((e) => e.isDirectory()).map((e) => e.name).sort())
       .catch(() => [] as string[]);
     console.error(`bilinmeyen komut ya da görev: \`${cmd}\``);
     console.error(`  komutlar  : matrix, doctor, puanla, siniflandir, selftest, turlar,`);
     console.error(`              kalibre, kalibre2x2, planab, planrapor, report`);
-    console.error(`  görevler  : ${gorevler.join(", ")}`);
+    console.error(`  görevler  : ${tasks.join(", ")}`);
     console.error(`  Yeni bir komutu çekmediysen: git pull`);
     process.exit(2);
   }

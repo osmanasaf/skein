@@ -44,11 +44,11 @@ export interface LayerGap {
  * kancayı birden söyleyebilir.
  */
 export function layerGaps(events: SkeinEvent[]): LayerGap[] {
-  const anahtar = (runId: string, cell: string): string => `${runId}\u0000${cell}`;
-  const puanli = new Map(scoredCells(events).map((c) => [anahtar(c.runId, c.cell), c]));
+  const key = (runId: string, cell: string): string => `${runId}\u0000${cell}`;
+  const puanli = new Map(scoredCells(events).map((c) => [key(c.runId, c.cell), c]));
   const out: LayerGap[] = [];
   for (const s of classifiedCells(events)) {
-    const p = puanli.get(anahtar(s.runId, s.cell));
+    const p = puanli.get(key(s.runId, s.cell));
     if (p === undefined) continue;
     const caught = p.hooks - p.missed;
     if (s.proven <= caught) continue;

@@ -43,20 +43,20 @@ export function lastPlanEntry(card: Card): PlanEntry | null {
  * alışveriş içindeki taşıma yalnızca `plan` kaydı bırakıyor, yani böyle
  * bir kayıt kartın zinciri sürdürdüğünü söylüyor.
  */
-function alisverisKapandi(card: Card, topology: TopologySnapshot): boolean {
+function exchangeClosed(card: Card, topology: TopologySnapshot): boolean {
   const i = lastPlanIndex(card);
   if (i === -1) return false;
-  const katilimci = (rol: string): boolean => isPlanner(topology, rol);
+  const participant = (rol: string): boolean => isPlanner(topology, rol);
   for (const entry of card.history.slice(i + 1)) {
     switch (entry.event) {
       case "taken":
-        if (!katilimci(entry.role)) return true;
+        if (!participant(entry.role)) return true;
         break;
       case "handoff":
-        if (!katilimci(entry.from) || !katilimci(entry.to)) return true;
+        if (!participant(entry.from) || !participant(entry.to)) return true;
         break;
       case "reject":
-        if (!katilimci(entry.from)) return true;
+        if (!participant(entry.from)) return true;
         break;
       default:
         break;
@@ -87,9 +87,9 @@ function reopenedFor(card: Card): string | null {
   // açmak için dönmüyor; kodla ilgili bir sebepten dönüyor. Yeniden
   // açılmış sayılsaydı, plan yazarına "itirazları yanıtla" turu
   // verilirdi.
-  const kapi = card.history[i + 1];
+  const gate = card.history[i + 1];
   const decision = card.history[i + 2];
-  if (kapi?.event !== "gate" || decision?.event !== "released") return null;
+  if (gate?.event !== "gate" || decision?.event !== "released") return null;
   // `released.role` insanın kartı verdiği rol: `retry`de aynı rol,
   // `forward`da alışverişten sonraki rol. İkincisinde katılımcı eşleşmez
   // ve alışveriş yeniden açılmaz — istenen de bu.
@@ -130,9 +130,9 @@ export function planPhase(card: Card, roleId: string, topology: TopologySnapshot
   // Yeniden açılan alışverişte sıra ilerlemiyor: kapıda bekleyen rol AYNI
   // turu yeniden koşuyor. İlerletmek, insanın "bunu düzelt" dediği turu
   // atlamak olurdu.
-  const yeniden = reopenedFor(card);
-  if (yeniden !== null) {
-    if (yeniden !== last.role || roleId !== last.role) return { kind: "yok" };
+  const again = reopenedFor(card);
+  if (again !== null) {
+    if (again !== last.role || roleId !== last.role) return { kind: "yok" };
     switch (last.action) {
       case "yazdi": return { kind: "yaz" };
       case "itiraz": return { kind: "itiraz", round: last.round };
@@ -161,7 +161,7 @@ export function planPhase(card: Card, roleId: string, topology: TopologySnapshot
   //
   // İnsanın yeniden açtığı alışveriş bu kapıdan ÖNCE okunuyor
   // (`reopenedFor`), çünkü planı yalnızca insan yeniden açar.
-  if (alisverisKapandi(card, topology)) return { kind: "yok" };
+  if (exchangeClosed(card, topology)) return { kind: "yok" };
 
   const limit = topology.plan?.tur ?? 1;
 
@@ -171,13 +171,13 @@ export function planPhase(card: Card, roleId: string, topology: TopologySnapshot
       return roleId === objectors[0] ? { kind: "itiraz", round: 1 } : { kind: "yok" };
 
     case "itiraz": {
-      const sira = objectors.indexOf(last.role);
+      const order = objectors.indexOf(last.role);
       // Topolojide olmayan bir rolün itirazı: sıra hesaplanamaz, alışveriş
       // ilerletilmez. Sessizce başa dönmek, itirazcıları sonsuz döndürürdü.
-      if (sira === -1) return { kind: "yok" };
-      const sonraki = objectors[sira + 1];
-      if (sonraki !== undefined) {
-        return roleId === sonraki ? { kind: "itiraz", round: last.round } : { kind: "yok" };
+      if (order === -1) return { kind: "yok" };
+      const nextOne = objectors[order + 1];
+      if (nextOne !== undefined) {
+        return roleId === nextOne ? { kind: "itiraz", round: last.round } : { kind: "yok" };
       }
       // Turun bütün itirazcıları konuştu: yanıt sırası yazarda.
       return roleId === author ? { kind: "cevap", round: last.round } : { kind: "yok" };

@@ -208,6 +208,32 @@ gölgeleme riski sıfır.
 Bu dosyaya düzeltme yorumu yazarken backtick kullanıldı ve derleme
 patladı. Yorumlarda düz tırnak kullanılacak.
 
+**9. BEŞİNCİ SINIR: sınamalar betiğin KAYNAK METNİNİ doğruluyor.**
+`page.test.ts` betikteki fonksiyonu metin aramasıyla çıkarıyor —
+`fonksiyon(html, "jsonGibiMi")` → `src.indexOf("function jsonGibiMi(")`
+— ve ad bir DİZE. Ayrıca ~400 beklenti betiğin kaynağını doğruluyor:
+`expect(src).toContain("const canli = Boolean(g && g.alive)")`.
+
+Üç çıkarıcı var (`fonksiyon`, `bildirim`, `fonksiyonlar`); üçüncüsü
+adları bir DİZİ içinde alıyor. Çıkarıcı adları AST ile çevrildi
+(yalnızca o çağrıların dize argümanları; `renderPage("jeton")` bir
+token DEĞERİ ve dokunulmadı).
+
+Beklenen kod parçaları için de aynı numara denendi: dizenin İÇİ JS
+olarak ayrıştırılıp yalnızca tanımlayıcı konumları çevriliyor, iç içe
+dizeler korunuyor (`h === "yeni"` değişmiyor, çünkü betikteki o dize de
+çevrilmedi). Ama **Türkçe sınama BAŞLIKLARI da aynı kelimeleri
+taşıyor** ("onay kapısı: hedef varsa geri gönder") ve başlıklar Türkçe
+KALACAK; ayrım kırılgan. ÖLÇÜLDÜ: 285 adlık partide bu yüzden 15 sınama
+düştü, ve yeniden-tırnaklama mantığı `tarayici.test.ts`'i bozdu
+("Unterminated string literal").
+
+**KARAR:** arayüz katmanının üç dosyası (`page.ts`, `page.test.ts`,
+`tarayici.test.ts`) büyük partilerden DIŞLANIYOR (`--ui-haric`). Az
+sayıda adla bu çeviri başarıyla yapıldı (3. parti, 30 ad): yöntem
+çalışıyor, ölçek kırıyor. Kalan arayüz adları kendi aşamasında, küçük
+gruplar hâlinde ve her grupta tam suite koşarak çevrilecek.
+
 **Kanıt (her iki aşama için):** Türkçe metne bakan sınamaların hepsi
 DEĞİŞMEDEN geçmeli. Değişen varsa sınır çiğnenmiştir.
 

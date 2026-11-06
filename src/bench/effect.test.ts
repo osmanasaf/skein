@@ -240,8 +240,8 @@ describe("ölçüm grupları", () => {
     expect(e.relativeReduction).toBeGreaterThan(0.2); // havuzda olumlu görünüyor
     expect(e.verdict.code).toBe("belirsiz");
     expect(e.verdict.reason).toMatch(/ayrışıyor/);
-    const dar = e.groups.find((g) => g.taskId === "dar");
-    expect(dar?.verdict.code).toBe("olumsuz");
+    const narrow = e.groups.find((g) => g.taskId === "dar");
+    expect(narrow?.verdict.code).toBe("olumsuz");
   });
 
   it("görevi bilinmeyen koşuları kendi grubunda toplar", () => {

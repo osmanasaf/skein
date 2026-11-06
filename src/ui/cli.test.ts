@@ -2,7 +2,7 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { killTree, spawnPortable, tsxCliYolu } from "../proc/process.js";
+import { killTree, spawnPortable, tsxCliPath } from "../proc/process.js";
 
 /**
  * EKRANI GERÇEK SÜREÇ OLARAK KOŞTURAN SINAMALAR.
@@ -44,12 +44,12 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-interface CalisanEkran {
+interface RunningScreen {
   port: number;
   url: string;
   /** O ana kadar biriken stdout+stderr — CANLI: her çağrıda güncel hâlini verir. */
-  metni: () => string;
-  durdur: () => Promise<void>;
+  textOf: () => string;
+  stop: () => Promise<void>;
 }
 
 /**
@@ -79,18 +79,18 @@ interface CalisanEkran {
  * doğru arıyor, tam `npx tsx` gibi — ama `npx`i PATH üzerinden ÇAĞIRMADAN
  * (yukarıdaki `PATH=""` ihtiyacıyla çakışmadan).
  */
-function tsxYolu(): string {
-  return tsxCliYolu(process.cwd());
+function tsxPath(): string {
+  return tsxCliPath(process.cwd());
 }
 
-function ekraniBaslat(
+function startScreen(
   args: string[],
   options: { env?: NodeJS.ProcessEnv } = {},
-): Promise<CalisanEkran> {
+): Promise<RunningScreen> {
   return new Promise((resolve, reject) => {
     const child = spawnPortable(
       process.execPath,
-      [tsxYolu(), join(process.cwd(), "src", "ui", "cli.ts"), ...args],
+      [tsxPath(), join(process.cwd(), "src", "ui", "cli.ts"), ...args],
       { cwd: root, ...(options.env === undefined ? {} : { env: options.env }) },
     );
     let cikti = "";
@@ -101,7 +101,7 @@ function ekraniBaslat(
       killTree(child.pid);
       reject(new Error(`ekran açılmadı (20s), çıktı:\n${cikti}`));
     }, 20_000);
-    const bak = (chunk: Buffer): void => {
+    const inspect = (chunk: Buffer): void => {
       cikti += chunk.toString();
       const m = /ekran açık: (http:\S+)/.exec(cikti);
       if (m === null || settled) return;
@@ -114,16 +114,16 @@ function ekraniBaslat(
         // CANLI: dışarıdan her çağrıda o anki `cikti`'yi okur — "ekran açık"
         // satırından SONRA gelen (ör. tarayıcı uyarısı gibi) çıktıyı da
         // yakalayabilmek için bir anlık kopya yetmiyordu.
-        metni: () => cikti,
-        durdur: () =>
+        textOf: () => cikti,
+        stop: () =>
           new Promise<void>((res) => {
             child.on("close", () => res());
             killTree(child.pid);
           }),
       });
     };
-    child.stdout.on("data", bak);
-    child.stderr.on("data", bak);
+    child.stdout.on("data", inspect);
+    child.stderr.on("data", inspect);
     child.on("error", (error) => {
       if (settled) return;
       settled = true;
@@ -146,10 +146,10 @@ describe("ui cli — port hafızası (gerçek süreç)", () => {
    * denemesi DETERMİNİSTİK başarısız olur ve testler gerçek bir pencere
    * açmaz.
    */
-  const KOMUTSUZ_ORTAM = { ...process.env, PATH: "" };
+  const NO_COMMAND_ENV = { ...process.env, PATH: "" };
 
   it("--port verilen açılış o portta açılır ve hatırlanan hâle gelir", async () => {
-    const e = await ekraniBaslat(["test", "--tarayici-yok", "--port", "18391"]);
+    const e = await startScreen(["test", "--tarayici-yok", "--port", "18391"]);
     try {
       expect(e.port).toBe(18391);
       const record = JSON.parse(
@@ -157,27 +157,27 @@ describe("ui cli — port hafızası (gerçek süreç)", () => {
       ) as { port: number };
       expect(record.port).toBe(18391);
     } finally {
-      await e.durdur();
+      await e.stop();
     }
   });
 
   it("--port vermeden ikinci açılış ÖNCEKİ hatırlanan portu kullanır", async () => {
-    const e1 = await ekraniBaslat(["test", "--tarayici-yok", "--port", "18392"]);
-    await e1.durdur();
+    const e1 = await startScreen(["test", "--tarayici-yok", "--port", "18392"]);
+    await e1.stop();
 
-    const e2 = await ekraniBaslat(["test", "--tarayici-yok"]);
+    const e2 = await startScreen(["test", "--tarayici-yok"]);
     try {
       expect(e2.port).toBe(18392);
     } finally {
-      await e2.durdur();
+      await e2.stop();
     }
   });
 
   it("--port AÇIK isteği hatırlanan kaydı EZER", async () => {
-    const e1 = await ekraniBaslat(["test", "--tarayici-yok", "--port", "18393"]);
-    await e1.durdur();
+    const e1 = await startScreen(["test", "--tarayici-yok", "--port", "18393"]);
+    await e1.stop();
 
-    const e2 = await ekraniBaslat(["test", "--tarayici-yok", "--port", "18394"]);
+    const e2 = await startScreen(["test", "--tarayici-yok", "--port", "18394"]);
     try {
       expect(e2.port).toBe(18394);
       const record = JSON.parse(
@@ -186,7 +186,7 @@ describe("ui cli — port hafızası (gerçek süreç)", () => {
       // Ezilen kayıt artık İKİNCİ (açık) isteği taşıyor, birinciyi değil.
       expect(record.port).toBe(18394);
     } finally {
-      await e2.durdur();
+      await e2.stop();
     }
   });
 
@@ -197,19 +197,19 @@ describe("ui cli — port hafızası (gerçek süreç)", () => {
     // yalnızca USAGE basıp 0 ile çıkıyordu; ekran HİÇ AÇILMIYORDU. Akış adı
     // da VERİLMİYOR: `hub/flows` altındaki tek akış (`test`) varsayılan
     // olarak seçilmeli.
-    const e = await ekraniBaslat([], { env: KOMUTSUZ_ORTAM });
+    const e = await startScreen([], { env: NO_COMMAND_ENV });
     try {
       expect(e.port).toBeGreaterThan(0);
-      expect(e.metni()).not.toContain("Kullanım:");
+      expect(e.textOf()).not.toContain("Kullanım:");
     } finally {
-      await e.durdur();
+      await e.stop();
     }
   });
 
   it("`--help` kullanım metnini basar ve ekranı AÇMADAN 0 ile çıkar", async () => {
     const child = spawnPortable(
       process.execPath,
-      [tsxYolu(), join(process.cwd(), "src", "ui", "cli.ts"), "--help"],
+      [tsxPath(), join(process.cwd(), "src", "ui", "cli.ts"), "--help"],
       { cwd: root },
     );
     let cikti = "";
@@ -236,7 +236,7 @@ describe("ui cli — port hafızası (gerçek süreç)", () => {
   it("bilinmeyen bayrak ekranı AÇMAZ, 1 ile çıkar ve hangisi olduğunu söyler", async () => {
     const child = spawnPortable(
       process.execPath,
-      [tsxYolu(), join(process.cwd(), "src", "ui", "cli.ts"), "test", "--zamanasimi", "50"],
+      [tsxPath(), join(process.cwd(), "src", "ui", "cli.ts"), "test", "--zamanasimi", "50"],
       { cwd: root },
     );
     let cikti = "";
@@ -261,7 +261,7 @@ describe("ui cli — port hafızası (gerçek süreç)", () => {
     // çözümlemeye gerek kalmadan pinliyoruz.
     const child = spawnPortable(
       process.execPath,
-      [tsxYolu(), join(process.cwd(), "src", "ui", "cli.ts"), "test", "--timeout", "45"],
+      [tsxPath(), join(process.cwd(), "src", "ui", "cli.ts"), "test", "--timeout", "45"],
       { cwd: root },
     );
     let cikti = "";
@@ -277,11 +277,11 @@ describe("ui cli — port hafızası (gerçek süreç)", () => {
   it("bozuk `.skein/ekran.json` açılışı ENGELLEMİYOR", async () => {
     await mkdir(join(root, ".skein"), { recursive: true });
     await writeFile(join(root, ".skein", "ekran.json"), "{ bu json degil", "utf8");
-    const e = await ekraniBaslat(["test", "--tarayici-yok"]);
+    const e = await startScreen(["test", "--tarayici-yok"]);
     try {
       expect(e.port).toBeGreaterThan(0);
     } finally {
-      await e.durdur();
+      await e.stop();
     }
   });
 
@@ -292,21 +292,21 @@ describe("ui cli — port hafızası (gerçek süreç)", () => {
   // `cli.ts`'in gerçek hatayı GERÇEKTEN yutup yutmadığı.
   it("tarayıcı açma başarısız olsa da ekran çalışır durumda kalır", async () => {
     // `--tarayici-yok` KASITLI verilmiyor: gerçek açma yolu koşuyor.
-    const e = await ekraniBaslat(["test", "--port", "18395"], { env: KOMUTSUZ_ORTAM });
+    const e = await startScreen(["test", "--port", "18395"], { env: NO_COMMAND_ENV });
     try {
-      const cevap = await fetch(`${e.url}durum`);
-      expect(cevap.status).toBe(200);
+      const answer = await fetch(`${e.url}durum`);
+      expect(answer.status).toBe(200);
       // Hata yutulmuyor da — bir satır basılıyor, ekran yine çalışıyor.
       await new Promise((r) => setTimeout(r, 1_000));
-      expect(e.metni()).toContain("tarayıcı açılamadı");
+      expect(e.textOf()).toContain("tarayıcı açılamadı");
     } finally {
-      await e.durdur();
+      await e.stop();
     }
   });
 
   it("--tarayici-yok verilince açma denemesi hiç yapılmıyor, uyarı basılmıyor", async () => {
-    const e = await ekraniBaslat(["test", "--tarayici-yok", "--port", "18396"], {
-      env: KOMUTSUZ_ORTAM,
+    const e = await startScreen(["test", "--tarayici-yok", "--port", "18396"], {
+      env: NO_COMMAND_ENV,
     });
     try {
       // Yukarıdaki sınama AYNI komutsuz ortamda 1 saniye içinde uyarıyı
@@ -314,9 +314,9 @@ describe("ui cli — port hafızası (gerçek süreç)", () => {
       // kanıtı (`--tarayici-yok` bayrağı olmasaydı aynı ortam aynı uyarıyı
       // üretirdi).
       await new Promise((r) => setTimeout(r, 1_000));
-      expect(e.metni()).not.toContain("tarayıcı açılamadı");
+      expect(e.textOf()).not.toContain("tarayıcı açılamadı");
     } finally {
-      await e.durdur();
+      await e.stop();
     }
   });
 }, 60_000);
@@ -337,10 +337,10 @@ describe("ui cli — port hafızası (gerçek süreç)", () => {
  * `GET /durum`un döndürdüğü `flow.name`e bakarak sınanıyor.
  */
 describe("ui cli — varsayılan akış seçimi (gerçek süreç)", () => {
-  const KOMUTSUZ_ORTAM = { ...process.env, PATH: "" };
+  const NO_COMMAND_ENV = { ...process.env, PATH: "" };
 
   /** Tek rollü, geçerli bir akış dosyası metni — ad ve rol id'si parametreli. */
-  function akisYaml(ad: string, rol: string): string {
+  function flowYaml(ad: string, rol: string): string {
     return `
 name: ${ad}
 constitution:
@@ -354,16 +354,16 @@ roles:
 `;
   }
 
-  async function akisYarat(ad: string, rol: string): Promise<void> {
-    await writeFile(join(root, "hub", "flows", `${ad}.yaml`), akisYaml(ad, rol));
+  async function createFlow(ad: string, rol: string): Promise<void> {
+    await writeFile(join(root, "hub", "flows", `${ad}.yaml`), flowYaml(ad, rol));
   }
 
-  async function hatirlananaYaz(ad: string): Promise<void> {
+  async function writeRemembered(ad: string): Promise<void> {
     await mkdir(join(root, ".skein"), { recursive: true });
     await writeFile(join(root, ".skein", "ekran.json"), JSON.stringify({ akis: ad }), "utf8");
   }
 
-  async function aktifAkisAdi(e: CalisanEkran): Promise<string> {
+  async function activeFlowName(e: RunningScreen): Promise<string> {
     const model = (await (await fetch(`${e.url}durum`)).json()) as { flow: { name: string } };
     return model.flow.name;
   }
@@ -371,7 +371,7 @@ roles:
   // Sayfaya gömülü yazma jetonunu GERÇEK bir HTTP yanıtından çıkarıyoruz —
   // bu sınama gerçek bir süreçle konuşuyor, `serveUi`nin döndürdüğü
   // `token`a doğrudan erişimi yok (bkz. `server.test.ts`'teki o erişim).
-  async function jetonAl(url: string): Promise<string> {
+  async function takeToken(url: string): Promise<string> {
     const html = await (await fetch(url)).text();
     const m = /const JETON = "([^"]+)"/.exec(html);
     if (m === null) throw new Error("sayfada jeton bulunamadı");
@@ -385,96 +385,96 @@ roles:
   it("hafıza boşken ve gunluk-tek alfabetik İLK olmasa da gunluk-tek açılır", async () => {
     // "aaa" alfabetik olarak gunluk-tek'ten ÖNCE — "ada göre ilk" kuralı
     // yanlışlıkla hâlâ birincil olsaydı bu sınama "aaa" görürdü.
-    await akisYarat("aaa", "aaarol");
-    await akisYarat("gunluk-tek", "guntol");
-    const e = await ekraniBaslat([], { env: KOMUTSUZ_ORTAM });
+    await createFlow("aaa", "aaarol");
+    await createFlow("gunluk-tek", "guntol");
+    const e = await startScreen([], { env: NO_COMMAND_ENV });
     try {
-      expect(await aktifAkisAdi(e)).toBe("gunluk-tek");
+      expect(await activeFlowName(e)).toBe("gunluk-tek");
     } finally {
-      await e.durdur();
+      await e.stop();
     }
   });
 
   it("hatırlanan akış VARSA gunluk-tek'TEN ÖNCELİKLİ", async () => {
-    await akisYarat("ikinci", "ikincirol");
-    await akisYarat("gunluk-tek", "guntol");
-    await hatirlananaYaz("ikinci");
-    const e = await ekraniBaslat([], { env: KOMUTSUZ_ORTAM });
+    await createFlow("ikinci", "ikincirol");
+    await createFlow("gunluk-tek", "guntol");
+    await writeRemembered("ikinci");
+    const e = await startScreen([], { env: NO_COMMAND_ENV });
     try {
-      expect(await aktifAkisAdi(e)).toBe("ikinci");
+      expect(await activeFlowName(e)).toBe("ikinci");
     } finally {
-      await e.durdur();
+      await e.stop();
     }
   });
 
   it("hatırlanan akış ARTIK YOKSA engel olmuyor, gunluk-tek'e düşülüyor", async () => {
-    await akisYarat("gunluk-tek", "guntol");
-    await hatirlananaYaz("boyle-bir-akis-yok");
-    const e = await ekraniBaslat([], { env: KOMUTSUZ_ORTAM });
+    await createFlow("gunluk-tek", "guntol");
+    await writeRemembered("boyle-bir-akis-yok");
+    const e = await startScreen([], { env: NO_COMMAND_ENV });
     try {
-      expect(await aktifAkisAdi(e)).toBe("gunluk-tek");
+      expect(await activeFlowName(e)).toBe("gunluk-tek");
     } finally {
-      await e.durdur();
+      await e.stop();
     }
   });
 
   it("hatırlanan akış dosyası VAR AMA BOZUK, engel olmuyor, gunluk-tek'e düşülüyor", async () => {
     await writeFile(join(root, "hub", "flows", "kirik.yaml"), "{ gecerli yaml degil : : :");
-    await akisYarat("gunluk-tek", "guntol");
-    await hatirlananaYaz("kirik");
-    const e = await ekraniBaslat([], { env: KOMUTSUZ_ORTAM });
+    await createFlow("gunluk-tek", "guntol");
+    await writeRemembered("kirik");
+    const e = await startScreen([], { env: NO_COMMAND_ENV });
     try {
-      expect(await aktifAkisAdi(e)).toBe("gunluk-tek");
+      expect(await activeFlowName(e)).toBe("gunluk-tek");
     } finally {
-      await e.durdur();
+      await e.stop();
     }
   });
 
   it("hatırlanan da gunluk-tek de yoksa ADA GÖRE İLK akış açılır (son çare)", async () => {
-    await akisYarat("bbb", "bbbrol");
-    await akisYarat("aaa", "aaarol");
+    await createFlow("bbb", "bbbrol");
+    await createFlow("aaa", "aaarol");
     // `test.yaml` de var ("test" > "bbb" > "aaa" alfabetik) — en önce "aaa".
-    const e = await ekraniBaslat([], { env: KOMUTSUZ_ORTAM });
+    const e = await startScreen([], { env: NO_COMMAND_ENV });
     try {
-      expect(await aktifAkisAdi(e)).toBe("aaa");
+      expect(await activeFlowName(e)).toBe("aaa");
     } finally {
-      await e.durdur();
+      await e.stop();
     }
   });
 
   it("komut satırı argümanı hatırlananı VE gunluk-tek'i EZER", async () => {
-    await akisYarat("gunluk-tek", "guntol");
-    await akisYarat("ucuncu", "ucuncurol");
-    await hatirlananaYaz("gunluk-tek");
-    const e = await ekraniBaslat(["ucuncu", "--tarayici-yok"]);
+    await createFlow("gunluk-tek", "guntol");
+    await createFlow("ucuncu", "ucuncurol");
+    await writeRemembered("gunluk-tek");
+    const e = await startScreen(["ucuncu", "--tarayici-yok"]);
     try {
-      expect(await aktifAkisAdi(e)).toBe("ucuncu");
+      expect(await activeFlowName(e)).toBe("ucuncu");
     } finally {
-      await e.durdur();
+      await e.stop();
     }
   });
 
   it("ekrandaki seçiciden akış değiştirmek 'son açılan' hafızasını da günceller", async () => {
-    await akisYarat("ikinci", "ikincirol");
-    const e1 = await ekraniBaslat(["test", "--tarayici-yok"]);
+    await createFlow("ikinci", "ikincirol");
+    const e1 = await startScreen(["test", "--tarayici-yok"]);
     try {
-      const jeton = await jetonAl(e1.url);
+      const token = await takeToken(e1.url);
       const res = await fetch(`${e1.url}akis/sec`, {
         method: "POST",
-        headers: { "content-type": "application/json", "x-skein-token": jeton },
+        headers: { "content-type": "application/json", "x-skein-token": token },
         body: JSON.stringify({ name: "ikinci" }),
       });
       expect(res.status).toBe(200);
     } finally {
-      await e1.durdur();
+      await e1.stop();
     }
 
     // İKİNCİ açılış argümansız — hafızada şimdi "ikinci" olmalı.
-    const e2 = await ekraniBaslat([], { env: KOMUTSUZ_ORTAM });
+    const e2 = await startScreen([], { env: NO_COMMAND_ENV });
     try {
-      expect(await aktifAkisAdi(e2)).toBe("ikinci");
+      expect(await activeFlowName(e2)).toBe("ikinci");
     } finally {
-      await e2.durdur();
+      await e2.stop();
     }
   });
 }, 60_000);

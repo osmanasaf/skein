@@ -21,7 +21,7 @@ export type Decision = "accept" | "reject";
  * vermemek bir cevap değildir (bu dosyanın `missing`/`reject` ayrımının
  * aynı gerekçesi). Cevapsız madde kapıyı kapatır.
  */
-export interface YukumlulukCevabi {
+export interface ObligationAnswer {
   durum: "karsilandi" | "karsilanmadi";
   /** Neye bakıldığı; boş bırakılamaz — "karşılandı" tek başına kanıt değil. */
   not: string;
@@ -41,7 +41,7 @@ export interface Verdict {
    * bölgeye yönlendirip başka yerlere karşı körleştirebilir, o yüzden iki
    * sonuç ölçümde de ayrı sayılıyor.
    */
-  yukumlulukler?: Record<string, YukumlulukCevabi>;
+  yukumlulukler?: Record<string, ObligationAnswer>;
 }
 
 /**
@@ -116,12 +116,12 @@ export function parseVerdict(text: string): VerdictResult {
   // Yükümlülük cevapları: varsa KATI. Yarım bir cevap ("durum" var, "not"
   // yok) kapıyı geçerse, denetlenmemiş bir madde denetlenmiş sayılır.
   const yukRaw = doc["yukumlulukler"];
-  let yukumlulukler: Record<string, YukumlulukCevabi> | undefined;
+  let yukumlulukler: Record<string, ObligationAnswer> | undefined;
   if (yukRaw !== undefined && yukRaw !== null) {
     if (typeof yukRaw !== "object" || Array.isArray(yukRaw)) {
       return { kind: "invalid", problem: "`yukumlulukler` bir nesne olmalı" };
     }
-    const out: Record<string, YukumlulukCevabi> = {};
+    const out: Record<string, ObligationAnswer> = {};
     for (const [id, ham] of Object.entries(yukRaw as Record<string, unknown>)) {
       if (ham === null || typeof ham !== "object" || Array.isArray(ham)) {
         return { kind: "invalid", problem: `\`yukumlulukler.${id}\` bir nesne olmalı` };

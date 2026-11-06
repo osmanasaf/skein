@@ -24,15 +24,15 @@ import { kontrastOrani, NORMAL_METIN_ESIGI, IKINCIL_ETIKET_ESIGI } from "./kontr
  * hex'e iniyor, ikinci bir kaynak hiç açılmıyor.
  */
 function tokenlariAyristir(gövdeMetni: string): Map<string, string> {
-  const harita = new Map<string, string>();
+  const lookup = new Map<string, string>();
   const desen = /--([a-z0-9-]+):\s*(#[0-9A-Fa-f]{6}|var\(--[a-z0-9-]+\))\s*;/g;
   let eslesme: RegExpExecArray | null;
   while ((eslesme = desen.exec(gövdeMetni)) !== null) {
     const name = eslesme[1];
     const value = eslesme[2];
-    if (name !== undefined && value !== undefined) harita.set(name, value);
+    if (name !== undefined && value !== undefined) lookup.set(name, value);
   }
-  return harita;
+  return lookup;
 }
 
 /**
@@ -45,20 +45,20 @@ function tokenlariAyristir(gövdeMetni: string): Map<string, string> {
  * üzerine biniyor"). Koyu haritayı açığın üstüne yazarak birleştiriyoruz,
  * çünkü koyu blok --mono gibi değişmeyen token'ları tekrar etmiyor.
  */
-function temaTokenlari(html: string): { isOpen: Map<string, string>; koyu: Map<string, string> } {
+function temaTokenlari(html: string): { isOpen: Map<string, string>; darkBlock: Map<string, string> } {
   const kokBas = html.indexOf(":root {");
   const kokSon = html.indexOf("\n  }", kokBas);
   const acikGovde = html.slice(kokBas, kokSon);
 
-  const koyuSorguBas = html.indexOf("prefers-color-scheme: dark");
-  const koyuKokBas = html.indexOf(":root:not(", koyuSorguBas);
-  const koyuKokSon = html.indexOf("\n    }", koyuKokBas);
-  const koyuGovde = html.slice(koyuKokBas, koyuKokSon);
+  const darkQueryStart = html.indexOf("prefers-color-scheme: dark");
+  const darkRootStart = html.indexOf(":root:not(", darkQueryStart);
+  const darkRootEnd = html.indexOf("\n    }", darkRootStart);
+  const koyuGovde = html.slice(darkRootStart, darkRootEnd);
 
   const isOpen = tokenlariAyristir(acikGovde);
-  const koyu = new Map(isOpen);
-  for (const [name, value] of tokenlariAyristir(koyuGovde)) koyu.set(name, value);
-  return { isOpen, koyu };
+  const darkBlock = new Map(isOpen);
+  for (const [name, value] of tokenlariAyristir(koyuGovde)) darkBlock.set(name, value);
+  return { isOpen, darkBlock };
 }
 
 /**
@@ -66,10 +66,10 @@ function temaTokenlari(html: string): { isOpen: Map<string, string>; koyu: Map<s
  * bloğunun SADECE EZDİĞİ token'larını (açıkla birleştirmeden) döner.
  */
 function medyaEzmesi(html: string): Map<string, string> {
-  const koyuSorguBas = html.indexOf("prefers-color-scheme: dark");
-  const koyuKokBas = html.indexOf(":root:not(", koyuSorguBas);
-  const koyuKokSon = html.indexOf("\n    }", koyuKokBas);
-  return tokenlariAyristir(html.slice(koyuKokBas, koyuKokSon));
+  const darkQueryStart = html.indexOf("prefers-color-scheme: dark");
+  const darkRootStart = html.indexOf(":root:not(", darkQueryStart);
+  const darkRootEnd = html.indexOf("\n    }", darkRootStart);
+  return tokenlariAyristir(html.slice(darkRootStart, darkRootEnd));
 }
 
 /**
@@ -88,23 +88,23 @@ function zorlananKoyuTokenlari(html: string): Map<string, string> {
  * Zincir derinliği sınırlı: döngü ya da bozuk bir referans sessizce
  * yutulmasın, açık hata versin.
  */
-function cozumle(harita: Map<string, string>, name: string, derinlik = 0): string {
+function cozumle(lookup: Map<string, string>, name: string, derinlik = 0): string {
   if (derinlik > 8) throw new Error("var() zinciri cok derin (dongu?): " + name);
-  const value = harita.get(name);
+  const value = lookup.get(name);
   if (value === undefined) throw new Error("token bulunamadi: " + name);
   const match = /^var\(--([a-z0-9-]+)\)$/.exec(value);
   if (match) {
     const ic = match[1];
     if (ic === undefined) throw new Error("gecersiz var() referansi: " + value);
-    return cozumle(harita, ic, derinlik + 1);
+    return cozumle(lookup, ic, derinlik + 1);
   }
   return value;
 }
 
 /** Haritadan bir token okur; yoksa (örn. "#fff" gibi sabit bir renk) hex'i aynen döndürür. */
-function renk(harita: Map<string, string>, adVeyaHex: string): string {
+function colour(lookup: Map<string, string>, adVeyaHex: string): string {
   if (adVeyaHex.startsWith("#")) return adVeyaHex;
-  return cozumle(harita, adVeyaHex);
+  return cozumle(lookup, adVeyaHex);
 }
 
 type Esik = typeof NORMAL_METIN_ESIGI | typeof IKINCIL_ETIKET_ESIGI;
@@ -356,18 +356,18 @@ const CIFTLER: [string, string, string, Esik][] = [
 describe("token kontrastı — açık tema", () => {
   const { isOpen } = temaTokenlari(renderPage("x"));
 
-  it.each(CIFTLER)("%s", (_etiket, a, b, esik) => {
-    const oran = kontrastOrani(renk(isOpen, a), renk(isOpen, b));
-    expect(oran).toBeGreaterThanOrEqual(esik);
+  it.each(CIFTLER)("%s", (_etiket, a, b, threshold) => {
+    const ratio = kontrastOrani(colour(isOpen, a), colour(isOpen, b));
+    expect(ratio).toBeGreaterThanOrEqual(threshold);
   });
 });
 
 describe("token kontrastı — koyu tema", () => {
-  const { koyu } = temaTokenlari(renderPage("x"));
+  const { darkBlock } = temaTokenlari(renderPage("x"));
 
-  it.each(CIFTLER)("%s", (_etiket, a, b, esik) => {
-    const oran = kontrastOrani(renk(koyu, a), renk(koyu, b));
-    expect(oran).toBeGreaterThanOrEqual(esik);
+  it.each(CIFTLER)("%s", (_etiket, a, b, threshold) => {
+    const ratio = kontrastOrani(colour(darkBlock, a), colour(darkBlock, b));
+    expect(ratio).toBeGreaterThanOrEqual(threshold);
   });
 });
 
@@ -412,26 +412,26 @@ describe("SAPMALAR §2.5 — zemin dolgusu (fill, kenar DEĞİL): gövdeden (col
 
   it.each(FILL_TOKENLARI)("%s/color-bg — AÇIK temada", (name) => {
     const { isOpen } = temaTokenlari(renderPage("x"));
-    const diff = Math.abs(parlaklikHex(renk(isOpen, name)) - parlaklikHex(renk(isOpen, "color-bg")));
+    const diff = Math.abs(parlaklikHex(colour(isOpen, name)) - parlaklikHex(colour(isOpen, "color-bg")));
     expect(diff).toBeLessThanOrEqual(100);
   });
 
   it.each(FILL_TOKENLARI)("%s/color-bg — KOYU temada (reviewer'ın yakaladığı kusur: ÖNCEDEN hiç ezilmiyordu — neutral-400 fark 159, neutral-500 fark 128, ikisi de >100)", (name) => {
-    const { koyu } = temaTokenlari(renderPage("x"));
-    const diff = Math.abs(parlaklikHex(renk(koyu, name)) - parlaklikHex(renk(koyu, "color-bg")));
+    const { darkBlock } = temaTokenlari(renderPage("x"));
+    const diff = Math.abs(parlaklikHex(colour(darkBlock, name)) - parlaklikHex(colour(darkBlock, "color-bg")));
     expect(diff).toBeLessThanOrEqual(100);
   });
 
   it("--color-neutral-400 koyu temada ESKİ açık ham değerine (neutral-400, #bab6b6) EŞİT DEĞİL — bu, tam reviewer'ın bulduğu kusurdu", () => {
-    const { koyu } = temaTokenlari(renderPage("x"));
-    expect(cozumle(koyu, "color-neutral-400")).not.toBe("#bab6b6");
-    expect(cozumle(koyu, "color-neutral-400")).toBe("#444141");
+    const { darkBlock } = temaTokenlari(renderPage("x"));
+    expect(cozumle(darkBlock, "color-neutral-400")).not.toBe("#bab6b6");
+    expect(cozumle(darkBlock, "color-neutral-400")).toBe("#444141");
   });
 
   it("--color-neutral-500 koyu temada ESKİ açık ham değerine (neutral-500, #9b9797) EŞİT DEĞİL — tam reviewer'ın bulduğu kusurdu", () => {
-    const { koyu } = temaTokenlari(renderPage("x"));
-    expect(cozumle(koyu, "color-neutral-500")).not.toBe("#9b9797");
-    expect(cozumle(koyu, "color-neutral-500")).toBe("#605d5d");
+    const { darkBlock } = temaTokenlari(renderPage("x"));
+    expect(cozumle(darkBlock, "color-neutral-500")).not.toBe("#9b9797");
+    expect(cozumle(darkBlock, "color-neutral-500")).toBe("#605d5d");
   });
 });
 
@@ -441,9 +441,9 @@ describe("token ayrıştırma — bağlantı sınaması", () => {
   // değişirse (yeni bir token eklenir/silinirse) bu da değişmeli —
   // sabit bir sayı yerine "önemli miktarda token" iddia ediliyor.
   it("her iki temada da aynı token adları tanımlı", () => {
-    const { isOpen, koyu } = temaTokenlari(renderPage("x"));
+    const { isOpen, darkBlock } = temaTokenlari(renderPage("x"));
     expect(isOpen.size).toBeGreaterThan(15);
-    expect([...isOpen.keys()].sort()).toEqual([...koyu.keys()].sort());
+    expect([...isOpen.keys()].sort()).toEqual([...darkBlock.keys()].sort());
   });
 });
 
@@ -467,15 +467,15 @@ describe("tema anahtarı — :root[data-theme=\"dark\"] @media'daki koyu ezmesiy
   it("iki blok da AYNI token adlarını taşıyor", () => {
     const html = renderPage("x");
     const medya = medyaEzmesi(html);
-    const zorlanan = zorlananKoyuTokenlari(html);
-    expect(zorlanan.size).toBeGreaterThan(5);
-    expect([...medya.keys()].sort()).toEqual([...zorlanan.keys()].sort());
+    const forced = zorlananKoyuTokenlari(html);
+    expect(forced.size).toBeGreaterThan(5);
+    expect([...medya.keys()].sort()).toEqual([...forced.keys()].sort());
   });
 
   it("ortak her token AYNI ham değere çözülüyor", () => {
     const html = renderPage("x");
     const { isOpen } = temaTokenlari(html);
-    const zorlanan = zorlananKoyuTokenlari(html);
+    const forced = zorlananKoyuTokenlari(html);
     // var() zincirleri (ör. "--color-accent-100: var(--color-accent-900)")
     // EZİLMEYEN taban token'lara (color-accent-900 gibi) iniyor — bunlar
     // sadece açık :root'ta tanımlı, bu yüzden ÇÖZÜMLEME açığın üstüne
@@ -484,9 +484,9 @@ describe("tema anahtarı — :root[data-theme=\"dark\"] @media'daki koyu ezmesiy
     const medyaCozumlu = new Map(isOpen);
     for (const [name, value] of medyaEzmesi(html)) medyaCozumlu.set(name, value);
     const zorlananCozumlu = new Map(isOpen);
-    for (const [name, value] of zorlanan) zorlananCozumlu.set(name, value);
-    for (const name of zorlanan.keys()) {
-      expect(renk(zorlananCozumlu, name)).toBe(renk(medyaCozumlu, name));
+    for (const [name, value] of forced) zorlananCozumlu.set(name, value);
+    for (const name of forced.keys()) {
+      expect(colour(zorlananCozumlu, name)).toBe(colour(medyaCozumlu, name));
     }
   });
 });

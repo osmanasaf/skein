@@ -15,18 +15,18 @@ import { join } from "node:path";
  * (bkz. `hamKaydiYaz`). Bu olmasa `sonPortuYaz` sonra gelen bir `sonAkisiYaz`
  * portu, ya da tersi, SESSİZCE silerdi.
  */
-const DOSYA_ADI = "ekran.json";
+const FILE_NAME = "ekran.json";
 
 /** `port` alanı makul bir TCP portu mu — 0 ayrılmamış, 65535 üst sınır. */
-function gecerliPort(value: unknown): value is number {
+function validPort(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value > 0 && value <= 65535;
 }
 
 /** Üç hâlden biri — "sistem" (OS tercihini izle), "acik", "koyu". */
-export type Tema = "sistem" | "acik" | "koyu";
+export type Theme = "sistem" | "acik" | "koyu";
 
 /** `tema` alanı üç geçerli değerden biri mi. */
-function gecerliTema(value: unknown): value is Tema {
+function validTheme(value: unknown): value is Theme {
   return value === "sistem" || value === "acik" || value === "koyu";
 }
 
@@ -37,10 +37,10 @@ function gecerliTema(value: unknown): value is Tema {
  * Her iki alanın (`port`, `akis`) okuyucusu da BURADAN geçiyor: "bozuk
  * dosya kilitlemez" kuralının tek yeri, ikisi için ayrı ayrı yazılmıyor.
  */
-async function hamKaydiOku(root: string): Promise<Record<string, unknown>> {
+async function readRawRecord(root: string): Promise<Record<string, unknown>> {
   let text: string;
   try {
-    text = await readFile(join(root, ".skein", DOSYA_ADI), "utf8");
+    text = await readFile(join(root, ".skein", FILE_NAME), "utf8");
   } catch {
     return {};
   }
@@ -64,9 +64,9 @@ async function hamKaydiOku(root: string): Promise<Record<string, unknown>> {
  * geçerli. Hatırlanan port yalnızca bir İPUCU; kaybı turu durdurmaz, ekran
  * boş bir port seçerek açılmaya devam eder.
  */
-export async function sonPortuOku(root: string): Promise<number | undefined> {
-  const port = (await hamKaydiOku(root))["port"];
-  return gecerliPort(port) ? port : undefined;
+export async function readLastPort(root: string): Promise<number | undefined> {
+  const port = (await readRawRecord(root))["port"];
+  return validPort(port) ? port : undefined;
 }
 
 /**
@@ -79,8 +79,8 @@ export async function sonPortuOku(root: string): Promise<number | undefined> {
  * olabilir, bu fonksiyon o denetimi YAPMIYOR — "var mı, geçerli mi" sorusu
  * çağıranın işi.
  */
-export async function sonAkisiOku(root: string): Promise<string | undefined> {
-  const akis = (await hamKaydiOku(root))["akis"];
+export async function readLastFlow(root: string): Promise<string | undefined> {
+  const akis = (await readRawRecord(root))["akis"];
   return typeof akis === "string" && akis.trim() !== "" ? akis : undefined;
 }
 
@@ -94,9 +94,9 @@ export async function sonAkisiOku(root: string): Promise<string | undefined> {
  * davranır (ikisi de OS tercihini izler), bu yüzden ayrı bir "hiç
  * seçilmedi" durumu YOK.
  */
-export async function sonTemaOku(root: string): Promise<Tema | undefined> {
-  const tema = (await hamKaydiOku(root))["tema"];
-  return gecerliTema(tema) ? tema : undefined;
+export async function readLastTheme(root: string): Promise<Theme | undefined> {
+  const tema = (await readRawRecord(root))["tema"];
+  return validTheme(tema) ? tema : undefined;
 }
 
 /**
@@ -109,14 +109,14 @@ export async function sonTemaOku(root: string): Promise<Tema | undefined> {
  * atomik: `card/queue.ts`'teki kart yazma disipliniyle aynı, yarım yazılmış
  * bir dosya bir sonraki okumada "bozuk" sayılıp yok sayılır.
  */
-async function hamKaydiYaz(root: string, field: string, deger: unknown): Promise<void> {
+async function writeRawRecord(root: string, field: string, deger: unknown): Promise<void> {
   const dir = join(root, ".skein");
   await mkdir(dir, { recursive: true });
-  const mevcut = await hamKaydiOku(root);
+  const mevcut = await readRawRecord(root);
   const fresh = { ...mevcut, [field]: deger };
   const tmp = join(dir, `.tmp-${randomBytes(6).toString("hex")}`);
   await writeFile(tmp, JSON.stringify(fresh), "utf8");
-  await rename(tmp, join(dir, DOSYA_ADI));
+  await rename(tmp, join(dir, FILE_NAME));
 }
 
 /**
@@ -125,8 +125,8 @@ async function hamKaydiYaz(root: string, field: string, deger: unknown): Promise
  * `akis` alanı AYNEN kalır (bkz. `hamKaydiYaz`) — port hatırlama ile akış
  * hatırlama birbirinden bağımsız iki özellik, biri ötekini silmemeli.
  */
-export async function sonPortuYaz(root: string, port: number): Promise<void> {
-  await hamKaydiYaz(root, "port", port);
+export async function writeLastPort(root: string, port: number): Promise<void> {
+  await writeRawRecord(root, "port", port);
 }
 
 /**
@@ -137,8 +137,8 @@ export async function sonPortuYaz(root: string, port: number): Promise<void> {
  * seçiciyle değiştirilen akış ekranda görünür ama bir sonraki `npm start`
  * hâlâ eski kaydı okurdu.
  */
-export async function sonAkisiYaz(root: string, akis: string): Promise<void> {
-  await hamKaydiYaz(root, "akis", akis);
+export async function writeLastFlow(root: string, akis: string): Promise<void> {
+  await writeRawRecord(root, "akis", akis);
 }
 
 /**
@@ -149,12 +149,12 @@ export async function sonAkisiYaz(root: string, akis: string): Promise<void> {
  * `server.ts`) bunu çağırıyor; sayfa yenilenince `GET /` aynı dosyadan
  * okuyup `renderPage`'e veriyor (kart c-20261106-e62847).
  */
-export async function sonTemaYaz(root: string, tema: Tema): Promise<void> {
-  await hamKaydiYaz(root, "tema", tema);
+export async function writeLastTheme(root: string, tema: Theme): Promise<void> {
+  await writeRawRecord(root, "tema", tema);
 }
 
 /** `EADDRINUSE` mi — başka biri o portu tutuyor demek. */
-function portDolu(error: unknown): boolean {
+function portBusy(error: unknown): boolean {
   return (error as NodeJS.ErrnoException | undefined)?.code === "EADDRINUSE";
 }
 
@@ -177,30 +177,30 @@ function portDolu(error: unknown): boolean {
  * sahte bir fonksiyon vererek "dolu port" senaryosunu GERÇEK bir soket
  * açmadan üretir.
  */
-export async function portuHatirlayarakAc<T extends { port: number }>(
+export async function openRememberingPort<T extends { port: number }>(
   root: string,
   explicitPort: number | undefined,
   open: (port: number | undefined) => Promise<T>,
 ): Promise<T> {
   if (explicitPort !== undefined) {
     const result = await open(explicitPort);
-    await sonPortuYaz(root, result.port);
+    await writeLastPort(root, result.port);
     return result;
   }
 
-  const hatirlanan = await sonPortuOku(root);
-  if (hatirlanan !== undefined) {
+  const remembered = await readLastPort(root);
+  if (remembered !== undefined) {
     try {
-      const result = await open(hatirlanan);
-      await sonPortuYaz(root, result.port);
+      const result = await open(remembered);
+      await writeLastPort(root, result.port);
       return result;
     } catch (error) {
-      if (!portDolu(error)) throw error;
+      if (!portBusy(error)) throw error;
       // Düş: boş port seç.
     }
   }
 
   const result = await open(undefined);
-  await sonPortuYaz(root, result.port);
+  await writeLastPort(root, result.port);
   return result;
 }

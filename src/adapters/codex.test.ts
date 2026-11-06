@@ -117,7 +117,7 @@ describe("CodexCliAdapter — son mesaj dosyası", () => {
   it("son mesaj dosyasını çalışma dizinine bırakmaz", async () => {
     const bin = await fakeCli({ lastMessage: "x" });
     await new CodexCliAdapter({ model: "m", bin }).invoke(req());
-    const kalanlar = await readdir(root);
-    expect(kalanlar.filter((f) => f.includes("last-message"))).toEqual([]);
+    const remaining = await readdir(root);
+    expect(remaining.filter((f) => f.includes("last-message"))).toEqual([]);
   });
 });

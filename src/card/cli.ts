@@ -112,7 +112,7 @@ function printCard(card: Card): void {
  * aynı işi ikinci kez, para harcayarak yaptırır. Gözcünün kilidi tam bunu
  * önlemek için var ve bu iki yol ona bakmıyordu.
  */
-async function gozcuVarsaDur(root: string, komut: string): Promise<string | null> {
+async function stopIfWatcher(root: string, komut: string): Promise<string | null> {
   const lockPath = join(root, ".skein", "daemon.json");
   const holder: LockInfo | null = await liveLock(lockPath);
   if (holder === null) return null;
@@ -187,7 +187,7 @@ async function run(argv: string[], root: string): Promise<number> {
         console.log(USAGE);
         return 1;
       }
-      const blockage = await gozcuVarsaDur(root, "take");
+      const blockage = await stopIfWatcher(root, "take");
       if (blockage !== null) {
         console.error(`✗ ${blockage}`);
         return 1;
@@ -291,7 +291,7 @@ async function run(argv: string[], root: string): Promise<number> {
     }
 
     case "recover": {
-      const blockage = await gozcuVarsaDur(root, "recover");
+      const blockage = await stopIfWatcher(root, "recover");
       if (blockage !== null) {
         console.error(`✗ ${blockage}`);
         return 1;

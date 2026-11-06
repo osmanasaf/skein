@@ -1,6 +1,6 @@
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
-import { gateKind, planGateEntry, type Card, type CardState, type PlanKabul } from "../card/card.js";
+import { gateKind, planGateEntry, type Card, type CardState, type PlanAcceptance } from "../card/card.js";
 import { isOrphan, isStale } from "../card/orphan.js";
 import type { CardQueue } from "../card/queue.js";
 import { readEvents, type SkeinEvent } from "../events/log.js";
@@ -78,7 +78,7 @@ export interface UiModel {
      * ile gerçek kart sayısını veriyor. Ekran başlığı bunu okuyor, kendi
      * sayımını İCAT ETMİYOR (bkz. `page.ts` kuyruk engeli bandı).
      */
-    engelliKart: number;
+    blockedCards: number;
   };
   /**
    * Ayrıştırılamayan kart dosyalarının yolları.
@@ -183,7 +183,7 @@ export interface UiCard {
    * götürüyor. Gerçek sebep yalnızca gerekçe satırında, rozet metniyle
    * çelişerek duruyordu.
    */
-  planKilidi: boolean;
+  planLock: boolean;
   /**
    * `back` kararının gideceği rol — yoksa `null`.
    *
@@ -193,7 +193,7 @@ export interface UiCard {
    * geri gönderdiğini sanıyordu. Model bu alanı taşımadığı için ekran
    * ayırt edemiyordu.
    */
-  geriHedef: string | null;
+  backTarget: string | null;
   gateReason: string | null;
   /** Bu kart için yapılan tur sayısı. */
   turns: number;
@@ -269,7 +269,7 @@ export interface UiCard {
    * İnsan kapısında "üretici haklı / denetçi haklı" kararını verirken
    * kararın dayanağı ekranda görünmek zorunda.
    */
-  plan: { path: string; hash: string; kabuller?: PlanKabul[] } | null;
+  plan: { path: string; hash: string; kabuller?: PlanAcceptance[] } | null;
 }
 
 export interface UiStep {
@@ -382,7 +382,7 @@ export async function buildModel(options: BuildOptions): Promise<UiModel> {
       costUsd: ui.reduce((sum, c) => sum + c.costUsd, 0),
       unmeasured: ui.reduce((sum, c) => sum + c.unmeasured, 0),
       activations: events.filter((e) => e.type === "agent.started").length,
-      engelliKart: kartSayisi(blockages),
+      blockedCards: cardCount(blockages),
     },
     corrupt: await options.queue.bozuklar(),
     blockages,
@@ -410,7 +410,7 @@ export async function buildModel(options: BuildOptions): Promise<UiModel> {
  * bir kart/kuyruk dosyasını işaret eder — eski anlam korunuyor: her PATH
  * ayrı bir karttır.
  */
-export function kartSayisi(blockages: UiEngel[]): number {
+export function cardCount(blockages: UiEngel[]): number {
   const gruplar = new Set<string>();
   for (const blockage of blockages) {
     gruplar.add(blockage.code === "KIRLI" ? `rol:${blockage.role}` : `yol:${blockage.path}`);
@@ -441,13 +441,13 @@ export function kartSayisi(blockages: UiEngel[]): number {
  * (yoksa `undefined`), çıktı bir boolean. DOM yok, I/O yok — `surenEngeller`
  * günlüğü zaten okudu, bu fonksiyon sadece karar veriyor.
  */
-export function kirliSuruyorMu(blockage: UiEngel, sonTurBaslangici: string | undefined): boolean {
+export function kirliSuruyorMu(blockage: UiEngel, lastTurnStart: string | undefined): boolean {
   // Bu rol hiç tur başlatmamışsa (ya da engelden önce başlatılmışsa) ağacın
   // o zamandan beri temizlendiğine dair bir kanıt yok: engel hâlâ sürüyor
   // sayılır — bilmiyorsak çözülmüş SAYMIYORUZ, aynı projenin "bilmiyorsak
   // başlatma" ilkesi.
-  if (sonTurBaslangici === undefined) return true;
-  return sonTurBaslangici <= blockage.at;
+  if (lastTurnStart === undefined) return true;
+  return lastTurnStart <= blockage.at;
 }
 
 /**
@@ -475,10 +475,10 @@ async function surenEngeller(events: SkeinEvent[]): Promise<UiEngel[]> {
   // `kirliSuruyorMu`'nun ihtiyaç duyduğu tek ek bilgi: rol başına bilinen
   // en yeni `agent.started` anı. Aynı günlükten, ek I/O yok — olaylar
   // sırayla okunuyor, o yüzden son yazım kazanıyor.
-  const sonTurBaslangici = new Map<string, string>();
+  const lastTurnStart = new Map<string, string>();
   for (const event of events) {
     if (event.type !== "agent.started") continue;
-    sonTurBaslangici.set(event.role, event.at);
+    lastTurnStart.set(event.role, event.at);
   }
 
   const suren: UiEngel[] = [];
@@ -486,7 +486,7 @@ async function surenEngeller(events: SkeinEvent[]): Promise<UiEngel[]> {
     if (blockage.code === "KIRLI") {
       // Dosyanın varlığı bu kod için hiçbir şey söylemiyor (bkz.
       // `kirliSuruyorMu`); karar olay günlüğünden türüyor.
-      if (kirliSuruyorMu(blockage, sonTurBaslangici.get(blockage.role))) suren.push(blockage);
+      if (kirliSuruyorMu(blockage, lastTurnStart.get(blockage.role))) suren.push(blockage);
       continue;
     }
     // Diğer kodlarda yol bir kart/kuyruk dosyası: dosya yerinde değilse
@@ -530,8 +530,8 @@ function toUiCard(
   for (const event of events) {
     if (event.type !== "agent.finished") continue;
     durationMs += event.durationMs;
-    const dolar = event.usage?.costUsd;
-    if (typeof dolar === "number") costUsd += dolar;
+    const usd = event.usage?.costUsd;
+    if (typeof usd === "number") costUsd += usd;
     else unmeasured += 1;
     tokens += (event.usage?.inputTokens ?? 0) + (event.usage?.outputTokens ?? 0);
   }
@@ -558,10 +558,10 @@ function toUiCard(
     role: card.role,
     state: card.state,
     gate: gateKind(card),
-    planKilidi: planGateEntry(card) !== null,
+    planLock: planGateEntry(card) !== null,
     // Kartın KENDİ topolojisinden: kapı kararını da `kapiKarari` oradan
     // okuyor, yani düğme ile çekirdek aynı kaynağa bakıyor.
-    geriHedef: roleOf(card.topology, card.role)?.reject ?? null,
+    backTarget: roleOf(card.topology, card.role)?.reject ?? null,
     gateReason: lastGateReason(card),
     turns,
     rejects,
