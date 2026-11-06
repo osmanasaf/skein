@@ -2,7 +2,15 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { portuHatirlayarakAc, sonAkisiOku, sonAkisiYaz, sonPortuOku, sonPortuYaz } from "./port-memory.js";
+import {
+  portuHatirlayarakAc,
+  sonAkisiOku,
+  sonAkisiYaz,
+  sonPortuOku,
+  sonPortuYaz,
+  sonTemaOku,
+  sonTemaYaz,
+} from "./port-memory.js";
 
 let root: string;
 
@@ -157,6 +165,62 @@ describe("port ve akış hafızası birbirini EZMİYOR", () => {
     await sonAkisiYaz(root, "gunluk-tek");
     const entries = await import("node:fs/promises").then((m) => m.readdir(join(root, ".skein")));
     expect(entries).toEqual(["ekran.json"]);
+  });
+});
+
+/**
+ * TEMA ANAHTARININ HAFIZASI — kart c-20261106-e62847.
+ *
+ * `sonPortuOku`/`sonAkisiOku` ile AYNI "bozuk kayıt kilitlemez" kuralı,
+ * üçüncü alan (`tema`) için. Üç geçerli değer DIŞINDA hiçbir şey kabul
+ * edilmiyor — "açık"/"koyu" gibi yanlış yazılmış bir değer de BOZUK kayıt
+ * sayılır, sessizce "sistem"e düşülür (çağıran taraf `undefined`'ı öyle
+ * yorumluyor).
+ */
+describe("sonTemaOku", () => {
+  it("dosya yoksa undefined döner — ilk açılışta hafıza boş sayılır", async () => {
+    expect(await sonTemaOku(root)).toBeUndefined();
+  });
+
+  it("sonTemaYaz ile yazılan tema geri okunur", async () => {
+    await sonTemaYaz(root, "koyu");
+    expect(await sonTemaOku(root)).toBe("koyu");
+  });
+
+  it("üç geçerli değerin hepsi kabul edilir", async () => {
+    for (const tema of ["sistem", "acik", "koyu"] as const) {
+      await sonTemaYaz(root, tema);
+      expect(await sonTemaOku(root)).toBe(tema);
+    }
+  });
+
+  it("bozuk JSON engel olmuyor — undefined döner, fırlatmaz", async () => {
+    await mkdir(join(root, ".skein"), { recursive: true });
+    await writeFile(join(root, ".skein", "ekran.json"), "{ bu json degil", "utf8");
+    await expect(sonTemaOku(root)).resolves.toBeUndefined();
+  });
+
+  it("tema alanı geçersiz bir metinse (üç değerden biri DEĞİLSE) yok sayılır", async () => {
+    await mkdir(join(root, ".skein"), { recursive: true });
+    await writeFile(join(root, ".skein", "ekran.json"), JSON.stringify({ tema: "açık" }), "utf8");
+    expect(await sonTemaOku(root)).toBeUndefined();
+  });
+
+  it("tema alanı metin değilse yok sayılır", async () => {
+    await mkdir(join(root, ".skein"), { recursive: true });
+    await writeFile(join(root, ".skein", "ekran.json"), JSON.stringify({ tema: 1 }), "utf8");
+    expect(await sonTemaOku(root)).toBeUndefined();
+  });
+});
+
+describe("port/akış/tema hafızası birbirini EZMİYOR", () => {
+  it("üçü de bağımsız — biri yazılınca ötekiler SİLİNMİYOR", async () => {
+    await sonPortuYaz(root, 7777);
+    await sonAkisiYaz(root, "gunluk-tek");
+    await sonTemaYaz(root, "koyu");
+    expect(await sonPortuOku(root)).toBe(7777);
+    expect(await sonAkisiOku(root)).toBe("gunluk-tek");
+    expect(await sonTemaOku(root)).toBe("koyu");
   });
 });
 

@@ -17,6 +17,7 @@ import { liveLock } from "../watch/lock.js";
 import { snapshot, type TopologySnapshot } from "../flow/snapshot.js";
 import { buildDetail, buildModel, buildSteps, type DetailOptions, type UiModel } from "./model.js";
 import { renderPage } from "./page.js";
+import { sonTemaOku, sonTemaYaz, type Tema } from "./port-memory.js";
 
 /** Ekranın baktığı akışın yaşayan hâli. */
 export interface CanliAkis {
@@ -469,6 +470,9 @@ function yetkili(
  *   GET  /adimlar?kart=...    kartın güncel aktivasyonunun TAM adım izi
  *                             (DEVIR.md §6, Ajanlar sekmesi — GERÇEKTEN
  *                             yeni uç, bkz. tasarim/SAPMALAR.md §3)
+ *   POST /tema                üst çubuktaki tema anahtarının seçimini
+ *                             `.skein/ekran.json`'a kalıcı yazar (kart
+ *                             c-20261106-e62847)
  *
  * Yazan uç noktalar KOMUT gönderiyor: yüzey kendi kopyasını
  * güncellemiyor, `queue.release()` çağırıyor ve cevabı çekirdeğin ürettiği
@@ -1096,6 +1100,39 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
       return;
     }
 
+    if (req.method === "POST" && path === "/tema") {
+      const hata = yetkili(req, token, adlar, portu());
+      if (hata !== null) {
+        res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ hata }));
+        return;
+      }
+      readBody(req)
+        .then(async (body) => {
+          const istek = JSON.parse(body === "" ? "{}" : body) as { tema?: unknown };
+          const tema = istek.tema;
+          // ÜYELİK: üç değerden biri DEĞİLSE reddedilir — bir yazım hatası
+          // (ör. "açık" İ'siz yazılmamış "acik" DEĞİL) sessizce "sistem"e
+          // düşürülmez, istemciye AÇIKÇA hata döner. `sonTemaOku`'nun
+          // "bozuk kayıt kilitlemez" kuralı OKUMA için; bu BİR YAZMA, ve
+          // yazan taraf (bu ekranın kendi JS'i) her zaman geçerli bir
+          // değer gönderecek — geçersizse BİR KUSUR var, örtülmemeli.
+          if (tema !== "sistem" && tema !== "acik" && tema !== "koyu") {
+            throw new Error("Geçersiz tema: " + JSON.stringify(tema));
+          }
+          await sonTemaYaz(options.root, tema as Tema);
+        })
+        .then(() => {
+          res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ ok: true }));
+        })
+        .catch((error: unknown) => {
+          res.writeHead(400, { "content-type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ hata: (error as Error).message }));
+        });
+      return;
+    }
+
     if (req.method !== "GET") {
       res.writeHead(405, { "content-type": "text/plain; charset=utf-8" });
       res.end("Bu uç nokta yalnızca okur.");
@@ -1248,15 +1285,27 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
     }
 
     if (path === "/" || path === "/index.html") {
-      res.writeHead(200, {
-        "content-type": "text/html; charset=utf-8",
-        // Jeton gömülü: sayfa önbelleğe alınırsa eski jetonla açılır.
-        "cache-control": "no-store",
+      // Tema hatırlaması DİSKTEN okunuyor (kart c-20261106-e62847,
+      // port-memory.ts) — bu yüzden bu uç artık ASENKRON. `sonTemaOku`
+      // kendi "bozuk kayıt kilitlemez" kuralını taşıyor (hiçbir zaman
+      // fırlatmaz): dosya yoksa/bozuksa `undefined` döner, `renderPage`
+      // onu "sistem" sayar — bir bozuk `ekran.json` ekranın AÇILMASINI
+      // engellemez.
+      sonTemaOku(options.root).then((tema) => {
+        res.writeHead(200, {
+          "content-type": "text/html; charset=utf-8",
+          // Jeton gömülü: sayfa önbelleğe alınırsa eski jetonla açılır.
+          "cache-control": "no-store",
+        });
+        // Gözcü ayarı da jetonla AYNI nedenle gömülü: `options.gozcu`
+        // sürecin ömrü boyunca değişmiyor (DEVIR.md'nin "unmanaged" durumu,
+        // kart c-20261105-92d731) — AKISLAR'ın "bir kez oku" ilkesiyle AYNI.
+        res.end(renderPage(
+          token,
+          options.gozcu ? { bayraklar: [...options.gozcu.bayraklar] } : null,
+          tema ?? "sistem",
+        ));
       });
-      // Gözcü ayarı da jetonla AYNI nedenle gömülü: `options.gozcu`
-      // sürecin ömrü boyunca değişmiyor (DEVIR.md'nin "unmanaged" durumu,
-      // kart c-20261105-92d731) — AKISLAR'ın "bir kez oku" ilkesiyle AYNI.
-      res.end(renderPage(token, options.gozcu ? { bayraklar: [...options.gozcu.bayraklar] } : null));
       return;
     }
 

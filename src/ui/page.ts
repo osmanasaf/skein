@@ -21,15 +21,31 @@
  * `GOZCU_AYAR` yorumu, DEVIR.md'nin "unmanaged" durumu). `JSON.stringify`
  * tırnak İÇİNE değil DOĞRUDAN gömülüyor — `JETON`'un aksine bu bir nesne/
  * `null`, dize değil; tırnaklamak geçersiz bir JS ifadesi üretirdi.
+ *
+ * `tema` — kart c-20261106-e62847, `.skein/ekran.json`'da hatırlanan tema
+ * seçimi (`port-memory.ts`'teki `sonTemaOku`). `<html>`'in `data-theme`
+ * niteliği BURADA, SUNUCUDA basılıyor — istemci JS'i beklemiyor, yani ilk
+ * boyamada YANLIŞ temanın bir an görünüp sonra değişmesi (FOUC) YOK.
+ * "sistem" nitelik EKLEMİYOR (OS tercihini izleyen `@media` bloğu zaten
+ * bunu yapıyor); "acik"/"koyu" sırasıyla `data-theme="light"`/`"dark"`
+ * basıyor. Geçersiz bir değer (ileride bir mutasyon/elle bozma) sessizce
+ * "sistem"e düşüyor — bozuk tema kaydı ekranı AÇILMAZ hâle getirmemeli,
+ * `sonTemaOku`'nun kendi "bozuk kayıt kilitlemez" kuralıyla AYNI ilke.
  */
-export function renderPage(token: string, gozcu: { bayraklar: string[] } | null = null): string {
+export function renderPage(
+  token: string,
+  gozcu: { bayraklar: string[] } | null = null,
+  tema: "sistem" | "acik" | "koyu" = "sistem",
+): string {
+  const nitelik = tema === "acik" ? ' data-theme="light"' : tema === "koyu" ? ' data-theme="dark"' : "";
   return PAGE
+    .replace("__TEMA_NITELIGI__", nitelik)
     .replace("__JETON__", token)
     .replace("__GOZCU_AYAR__", JSON.stringify(gozcu));
 }
 
 const PAGE = `<!doctype html>
-<html lang="tr">
+<html lang="tr"__TEMA_NITELIGI__>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -37,12 +53,20 @@ const PAGE = `<!doctype html>
 <style>
   /*
    * GÖKYÜZÜ VE İZ. "skein" bir kaz sürüsünün V dizilişi — palet bunu
-   * taşıyor: zemin geniş ve sakin, soğuk gri-mavi bir gökyüzü; kartlar o
-   * zeminin üstünde duran AÇIK paneller; ince açık çizgiler "uçuş izi".
-   * TEK bir sıcak renk var (--gate) ve o yalnızca insan kararı bekleyen
-   * yerler için ayrılmış — kapı, uyarı, engel. Önceki palette kapı
-   * sarısı ile vurgu yeşili AYNI ANDA bağırıyordu; burada --accent sakin
-   * bir gökyüzü mavisi, sıcaklık tek yerde kalıyor.
+   * taşıyor: zemin geniş ve sakin, kartlar o zeminin üstünde duran AÇIK
+   * paneller; ince açık çizgiler "uçuş izi". TEK bir sıcak renk var
+   * (--gate) ve o yalnızca insan kararı bekleyen yerler için ayrılmış —
+   * kapı, uyarı, engel. Önceki palette kapı sarısı ile vurgu yeşili AYNI
+   * ANDA bağırıyordu; burada --accent sakin bir gökyüzü mavisi, sıcaklık
+   * tek yerde kalıyor.
+   *
+   * ZEMİN artık İKİ temada İKİ ayrı karakter (kart c-20261106-e62847,
+   * UX.md §3.2): AÇIKTA Modernist'in nötr grisi (--bg Modernist
+   * --color-bg'ye hizalı, bkz. aşağıdaki token yorumu — gövde ile üst
+   * çubuk/paneller artık AYNI paleti paylaşıyor), KOYUDA hâlâ bu bloğun
+   * kendi soğuk gri-mavi "gökyüzü" ailesi (--bg: #0B1118, aşağıdaki
+   * @media bloğu) — o kısmın değiştirilmesi bu kartın görev metninin
+   * kapsamı DIŞINDA ("açık temada" diyor), bkz. aynı yorum.
    *
    * --reject-ink / --reject AYRIMI kasıtlı (gate/gate-ink'teki ayrımın
    * aynısı): --reject kenarlık ve dolgu (yetim kart kapatma düğmesinin
@@ -53,8 +77,23 @@ const PAGE = `<!doctype html>
    * aynı değeri taşıyabiliyor çünkü çatışma yalnızca koyu zeminde çıkıyor.
    */
   :root {
-    /* yüzeyler: soğuk gri-mavi zemin, beyaz panel */
-    --bg: #E7ECF2; --surface: #FFFFFF; --surface-2: #EEF2F7;
+    /*
+     * --bg'nin AÇIK değeri — kart c-20261106-e62847, UX.md §3.2 bonusu.
+     * ÖNCEDEN #E7ECF2 (gökyüzü paleti, bu bloğun üstteki yorumunun kendi
+     * mavimsi zemini) — ama gövde (body, aşağıda "background: var(--bg)")
+     * bunu kullanıyordu ve Modernist'e geçen üst çubuk/panellerle (--color-bg,
+     * #f3f2f2, nötr gri) AYNI ekranda İKİ ayrı palet duruyordu (UX.md'nin
+     * ölçtüğü: "body rgb(231, 236, 242) — mavimsi ... Modernist zemin
+     * #f3f2f2 (nötr gri)"). Değer burada --color-bg'NİN AÇIK hex'iyle
+     * BİREBİR aynı yapıldı — yeni renk icat edilmiyor, var olan Modernist
+     * zemine hizalanıyor. KOYU ezmesi (aşağıda, @media bloğu) BİLEREK
+     * DOKUNULMADI: görev metni açıkça "açık temada" diyor, ve koyu
+     * değeri (#0B1118) tarayici.test.ts'te başka sınamalarla ("gökyüzü
+     * paleti: koyu temada", "#bar koyu temada ... document.body") zaten
+     * PİNLİ — bu bonus o sınamaları kırmadan yalnızca İSTENEN yarıyı
+     * düzeltiyor.
+     */
+    --bg: #f3f2f2; --surface: #FFFFFF; --surface-2: #EEF2F7;
     --ink: #15212C; --ink-2: #4C5B6B; --ink-3: #6E7B89;
     --line: #C9D3DD; --line-soft: #E7ECF2;
     /* tek SAKİN vurgu — gökyüzü mavisi, kapıyla yarışmaz */
@@ -167,6 +206,39 @@ const PAGE = `<!doctype html>
      * ESIGI'nin (3) bile altında. Yeni renk YOK — ramptan doğru adım.
      */
     --bad-ink: var(--color-accent-700);
+
+    /* ------------------------------------------------------------------
+     * SOLID-* — kart c-20261106-e62847 (koyu tema + accent rampası).
+     *
+     * --color-accent-700/800 AŞAĞIDA koyu temada ESKİ anlamlarını
+     * KAYBEDİYOR: bu karttan önce ikisi "dolgulu beyaz-metin düğme" VE
+     * "accent-100 zemin üstünde metin" rollerinin İKİSİNİ birden
+     * taşıyordu, ki bu tam SAPMALAR'ın şimdi düzelttiği kusurun kökü —
+     * ".railKapiKutu" (accent-100) koyu temada hiç ezilmediği için
+     * accent-700/800 "ikisinde de aynı" kalabiliyordu. accent-100 artık
+     * koyu temada EZİLİYOR (aşağıda), yani accent-700/800'ün "zemin
+     * üstünde metin" rolü ARTIK TERS yöne (açık) dönmek ZORUNDA —
+     * ama "dolgulu beyaz-metin düğme" rolü (.yeniKart, .navRozet-accent,
+     * .railBtn.primary, formasyon "+" dairesi) AYNI KOYU değeri İSTİYOR,
+     * yoksa beyaz metin açık bir zemine biner (okunmaz). Aynı token adı
+     * iki çelişen rolü taşıyamaz — bu yüzden dolgulu-düğme rolü KENDİ
+     * değişmez adına taşındı. Değerler YENİ İCAT EDİLMİYOR: ikisi de
+     * accent-700/800'ün ZATEN VAR OLAN, değişmeyen ham hex'i (#ae1800/
+     * #7c1405) — sadece token ADI ayrıştı, renk aynı.
+     * ------------------------------------------------------------------ */
+    --solid-accent: #ae1800;       /* = color-accent-700'ün ham değeri, HER ZAMAN koyu (beyaz metinle) */
+    --solid-accent-hover: #7c1405; /* = color-accent-800'ün ham değeri, aynı sebep */
+    /*
+     * TOAST-BG — ".bildirim" için AYNI ayrışma, neutral-900 üzerinde.
+     * DEVIR.md "koyu zemin, temadan bağımsız" diyor (bkz. aşağıdaki eski
+     * yorum, artık ".bildirim" kuralının yanına taşındı) — ama
+     * color-neutral-900 artık KENDİSİ de ".akisKart-panoda"/
+     * ".promptlarOge-secili"/".railBaslikBtn" gibi accent-100 zemini
+     * üstünde METİN rolünde kullanılıyor, o rol koyu temada AÇIK olmak
+     * zorunda. Toast'un "her zaman koyu" sözü ayrı bir ada taşınmadan bu
+     * ikisi çakışırdı.
+     */
+    --toast-bg: #2d2b2b;           /* = color-neutral-900'ün ham değeri, HER ZAMAN koyu */
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
@@ -190,16 +262,10 @@ const PAGE = `<!doctype html>
        * gibi değerler de modernist.css'te YOK, bu kart ÖNCESİNDE icat edilmiş.
        *
        * Hangi beş token: .bar ve altındakiler GERÇEKTEN bunları tüketiyor
-       * (bkz. .bar/.marka/.navRozet-notr/.sayac kuralları, yukarıda). Diğer
-       * Modernist token'lar (color-surface hariç — o da gerekti, aşağıda)
-       * henüz hiçbir seçicide KULLANILMIYOR (örn. color-neutral-100/800,
-       * color-accent-100..900, queue-square-*, daemon-dot-stopping-*,
-       * empty-bird-ink) — SAPMALAR'daki "token var, seçici yok" deseninin
-       * aynısı, bu kart onları tüketmiyor, koyu ezmesi de onlara eklenmedi;
-       * ekleyen kart bu sorumluluğu üstlenecek. queue-square-border ve
-       * daemon-dot-off/stopping-border zaten var(--color-text) ÜZERİNDEN
-       * geliyor (satır 131/133/135), yani color-text'in bu ezmesi onları da
-       * otomatik düzeltiyor — ayrıca tanımlamaya gerek yok.
+       * (bkz. .bar/.marka/.navRozet-notr/.sayac kuralları, yukarıda).
+       * queue-square-border ve daemon-dot-off/stopping-border zaten
+       * var(--color-text) ÜZERİNDEN geliyor, yani color-text'in bu ezmesi
+       * onları da otomatik düzeltiyor — ayrıca tanımlamaya gerek yok.
        *
        * color-text LIGHT olunca (koyu zeminde okunsun diye), ona bağlı
        * ZEMİN rolündeki iki token da TERS çevrilmek zorunda — yoksa açık
@@ -217,9 +283,7 @@ const PAGE = `<!doctype html>
        * 10.24:1, text/neutral-200 11.25:1 — hepsi NORMAL_METIN_ESIGI'ni
        * (4.5) rahatça geçiyor. color-accent (#ec3013, DEĞİŞMEDİ) kendi
        * zemininin yeni koyu değeriyle 4.21:1 — IKINCIL_ETIKET_ESIGI'yi (3,
-       * marka ikonu büyük grafik) geçiyor. color-accent-700 de DEĞİŞMEDİ
-       * (beyaz metinle zaten 7.17:1, kendi dolgusu — sayfa zeminine değil
-       * kendi rengine bağlı, tema değişse de aynı kalması marka tutarlılığı).
+       * marka ikonu büyük grafik) geçiyor.
        *
        * Kapı: tarayici.test.ts "#bar koyu temada koyulaşıyor" sınaması —
        * gerçek tarayıcıda getComputedStyle(#bar) ölçer, document.body'yi
@@ -228,6 +292,74 @@ const PAGE = `<!doctype html>
        */
       --color-bg: #1A1817; --color-surface: #242120; --color-text: #F2EFEE;
       --color-neutral-200: #35312F; --color-neutral-700: #C9C4C2;
+
+      /* ------------------------------------------------------------------
+       * ACCENT RAMPASI + color-neutral-900 — kart c-20261106-e62847.
+       *
+       * ÖLÇÜLEN KUSUR: yukarıdaki BEŞ token dışında accent-100..900'ün
+       * TAMAMI ve color-neutral-900 koyu temada hiç ezilmiyordu. Ekranda
+       * en görünür sonucu ".railKapiKutu" idi — zemini accent-100
+       * (#fff2ef), koyu gövdenin (#1A1817) üstünde rgb(255,242,239),
+       * parlaklık 245/255, ÖLÇÜLEN 338×267px bir blok: gövdeden
+       * neredeyse ayırt edilemeyen BEYAZ bir yüzey, ekranın en önemli
+       * kutusunun (kapı kararı) üstünde. Aynı kusur accent-100'ü zemin
+       * alan HER yerde tekrarlanıyordu (duzenleRol.duzenleVurgu,
+       * railGozcuUyari, akisKart-panoda, promptlarOge-secili,
+       * promptlarSiraAdim-vurgulu, ajanCanliEtiket, formasyonDugum.secili,
+       * railGozcuLogSatir .hata, akisKartHata) — hepsi AYNI token'a
+       * bağlı, tek satır düzeltiyor hepsini.
+       *
+       * İKİNCİ, DAHA SESSİZ kusur: accent-700/800 bazı yerlerde ÇIPLAK
+       * --color-bg/--color-surface üstünde metin/kenar olarak kullanılıyor
+       * (.formasyonRetEtiket, .formasyonKapiEtiket, .formasyonPlanEtiket,
+       * .duzenleAdGirisi.gecersiz, .duzenleIkonSil:hover) — bunlar accent-100
+       * kutusuna SARILI değil, ama AYNI ham renk (#ae1800/#7c1405) koyu
+       * zeminde de koyu kaldığı için OKUNMUYORDU. Ölçüldü: accent-700/bg
+       * 2.47:1, accent-800/bg 1.65:1 — IKINCIL_ETIKET_ESIGI'nin (3) bile
+       * altında. Bu ikisi şimdiye kadar hiçbir token-kontrast.test.ts
+       * girdisinde YOKTU (aşağıda eklendi) — SAPMALAR §2.7'nin uyardığı
+       * gibi "nitelik/sınıf doğru" sınanmış ama "ekranda okunuyor mu"
+       * hiç ölçülmemişti.
+       *
+       * YÖNTEM — YENİ RENK İCAT EDİLMİYOR, rampanın kendi basamakları
+       * TERS basamağa taşınıyor (100<->900, 200<->800, 300<->700):
+       * accent-100'ün koyu karşılığı rampanın EN KOYU ucu (900'ün ışık
+       * değeri), accent-700/800'ün koyu karşılığı EN AÇIK ucun yanı
+       * (300/200'ün ışık değeri) — "zemin" rolü koyulaşırken "o zemin
+       * üstündeki metin" rolü açılıyor, DEVIR'in kendi kontrast mantığı.
+       * accent-300/900/neutral-100 KENDİLERİ hiçbir seçicide KULLANILMIYOR
+       * (yalnızca bu yansımanın KAYNAĞI) ve bu kartta da tüketilmiyor —
+       * bu yüzden onlara AYRICA koyu ezmesi eklenmedi (üstteki "token var,
+       * seçici yok" emsali). accent-400/500/600 de aynı sebepten
+       * DOKUNULMADI: accent-400 zaten --bad-ink'in koyu değeri olarak
+       * (satır ~183) KENDİ ışık hâliyle doğru ölçülüyor — bu ramp
+       * basamağını da yansıtmak --bad-ink'in ZATEN TESTLİ 7.62:1 oranını
+       * sessizce değiştirirdi, bu kart o zinciri BOZMUYOR.
+       *
+       * color-accent-700/800'ün ESKİ "dolgulu beyaz-metin düğme" rolü
+       * (.yeniKart, .navRozet-accent, .railBtn.primary, formasyon "+"
+       * dairesi) bu yansımayla ÇAKIŞIRDI (beyaz metin artık açık bir
+       * zemine binerdi) — o rol --solid-accent/--solid-accent-hover'a
+       * taşındı (yukarıda, ışık :root'ta tanımlı, koyu temada HİÇ
+       * ezilmiyor). color-neutral-900'ün ESKİ "toast her zaman koyu"
+       * rolü de aynı sebepten --toast-bg'ye taşındı; ".bildirim" artık
+       * onu kullanıyor (aşağıda).
+       *
+       * Ölçüldü (token-kontrast.test.ts, iki temada ayrı ayrı — SAPMALAR
+       * §2.5): accent-700(ink)/accent-100(bg) koyuda 9.58:1, accent-800/
+       * accent-100 koyuda 11.71:1, neutral-900/accent-100 koyuda 13.32:1,
+       * accent-700/color-bg (çıplak) koyuda 11.66:1, accent-800/color-bg
+       * koyuda 14.25:1 — hepsi NORMAL_METIN_ESIGI'yi (4.5) geçiyor.
+       * accent-100(bg)'nin kendisi gövdeden (#1A1817) sadece ~14 parlaklık
+       * birimi uzakta — "100 birimden fazla sapan yüzey kalmasın" hedefi
+       * tutuyor (bkz. tarayici.test.ts "koyu temada kapı kutusu artık
+       * parlak bir yüzey değil").
+       * ------------------------------------------------------------------ */
+      --color-accent-100: var(--color-accent-900);
+      --color-accent-200: #7c1405;  /* = color-accent-800'ün IŞIK değeri — accent-800 BU bloğun kendisinde ters yöne döndüğü için var() zinciri KURULAMIYOR, literal gerekiyor */
+      --color-accent-700: var(--color-accent-300);
+      --color-accent-800: #ffe0d9;  /* = color-accent-200'ün IŞIK değeri — aynı sebep */
+      --color-neutral-900: var(--color-neutral-100);
 
       /*
        * BAD-INK koyu ezmesi — ramptaki #ae1800 (accent-700) koyu zeminde
@@ -238,6 +370,38 @@ const PAGE = `<!doctype html>
        */
       --bad-ink: var(--color-accent-400);
     }
+  }
+  /*
+   * TEMA ANAHTARI — kart c-20261106-e62847. Üstteki @media bloğu yalnızca
+   * OS "koyu" tercih EDİYORSA uygulanıyor; operatör anahtarla "koyu"yu
+   * AÇIKÇA seçtiğinde (OS açık olsa bile) koyu temanın uygulanması için
+   * @media koşulundan BAĞIMSIZ bir seçici gerekiyor. Bu dosya build
+   * adımsız, tek dosyalık kalmak için (bkz. dosya başı yorumu) bir CSS
+   * önişlemci/mixin kullanmıyor — bu yüzden yukarıdaki blok burada
+   * AYNEN tekrarlanıyor (CSS'in kendisinde "aynı gövdeyi iki seçiciye
+   * bağla" diye bir yapı yok: bir @media bloğu düz bir seçiciyle AYNI
+   * virgüllü listede olamaz). Gerekçe yorumları YUKARIDAKİ blokta —
+   * burada tekrar edilmiyor, DEĞERLER birebir aynı, iki kaynak değil tek
+   * kaynağın iki YERDE basılması (test bunu renderPage()'in ürettiği
+   * GERÇEK metinden okuyarak doğruluyor, token-kontrast.test.ts'teki
+   * "tema anahtarı" takımı).
+   */
+  :root[data-theme="dark"] {
+    --bg: #0B1118; --surface: #121A24; --surface-2: #1A2430;
+    --ink: #E8EEF4; --ink-2: #A9B7C4; --ink-3: #7C8997;
+    --line: #28333F; --line-soft: #141D27;
+    --accent: #3C72A8; --accent-ink: #8FC3EA; --accent-soft: #14222F; --accent-line: #3C5A78;
+    --accept: #6FBE86;
+    --reject: #7A2222; --reject-ink: #E08585;
+    --gate: #9A6A1E; --gate-bg: #241A0D; --gate-line: #4A3620; --gate-ink: #E8D3A8;
+    --color-bg: #1A1817; --color-surface: #242120; --color-text: #F2EFEE;
+    --color-neutral-200: #35312F; --color-neutral-700: #C9C4C2;
+    --color-accent-100: var(--color-accent-900);
+    --color-accent-200: #7c1405;
+    --color-accent-700: var(--color-accent-300);
+    --color-accent-800: #ffe0d9;
+    --color-neutral-900: var(--color-neutral-100);
+    --bad-ink: var(--color-accent-400);
   }
   * { box-sizing: border-box; }
   body {
@@ -299,7 +463,8 @@ const PAGE = `<!doctype html>
     display: inline-flex; align-items: center; justify-content: center; min-width: 18px;
     height: 18px; padding: 0 5px; font-size: var(--fs-11); font-weight: 700; line-height: 1;
   }
-  .navRozet-accent { background: var(--color-accent-700); color: #fff; }
+  /* --solid-accent: dolgulu beyaz-metin rozet, HER ZAMAN koyu (bkz. :root'taki SOLID-* yorumu). */
+  .navRozet-accent { background: var(--solid-accent); color: #fff; }
   .navRozet-notr { background: var(--color-neutral-200); color: var(--color-text); }
   #akisSecici {
     font: inherit; font-size: var(--fs-ui); font-family: var(--mono); min-height: 34px;
@@ -341,12 +506,30 @@ const PAGE = `<!doctype html>
   .spacer { flex: 1 1 auto; }
   .sayac { font-size: var(--fs-13); color: var(--label-ink); }
   .sayac b { color: var(--color-text); font-weight: 800; }
+  /* --solid-accent(-hover): dolgulu beyaz-metin düğme, HER ZAMAN koyu (bkz. :root'taki SOLID-* yorumu). */
   .yeniKart {
     font: inherit; font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-14);
     min-height: 40px; padding: 0 var(--space-5); border: none; cursor: pointer;
-    background: var(--color-accent-700); color: #fff;
+    background: var(--solid-accent); color: #fff;
   }
-  .yeniKart:hover { background: var(--color-accent-800); }
+  .yeniKart:hover { background: var(--solid-accent-hover); }
+  /*
+   * TEMA ANAHTARI — kart c-20261106-e62847 (DEVIR.md'de yok, UX.md'nin
+   * "operatör koyu temayı kapatamıyor" bulgusunun yaması). ".duzenleSegment"/
+   * ".duzenleSegmentBtn" (Rolleri Düzenle modunun tekil/toplu anahtarı,
+   * aşağıda) ile AYNI deseni izliyor — düğme grubu + "secili" sınıfı, YENİ
+   * bir etkileşim deseni İCAT EDİLMİYOR, yalnızca üst çubuğun ölçeğine
+   * (1px kenar, 28px yükseklik) küçültülüyor.
+   */
+  .temaAnahtari { display: flex; border: 1px solid var(--color-divider); flex: 0 0 auto; }
+  .temaBtn {
+    font: inherit; font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-11);
+    min-height: 28px; padding: 0 var(--space-3); border: none; background: none; color: var(--color-text);
+    cursor: pointer;
+  }
+  .temaBtn:not(:last-child) { border-right: 1px solid var(--color-divider); }
+  .temaBtn.secili { background: var(--color-text); color: var(--color-bg); }
+  .temaBtn:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
   .panoArac {
     display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-5) var(--sp-9);
     padding: var(--sp-6) 0;
@@ -455,6 +638,16 @@ const PAGE = `<!doctype html>
   .formasyonCikis text { fill: var(--color-text); }
   .formasyonCikis rect { fill: var(--color-surface); stroke: var(--color-text); stroke-width: 2; }
   .formasyonGiris:focus-visible circle { stroke: var(--color-text); stroke-width: 2; }
+  /*
+   * Bu iki etiket --color-bg üstünde ÇIPLAK fill kullanıyor (accent-100
+   * kutusuna sarılı DEĞİL). Kart c-20261106-e62847'den ÖNCE koyu temada
+   * ÖLÇÜLDÜ 2.47:1 (accent-700) / 1.65:1 (accent-800, formasyonPlanEtiket)
+   * — IKINCIL_ETIKET_ESIGI'nin (3) bile altında, yani koyu temada metin
+   * fiilen OKUNMUYORDU. accent-100'ün yanında accent-700/800'ün de
+   * koyu-temada açık bir değere dönmesiyle (bkz. @media bloğundaki ACCENT
+   * RAMPASI yorumu) bu artık koyuda 11.66:1/14.25:1 — token-kontrast.
+   * test.ts'e eklendi.
+   */
   .formasyonRetEtiket { font-size: var(--fs-12); font-weight: 600; fill: var(--color-accent-700); }
   /* Boyut skein-merkez-v3.html'den: insan onayı etiketi 13px (ret
      etiketinin 12px'inden farklı — ikisi de DEVIR.md'de açıkça verilmemiş,
@@ -489,17 +682,19 @@ const PAGE = `<!doctype html>
    * AYNI yapıyı kullanıyor (DEVIR.md ikisinde de "accent-100 kutu, üstte
    * 4px accent çizgi" diyor, bkz. railKapiKutu).
    *
-   * .railBaslikBtn burada KASITLI OLARAK --color-text KULLANMIYOR:
-   * --color-text koyu temada AÇIK renge dönüyor (bkz. yukarıdaki
-   * "@media (prefers-color-scheme: dark)" bloğu, satır ~196), ama bu
-   * kutunun zemini (--color-accent-100) HİÇ dönmüyor — SAPMALAR.md'nin
-   * ÖNCEDEN ÖLÇÜP REZERVE ETTİĞİ çift tam olarak bu (accent-800/accent-100,
-   * token-kontrast.test.ts'teki "Modernist kapı gerekçesi" girdisi, iki
-   * temada da AYNI sayılarla ölçülüp geçiyor çünkü hiçbiri değişmiyor).
-   * --color-text'i buraya katmak koyu temada açık yazıyı açık zemine
-   * bindirirdi (metin kaybolur) — SAPMALAR.md §2.5'in tam uyardığı kusur.
-   * --color-neutral-900 de tema tarafından HİÇ EZİLMİYOR, yani bu kutunun
-   * içinde --color-text'in YERİNE güvenle kullanılabilir.
+   * .railBaslikBtn burada KASITLI OLARAK --color-text KULLANMIYOR, hâlâ:
+   * --color-text koyu temada AÇIK renge dönüyor, ama bu kutunun zemini
+   * (--color-accent-100) koyu temada KOYU bir değere dönüyor (kart
+   * c-20261106-e62847, bkz. yukarıdaki @media bloğundaki ACCENT RAMPASI
+   * yorumu) — --color-text'i katmak açık yazıyı yine açık bir zemine
+   * BİNDİRİR, sadece zemin artık ESKİDEN farklı bir "açık" değil, KOYU.
+   * Bu yüzden --color-neutral-900 kullanılıyor: ESKİDEN (bu karttan önce)
+   * bu token da hiç ezilmiyordu ve çift "tema-değişmez" sayılıyordu; ŞİMDİ
+   * --color-neutral-900'ün KENDİSİ koyu temada AÇIK bir değere dönüyor
+   * (yukarıdaki ACCENT RAMPASI yorumu) — yani metin rengi ARTIK zeminle
+   * (accent-100) BİRLİKTE, ters yönde dönüyor: zemin koyulaşırken metin
+   * açılıyor. Ölçülen: accent-700/accent-100 koyuda 9.58:1, neutral-900/
+   * accent-100 koyuda 13.32:1 (token-kontrast.test.ts, iki tema ayrı ayrı).
    */
   .railKapiKutu {
     background: var(--color-accent-100); border-top: var(--border-accent) solid var(--color-accent);
@@ -536,8 +731,9 @@ const PAGE = `<!doctype html>
     border: var(--border-row) solid var(--color-text); background: var(--color-surface); color: var(--color-text);
   }
   .railBtn:hover:not(:disabled) { background: var(--color-neutral-200); }
-  .railBtn.primary { background: var(--color-accent-700); border-color: var(--color-accent-700); color: #fff; }
-  .railBtn.primary:hover:not(:disabled) { background: var(--color-accent-800); }
+  /* --solid-accent(-hover): dolgulu beyaz-metin düğme, HER ZAMAN koyu (bkz. :root'taki SOLID-* yorumu). */
+  .railBtn.primary { background: var(--solid-accent); border-color: var(--solid-accent); color: #fff; }
+  .railBtn.primary:hover:not(:disabled) { background: var(--solid-accent-hover); }
   .railBtn:disabled { opacity: .45; cursor: progress; }
   .railBtn:focus-visible, .railSatir:focus-visible, .railBaslikBtn:focus-visible, .railGeri:focus-visible {
     outline: var(--border-accent) solid var(--color-accent);
@@ -672,10 +868,11 @@ const PAGE = `<!doctype html>
   /*
    * accent-700 metin + accent-100 zemin — token-kontrast.test.ts'in
    * "Sağ panel kapı kutusu üst etiketi" çiftiyle AYNI, YENİ bir çift
-   * İCAT EDİLMİYOR (SAPMALAR.md §1). O çift TEMA-DEĞİŞMEZ (accent-100
-   * hiçbir zaman ezilmiyor) — HATA accent-700'ün düz --color-bg üstünde
-   * mi yoksa burada mı durduğu KOYU TEMADA ayrışırdı, bu yüzden zemin de
-   * BİRLİKTE taşınıyor.
+   * İCAT EDİLMİYOR (SAPMALAR.md §1). Bu çift artık (kart c-20261106-e62847)
+   * TEMA-DEĞİŞMEZ DEĞİL: accent-100 koyuda koyulaşıyor, accent-700 koyuda
+   * açılıyor — ikisi BİRLİKTE, ters yönde dönüyor (bkz. @media bloğundaki
+   * ACCENT RAMPASI yorumu), dolgulu rozet görünüşü DEVIR'in kendi tasarım
+   * kararı olarak kalıyor.
    */
   .duzenleHata {
     color: var(--color-accent-700); background: var(--color-accent-100);
@@ -748,12 +945,14 @@ const PAGE = `<!doctype html>
    * panelin ambient zemini --color-bg üstünde duruyordu — koyu temada
    * ÖLÇÜLDÜ 2.47:1, IKINCIL_ETIKET_ESIGI'nin (3:1) bile altında. YENİ bir
    * token çifti TÜRETMEK yerine SAPMALAR.md §1'in yöntemi tekrarlanıyor:
-   * zaten token-kontrast.test.ts'te AÇIK VE KOYU için ölçülmüş,
-   * TEMA-DEĞİŞMEZ accent-700/accent-100 çifti ("Sağ panel kapı kutusu üst
-   * etiketi") burada dolgulu bir rozet olarak yeniden kullanılıyor —
-   * ".duzenleHata"nın (yukarıda, satır ~635) aynı çifti kullanmasıyla
-   * BİREBİR aynı gerekçe. Zemin metinle birlikte taşındığı için hata
-   * satırı artık hangi temada olursa olsun kendi zemininden ayrışıyor.
+   * zaten token-kontrast.test.ts'te AÇIK VE KOYU için ölçülmüş accent-700/
+   * accent-100 çifti ("Sağ panel kapı kutusu üst etiketi") burada dolgulu
+   * bir rozet olarak yeniden kullanılıyor — ".duzenleHata"nın (yukarıda)
+   * aynı çifti kullanmasıyla BİREBİR aynı gerekçe. Çift kart c-20261106-
+   * e62847'den beri TEMA-DEĞİŞMEZ değil (ikisi BİRLİKTE, ters yönde
+   * dönüyor — @media bloğundaki ACCENT RAMPASI yorumu), ama zemin METİNLE
+   * birlikte taşındığı için hata satırı HER İKİ temada da kendi
+   * zemininden ayrışmayı sürdürüyor.
    */
   .railGozcuLogSatir .hata {
     display: inline-block; color: var(--color-accent-700); background: var(--color-accent-100);
@@ -767,15 +966,21 @@ const PAGE = `<!doctype html>
    * SAPMALAR.md'nin BİREBİR aynı kalması gereken kapı çıkışı mantığı)
    * bunu TÜKETİYOR, bkz. bildirimGoster.
    *
-   * --color-neutral-900 KASITLI OLARAK tema tarafından EZİLMİYOR ("koyu
-   * zemin" DEVIR'in kendi ifadesiyle sabit, açık temada da koyu kalması
-   * gereken bir araç ipucu — toast'ların alışıldık davranışı, gövdenin
-   * kendi temasını İZLEMEZ) — tıpkı sağ panelin kapı kutusunun
-   * accent-100'ü gibi, bkz. yukarıdaki o yorum.
+   * --toast-bg KASITLI OLARAK tema tarafından EZİLMİYOR ("koyu zemin"
+   * DEVIR'in kendi ifadesiyle sabit, açık temada da koyu kalması gereken
+   * bir araç ipucu — toast'ların alışıldık davranışı, gövdenin kendi
+   * temasını İZLEMEZ). Kart c-20261106-e62847'den ÖNCE bu rol düz
+   * --color-neutral-900 idi; o token şimdi ".akisKart-panoda"/
+   * ".promptlarOge-secili"/".railBaslikBtn" gibi accent-100 zemini
+   * üstünde METİN rolünde de kullanılıyor ve o rol koyu temada AÇIK
+   * olmak ZORUNDA — iki rol aynı adda çakışırdı, bu yüzden toast'ın
+   * "her zaman koyu" sözü ayrı bir token olan --toast-bg'ye taşındı
+   * (bkz. :root'taki TOAST-BG yorumu). Değer DEĞİŞMEDİ, #2d2b2b ile
+   * aynı — sadece ad ayrıştı.
    */
   .bildirim {
     position: fixed; left: var(--space-5); bottom: var(--space-5); z-index: 20;
-    max-width: 360px; background: var(--color-neutral-900); color: #fff;
+    max-width: 360px; background: var(--toast-bg); color: #fff;
     border-left: var(--border-accent) solid var(--color-accent);
     padding: var(--space-3) var(--space-5); font-size: var(--fs-13);
     box-shadow: 0 12px 32px rgba(0, 0, 0, .22);
@@ -998,17 +1203,18 @@ const PAGE = `<!doctype html>
     padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-3);
   }
   /*
-   * "Paneldeki akışın kartı accent-100 zeminli" — DEVIR.md §4. ".railKapiKutu"
-   * ile AYNI tuzak (yukarıdaki o yorum, satır ~447): --color-accent-100 koyu
-   * temada HİÇ dönmüyor (bkz. token tanımları, yalnızca ışık değerleri var —
-   * bu dosyada aratıldı, koyu ezmesi YOK), ama --color-text/--label-ink
-   * koyu temada AÇIK renge dönüyor (o kutuların KENDİ zemini de dönüyor
-   * diye). Bu kartın zemini KOŞULLU dönüyor (yalnızca "panoda") — o yüzden
-   * metin rengi de AYNI koşulla eşleşmeli: panoda İKEN --color-neutral-900/
-   * accent-800 (railBaslikBtn/railGerekce'nin kullandığı, tema tarafından
-   * HİÇ EZİLMEYEN çift), panoda DEĞİLKEN --color-text/--label-ink (normal
-   * sayfa zemini, bunlar zaten o zemine göre doğru dönüyor). Mini
-   * formasyonun kendi rengi de aynı kuralı izliyor (bkz. miniFormasyonSvg,
+   * "Paneldeki akışın kartı accent-100 zeminli" — DEVIR.md §4. Kart
+   * c-20261106-e62847'den ÖNCE --color-accent-100 koyu temada hiç
+   * dönmüyordu ve bu kartın zemini ".railKapiKutu" ile AYNI tuzağı
+   * taşıyordu; ARTIK accent-100 koyu temada KOYULAŞIYOR (bkz. yukarıdaki
+   * @media bloğundaki ACCENT RAMPASI yorumu). Bu kartın zemini KOŞULLU
+   * dönüyor (yalnızca "panoda") — o yüzden metin rengi de AYNI koşulla
+   * eşleşmeli: panoda İKEN --color-neutral-900/accent-800 (railBaslikBtn/
+   * railGerekce'nin kullandığı ÇİFT, bu kart sayesinde accent-100 ile
+   * BİRLİKTE ters yönde dönüyor — artık ikisi de koyu temada AÇIK),
+   * panoda DEĞİLKEN --color-text/--label-ink (normal sayfa zemini,
+   * bunlar zaten o zemine göre doğru dönüyor). Mini formasyonun kendi
+   * rengi de aynı kuralı izliyor (bkz. miniFormasyonSvg,
    * ".akisKartFormasyonGovde/-Nokta" sınıfları, aşağıda).
    */
   .akisKart-panoda { background: var(--color-accent-100); }
@@ -1109,12 +1315,17 @@ const PAGE = `<!doctype html>
   .promptlarOge:hover { background: var(--color-neutral-200); }
   /*
    * SEÇİLİ ÖGE — "4px accent sol kenar + accent-100 zemin" (DEVIR.md §5).
-   * Metin rengi düz --color-text DEĞİL: accent-100 zemini hiçbir zaman
-   * koyu temada EZİLMİYOR (Akışlar sekmesinin ".akisKart-panoda" emsaliyle
-   * AYNI gerekçe), yani color-text koyu temada AÇIK bir renge dönünce açık
-   * zemin üstüne biner. --color-neutral-900/--color-accent-800 (zaten
-   * token-kontrast.test.ts'te ölçülü, ".railKapiKutu" ile AYNI çift)
-   * tema-değişmez kalıyor.
+   * Metin rengi düz --color-text DEĞİL: accent-100 zemini artık (kart
+   * c-20261106-e62847) koyu temada KOYULAŞIYOR, yani düz color-text
+   * (koyu temada AÇIK) yine AÇIK zemine binerdi ama şimdi zemin KOYU
+   * olduğu için bu DOĞRU olurdu da — burada hâlâ --color-neutral-900/
+   * --color-accent-800 kullanılıyor çünkü bu ikisi de AYNI kart ile
+   * zeminle BİRLİKTE ters yönde dönüyor (Akışlar sekmesinin
+   * ".akisKart-panoda" emsaliyle AYNI gerekçe, bkz. @media bloğundaki
+   * ACCENT RAMPASI yorumu) — düz color-text/label-ink kullanmak da
+   * çalışırdı ama bu üç yerin (railKapiKutu/akisKart-panoda/promptlarOge-
+   * secili) AYNI ikili tercih etmesi tek bir "tint kutusu" kuralı
+   * kalmasını sağlıyor.
    */
   .promptlarOge-secili {
     border-left-color: var(--color-accent); background: var(--color-accent-100);
@@ -1126,8 +1337,13 @@ const PAGE = `<!doctype html>
   /*
    * "Kaydedilmemiş değişiklik 8px accent kare" (DEVIR.md §5). accent/
    * accent-100 çifti bu kartta YENİ pinlendi (token-kontrast.test.ts):
-   * 3.84:1, IKINCIL_ETIKET_ESIGI'yi (3, küçük grafik işaret) geçiyor —
-   * ikisi de hiçbir temada EZİLMEDİĞİ için oran tema-değişmez.
+   * açık temada 3.84:1. --color-accent KENDİSİ hâlâ hiçbir temada
+   * EZİLMİYOR (bkz. ".marka" yorumu), ama accent-100 artık (kart
+   * c-20261106-e62847) koyu temada koyulaşıyor — oran bu yüzden ARTIK
+   * tema-değişmez DEĞİL, ama iki temada da AYRI AYRI ölçülüp
+   * IKINCIL_ETIKET_ESIGI'yi (3, küçük grafik işaret) geçiyor (koyuda
+   * color-accent/color-accent-100 3.46:1 — token-kontrast.test.ts
+   * "Promptlar sekmesi" girdisi).
    */
   .promptlarTaslakIsareti { width: 8px; height: 8px; flex: 0 0 auto; background: var(--color-accent); display: inline-block; }
   .promptlarYeniRol { align-self: flex-start; margin-top: var(--space-5); }
@@ -1171,8 +1387,10 @@ const PAGE = `<!doctype html>
    *   gövde metni zemin/yüzey üstünde — "Modernist gövde metni" (iki girdi),
    *   etiket zemin üstünde — "label-ink/color-bg",
    *   "canlı" etiketi — "Sağ panel kapı kutusu üst etiketi" (accent-700/
-   *     accent-100, DEĞİŞMEYEN bir çift — SAPMALAR.md §2.5'in "tema
-   *     tarafından hiç ezilmiyor" notuyla AYNI gerekçe).
+   *     accent-100 — kart c-20261106-e62847'den beri bu çift artık
+   *     TEMA-DEĞİŞMEZ DEĞİL, ikisi BİRLİKTE ters yönde dönüyor, ama iki
+   *     temada da AYRI AYRI ölçülüp eşiği geçiyor, bkz. @media bloğundaki
+   *     ACCENT RAMPASI yorumu).
    * Kuş rengi/kanat çırpma JS'i formasyon diyagramıyla PAYLAŞILIYOR
    * (kusRengi/kanatCirpiyorMu) — ikinci bir "kuş nasıl boyanır" kuralı
    * YOK, o yüzden seçili satır BİLEREK zemin DEĞİŞTİRMİYOR (sol kenar +
@@ -2341,6 +2559,78 @@ function gozcuBeklemeSonucu(bekleyen, g) {
   return { yenidenBaslat: bekleyen === "yenidenBaslatiliyor" };
 }
 
+/**
+ * TEMA ANAHTARI — kart c-20261106-e62847. "sistem"/"acik"/"koyu"
+ * sözlüğümüz İLE <html data-theme>'in gerçek niteliği ("light"/"dark"/
+ * nitelik YOK) arasındaki ÇEVİRİ, SAF (DOM yok, iki yöne de test edilir).
+ *
+ * renderPage() SUNUCUDA aynı eşlemeyi yapıyor (bkz. page.ts'teki
+ * JSDoc) — bu TEK kaynak iki yerde: biri ilk boyamayı (sunucu), öteki
+ * anahtara tıklandığında ANINDA yansımayı (istemci, ağ isteğini
+ * BEKLEMEDEN) üretiyor. İkisi uyuşmazsa ekran AÇILDIĞINDA gösterdiği
+ * temayla anahtarın gösterdiği "seçili" düğme ÇELİŞİRDİ.
+ */
+function temaNitelikDegeri(tema) {
+  if (tema === "acik") return "light";
+  if (tema === "koyu") return "dark";
+  return null;
+}
+
+/** Tersi: gerçek nitelikten üç hâlden birine. SAF. */
+function nitelikTemaDegeri(nitelik) {
+  if (nitelik === "light") return "acik";
+  if (nitelik === "dark") return "koyu";
+  return "sistem";
+}
+
+/**
+ * Seçimi ANINDA uygular (DOM) VE sunucuya YAZAR (ağ) — kart c-20261106-
+ * e62847. Sıra ÖNEMLİ: önce <html> niteliği değişir (operatör BEKLEMEDEN
+ * görür), sonra ciz(SON_MODEL) çağrılır (anahtarın KENDİSİ de "secili"
+ * düğmeyi hemen güncellesin — aksi hâlde bir sonraki saniyelik yoklamaya
+ * kadar eski düğme "seçili" görünürdü), sonra yazma isteği atılır.
+ *
+ * Yazma BAŞARISIZ olursa (ağ hatası, sunucu kapandı) GÖRÜNÜŞ yine de
+ * doğru — operatör doğru temayı görüyor, yalnızca BİR SONRAKİ açılışta
+ * hatırlanmayabilir. Bu TEK başarısızlık biçimi gozcuKomut'un aksine
+ * (yukarıda) ekrana bant olarak YANSITILMIYOR: bir tema tercihinin ağ
+ * hatası turu durdurmuyor, "Yeni kart" kadar kritik bir eylem değil —
+ * SAPMALAR.md §2.3'ün gerektirdiği jeton/Origin kapısından GEÇİYOR
+ * (bkz. fetch çağrısı), sadece hata sessizce yutuluyor.
+ */
+function temaSec(tema) {
+  const nitelik = temaNitelikDegeri(tema);
+  if (nitelik === null) delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = nitelik;
+  if (SON_MODEL) ciz(SON_MODEL);
+  fetch("/tema", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-skein-token": JETON },
+    body: JSON.stringify({ tema }),
+  }).catch(() => {});
+}
+
+/**
+ * Üst çubuğun tema anahtarı DOM'u — üç düğme, ".duzenleSegment"/
+ * ".duzenleSegmentBtn" (Rolleri Düzenle modunun tekil/toplu anahtarı) ile
+ * AYNI deseni izliyor: düğme grubu + "secili" sınıfı, YENİ bir etkileşim
+ * deseni İCAT EDİLMİYOR.
+ */
+function temaAnahtariKur() {
+  const mevcutTema = nitelikTemaDegeri(document.documentElement.dataset.theme || null);
+  const grup = el("div", "temaAnahtari");
+  grup.setAttribute("role", "group");
+  grup.setAttribute("aria-label", "Tema");
+  [["sistem", "Sistem"], ["acik", "Açık"], ["koyu", "Koyu"]].forEach(([deger, etiket]) => {
+    const b = el("button", "temaBtn" + (deger === mevcutTema ? " secili" : ""), etiket);
+    b.type = "button";
+    b.setAttribute("aria-pressed", String(deger === mevcutTema));
+    b.addEventListener("click", () => { if (deger !== mevcutTema) temaSec(deger); });
+    grup.append(b);
+  });
+  return grup;
+}
+
 function ciz(m) {
   AKTIF_AD = m.flow.name;
   SON_MODEL = m;
@@ -2502,6 +2792,10 @@ function ciz(m) {
   maliyetSayac.append(document.createTextNode("toplam maliyet "));
   maliyetSayac.append(el("b", null, (m.totals.olculmeyen ? "≥" : "") + para(m.totals.costUsd)));
   bar.append(maliyetSayac);
+
+  // TEMA ANAHTARI — kart c-20261106-e62847 (UX.md "operatör koyu temayı
+  // kapatamıyor" bulgusunun yaması).
+  bar.append(temaAnahtariKur());
 
   // yeni kart dugmesi: ekranin en cok kullanilan eylemi, ust cubugun ana dugmesi.
   const yeni = el("button", "yeniKart", "Yeni kart");
@@ -3537,6 +3831,9 @@ function formasyonSvgKur(m) {
     const ilk = planNoktalari[0];
     const son = planNoktalari[planNoktalari.length - 1];
     const bant = sv("path", { d: planlamaBandYolu(ilk, son), fill: "none" });
+    // accent-200 koyu temada koyulaşıyor (kart c-20261106-e62847, bkz.
+    // @media bloğundaki ACCENT RAMPASI yorumu) — bu şeridin açık-pembe
+    // hâli (#ffe0d9) koyu gövdenin üstünde PARLAK bir çizgi olurdu.
     bant.style.stroke = "var(--color-accent-200)";
     bant.style.strokeWidth = "22";
     bant.style.strokeLinecap = "butt";
@@ -3610,13 +3907,16 @@ function formasyonSvgKur(m) {
     svg.append(etiket);
   });
 
-  // GİRİŞ — 44px accent "+" (Yeni kart).
+  // GİRİŞ — 44px accent "+" (Yeni kart). Dolgu --solid-accent: beyaz "+"
+  // metni üstünde duruyor (bkz. .formasyonGiris text, aşağıda), bu yüzden
+  // HER ZAMAN koyu kalması gerekiyor — ".yeniKart" ile AYNI rol, AYNI
+  // token (:root'taki SOLID-* yorumu, kart c-20261106-e62847).
   const girisG = sv("g", { class: "formasyonGiris" });
   girisG.setAttribute("role", "button");
   girisG.setAttribute("tabindex", "0");
   girisG.setAttribute("aria-label", "Yeni kart");
   const girisDaire = sv("circle", { cx: girisNokta.x, cy: girisNokta.y, r: 22 });
-  girisDaire.style.fill = "var(--color-accent-700)";
+  girisDaire.style.fill = "var(--solid-accent)";
   girisG.append(girisDaire);
   const girisArti = sv("text", { x: girisNokta.x, y: girisNokta.y + 8, "text-anchor": "middle" });
   girisArti.style.fontSize = "26px";

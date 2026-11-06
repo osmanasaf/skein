@@ -22,6 +22,14 @@ function gecerliPort(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value > 0 && value <= 65535;
 }
 
+/** Üç hâlden biri — "sistem" (OS tercihini izle), "acik", "koyu". */
+export type Tema = "sistem" | "acik" | "koyu";
+
+/** `tema` alanı üç geçerli değerden biri mi. */
+function gecerliTema(value: unknown): value is Tema {
+  return value === "sistem" || value === "acik" || value === "koyu";
+}
+
 /**
  * Ham kaydı okur — dosya yoksa, okunamıyorsa ya da kök öğe bir eşleme
  * (mapping) değilse boş nesne döner, FIRLATMAZ.
@@ -77,6 +85,21 @@ export async function sonAkisiOku(root: string): Promise<string | undefined> {
 }
 
 /**
+ * `.skein/ekran.json`'dan hatırlanan tema seçimini okur.
+ *
+ * Aynı "bozuk kayıt kilitlemez" kuralı: dosya yoksa, bozuksa ya da `tema`
+ * alanı üç geçerli değerden biri değilse `undefined` döner — FIRLATMAZ.
+ * Çağıran taraf (`serveUi`, `GET /`) `undefined`'ı "sistem" sayar: hiç
+ * seçim yapılmamış ekranla açıkça "sistem" seçmiş ekran GÖRÜNÜRDE aynı
+ * davranır (ikisi de OS tercihini izler), bu yüzden ayrı bir "hiç
+ * seçilmedi" durumu YOK.
+ */
+export async function sonTemaOku(root: string): Promise<Tema | undefined> {
+  const tema = (await hamKaydiOku(root))["tema"];
+  return gecerliTema(tema) ? tema : undefined;
+}
+
+/**
  * Kaydın TEK bir alanını değiştirip atomik yazar — ötekisi (port/akış)
  * AYNEN kalır.
  *
@@ -116,6 +139,18 @@ export async function sonPortuYaz(root: string, port: number): Promise<void> {
  */
 export async function sonAkisiYaz(root: string, akis: string): Promise<void> {
   await hamKaydiYaz(root, "akis", akis);
+}
+
+/**
+ * Seçilen temayı `.skein/ekran.json`'a kalıcı yazar.
+ *
+ * `port`/`akis` alanları AYNEN kalır (bkz. `hamKaydiYaz`) — üçü birbirinden
+ * bağımsız, biri ötekini silmemeli. Ekrandaki tema anahtarı (`POST /tema`,
+ * `server.ts`) bunu çağırıyor; sayfa yenilenince `GET /` aynı dosyadan
+ * okuyup `renderPage`'e veriyor (kart c-20261106-e62847).
+ */
+export async function sonTemaYaz(root: string, tema: Tema): Promise<void> {
+  await hamKaydiYaz(root, "tema", tema);
 }
 
 /** `EADDRINUSE` mi — başka biri o portu tutuyor demek. */

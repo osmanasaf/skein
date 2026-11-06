@@ -62,6 +62,28 @@ function temaTokenlari(html: string): { acik: Map<string, string>; koyu: Map<str
 }
 
 /**
+ * `@media (prefers-color-scheme: dark) { :root:not(...) { ... } }`
+ * bloğunun SADECE EZDİĞİ token'larını (açıkla birleştirmeden) döner.
+ */
+function medyaEzmesi(html: string): Map<string, string> {
+  const koyuSorguBas = html.indexOf("prefers-color-scheme: dark");
+  const koyuKokBas = html.indexOf(":root:not(", koyuSorguBas);
+  const koyuKokSon = html.indexOf("\n    }", koyuKokBas);
+  return tokenlariAyristir(html.slice(koyuKokBas, koyuKokSon));
+}
+
+/**
+ * `:root[data-theme="dark"] { ... }` bloğunun token'ları — tema anahtarı
+ * OS tercihinden BAĞIMSIZ "koyu" seçildiğinde uygulanan blok (kart
+ * c-20261106-e62847, page.ts'teki TEMA ANAHTARI yorumu).
+ */
+function zorlananKoyuTokenlari(html: string): Map<string, string> {
+  const bas = html.indexOf(':root[data-theme="dark"] {');
+  const son = html.indexOf("\n  }", bas);
+  return tokenlariAyristir(html.slice(bas, son));
+}
+
+/**
  * Bir token adını, var() zincirini izleyerek gerçek hex değerine indirir.
  * Zincir derinliği sınırlı: döngü ya da bozuk bir referans sessizce
  * yutulmasın, açık hata versin.
@@ -188,9 +210,15 @@ const CIFTLER: [string, string, string, Esik][] = [
   // aşağıdaki üç çift YENİ: eski palette hiç karşılığı yok. Ölçüldü:
   // beyaz metin düz --color-accent zemin üstünde 4.20:1 — normal metin
   // eşiğini (4.5) GEÇMİYOR. Bu yüzden "Yeni kart" düğmesi ve dolu
-  // rozetler --color-accent-700 kullanıyor (7.17:1, aynı ramptan bir
-  // ADIM koyu) — SAPMALAR'ın kendi yönteminin aynısı: yeni renk icat
-  // etme, ramptan doğru basamağı seç.
+  // rozetler ("Yeni kart", .navRozet-accent, .railBtn.primary) --solid-accent
+  // kullanıyor (7.17:1, aynı ramptan bir ADIM koyu, kart c-20261106-e62847'
+  // den ÖNCE --color-accent-700'ün KENDİSİYDİ) — SAPMALAR'ın kendi
+  // yönteminin aynısı: yeni renk icat etme, ramptan doğru basamağı seç.
+  // --solid-accent BİLİNÇLİ OLARAK hiçbir temada ezilmiyor (page.ts'teki
+  // SOLID-* yorumu) — color-accent-700'ün KENDİSİ artık (kart
+  // c-20261106-e62847) koyu temada BAŞKA bir role (accent-100 zemini
+  // üstünde ink) hizmet ediyor ve o roldeki değeri koyuda DEĞİŞİYOR,
+  // bu yüzden dolgulu-düğme rolü ayrı, değişmez bir ada taşındı.
   [
     "Modernist marka simgesi/açık gözcü noktası — accent, zemin üstünde (büyük grafik)",
     "color-accent",
@@ -198,9 +226,9 @@ const CIFTLER: [string, string, string, Esik][] = [
     IKINCIL_ETIKET_ESIGI,
   ],
   [
-    "Modernist birincil düğme ve dolu rozet — beyaz metin, accent-700 zemin",
+    "Modernist birincil düğme ve dolu rozet — beyaz metin, solid-accent zemin (temadan bağımsız)",
     "#FFFFFF",
-    "color-accent-700",
+    "solid-accent",
     NORMAL_METIN_ESIGI,
   ],
   [
@@ -211,13 +239,16 @@ const CIFTLER: [string, string, string, Esik][] = [
   ],
 
   // --- Sağ panel (c-20261105-d500f1) ---
-  // Kapı kutusunun accent-100 zemini TEMA TARAFINDAN HİÇ DEĞİŞMİYOR (bkz.
-  // page.ts ".railKapiKutu" yorumu) — yani gerekçenin accent-800/accent-100
-  // çiftinin aksine ("Modernist kapı gerekçesi", yukarıda), bu üç çift de
-  // KASITLI OLARAK tema-değişmez token'lar arasında: açık ve koyu temada
-  // AYNI iki sayı ölçülür. Başlık düğmesi bu yüzden --color-text (koyu
-  // temada AÇIK renge döner) DEĞİL, --color-neutral-900 kullanıyor — o da
-  // hiçbir zaman ezilmiyor.
+  // Kapı kutusunun accent-100 zemini kart c-20261106-e62847'den ÖNCE
+  // tema tarafından hiç değişmiyordu (bkz. page.ts ".railKapiKutu"
+  // yorumu) — ARTIK değişiyor: accent-100 koyuda koyulaşıyor, accent-700/
+  // neutral-900 (buradaki ink rolleri) koyuda AÇILIYOR, ikisi BİRLİKTE
+  // ters yönde dönüyor. Bu yüzden aşağıdaki iki çift artık AÇIK VE KOYU
+  // için AYRI AYRI ölçülüyor (SAPMALAR.md §2.5) — aynı sayı değil, ama
+  // ikisi de eşiği geçiyor. Başlık düğmesi --color-text (koyu temada AÇIK
+  // renge döner) DEĞİL, --color-neutral-900 kullanmayı sürdürüyor, çünkü
+  // neutral-900 artık accent-100 ile AYNI kart tarafından BİRLİKTE
+  // ters çevrildi (page.ts'teki ACCENT RAMPASI yorumu).
   [
     "Sağ panel kapı kutusu üst etiketi — accent-700, accent-100 zemin üstünde",
     "color-accent-700",
@@ -237,19 +268,19 @@ const CIFTLER: [string, string, string, Esik][] = [
     IKINCIL_ETIKET_ESIGI,
   ],
   [
-    "Bildirim — beyaz metin, neutral-900 zemin üstünde (DEVIR.md: 'koyu zemin', temadan bağımsız)",
+    "Bildirim — beyaz metin, toast-bg zemin üstünde (DEVIR.md: 'koyu zemin', temadan bağımsız)",
     "#FFFFFF",
-    "color-neutral-900",
+    "toast-bg",
     NORMAL_METIN_ESIGI,
   ],
 
   // --- Promptlar sekmesi (DEVIR.md §5) ---
   // "Kaydedilmemiş değişiklik" işareti accent dolgulu 8px bir kare,
   // SEÇİLİ (accent-100 zemin) bir öğenin üstünde de görünür olmak
-  // zorunda. İkisi de hiçbir temada EZİLMEDİĞİ için (color-accent ve
-  // color-accent-100'ün dark-mode ezmesi YOK, bkz. page.ts) oran
-  // tema-değişmez: 3.84:1, IKINCIL_ETIKET_ESIGI'yi (3, küçük grafik
-  // işaret) geçiyor.
+  // zorunda. color-accent hiçbir temada EZİLMİYOR, ama color-accent-100
+  // artık (kart c-20261106-e62847) koyuda koyulaşıyor — oran bu yüzden
+  // ARTIK tema-değişmez DEĞİL (açıkta 3.84:1, koyuda 3.46:1), ikisi de
+  // IKINCIL_ETIKET_ESIGI'yi (3, küçük grafik işaret) geçiyor.
   [
     "Promptlar sekmesi — kaydedilmemiş taslak işareti, seçili öğenin accent-100 zemini üstünde",
     "color-accent",
@@ -269,6 +300,55 @@ const CIFTLER: [string, string, string, Esik][] = [
     "Ajanlar 'Şu an' kutusu — ölçülmeyen maliyet uyarısı (.bad), surface zemin üstünde",
     "bad-ink",
     "color-surface",
+    NORMAL_METIN_ESIGI,
+  ],
+
+  // --- Koyu tema — accent rampası + color-neutral-900 (c-20261106-e62847) ---
+  // ÖLÇÜLEN KUSUR: ".railKapiKutu" zemini (accent-100) koyu temada hiç
+  // ezilmiyordu — koyu gövde rgb(11,17,24) iken kutu rgb(255,242,239),
+  // parlaklık 245/255, 338×267px, ekranın en önemli kutusunun (kapı
+  // kararı) üstünde. Yukarıdaki iki çift ("Sağ panel kapı kutusu üst
+  // etiketi"/"...başlık düğmesi", "Modernist kapı gerekçesi", "Modernist
+  // rozet — tag-accent") artık BU ikinci düzeltmeyi (accent-100 koyuda
+  // koyulaşıyor) de ölçüyor — burada EKLENEN, o düzeltmenin AÇMADIĞI,
+  // önceden HİÇ test edilmemiş iki çıplak-ink çiftidir: accent-700/800
+  // bazı yerlerde accent-100 kutusuna SARILI DEĞİL, çıplak --color-bg/
+  // --color-surface üstünde duruyor (.formasyonRetEtiket/.formasyonKapiEtiket/
+  // .formasyonPlanEtiket, .duzenleAdGirisi.gecersiz, .duzenleIkonSil:hover).
+  // Koyu temada ÖLÇÜLDÜ (düzeltmeden ÖNCE): accent-700/color-bg 2.47:1,
+  // accent-800/color-bg 1.65:1 — IKINCIL_ETIKET_ESIGI'nin (3) bile altında,
+  // yani bu metin fiilen OKUNMUYORDU, hiçbir sınama bunu yakalamıyordu.
+  [
+    "Formasyon 'ret' etiketi — çıplak accent-700, zemin üstünde (büyük grafik)",
+    "color-accent-700",
+    "color-bg",
+    IKINCIL_ETIKET_ESIGI,
+  ],
+  [
+    "Formasyon 'insan onayı' etiketi — çıplak accent-700, zemin üstünde (büyük grafik)",
+    "color-accent-700",
+    "color-bg",
+    IKINCIL_ETIKET_ESIGI,
+  ],
+  [
+    "Formasyon 'planlama' etiketi — çıplak accent-800, zemin üstünde (büyük grafik)",
+    "color-accent-800",
+    "color-bg",
+    IKINCIL_ETIKET_ESIGI,
+  ],
+  [
+    "Rolleri düzenle — geçersiz ad girişi kenarı/sil düğmesi hover'ı, accent-700, surface zemin üstünde",
+    "color-accent-700",
+    "color-surface",
+    IKINCIL_ETIKET_ESIGI,
+  ],
+  // --solid-accent(-hover) BİLİNÇLİ OLARAK hiçbir temada ezilmiyor
+  // (page.ts'teki SOLID-* yorumu) — "Yeni kart"/rozet çiftiyle AYNI
+  // sebep, hover durumu için AYRI pinlendi.
+  [
+    "Yeni kart düğmesi (hover) — beyaz metin, solid-accent-hover zemin (temadan bağımsız)",
+    "#FFFFFF",
+    "solid-accent-hover",
     NORMAL_METIN_ESIGI,
   ],
 ];
@@ -300,5 +380,76 @@ describe("token ayrıştırma — bağlantı sınaması", () => {
     const { acik, koyu } = temaTokenlari(renderPage("x"));
     expect(acik.size).toBeGreaterThan(15);
     expect([...acik.keys()].sort()).toEqual([...koyu.keys()].sort());
+  });
+});
+
+/**
+ * TEMA ANAHTARI — "sistem"den BAĞIMSIZ "koyu" seçimi, kart c-20261106-e62847.
+ *
+ * `page.ts` iki ayrı yerde koyu değerleri basıyor: `@media
+ * (prefers-color-scheme: dark)`'in içindeki `:root:not([data-theme="light"])`
+ * (OS tercihini izler) ve `:root[data-theme="dark"]` (anahtarla AÇIKÇA
+ * seçilen, OS'tan BAĞIMSIZ). Bu dosya tek kaynak değil — CSS'te bir @media
+ * bloğu ile düz bir seçici AYNI gövdeyi "paylaşamaz" (bkz. page.ts'teki
+ * TEMA ANAHTARI yorumu) — bu yüzden ikinci blok BİREBİR kopya olarak
+ * yazıldı. Bu sınama o kopyanın DRİFT ETMEDİĞİNİ ölçüyor: biri değişip
+ * öteki unutulursa (üstteki "koyu tema" takımının ÖLÇTÜĞÜ, @media bloğu)
+ * anahtarla "koyu" seçen bir operatör FARKLI, test edilmemiş bir palet
+ * görür — hiçbir sınama bunu yakalamaz, çünkü yukarıdaki iki describe
+ * bloğu SADECE @media bloğunu okuyor (`temaTokenlari`, `renderPage("x")`
+ * varsayılan "sistem" ile çağrılıyor, `data-theme` niteliği hiç basılmıyor).
+ */
+describe("tema anahtarı — :root[data-theme=\"dark\"] @media'daki koyu ezmesiyle BİREBİR AYNI", () => {
+  it("iki blok da AYNI token adlarını taşıyor", () => {
+    const html = renderPage("x");
+    const medya = medyaEzmesi(html);
+    const zorlanan = zorlananKoyuTokenlari(html);
+    expect(zorlanan.size).toBeGreaterThan(5);
+    expect([...medya.keys()].sort()).toEqual([...zorlanan.keys()].sort());
+  });
+
+  it("ortak her token AYNI ham değere çözülüyor", () => {
+    const html = renderPage("x");
+    const { acik } = temaTokenlari(html);
+    const zorlanan = zorlananKoyuTokenlari(html);
+    // var() zincirleri (ör. "--color-accent-100: var(--color-accent-900)")
+    // EZİLMEYEN taban token'lara (color-accent-900 gibi) iniyor — bunlar
+    // sadece açık :root'ta tanımlı, bu yüzden ÇÖZÜMLEME açığın üstüne
+    // kurulan haritayla yapılıyor (temaTokenlari'nin "koyu" haritasıyla
+    // AYNI desen).
+    const medyaCozumlu = new Map(acik);
+    for (const [ad, deger] of medyaEzmesi(html)) medyaCozumlu.set(ad, deger);
+    const zorlananCozumlu = new Map(acik);
+    for (const [ad, deger] of zorlanan) zorlananCozumlu.set(ad, deger);
+    for (const ad of zorlanan.keys()) {
+      expect(renk(zorlananCozumlu, ad)).toBe(renk(medyaCozumlu, ad));
+    }
+  });
+});
+
+describe("renderPage — tema parametresi <html>'in data-theme niteliğini basıyor", () => {
+  it("'sistem' (varsayılan) — nitelik YOK, OS tercihi @media ile izleniyor", () => {
+    // "data-theme" DİZGİSİ sayfanın CSS'inde (seçici olarak) başka
+    // yerlerde de geçiyor — bu yüzden TÜM metin değil, SADECE <html>
+    // etiketinin kendisi sınanıyor.
+    const html = renderPage("x");
+    expect(html).toContain('<html lang="tr">');
+    expect(html.slice(0, html.indexOf(">") + 1)).not.toContain("data-theme");
+  });
+
+  it("'acik' — data-theme=\"light\" (koyu @media bloğunu KAPATAN mevcut kaçış yolu)", () => {
+    const html = renderPage("x", null, "acik");
+    expect(html).toContain('<html lang="tr" data-theme="light">');
+  });
+
+  it("'koyu' — data-theme=\"dark\" (OS'tan BAĞIMSIZ, yeni :root[data-theme=\"dark\"] bloğunu açan nitelik)", () => {
+    const html = renderPage("x", null, "koyu");
+    expect(html).toContain('<html lang="tr" data-theme="dark">');
+  });
+
+  it("__TEMA_NITELIGI__ yer tutucusu hiçbir seçimde kalmıyor", () => {
+    for (const tema of ["sistem", "acik", "koyu"] as const) {
+      expect(renderPage("x", null, tema)).not.toContain("__TEMA_NITELIGI__");
+    }
   });
 });

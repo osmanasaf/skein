@@ -812,6 +812,54 @@ describe("calisanAjanSayisi — Ajanlar rozeti", () => {
 });
 
 /**
+ * TEMA ÇEVİRİSİ — kart c-20261106-e62847. "sistem"/"acik"/"koyu"
+ * sözlüğü İLE gerçek <html data-theme> niteliği arasındaki eşleme, SAF.
+ * İKİ YÖN de ayrı sınanıyor: biri düşerse anahtar tıklandığında DOM'a
+ * yazılan nitelik yanlış olur, öteki düşerse sayfa AÇILIRKEN (sunucudan
+ * gelen niteliğe göre) "secili" düğme yanlış görünür.
+ */
+describe("temaNitelikDegeri — tema adından <html data-theme> niteliğine", () => {
+  const nitelik = (tema: string): string | null =>
+    fonksiyon<(t: string) => string | null>(renderPage("t"), "temaNitelikDegeri")(tema);
+
+  it("'acik' -> 'light'", () => {
+    expect(nitelik("acik")).toBe("light");
+  });
+
+  it("'koyu' -> 'dark'", () => {
+    expect(nitelik("koyu")).toBe("dark");
+  });
+
+  it("'sistem' -> null (nitelik hiç basılmaz, OS tercihi @media ile izlenir)", () => {
+    expect(nitelik("sistem")).toBeNull();
+  });
+});
+
+describe("nitelikTemaDegeri — <html data-theme> niteliğinden tema adına (tersi)", () => {
+  const tema = (nitelik: string | null): string =>
+    fonksiyon<(n: string | null) => string>(renderPage("t"), "nitelikTemaDegeri")(nitelik);
+
+  it("'light' -> 'acik'", () => {
+    expect(tema("light")).toBe("acik");
+  });
+
+  it("'dark' -> 'koyu'", () => {
+    expect(tema("dark")).toBe("koyu");
+  });
+
+  // SINIR: nitelik YOKSA (null) VE tanınmayan bir değer gelse de (elle
+  // bozulmuş DOM) ikisi de "sistem" — bozuk bir nitelik anahtarı
+  // KİLİTLEMEMELİ, en güvenli varsayılana düşmeli.
+  it("null -> 'sistem'", () => {
+    expect(tema(null)).toBe("sistem");
+  });
+
+  it("tanınmayan bir değer -> 'sistem'", () => {
+    expect(tema("mavi")).toBe("sistem");
+  });
+});
+
+/**
  * ROLKONUMU — V formasyonundaki rol yerleşimi (kart c-20261105-2a8dab,
  * DEVIR.md "Formasyon diyagramı"). SAF (DOM yok), ama `FORMASYON_GOVDE`
  * sabitine bağlı olduğu için `fonksiyonlar` ile BİRLİKTE çıkarılıyor.

@@ -89,6 +89,8 @@ declare const document: {
   body: unknown;
   /** Yalnızca "Akışlar sekmesi" describe'ındaki Escape sınaması için. */
   dispatchEvent: (e: unknown) => void;
+  /** Yalnızca "tema anahtarı" describe'ı için — <html>'in "data-theme" niteliğini okur. */
+  documentElement: { getAttribute: (ad: string) => string | null };
 };
 /** Yalnızca 'change' olayını elle kurup yaymak için — bkz. yukarıdaki not. */
 declare class Event {
@@ -127,6 +129,8 @@ declare function ciz(m: unknown): void;
 type Tarayici = { newPage: (o?: unknown) => Promise<Sayfa>; close: () => Promise<void> };
 type Sayfa = {
   goto: (url: string, o?: unknown) => Promise<unknown>;
+  /** Yalnızca "tema anahtarı" describe'ı için — seçimin GERÇEK bir sayfa yenilemesinde korunduğunu ölçer. */
+  reload: (o?: unknown) => Promise<unknown>;
   waitForSelector: (s: string, o?: unknown) => Promise<unknown>;
   waitForTimeout: (ms: number) => Promise<void>;
   click: (s: string) => Promise<void>;
@@ -293,7 +297,7 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
   }, 60_000);
 
   /**
-   * GÖKYÜZÜ PALETİ — hesaplanan zemin rengi ve konsol temiz.
+   * ZEMİN RENGİ — hesaplanan arka plan ve konsol temiz.
    *
    * `page.test.ts` yalnızca KAYNAK METNİ sınıyor: `:root` bloğunda doğru
    * hex yazdığını görür ama tarayıcının o CSS'i GERÇEKTEN uyguladığını
@@ -303,14 +307,22 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
    * AYNI token'lara karşı (bu dosyadaki hex'ler o testteki hex'lerin
    * kopyası DEĞİL, page.ts'teki --bg'nin rgb karşılığı; ikisi birlikte
    * aynı kaynağı iki açıdan doğruluyor).
+   *
+   * AÇIK değer kart c-20261106-e62847'den beri "gökyüzü" DEĞİL (UX.md
+   * §3.2 bonusu) — --bg'nin açık hex'i Modernist --color-bg'ye hizalandı
+   * (#f3f2f2), bu testin adı ve beklediği rgb de ONUNLA güncellendi. KOYU
+   * değer BİLEREK dokunulmadı (görev metni "açık temada" diyor) — alttaki
+   * sınama hâlâ eski "gökyüzü" ailesinin koyu ucunu (#0B1118) ölçüyor.
    */
-  it("gökyüzü paleti: açık temada zemin doğru rgb, konsol temiz", async () => {
+  it("açık temada zemin artık Modernist'in nötr grisi (eski 'gökyüzü' mavisi DEĞİL), konsol temiz", async () => {
     const { page, hatalar } = await acTema("light");
     try {
       await page.waitForSelector("#bar .pill", { timeout: 15_000 });
       const zemin = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-      // --bg: #E7ECF2 → rgb(231, 236, 242)
-      expect(zemin).toBe("rgb(231, 236, 242)");
+      // --bg (açık, kart c-20261106-e62847'den ÖNCE): #E7ECF2 → rgb(231, 236, 242).
+      expect(zemin).not.toBe("rgb(231, 236, 242)");
+      // --bg (açık, ARTIK): #f3f2f2 → rgb(243, 242, 242) — --color-bg'yle AYNI hex.
+      expect(zemin).toBe("rgb(243, 242, 242)");
       expect(hatalar).toEqual([]);
     } finally {
       await page.close();
@@ -362,6 +374,168 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
       expect(govdeZemin).toBe("rgb(11, 17, 24)");
       // --color-text'in koyu ezmesi: #F2EFEE → rgb(242, 239, 238).
       expect(sekmeMetni).toBe("rgb(242, 239, 238)");
+      expect(hatalar).toEqual([]);
+    } finally {
+      await page.close();
+    }
+  }, 60_000);
+
+  /** "rgb(r, g, b)" metninden 0-255 arası ORTALAMA kanal (kaba parlaklık). */
+  function parlaklik(rgb: string): number {
+    const esle = /rgb\((\d+),\s*(\d+),\s*(\d+)\)/.exec(rgb);
+    if (!esle) throw new Error("rgb ayrıştırılamadı: " + rgb);
+    return (Number(esle[1]) + Number(esle[2]) + Number(esle[3])) / 3;
+  }
+
+  /**
+   * ÖLÇÜLEN KUSUR — kart c-20261106-e62847. Operatörün ölçtüğü hâl:
+   * koyu temada ".railKapiKutu" (sağ panelin kapı kutusu, accent-100
+   * zeminli) rgb(255, 242, 239) basıyordu — gövde rgb(11, 17, 24) iken
+   * parlaklık 245/255, ekranın en önemli kutusunun (kapı kararı) üstünde
+   * NEREDEYSE BEYAZ bir blok. Bu sınama tam o yüzeyi, GERÇEK tarayıcıda
+   * `getComputedStyle` ile ölçüyor — `token-kontrast.test.ts` kaynak
+   * METNİ ayrıştırıyor, bu dosyanın başındaki "#bar koyu temada" sınaması
+   * gibi "nitelik doğru" ile "ekranda doğru" AYRI iddialar (SAPMALAR.md
+   * §2.7).
+   */
+  it("koyu temada '.railKapiKutu' artık gövdeden >100 parlaklık birimi uzak PARLAK bir yüzey DEĞİL", async () => {
+    await queue.add(newCard({ title: "zaman asimi", task: "iş", topology }));
+    const taken = await al(queue, "coder");
+    await queue.escalate(taken, "sebep");
+
+    const { page, hatalar } = await acTema("dark");
+    try {
+      await page.waitForSelector(".railKapiKutu", { timeout: 15_000 });
+      const kutuZemin = await page.evaluate(() =>
+        getComputedStyle(document.querySelector(".railKapiKutu")).backgroundColor);
+      const govdeZemin = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+
+      // ESKİ (kusurlu) değer tam olarak bu — KARŞIT iddia, regresyonu pinler.
+      expect(kutuZemin).not.toBe("rgb(255, 242, 239)");
+      // YENİ değer: --color-accent-100'ün koyu ezmesi, #4d170e → rgb(77, 23, 14).
+      expect(kutuZemin).toBe("rgb(77, 23, 14)");
+
+      const fark = Math.abs(parlaklik(kutuZemin) - parlaklik(govdeZemin));
+      expect(fark).toBeLessThanOrEqual(100);
+
+      expect(hatalar).toEqual([]);
+    } finally {
+      await page.close();
+    }
+  }, 60_000);
+
+  /**
+   * TEMA ANAHTARI — kart c-20261106-e62847 (UX.md: "operatör koyu temayı
+   * kapatamıyor"). Üç sınama: anında uygulanıyor (ağ isteğini beklemeden),
+   * sunucudan BAĞIMSIZ bir OS tercihini EZEBİLİyor (var olan data-theme
+   * kaçış yolu artık bir ARAYÜZDEN tetikleniyor), ve seçim sayfa
+   * YENİDEN AÇILINCA (gerçek bir `page.reload`, .skein/ekran.json'dan)
+   * korunuyor.
+   */
+  describe("tema anahtarı", () => {
+    it("'Koyu' tıklanınca OS açık olsa da ANINDA koyulaşır VE yeniden açılışta KORUNUR", async () => {
+      const { page, hatalar } = await acTema("light");
+      try {
+        await page.waitForSelector(".temaAnahtari", { timeout: 15_000 });
+        expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor))
+          .toBe("rgb(243, 242, 242)");
+
+        await page.click('.temaBtn:has-text("Koyu")');
+        expect(await page.evaluate(() => document.documentElement.getAttribute("data-theme")))
+          .toBe("dark");
+        expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor))
+          .toBe("rgb(11, 17, 24)");
+        // Düğmenin KENDİSİ de "secili" olarak güncelleniyor — bir sonraki
+        // saniyelik yoklamaya kadar beklemeden (temaSec, ciz(SON_MODEL)).
+        // NOT: ":has-text" Playwright'ın KENDİ seçici motoru — düz
+        // `document.querySelector` içinde geçersiz, bu yüzden `evaluate`
+        // İÇİNDE metinle eşleştirme elle yapılıyor.
+        expect(await page.evaluate(() =>
+          Array.from(document.querySelectorAll(".temaBtn"))
+            .find((b) => b.textContent === "Koyu")
+            ?.classList.contains("secili")))
+          .toBe(true);
+
+        // SAYFA YENİDEN AÇILIYOR — tarayıcı belleği değil, GERÇEK bir
+        // istek ve GERÇEK .skein/ekran.json okuması.
+        await page.reload({ waitUntil: "networkidle" });
+        await page.waitForSelector(".temaAnahtari", { timeout: 15_000 });
+        expect(await page.evaluate(() => document.documentElement.getAttribute("data-theme")))
+          .toBe("dark");
+        expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor))
+          .toBe("rgb(11, 17, 24)");
+
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+      }
+    }, 60_000);
+
+    it("OS koyuyken 'Açık' seçilince gövde AÇIK kalır (mevcut kaçış yolu, şimdi arayüzden)", async () => {
+      const { page, hatalar } = await acTema("dark");
+      try {
+        await page.waitForSelector(".temaAnahtari", { timeout: 15_000 });
+        expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor))
+          .toBe("rgb(11, 17, 24)");
+
+        await page.click('.temaBtn:has-text("Açık")');
+        expect(await page.evaluate(() => document.documentElement.getAttribute("data-theme")))
+          .toBe("light");
+        expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor))
+          .toBe("rgb(243, 242, 242)");
+
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+      }
+    }, 60_000);
+
+    it("'Sistem' seçimine geri dönünce OS tercihi yeniden izlenir", async () => {
+      const { page, hatalar } = await acTema("dark");
+      try {
+        await page.waitForSelector(".temaAnahtari", { timeout: 15_000 });
+        await page.click('.temaBtn:has-text("Açık")');
+        expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor))
+          .toBe("rgb(243, 242, 242)");
+
+        await page.click('.temaBtn:has-text("Sistem")');
+        expect(await page.evaluate(() => document.documentElement.getAttribute("data-theme")))
+          .toBeNull();
+        // OS "dark" ile açıldı (acTema("dark")) — "sistem" bunu izler.
+        expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor))
+          .toBe("rgb(11, 17, 24)");
+
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+      }
+    }, 60_000);
+  });
+
+  /**
+   * --solid-accent — kart c-20261106-e62847. ".yeniKart"/".railBtn.primary"/
+   * ".navRozet-accent" dolgulu beyaz-metin düğmeleri ARTIK --color-accent-700
+   * DEĞİL, --solid-accent kullanıyor (bkz. page.ts'teki SOLID-* yorumu):
+   * --color-accent-700 koyu temada AÇIK bir değere dönüyor (accent-100
+   * zemini üstünde ink rolü için), ama bu düğmelerin dolgusu HER ZAMAN
+   * koyu kalmalı (üstündeki metin beyaz). AÇIK temada ikisi AYNI hex
+   * olduğu için (ae1800) bu ayrım yalnızca KOYU temada GÖRÜNÜR — ".dialog
+   * .railBtn.primary" sınaması (yukarıda, "Yeni akış" describe'ı) SADECE
+   * açık temada koşuyor, bu yüzden bu regresyonu YAKALAYAMAZDI. Bu sınama
+   * AÇIKÇA koyu temada ölçüyor.
+   */
+  it("koyu temada 'Yeni kart' düğmesi HÂLÂ koyu dolgulu (--solid-accent, --color-accent-700'ün koyu-tema AÇIK değerine DÖNMEDİ)", async () => {
+    const { page, hatalar } = await acTema("dark");
+    try {
+      await page.waitForSelector("#bar .pill", { timeout: 15_000 });
+      const zemin = await page.evaluate(() =>
+        getComputedStyle(document.querySelector('button.yeniKart')).backgroundColor);
+      // --solid-accent: #ae1800 → rgb(174, 24, 0) — temadan bağımsız.
+      expect(zemin).toBe("rgb(174, 24, 0)");
+      // KARŞIT İDDİA: --color-accent-700'ün koyu-tema (ink) değeri, #ffc4b8
+      // → rgb(255, 196, 184) — bu düğme BUNA dönerse beyaz "+" metni
+      // okunmaz hâle gelirdi.
+      expect(zemin).not.toBe("rgb(255, 196, 184)");
       expect(hatalar).toEqual([]);
     } finally {
       await page.close();
@@ -1408,6 +1582,37 @@ reject:
 
         const guncel = await queue.get(taken.id);
         expect(guncel?.state).not.toBe("gate");
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+      }
+    }, 60_000);
+
+    /**
+     * --toast-bg — kart c-20261106-e62847. "#bildirim" ARTIK --color-
+     * neutral-900 DEĞİL, --toast-bg kullanıyor (bkz. page.ts'teki
+     * TOAST-BG yorumu): neutral-900 koyu temada AÇIK bir değere dönüyor
+     * (accent-100 zemini üstünde ink rolü için), ama toast'ın "her zaman
+     * koyu zemin" sözü (DEVIR.md) buna bağlı KALAMAZ. Açık temada ikisi
+     * AYNI hex olduğu için (üstteki "kapı kartının çıkış düğmesi"
+     * sınaması bunu YAKALAYAMAZ) bu sınama AÇIKÇA koyu temada ölçüyor.
+     */
+    it("koyu temada bildirim kutusu HÂLÂ koyu zeminli (--toast-bg, neutral-900'ün koyu-tema AÇIK değerine DÖNMEDİ)", async () => {
+      await queue.add(newCard({ title: "yeniden denenecek", task: "iş", topology }));
+      const taken = await al(queue, "coder");
+      await queue.escalate(taken, "geçici bir hata");
+
+      const { page, hatalar } = await acTema("dark");
+      try {
+        await page.waitForSelector(".railKapiKutu", { timeout: 15_000 });
+        await page.click('.railKapiKutu .railCikis button:has-text("Yeniden koş")');
+        await page.waitForSelector("#bildirim.gorunur", { timeout: 10_000 });
+        const zemin = await page.evaluate(() => getComputedStyle(document.getElementById("bildirim")).backgroundColor);
+        // --toast-bg: #2d2b2b → rgb(45, 43, 43) — temadan bağımsız.
+        expect(zemin).toBe("rgb(45, 43, 43)");
+        // KARŞIT İDDİA: --color-neutral-900'ün koyu-tema (ink) değeri,
+        // #f8f4f4 → rgb(248, 244, 244).
+        expect(zemin).not.toBe("rgb(248, 244, 244)");
         expect(hatalar).toEqual([]);
       } finally {
         await page.close();

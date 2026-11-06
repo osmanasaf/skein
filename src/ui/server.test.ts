@@ -191,6 +191,103 @@ describe("serveUi", () => {
   });
 });
 
+/**
+ * TEMA ANAHTARI — kart c-20261106-e62847 (koyu tema baştan kur + tema
+ * anahtarı). Üç hâl: "sistem" (hiç seçim yoksa varsayılan, `<html>`'de
+ * nitelik YOK, OS tercihi `@media`'yla izlenir), "acik" (data-theme=
+ * "light"), "koyu" (data-theme="dark"). Seçim `.skein/ekran.json`'a
+ * yazılıyor (`port-memory.ts`'teki `sonTemaYaz`, port/akış hafızasıyla
+ * AYNI dosya) — bu yüzden "sayfa yenilenince korunuyor" iddiası GERÇEK
+ * bir HTTP isteğiyle, GERÇEK dosyadan okunarak sınanıyor, bir JS
+ * değişkeniyle değil.
+ */
+/**
+ * `<html ...>` ETİKETİNİN KENDİSİ — "data-theme" dizgisi sayfanın CSS'inde
+ * (seçici olarak) de geçiyor, ve `<!doctype html>` kendi `>`'siyle BİTİYOR,
+ * yani "ilk >'ye kadar" almak doctype'ı yakalar. Bu yüzden önce `<html`
+ * aranıyor, KAPANIŞ `>`'si ONDAN SONRA bulunuyor.
+ */
+function htmlEtiketi(html: string): string {
+  const bas = html.indexOf("<html");
+  return html.slice(bas, html.indexOf(">", bas) + 1);
+}
+
+describe("serveUi — tema anahtarı", () => {
+  it("hiç seçim yapılmadıysa GET / <html> niteliksiz döner (sistem)", async () => {
+    const html = await (await fetch(server.url)).text();
+    expect(htmlEtiketi(html)).toBe('<html lang="tr">');
+  });
+
+  it("POST /tema 'koyu' yazar, SONRAKİ GET / data-theme=\"dark\" döner", async () => {
+    const yaz = await fetch(`${server.url}tema`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-skein-token": server.token },
+      body: JSON.stringify({ tema: "koyu" }),
+    });
+    expect(yaz.status).toBe(200);
+
+    const html = await (await fetch(server.url)).text();
+    expect(htmlEtiketi(html)).toBe('<html lang="tr" data-theme="dark">');
+  });
+
+  it("POST /tema 'acik' yazar, SONRAKİ GET / data-theme=\"light\" döner", async () => {
+    await fetch(`${server.url}tema`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-skein-token": server.token },
+      body: JSON.stringify({ tema: "acik" }),
+    });
+    const html = await (await fetch(server.url)).text();
+    expect(htmlEtiketi(html)).toBe('<html lang="tr" data-theme="light">');
+  });
+
+  it("seçim .skein/ekran.json'a yazılır — AYRI bir sunucu açılışında da okunur", async () => {
+    await fetch(`${server.url}tema`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-skein-token": server.token },
+      body: JSON.stringify({ tema: "koyu" }),
+    });
+    const ekran = JSON.parse(await readFile(join(root, ".skein", "ekran.json"), "utf8")) as { tema?: string };
+    expect(ekran.tema).toBe("koyu");
+
+    // Aynı kök dizinle YENİ bir ekran: port/akış hafızasının izlediği
+    // AYNI "diskten oku" ilkesi — işlem belleğinde TUTULAN bir değer
+    // değil.
+    const s2 = await serveUi({ root, queue, topology, flowName: gercekFlow.name, flowHash: gercekFlow.hash });
+    try {
+      const html = await (await fetch(s2.url)).text();
+      expect(htmlEtiketi(html)).toBe('<html lang="tr" data-theme="dark">');
+    } finally {
+      await s2.close();
+    }
+  });
+
+  it("jeton yoksa/yanlışsa 403 — kayıt DEĞİŞMİYOR", async () => {
+    const res = await fetch(`${server.url}tema`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-skein-token": "deadbeef" },
+      body: JSON.stringify({ tema: "koyu" }),
+    });
+    expect(res.status).toBe(403);
+    const html = await (await fetch(server.url)).text();
+    expect(htmlEtiketi(html)).toBe('<html lang="tr">');
+  });
+
+  it("geçersiz tema değeri 400 — 'açık' İ'li yazım 'acik' İLE AYNI SAYILMAZ", async () => {
+    const res = await fetch(`${server.url}tema`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-skein-token": server.token },
+      body: JSON.stringify({ tema: "açık" }),
+    });
+    expect(res.status).toBe(400);
+    const html = await (await fetch(server.url)).text();
+    expect(htmlEtiketi(html)).toBe('<html lang="tr">');
+  });
+
+  it("GET /tema yok — yalnızca POST ile yazılır", async () => {
+    expect((await fetch(`${server.url}tema`)).status).toBe(404);
+  });
+});
+
 describe("serveUi — kapıyı açmak", () => {
   const birak = (id: string, karar?: string, baslik?: Record<string, string>) =>
     fetch(`${server.url}kart/${id}/birak`, {
