@@ -3295,24 +3295,45 @@ function ajanGuncelKart(rolId, cards) {
 }
 
 /**
+ * guncelKart + daemon'dan "şu an" DURUMUNUN KARARI — ajanDurumMetni (sol
+ * satır) VE ajanSuAnKutuKur (sağ "Şu an" kutusu) AYNI kart için bu kararı
+ * İKİ YERDE AYRI AYRI vermesin diye BURADAN okuyor: ikisi ayrı ayrı karar
+ * verince aynı ekranda çelişen anlatılar çıkıyordu — kart "active" ama
+ * gözcü ölüyken sol satır "gözcü kapalı · … yarıda" derken sağ kutu hâlâ
+ * sahte bir "Bash · …" basıyordu (reviewer'ın b64fe2f için itirazı). SAF,
+ * DOM yok.
+ *
+ * "gözcüKapali" dalı KASITLI OLARAK "live"/"calisiyor" dalından ÖNCE: bir
+ * kart "active" durumunda olabilir ama gözcü çökmüşse (bayat kilit) ona
+ * dokunan bir süreç YOK — "Bash · …" demek operatöre var olmayan bir
+ * işlemi varmış gibi göstermek olurdu, SAPMALAR.md §2.6'nın "bayat
+ * kilitte düğme 'durdur' DEMEZ" kuralıyla AYNI ilke, burada karta
+ * uygulanmış hâli.
+ */
+function ajanSuAnDurumu(guncelKart, daemon) {
+  if (!guncelKart) return null;
+  if (guncelKart.state !== "active") return { tur: "kapida" };
+  if (!(daemon && daemon.alive)) return { tur: "gozcuKapali" };
+  if (guncelKart.live) return { tur: "live", live: guncelKart.live };
+  return { tur: "calisiyor" };
+}
+
+/**
  * Rolün tek satırlık durum metni — DEVIR.md §6'nın beş örneğinin BİREBİR
  * karşılığı: "Bash · npx vitest run …", "kapıda bekliyor · …", "N kart
  * kuyrukta", "boşta", "gözcü kapalı · … yarıda". SAF, DOM yok.
  *
- * "gözcü kapalı" dalı KASITLI OLARAK "koşuyor" dalından ÖNCE: bir kart
- * "active" durumunda olabilir ama gözcü çökmüşse (bayat kilit) ona
- * dokunan bir süreç YOK — "Bash · …" demek operatöre var olmayan bir
- * işlemi varmış gibi göstermek olurdu, SAPMALAR.md §2.6'nın "bayat
- * kilitte düğme 'durdur' DEMEZ" kuralıyla AYNI ilke, burada rol durumuna
- * uygulanmış hâli.
+ * Kararın kendisi ajanSuAnDurumu'ndan geliyor (bkz. onun yorumu) — burada
+ * yalnızca o kararın BU satır için METNE çevrilmesi var.
  */
 function ajanDurumMetni(role, guncelKart, daemon) {
-  if (guncelKart && guncelKart.state === "active") {
-    if (!(daemon && daemon.alive)) return "gözcü kapalı · " + guncelKart.title + " yarıda";
-    if (guncelKart.live) return (guncelKart.live.name || guncelKart.live.kind) + " · " + (guncelKart.live.detail || "");
-    return "çalışıyor";
+  const durum = ajanSuAnDurumu(guncelKart, daemon);
+  if (durum) {
+    if (durum.tur === "gozcuKapali") return "gözcü kapalı · " + guncelKart.title + " yarıda";
+    if (durum.tur === "live") return (durum.live.name || durum.live.kind) + " · " + (durum.live.detail || "");
+    if (durum.tur === "calisiyor") return "çalışıyor";
+    return "kapıda bekliyor · " + guncelKart.title;
   }
-  if (guncelKart && guncelKart.gate) return "kapıda bekliyor · " + guncelKart.title;
   if (role.depth > 0) return role.depth + " kart kuyrukta";
   return "boşta";
 }
@@ -6231,24 +6252,35 @@ async function yeniRolGonder() {
  * Seçili rolün "Şu an" kutusu — DEVIR.md §6: surface zemin, çalışırken/
  * kapıda üstte 4px accent çizgi, kart başlığı, adım/araç/süre/maliyet
  * satırı, "Kartı panoda aç".
+ *
+ * "daemon" parametresi ZORUNLU — ajanSuAnDurumu'na bakmadan guncelKart'ın
+ * "live" alanını basmak, gözcü ölüyken (bayat kilit) solda aynı kart için
+ * ajanDurumMetni'nin söylediği "gözcü kapalı · … yarıda" ile ÇELİŞEN sahte
+ * bir "Bash · …" üretirdi (reviewer'ın b64fe2f itirazı). Karar BURADA da
+ * aynı ajanSuAnDurumu'ndan okunuyor ki iki yüzey aynı karttan AYNI sonuca
+ * varsın.
  */
-function ajanSuAnKutuKur(guncelKart) {
+function ajanSuAnKutuKur(guncelKart, daemon) {
   const kutu = el("div", "ajanSuAn");
   if (!guncelKart) {
     kutu.append(el("div", "ipucu", "Şu an bu role atanmış bir kart yok."));
     return kutu;
   }
-  // guncelKart burada YA koşuyor YA kapıda (ajanGuncelKart'ın tanımı) —
-  // DEVIR'in "çalışırken ya da kapıda üstte 4px accent çizgi" kuralı bu
-  // yüzden KOŞULSUZ: başka bir durumda bu kutu hiç açılmaz.
-  kutu.classList.add("ajanSuAn-vurgulu");
+  const durum = ajanSuAnDurumu(guncelKart, daemon);
+  // "gözcü kapalı" ise bu karta dokunan bir süreç YOK — DEVIR'in
+  // "çalışırken ya da kapıda üstte 4px accent çizgi" kuralı o yüzden bu
+  // dalda KASITLI OLARAK uygulanmıyor: accent çizgisi "şu an önemli bir
+  // şey oluyor" der, burada olmuyor.
+  if (durum.tur !== "gozcuKapali") kutu.classList.add("ajanSuAn-vurgulu");
   kutu.append(el("div", "ajanSuAnBaslik", guncelKart.title));
 
   const satir = el("div", "ajanSuAnSatir mono");
-  if (guncelKart.state === "active" && guncelKart.live) {
-    satir.append(el("b", null, guncelKart.live.name || guncelKart.live.kind));
-    if (guncelKart.live.detail) satir.append(el("span", null, guncelKart.live.detail));
-  } else if (guncelKart.state === "active") {
+  if (durum.tur === "gozcuKapali") {
+    satir.append(el("span", null, "gözcü kapalı · yarıda"));
+  } else if (durum.tur === "live") {
+    satir.append(el("b", null, durum.live.name || durum.live.kind));
+    if (durum.live.detail) satir.append(el("span", null, durum.live.detail));
+  } else if (durum.tur === "calisiyor") {
     satir.append(el("span", null, "çalışıyor"));
   } else {
     satir.append(el("span", null, "kapıda"));
@@ -6359,7 +6391,7 @@ function ajanPanelKur(m, rolId) {
   panel.append(ust);
 
   const guncelKart = ajanGuncelKart(rolId, m.cards);
-  panel.append(ajanSuAnKutuKur(guncelKart));
+  panel.append(ajanSuAnKutuKur(guncelKart, m.daemon));
   panel.append(ajanAdimlarKur(guncelKart, m.daemon));
   panel.append(ajanGorevKur(meta));
   return panel;

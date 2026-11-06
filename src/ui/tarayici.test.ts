@@ -3002,6 +3002,12 @@ roles:
         // etiketi görünür, ve Adımlar listesi SUNUCUDAN GERÇEKTEN gelen
         // iki adımı EN YENİSİ EN ÜSTTE gösteriyor.
         expect(await page.textContent(".ajanSuAnBaslik")).toBe("jitter ekle");
+        // "Şu an" kutusunun KENDİ satırı da sol satırla AYNI "araç ·
+        // ayrıntı"yı taşıyor — ajanSuAnDurumu'nun "live" dalının bu kutuya
+        // GERÇEKTEN ulaştığının kanıtı (bkz. ajanSuAnKutuKur, page.ts).
+        const suAnSatirMetni = await page.textContent(".ajanSuAnSatir");
+        expect(suAnSatirMetni).toContain("Bash");
+        expect(suAnSatirMetni).toContain("npx vitest run");
         await page.waitForSelector(".ajanCanliEtiket", { timeout: 10_000 });
         await page.waitForSelector(".ajanAdim", { timeout: 10_000 });
         const adimlar = await page.evaluate(() =>
@@ -3010,6 +3016,52 @@ roles:
         expect(adimlar[0]).toContain("Bash");
         expect(adimlar[0]).toContain("npx vitest run");
         expect(adimlar[1]).toContain("Read");
+
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+      }
+    }, 60_000);
+
+    /**
+     * BAYAT KİLİT — reviewer'ın b64fe2f için itirazı: kart "active" olsa
+     * bile gözcü ÖLÜYSE (burada hiç acquireLock çağrılmıyor, tıpkı "gözcü
+     * kapalıyken çalışan kart" (satır ~1667) testindeki gibi) "Şu an"
+     * kutusu SOLDAKİ satırla (ajanDurumMetni) ÇELİŞEN sahte bir
+     * "Bash · …" basmamalı — ikisi AYNI karttan AYNI kararı (page.ts,
+     * ajanSuAnDurumu) okumalı.
+     */
+    it("gözcü ölüyken 'Şu an' kutusu da 'gözcü kapalı' der, sahte araç satırı basmaz", async () => {
+      const kart = await queue.add(newCard({ title: "bayat-kilit", task: "iş", topology }));
+      await al(queue, "coder");
+      const log = new EventLog(join(root, ".skein", "olaylar.jsonl"), "kosu-2");
+      await log.append({
+        type: "agent.started", cell: `${kart.id}:coder`, role: "coder",
+        provider: "claude", model: "m", promptHash: "h",
+      });
+      await log.append({
+        type: "agent.step", cell: `${kart.id}:coder`, role: "coder",
+        seq: 1, kind: "tool", name: "Bash", detail: "npx vitest run",
+      });
+
+      const { page, hatalar } = await ac();
+      try {
+        await page.click('.navSekme:has-text("Ajanlar")');
+        await page.waitForSelector(".ajanSatir", { timeout: 10_000 });
+
+        // SOL SATIR: page.test.ts'teki ajanDurumMetni biriminin GERÇEK
+        // DOM karşılığı.
+        await page.waitForSelector('.ajanSatirDurum:has-text("gözcü kapalı")', { timeout: 10_000 });
+        expect(await page.textContent(".ajanSatirDurum")).toBe("gözcü kapalı · bayat-kilit yarıda");
+
+        // SAĞ KUTU — AYNI kart için AYNI anlatı: sahte "Bash" satırı YOK,
+        // "gözcü kapalı" VAR, ve "şu an önemli bir şey oluyor" diyen
+        // accent çizgisi (ajanSuAn-vurgulu) de BASILMIYOR.
+        const satirMetni = await page.textContent(".ajanSuAnSatir");
+        expect(satirMetni).not.toContain("Bash");
+        expect(satirMetni).toContain("gözcü kapalı");
+        expect(await page.evaluate(() =>
+          document.querySelector(".ajanSuAn")?.classList.contains("ajanSuAn-vurgulu"))).toBe(false);
 
         expect(hatalar).toEqual([]);
       } finally {

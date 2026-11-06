@@ -2052,9 +2052,13 @@ describe("ajanGuncelKart — rolün 'güncel' kartı", () => {
 describe("ajanDurumMetni — DEVIR.md §6'nın beş durum metni", () => {
   const ON = { alive: true };
   const KAPALI = null;
+  // ajanDurumMetni artık kararı paylaşılan ajanSuAnDurumu'ndan okuyor
+  // (bkz. page.ts yorumu — ajanSuAnKutuKur İKİSİ aynı karardan geçsin
+  // diye); o yüzden tek başına değil, ikisi BİRLİKTE çıkarılıyor
+  // (rolKonumu/FORMASYON_GOVDE çiftinin aynı deseni, bkz. fonksiyonlar).
   const durum = (role: { depth: number }, kart: AjanKart | null, daemon: unknown): string =>
-    fonksiyon<(r: { depth: number }, k: AjanKart | null, d: unknown) => string>(
-      renderPage("t"), "ajanDurumMetni",
+    fonksiyonlar<(r: { depth: number }, k: AjanKart | null, d: unknown) => string>(
+      renderPage("t"), ["ajanSuAnDurumu", "ajanDurumMetni"], "ajanDurumMetni",
     )(role, kart, daemon);
 
   it("boşta: kart yok, kuyruk boş", () => {
@@ -2100,6 +2104,58 @@ describe("ajanDurumMetni — DEVIR.md §6'nın beş durum metni", () => {
   it("gözcü kapalı: daemon alive:false iken de aynı dal çalışır", () => {
     const kart: AjanKart = { role: "coder", state: "active", title: "x" };
     expect(durum({ depth: 0 }, kart, { alive: false })).toBe("gözcü kapalı · x yarıda");
+  });
+});
+
+/**
+ * ajanSuAnDurumu — ajanDurumMetni (sol satır) VE ajanSuAnKutuKur (sağ
+ * "Şu an" kutusu) İKİSİNİN DE okuduğu PAYLAŞILAN karar (bkz. page.ts
+ * yorumu). Üstteki describe zaten bu kararı ajanDurumMetni'nin METNİ
+ * üzerinden dolaylı sınıyor; burada doğrudan ŞEKLİ (tur + live) sınanıyor
+ * — reviewer'ın b64fe2f itirazının tam karşılığı: iki yüzeyin AYRI AYRI
+ * karar vermesi önce buradan, tek bir yerden kesiliyor.
+ */
+describe("ajanSuAnDurumu — iki yüzeyin paylaştığı karar", () => {
+  type AjanDurum = { tur: string; live?: { name?: string; kind?: string; detail?: string } };
+  const durum = (kart: AjanKart | null, daemon: unknown): AjanDurum | null =>
+    fonksiyon<(k: AjanKart | null, d: unknown) => AjanDurum | null>(
+      renderPage("t"), "ajanSuAnDurumu",
+    )(kart, daemon);
+
+  it("kart yoksa null — çağıran kendi 'boşta'/'kuyrukta' kararını verir", () => {
+    expect(durum(null, { alive: true })).toBeNull();
+  });
+
+  it("kart kapıda (active değil) — gözcü durumu FARK ETMEZ", () => {
+    const kart: AjanKart = { role: "coder", state: "gate", gate: "approval", title: "x" };
+    expect(durum(kart, { alive: true })).toEqual({ tur: "kapida" });
+    expect(durum(kart, null)).toEqual({ tur: "kapida" });
+  });
+
+  // SINIR: gözcü ÖLÜYSE (daemon null YA DA alive:false) bu dal "live"dan
+  // ÖNCE devreye girer — kartın "live" alanı dolu olsa BİLE.
+  it("active + gözcü ÖLÜ (daemon null) — gozcuKapali, live alanı YOK SAYILIR", () => {
+    const kart: AjanKart = {
+      role: "coder", state: "active", title: "x",
+      live: { name: "Bash", kind: "tool", detail: "npx vitest run" },
+    };
+    expect(durum(kart, null)).toEqual({ tur: "gozcuKapali" });
+  });
+
+  it("active + gözcü ÖLÜ (daemon.alive === false) — gozcuKapali", () => {
+    const kart: AjanKart = { role: "coder", state: "active", title: "x" };
+    expect(durum(kart, { alive: false })).toEqual({ tur: "gozcuKapali" });
+  });
+
+  it("active + gözcü AÇIK + live var — live, live'ın KENDİSİ taşınır", () => {
+    const live = { name: "Bash", kind: "tool", detail: "npx vitest run" };
+    const kart: AjanKart = { role: "coder", state: "active", title: "x", live };
+    expect(durum(kart, { alive: true })).toEqual({ tur: "live", live });
+  });
+
+  it("active + gözcü AÇIK + live yok — calisiyor", () => {
+    const kart: AjanKart = { role: "coder", state: "active", title: "x", live: null };
+    expect(durum(kart, { alive: true })).toEqual({ tur: "calisiyor" });
   });
 });
 
