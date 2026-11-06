@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
 import { createRequire } from "node:module";
+import { writeFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -428,6 +429,184 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
       expect(dugmeler.some((d) => d.includes("Gözcüyü durdur"))).toBe(false);
     } finally {
       await page.close();
+    }
+  }, 60_000);
+
+  /**
+   * GÖZCÜ PANELİ — MOD 4 (DEVIR.md §2, kart c-20261105-92d731).
+   *
+   * Önceki kart çipi "tek başına tıklanabilir DEĞİL" diye not etmişti
+   * (sağ panel henüz yoktu). Bu takım o notu kapatan gerçek davranışı
+   * tarayıcıda ölçüyor: `page.test.ts` yalnızca KARAR fonksiyonlarını
+   * (gozcuPanelDurum/gozcuTopoUyari/gozcuEylemEtiketi) SAF olarak sınıyor —
+   * çipin GERÇEKTEN tıklanabilir olduğu, paneli AÇTIĞI ve doğru düğmenin
+   * gözcüyü GERÇEKTEN başlattığı/durdurduğu yalnızca burada görünür
+   * (tıpkı "Gözcüyü durdur"ın hiçbir şeyi durdurmadığı üç kusurun ancak
+   * tarayıcıda çıktığı gibi, bkz. dosya başı yorumu).
+   */
+  it("gözcü çipine tıklayınca sağ panel açılır — unmanaged: düğme yok, iki komut", async () => {
+    const { page } = await ac();
+    try {
+      await page.waitForSelector("#bar .pill", { timeout: 15_000 });
+      await page.click("#bar .pill");
+      await page.waitForSelector(".railGozcuBaslik", { timeout: 10_000 });
+      expect(await page.textContent(".railGozcuBaslik")).toBe("gözcü · elle");
+      const komutlar = await page.evaluate(() =>
+        Array.from(document.querySelectorAll(".railGozcuKomut")).map((e) => e.textContent ?? ""));
+      expect(komutlar.length).toBe(2);
+      expect(komutlar[0]).toContain("src/watch/cli.ts");
+      expect(komutlar[1]).toContain("src/ui/cli.ts");
+      const dugmeVar = await page.evaluate(() => Boolean(document.querySelector(".railGozcuEylemler button")));
+      expect(dugmeVar).toBe(false);
+    } finally {
+      await page.close();
+    }
+  }, 60_000);
+
+  /** Gözcü bayraklarıyla açılan, sahte `spawn` alan ayrı bir sunucu — bu takımın MANAGED sınamaları için. */
+  async function yonetilenSunucu(gozcuAyar: {
+    bayraklar?: string[];
+    spawn?: (argv: string[]) => { pid: number; kill: () => void; onExit: (cb: () => void) => void };
+  } = {}): Promise<{ s: UiServer; flow: { name: string; hash: string } }> {
+    const flow = await loadFlow(join(root, "hub", "flows", "test.yaml"), { root, providers: knownProviderSet() });
+    const s = await serveUi({
+      root, queue, topology, flowName: flow.name, flowHash: flow.hash,
+      // Bayat kilidin PID'i gerçek olmayabilir (4_194_305 gibi) — alive
+      // override'ı o YOLU bozmuyor, pidAlive zaten test boyunca
+      // KULLANILMIYOR (model her zaman verilen fonksiyona bakıyor).
+      alive: () => true,
+      gozcu: {
+        komut: ["node", "-e", ""],
+        bayraklar: gozcuAyar.bayraklar ?? ["--model", "claude:m"],
+        spawn: (gozcuAyar.spawn ?? (() => ({ pid: 777, kill: () => {}, onExit: () => {} }))) as never,
+      },
+    });
+    return { s, flow };
+  }
+
+  it("yönetilen ekranda kapalıyken panelden başlatmak gözcüyü GERÇEKTEN çalıştırır", async () => {
+    const cagrilar: string[][] = [];
+    const { s, flow } = await yonetilenSunucu({
+      spawn: (argv) => {
+        cagrilar.push(argv);
+        // Gerçek gözcü kilidi KENDİSİ yazar (watch/cli.ts); sahte spawn
+        // bunu SENKRON taklit ediyor — asenkron yazsaydı HTTP cevabındaki
+        // model hâlâ "kapalı" okurdu (yarış), panel bir turluk YANLIŞ
+        // durum gösterirdi.
+        writeFileSync(join(root, ".skein", "daemon.json"), JSON.stringify({
+          pid: 777, startedAt: new Date().toISOString(), flow: flow.name, hash: flow.hash, mode: "serve",
+        }));
+        return { pid: 777, kill: () => {}, onExit: () => {} };
+      },
+    });
+    const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+    try {
+      await page.goto(s.url, { waitUntil: "networkidle" });
+      await page.waitForSelector("#bar .pill", { timeout: 15_000 });
+      await page.click("#bar .pill");
+      await page.waitForSelector(".railGozcuEylemler .railBtn", { timeout: 10_000 });
+      expect(await page.textContent(".railGozcuEylemler .railBtn")).toBe("Gözcüyü başlat");
+
+      await page.click(".railGozcuEylemler .railBtn");
+      await page.waitForTimeout(400);
+      expect(cagrilar).toEqual([["node", "-e", "", "test", "--serve", "--model", "claude:m"]]);
+      expect(await page.textContent(".railGozcuBaslik")).toBe("gözcü açık");
+    } finally {
+      await page.close();
+      await s.close();
+    }
+  }, 60_000);
+
+  it("yönetilen ekranda AÇIK gözcüyü panelden durdurmak 'Süren tur bitiyor…' gösterir", async () => {
+    // "Durdur" sunucuda YALNIZCA bu ekranın BAŞLATTIĞI süreci kabul ediyor
+    // (SAPMALAR §2.6 kural 2) — o yüzden kilidi ELLE yazıp hemen durdurmayı
+    // DENEMEK YERİNE önce GERÇEKTEN "Gözcüyü başlat"a basılıyor (sahte
+    // spawn kilidi senkron yazıyor, bkz. önceki sınama), `cocuk` sunucuda
+    // GERÇEKTEN kurulsun.
+    const { s, flow } = await yonetilenSunucu({
+      spawn: (argv) => {
+        writeFileSync(join(root, ".skein", "daemon.json"), JSON.stringify({
+          pid: 777, startedAt: new Date().toISOString(), flow: flow.name, hash: flow.hash, mode: "serve",
+        }));
+        return { pid: 777, kill: () => {}, onExit: () => {} };
+      },
+    });
+    const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+    try {
+      await page.goto(s.url, { waitUntil: "networkidle" });
+      await page.waitForSelector("#bar .pill", { timeout: 15_000 });
+      await page.click("#bar .pill");
+      await page.waitForSelector(".railGozcuEylemler .railBtn", { timeout: 10_000 });
+      await page.click(".railGozcuEylemler .railBtn"); // "Gözcüyü başlat"
+      await page.waitForTimeout(400);
+      expect(await page.textContent(".railGozcuEylemler .railBtn")).toBe("Gözcüyü durdur");
+
+      await page.click(".railGozcuEylemler .railBtn"); // "Gözcüyü durdur"
+      await page.waitForTimeout(400);
+      const dugme = await page.evaluate(() => {
+        const b = document.querySelector(".railGozcuEylemler button") as { textContent: string | null; disabled?: boolean } | null;
+        return b ? { metin: b.textContent, devreDisi: Boolean(b.disabled) } : null;
+      });
+      expect(dugme).toEqual({ metin: "Süren tur bitiyor…", devreDisi: true });
+      expect(await page.textContent(".railGozcuBaslik")).toBe("gözcü duruyor…");
+    } finally {
+      await page.close();
+      await s.close();
+    }
+  }, 60_000);
+
+  it("yönetilen ekranda bayat kilitte panel 'Kilidi devral ve başlat' gösterir, durdur YOK", async () => {
+    // Bu sınama `yonetilenSunucu`nun "alive" override'ını KASITLI
+    // KULLANMIYOR: override her pid'i canlı sayar, oysa "bayat kilit"in
+    // GERÇEK anlamı pid'in GERÇEKTEN ölü olması — gerçek `pidAlive` ile
+    // ölçülmesi gerekiyor.
+    const flow = await loadFlow(join(root, "hub", "flows", "test.yaml"), { root, providers: knownProviderSet() });
+    const s = await serveUi({
+      root, queue, topology, flowName: flow.name, flowHash: flow.hash,
+      gozcu: { komut: ["node"], bayraklar: [], spawn: (() => ({ pid: 1, kill: () => {}, onExit: () => {} })) as never },
+    });
+    // Ölü pid: "bayat kilitte gözcü düğmesi 'başlat' diyor" sınamasıyla AYNI
+    // sabit (2^22 üstü Linux'ta ayrılmaz).
+    await acquireLock(join(root, ".skein", "daemon.json"), {
+      pid: 4_194_305, startedAt: new Date().toISOString(), flow: flow.name, hash: flow.hash, mode: "serve",
+    });
+    const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+    try {
+      await page.goto(s.url, { waitUntil: "networkidle" });
+      await page.waitForSelector("#bar .pill", { timeout: 15_000 });
+      await page.click("#bar .pill");
+      await page.waitForSelector(".railGozcuEylemler .railBtn", { timeout: 10_000 });
+      expect(await page.textContent(".railGozcuEylemler .railBtn")).toBe("Kilidi devral ve başlat");
+      const digerDugmeler = await page.evaluate(() =>
+        Array.from(document.querySelectorAll(".railGozcuEylemler button")).map((b) => b.textContent ?? ""));
+      expect(digerDugmeler.some((d) => d.includes("Gözcüyü durdur"))).toBe(false);
+    } finally {
+      await page.close();
+      await s.close();
+    }
+  }, 60_000);
+
+  it("topoloji uyarısı: akış hash'i gözcününkiyle UYUŞMUYORSA 'Yeniden başlat' çıkar", async () => {
+    const { s, flow } = await yonetilenSunucu();
+    writeFileSync(join(root, ".skein", "daemon.json"), JSON.stringify({
+      pid: 777, startedAt: new Date().toISOString(), flow: flow.name, hash: "ESKI-HASH-abc", mode: "serve",
+    }));
+    const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+    try {
+      await page.goto(s.url, { waitUntil: "networkidle" });
+      await page.waitForSelector("#bar .pill", { timeout: 15_000 });
+      expect(await page.textContent("#bar .pill")).toContain("gözcü · yeniden başlat");
+      await page.click("#bar .pill");
+      await page.waitForSelector(".railGozcuUyari", { timeout: 10_000 });
+      const yenidenVar = await page.evaluate(() =>
+        Array.from(document.querySelectorAll(".railGozcuUyari button")).some((b) => b.textContent === "Yeniden başlat"));
+      expect(yenidenVar).toBe(true);
+      // Normal "Gözcüyü durdur" düğmesi UYARI KUTUSUNUN YANINDA hâlâ duruyor
+      // — topoloji uyarısı "on" durumunu DEĞİŞTİRMİYOR, yalnızca EK bir kutu.
+      expect(await page.textContent(".railGozcuEylemler .railBtn")).toBe("Gözcüyü durdur");
+    } finally {
+      await page.close();
+      await s.close();
     }
   }, 60_000);
 

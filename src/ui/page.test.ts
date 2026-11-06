@@ -542,6 +542,148 @@ describe("gozcuDurum — gözcü çipinin durum kararı", () => {
   });
 });
 
+type DaemonInfo = { pid: number; flow: string; hash: string; mode: "serve" | "batch"; startedAt: string };
+type Daemon = { alive: boolean; info: DaemonInfo } | null;
+
+const DAEMON_INFO: DaemonInfo = { pid: 1, flow: "f", hash: "abc", mode: "serve", startedAt: "2026-01-01T00:00:00.000Z" };
+
+/**
+ * GOZCUPANELDURUM — gözcü PANELİNİN beş durumu (DEVIR.md §2, kart
+ * c-20261105-92d731). `gozcuDurum`'u (yukarıda) YAPI TAŞI olarak
+ * kullandığı için fonksiyonlar() ile İKİSİ BİRLİKTE çıkarılıyor —
+ * `fonksiyon()` burada `gozcuDurum is not defined` ile patlardı (bkz.
+ * rolKonumu/FORMASYON_GOVDE emsali, yukarıda `fonksiyonlar` yorumu).
+ */
+describe("gozcuPanelDurum — gözcü panelinin beş durumu", () => {
+  type Durum = { durum: string; etiket: string };
+  const durum = (g: Daemon, yonetiliyor: boolean, duruyor: boolean): Durum =>
+    fonksiyonlar<(g: Daemon, y: boolean, d: boolean) => Durum>(
+      renderPage("t"), ["gozcuDurum", "gozcuPanelDurum"], "gozcuPanelDurum",
+    )(g, yonetiliyor, duruyor);
+
+  // ÖNCELİK: yönetilmiyorsa HER ZAMAN "unmanaged" — gözcü GERÇEKTEN
+  // çalışıyor olsa BİLE (başka bir kabuktan açılmış olabilir).
+  it("yönetilmiyorsa durum her zaman unmanaged", () => {
+    expect(durum(null, false, false)).toEqual({ durum: "unmanaged", etiket: "gözcü · elle" });
+    expect(durum({ alive: true, info: DAEMON_INFO }, false, false))
+      .toEqual({ durum: "unmanaged", etiket: "gözcü · elle" });
+  });
+
+  it("yönetiliyor, kilit yok: off", () => {
+    expect(durum(null, true, false)).toEqual({ durum: "off", etiket: "gözcü kapalı" });
+  });
+
+  it("yönetiliyor, kilit ölü: stale", () => {
+    expect(durum({ alive: false, info: DAEMON_INFO }, true, false))
+      .toEqual({ durum: "stale", etiket: "gözcü çökmüş" });
+  });
+
+  it("yönetiliyor, canlı, bekleyen YOK: on", () => {
+    expect(durum({ alive: true, info: DAEMON_INFO }, true, false))
+      .toEqual({ durum: "on", etiket: "gözcü açık" });
+  });
+
+  // SINIR: canlı VE durdurma bekleniyor → "stopping", "on" DEĞİL. Bayrak
+  // yokken bu dal hiç tetiklenmez ("on" döner) — model SIGTERM'den SONRA
+  // bile `alive: true` okuduğu için (süreç henüz ölmedi) bu bayrak olmadan
+  // çip bir tur boyunca "açık" demeye devam ederdi.
+  it("yönetiliyor, canlı, bekleyen VAR: stopping, on DEĞİL", () => {
+    expect(durum({ alive: true, info: DAEMON_INFO }, true, true))
+      .toEqual({ durum: "stopping", etiket: "gözcü duruyor…" });
+  });
+
+  // "duruyor" bayrağı yalnızca CANLI dalda etkili — kilit yoksa/ölüyse
+  // durdurma beklemek anlamsız, off/stale olarak kalmalı.
+  it("bekleyen VAR ama kilit yok/ölüyse off/stale'den ÇIKMAZ", () => {
+    expect(durum(null, true, true)).toEqual({ durum: "off", etiket: "gözcü kapalı" });
+    expect(durum({ alive: false, info: DAEMON_INFO }, true, true))
+      .toEqual({ durum: "stale", etiket: "gözcü çökmüş" });
+  });
+});
+
+/**
+ * GOZCUTOPOUYARI — DEVIR.md §2 "Topoloji uyarısı" kararı. SAF, DOM yok.
+ */
+describe("gozcuTopoUyari — akış gözcü açıldıktan sonra değişti mi", () => {
+  const uyari = (g: Daemon, flowHash: string, durum: string): boolean =>
+    fonksiyon<(g: Daemon, f: string, d: string) => boolean>(renderPage("t"), "gozcuTopoUyari")(g, flowHash, durum);
+
+  it("açıkken hash değiştiyse uyarır", () => {
+    expect(uyari({ alive: true, info: DAEMON_INFO }, "YENI-HASH", "on")).toBe(true);
+  });
+
+  it("açıkken hash AYNIYSA uyarmaz", () => {
+    expect(uyari({ alive: true, info: DAEMON_INFO }, DAEMON_INFO.hash, "on")).toBe(false);
+  });
+
+  // SINIR: hash farklı olsa bile durum "on" DEĞİLSE (stopping/stale/off)
+  // uyarmaz — "Yeniden başlat" vaat eder ama başlatılacak canlı bir süreç
+  // yok, yapamayacağı şeyi vaat eden düğme sınıfına düşerdi.
+  it("durum 'on' değilse hash farklı olsa da uyarmaz", () => {
+    expect(uyari({ alive: true, info: DAEMON_INFO }, "YENI-HASH", "stopping")).toBe(false);
+  });
+
+  it("kilit yoksa uyarmaz", () => {
+    expect(uyari(null, "YENI-HASH", "on")).toBe(false);
+  });
+});
+
+/** GOZCUKOMUTORNEKLERI — "unmanaged" panelindeki iki örnek komut. SAF, DOM yok. */
+describe("gozcuKomutOrnekleri — ayrı kabuk komutları", () => {
+  const ornekler = (flowName: string): { cmd1: string; cmd2: string } =>
+    fonksiyon<(f: string) => { cmd1: string; cmd2: string }>(renderPage("t"), "gozcuKomutOrnekleri")(flowName);
+
+  it("akış adını İKİ komuta da yerleştirir", () => {
+    const o = ornekler("gunluk-tek");
+    expect(o.cmd1).toContain("src/watch/cli.ts");
+    expect(o.cmd1).toContain("gunluk-tek");
+    expect(o.cmd1).toContain("--serve");
+    expect(o.cmd2).toContain("src/ui/cli.ts");
+    expect(o.cmd2).toContain("gunluk-tek");
+  });
+});
+
+/**
+ * GOZCUEYLEMETIKETI — panelin tek başlat/durdur düğmesinin etiketi.
+ * SAF, DOM yok.
+ */
+describe("gozcuEylemEtiketi — başlat/devral/durdur etiketi", () => {
+  const etiket = (g: Daemon): string =>
+    fonksiyon<(g: Daemon) => string>(renderPage("t"), "gozcuEylemEtiketi")(g);
+
+  it("kilit yoksa 'Gözcüyü başlat'", () => {
+    expect(etiket(null)).toBe("Gözcüyü başlat");
+  });
+
+  it("canlıysa 'Gözcüyü durdur'", () => {
+    expect(etiket({ alive: true, info: DAEMON_INFO })).toBe("Gözcüyü durdur");
+  });
+
+  // SINIR: kilit VAR ama ölü (bayat) — "Gözcüyü başlat" DEĞİL, "Kilidi
+  // devral ve başlat". `g && !canli` yerine `!canli` yazılsaydı null
+  // durumunda da bu dal seçilir, "Kilidi devral ve başlat" yanlış yere
+  // (hiç kilit yokken) sızardı.
+  it("kilit var ama ölüyse 'Kilidi devral ve başlat'", () => {
+    expect(etiket({ alive: false, info: DAEMON_INFO })).toBe("Kilidi devral ve başlat");
+  });
+});
+
+/**
+ * RENDERPAGE — gözcü ayarı gömülü (kart c-20261105-92d731). Kaynak metin
+ * sınaması: JETON'un AYNI deseni, `GOZCU_AYAR` sayfaya JSON olarak gömülü.
+ */
+describe("renderPage — gözcü ayarı gömülü", () => {
+  it("ikinci parametre verilmezse GOZCU_AYAR null olur", () => {
+    const src = betik(renderPage("x"));
+    expect(src).toContain("const GOZCU_AYAR = null;");
+  });
+
+  it("bayraklarla verilirse GOZCU_AYAR o bayrakları taşır", () => {
+    const src = betik(renderPage("x", { bayraklar: ["--model", "claude:m"] }));
+    expect(src).toContain('const GOZCU_AYAR = {"bayraklar":["--model","claude:m"]};');
+  });
+});
+
 /**
  * ROZET SAYILARI — Pano/Ajanlar sekme rozetlerinin KARAR noktaları
  * (kart c-20261105-6d7f66). SAF, DOM yok.

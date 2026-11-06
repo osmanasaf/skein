@@ -220,6 +220,73 @@ function goreliYol(flowDir: string, abs: string): string {
   return r.startsWith(".") ? r : `./${r}`;
 }
 
+/** Gözcü günlüğünün ekrana giden hâli — `GET /gozcu/log` (kart c-20261105-92d731). */
+export interface GozcuLogSatiri {
+  at: string;
+  mesaj: string;
+  /** DEVIR.md §2: "hatalar accent-700" — kaynak STDERR'se true (bkz. satirYaziciKur). */
+  hata: boolean;
+}
+
+/**
+ * Tek bir gözcü.log satırını ayrıştırır — SAF.
+ *
+ * Satırlar `satirYaziciKur` tarafından `"HH:MM mesaj"` biçiminde yazılıyor
+ * (stderr kaynaklılar zaten "✗ " ile başlıyor). Biçime UYMAYAN bir satır
+ * (eski/elle eklenmiş içerik) SESSİZCE ATILMIYOR — saati boş, mesajı
+ * ham satırın kendisi olarak gösteriliyor: BİLDİRİLMEYEN SIFIR DEĞİLDİR,
+ * ayrıştıramadığımız bir satırı gizlemek de aynı kusur sınıfı.
+ */
+export function gozcuLogSatiriAyristir(ham: string): GozcuLogSatiri {
+  const esle = /^(\d{2}:\d{2}) (.*)$/.exec(ham);
+  const mesaj = esle ? (esle[2] ?? "") : ham;
+  return { at: esle ? (esle[1] ?? "") : "", mesaj, hata: mesaj.startsWith("✗") };
+}
+
+/**
+ * `.skein/gozcu.log`'un son `n` satırı, ayrıştırılmış — en eskisi önce
+ * (DEVIR.md'nin tablosu zaman sırasıyla okunuyor, en yeni günlük ÇIKIŞI
+ * gibi en ALTTA).
+ *
+ * Dosya yoksa (gözcü bu ekrandan HİÇ açılmamış) BOŞ liste — bu bir okuma
+ * hatası değil, "henüz günlük yok" demek.
+ */
+export async function gozcuLogKuyruk(path: string, n = 20): Promise<GozcuLogSatiri[]> {
+  let metin: string;
+  try {
+    metin = await readFile(path, "utf8");
+  } catch {
+    return [];
+  }
+  const satirlar = metin.split("\n").filter((s) => s !== "");
+  return satirlar.slice(-n).map(gozcuLogSatiriAyristir);
+}
+
+/**
+ * Bir alt sürecin stdout/stderr'ini SAAT DAMGALI satırlara bölüp log
+ * akışına yazan bir `data` dinleyicisi üretir (kart c-20261105-92d731).
+ *
+ * SATIR TAMAMLANMADAN yazılmıyor: `"\n"`e kadar arabelleğe alınıyor, yoksa
+ * tek bir `console.log` birden çok `data` olayına bölünürse ("büyük" bir
+ * satır) ortasına saat damgası ve/veya "✗ " sıkışırdı. Son parça (satır
+ * sonu olmayan kalıntı) süreç çıkarken KASITLI OLARAK atılıyor — pratikte
+ * her `console.log`/`console.error` kendi `\n`'ini taşıyor, ve bu dosyanın
+ * tek tüketicisi (tail) zaten tamamlanmamış bir satırı gösteremez.
+ */
+export function satirYaziciKur(log: NodeJS.WritableStream, hataKaynagi: boolean): (chunk: Buffer) => void {
+  let kalan = "";
+  return (chunk: Buffer) => {
+    kalan += chunk.toString("utf8");
+    const parcalar = kalan.split("\n");
+    kalan = parcalar.pop() ?? "";
+    for (const satir of parcalar) {
+      const saat = new Date().toTimeString().slice(0, 5);
+      const gosterim = hataKaynagi && !satir.startsWith("✗") ? `✗ ${satir}` : satir;
+      log.write(`${saat} ${gosterim}\n`);
+    }
+  };
+}
+
 /**
  * Bize ait sayılan ana bilgisayar adları.
  *
@@ -390,13 +457,20 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
    *
    * Ekranın kendi stdout'una karıştırmak iki akışı birbirine örerdi;
    * dosya hem kalıcı hem de ayrı bir kabukta `tail -f` ile izlenebilir.
+   *
+   * Satırlar artık SAAT DAMGALI yazılıyor (kart c-20261105-92d731, DEVIR.md
+   * §2 "son satırlar: saat + mesaj"): gözcünün KENDİ `console.log`'u saat
+   * basmıyor, bu yüzden damga BURADA, yazma anında ekleniyor — ikinci bir
+   * kaynak (gözcüyü değiştirmek) açmadan. Kaynak STDERR'den gelen her satır
+   * "✗ " ile işaretleniyor (zaten öyle başlamıyorsa) — `/gozcu/log`
+   * (gozcuLogKuyruk) bunu "hata" sayıp accent-700 gösterir.
    */
   const gercekSpawn = (root: string) => (argv: string[]): GozcuSurec => {
     const [komut, ...args] = argv;
     const child = spawnPortable(komut as string, args, { cwd: root });
     const log = createWriteStream(join(root, ".skein", "gozcu.log"), { flags: "a" });
-    child.stdout?.pipe(log);
-    child.stderr?.pipe(log);
+    child.stdout?.on("data", satirYaziciKur(log, false));
+    child.stderr?.on("data", satirYaziciKur(log, true));
     return {
       pid: child.pid,
       onExit: (cb) => {
@@ -1082,7 +1156,25 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
         // Jeton gömülü: sayfa önbelleğe alınırsa eski jetonla açılır.
         "cache-control": "no-store",
       });
-      res.end(renderPage(token));
+      // Gözcü ayarı da jetonla AYNI nedenle gömülü: `options.gozcu`
+      // sürecin ömrü boyunca değişmiyor (DEVIR.md'nin "unmanaged" durumu,
+      // kart c-20261105-92d731) — AKISLAR'ın "bir kez oku" ilkesiyle AYNI.
+      res.end(renderPage(token, options.gozcu ? { bayraklar: [...options.gozcu.bayraklar] } : null));
+      return;
+    }
+
+    if (path === "/gozcu/log") {
+      guncel().then(async (o) => {
+        const satirlar = await gozcuLogKuyruk(join(o.root, ".skein", "gozcu.log"));
+        res.writeHead(200, {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": "no-store",
+        });
+        res.end(JSON.stringify({ satirlar }));
+      }).catch((error: unknown) => {
+        res.writeHead(500, { "content-type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ hata: (error as Error).message }));
+      });
       return;
     }
 

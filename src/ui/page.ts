@@ -13,8 +13,19 @@
  * okuyamaz — yani yazma çağrısı için gereken jetonu öğrenemez. Ayrıntı:
  * `server.ts` içindeki `yetkili()`.
  */
-export function renderPage(token: string): string {
-  return PAGE.replace("__JETON__", token);
+/**
+ * Sayfayı jeton VE gözcü ayarıyla birlikte üretir.
+ *
+ * `gozcu` `null` ise bu ekran gözcü bayraklarıyla açılmadı — sayfadaki
+ * `GOZCU_AYAR` de `null` olur ve gözcü paneli düğme göstermez (bkz. yukarıda
+ * `GOZCU_AYAR` yorumu, DEVIR.md'nin "unmanaged" durumu). `JSON.stringify`
+ * tırnak İÇİNE değil DOĞRUDAN gömülüyor — `JETON`'un aksine bu bir nesne/
+ * `null`, dize değil; tırnaklamak geçersiz bir JS ifadesi üretirdi.
+ */
+export function renderPage(token: string, gozcu: { bayraklar: string[] } | null = null): string {
+  return PAGE
+    .replace("__JETON__", token)
+    .replace("__GOZCU_AYAR__", JSON.stringify(gozcu));
 }
 
 const PAGE = `<!doctype html>
@@ -275,30 +286,36 @@ const PAGE = `<!doctype html>
   }
   #akisSecici:disabled { cursor: progress; opacity: .6; }
   /*
-   * GÖZCÜ ÇİPİ — SAPMALAR.md §1'in gözcü noktası düzeltmelerini TÜKETİYOR:
-   * "yok" durumunun kenarı artık --daemon-dot-off-border'dan geliyor
-   * (önceki kart bunu tanımladı ama hiçbir seçici kullanmıyordu — bkz.
-   * token-kontrast.test.ts). "açık" durumu SAPMALAR'da kusurlu sayılmadı
-   * (accent/bg zaten 3.76:1, büyük-grafik eşiğini geçiyor), o yüzden düz
-   * --color-accent.
+   * GÖZCÜ ÇİPİ — DEVIR.md §2'nin BEŞ durumu (on/stopping/off/stale/
+   * unmanaged, kart c-20261105-92d731). SAPMALAR.md §1'in sapması: BEŞİ DE
+   * aynı 2px --color-text kenarlı kareyi kullanıyor (tasarımın "tüm durum
+   * noktaları kare, 2px kenar" kendi kuralı) — "off"/"unmanaged" aynı
+   * dolguyu (neutral-400) paylaşıyor çünkü tasarımın kendi tablosu da
+   * ikisine AYNI noktayı veriyor, sadece etiket ve düğme ayrışıyor.
+   * "stale" dolgusu --color-text: bu durumda ayrıca ÇİPİN KENDİSİ accent
+   * kenara dönüyor ("dikkat" sınıfı) — DEVIR'in "stale -> çipte accent
+   * kenar" satırı.
    *
-   * Çip TEK BAŞINA tıklanabilir DEĞİL: tasarımın "sağ ok → gözcü paneli"
-   * davranışı bu kartın kapsamında değil (sağ panel henüz yok). Ok salt
-   * görsel ipucu (aria-hidden); gerçek eylem yanındaki düğmede duruyor —
-   * "yapamayacağı şeyi vaat eden düğme" bu dosyada iki kez düzeltilmiş bir
-   * kusur sınıfı, çipi sahte bir hedefe bağlamak aynı hataya düşerdi.
+   * Çip artık BİR DÜĞME (önceki kart "tek başına tıklanabilir değil"
+   * diyordu — bu kart tam o notu kapatıyor, bkz. gozcuAc): tıklanınca sağ
+   * paneli gözcü moduna açar. Varsayılan kenar rengi --color-divider
+   * (sönük); panel AÇIKKEN --color-text'e döner ("railAcik") — DEVIR'in
+   * "daemonEdge" formülü.
    */
   .pill {
     display: inline-flex; align-items: center; gap: var(--space-2);
-    border: 2px solid var(--color-text); padding: var(--space-1) var(--space-3);
-    font-size: var(--fs-13); color: var(--color-text);
+    border: 2px solid var(--color-divider); padding: var(--space-1) var(--space-3);
+    font: inherit; font-size: var(--fs-13); color: var(--color-text);
+    background: none; cursor: pointer;
   }
-  .pill.cokmus { border-color: var(--color-accent); }
+  .pill.railAcik { border-color: var(--color-text); }
+  .pill.dikkat { border-color: var(--color-accent); }
   .pill .ok { margin-left: 2px; }
-  .dot { width: 10px; height: 10px; flex: 0 0 auto; }
-  .dot.acik { background: var(--color-accent); border: 2px solid var(--color-accent); }
-  .dot.cokmus { background: var(--color-text); border: 2px solid var(--color-text); }
-  .dot.yok { background: var(--daemon-dot-off-fill); border: 2px solid var(--daemon-dot-off-border); }
+  .dot { width: 10px; height: 10px; flex: 0 0 auto; border: 2px solid var(--color-text); }
+  .dot.on { background: var(--color-accent); }
+  .dot.stopping { background: var(--daemon-dot-stopping-fill); }
+  .dot.off, .dot.unmanaged { background: var(--daemon-dot-off-fill); }
+  .dot.stale { background: var(--color-text); }
   .spacer { flex: 1 1 auto; }
   .sayac { font-size: var(--fs-13); color: var(--label-ink); }
   .sayac b { color: var(--color-text); font-weight: 800; }
@@ -632,6 +649,58 @@ const PAGE = `<!doctype html>
   .duzenleDurumMetni { flex: 1 1 auto; min-width: 0; font-size: var(--fs-13); color: var(--label-ink); }
 
   /*
+   * MOD 4 — GÖZCÜ (kart c-20261105-92d731, DEVIR.md §2). ".railGeri"/
+   * ".railBtn"/".railUst"/".railBos" MEVCUT (Genel bakış/Rol/Kart/MOD5 ile
+   * PAYLAŞILIYOR) — burada yalnızca bu modun KENDİ yapıları.
+   */
+  .railGozcuBaslikSatir { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-2) 0 var(--space-3); }
+  .railGozcuNokta { width: 14px; height: 14px; flex: 0 0 auto; border: 2px solid var(--color-text); }
+  .railGozcuNokta.on { background: var(--color-accent); }
+  .railGozcuNokta.stopping { background: var(--daemon-dot-stopping-fill); }
+  .railGozcuNokta.off, .railGozcuNokta.unmanaged { background: var(--daemon-dot-off-fill); }
+  .railGozcuNokta.stale { background: var(--color-text); }
+  .railGozcuBaslik { font-family: var(--font-heading); font-weight: 800; font-size: var(--fs-30); margin: 0; }
+  .railGozcuAciklama { font-size: var(--fs-13-5); line-height: 1.5; color: var(--color-text); margin: 0 0 var(--space-5); max-width: 42ch; }
+  /* TOPOLOJİ UYARISI — DEVIR.md §2: accent-100 kutu, üstte 4px accent çizgi. */
+  .railGozcuUyari {
+    margin: 0 0 var(--space-5); padding: var(--space-4); background: var(--color-accent-100);
+    border-top: var(--border-accent) solid var(--color-accent); display: flex; flex-direction: column; gap: var(--space-3);
+  }
+  .railGozcuUyariMetin { font-size: var(--fs-13-5); line-height: 1.5; color: var(--color-accent-800); }
+  .railGozcuEylemler { display: flex; flex-direction: column; gap: var(--space-2); margin-bottom: var(--space-5); }
+  .railGozcuKomutEtiket { font-size: var(--fs-11-5); color: var(--label-ink); }
+  .railGozcuKomut {
+    display: block; padding: var(--space-4) var(--space-4); margin: var(--space-1) 0 var(--space-3);
+    background: var(--color-surface); font-family: var(--mono); font-size: var(--fs-12); overflow-wrap: anywhere;
+  }
+  .railGozcuBilgi { border-top: var(--border-row) solid var(--color-text); padding-top: var(--space-1); margin-bottom: var(--space-4); }
+  .railGozcuBilgiSatir {
+    display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: var(--space-3); padding: var(--space-2) 0;
+    border-bottom: var(--border-row) solid var(--color-divider); font-size: var(--fs-13);
+  }
+  .railGozcuBilgiSatir span { color: var(--label-ink); }
+  .railGozcuBilgiSatir b { font-weight: 600; overflow-wrap: anywhere; }
+  .railGozcuBayraklar { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-4); }
+  /*
+   * ".tag.tag-outline" — tasarımın KENDİ bileşen adı (skein-merkez-v3.html
+   * satır ~271), ama ".tag" zaten ESKİ panoda kart durumu etiketi için var
+   * (bkz. yukarıda ".tag.run/.gate/.queued"). Çakışmayı önlemek için bu
+   * kural SADECE ".railGozcuBayraklar" İÇİNDE geçerli — eski panonun
+   * ".tag"ı global kalır, global bir Modernist ".tag" bileşeni bu kartın
+   * işi değil.
+   */
+  .railGozcuBayraklar .tag {
+    border: 1px solid var(--color-text); padding: 2px var(--space-3); font-family: var(--mono); font-size: var(--fs-12);
+  }
+  .railGozcuLogBaslik { font-size: var(--fs-10-5); font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--label-ink); margin-bottom: var(--space-2); }
+  .railGozcuLogSatir {
+    display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: var(--space-3); padding: var(--space-2) 0;
+    border-bottom: var(--border-row) solid var(--color-divider); font-size: var(--fs-12); line-height: 1.4;
+  }
+  .railGozcuLogSatir .saat { color: var(--label-ink); }
+  .railGozcuLogSatir .hata { color: var(--color-accent-700); }
+
+  /*
    * BİLDİRİM — DEVIR.md "Interactions & Behavior": "Her çıkış kartı
    * ilgili kuyruğa bırakır ve kısa bir bildirim gösterir ... sol altta,
    * koyu zemin, 4px accent sol kenar, 3.4 sn." karar() (yukarıda,
@@ -891,6 +960,27 @@ const PAGE = `<!doctype html>
 <div id="bildirim" class="bildirim" role="status" aria-live="polite"></div>
 <script>
 const JETON = "__JETON__";
+/**
+ * Bu EKRANIN gözcüyü başlatıp durdurabilip durduramadığı — DEVIR.md'nin
+ * "unmanaged" durumu (kart c-20261105-92d731). 'null' ise ekran gözcü
+ * bayraklarıyla AÇILMADI: '/gozcu/baslat'/'/gozcu/durdur' 404 döner, yani
+ * düğme göstermek yapamayacağı şeyi vaat etmek olurdu (bu dosyadaki
+ * yinelenen kusur sınıfı, bkz. gozcuKomut yorumu). Sunucu açılışta GÖMÜYOR
+ * (JETON'un aynı deseni) çünkü bu bilgi süreç ömrü boyunca DEĞİŞMİYOR —
+ * her saniye /durum'a eklemek değişmeyen bir şeyi tekrar tekrar sormak
+ * olurdu, AKISLAR'ın "bir kez oku" ilkesiyle aynı.
+ */
+const GOZCU_AYAR = __GOZCU_AYAR__;
+// Durdurma/yeniden başlatma İSTENDİ ama henüz GERÇEKLEŞMEDİ — SIGTERM
+// anlık değil, gözcü süren turu bitirip çıkıyor (bkz. server.ts
+// "/gozcu/durdur" yorumu). 'null' | "durduruluyor" | "yenidenBaslatiliyor".
+// İkincisi, gözcü GERÇEKTEN öldüğünde (ciz() bir sonraki yoklamada bunu
+// modelden görünce) otomatik "/gozcu/baslat" tetikler — DEVIR.md'nin
+// "Yeniden başlat" düğmesinin yaptığı "durdur, sonra başlat" ikilisi.
+let GOZCU_BEKLEYEN = null;
+// ".skein/gozcu.log" son satırları — GÖZCÜ paneline İLK girişte bir kez
+// okunuyor (railGozcuYukle), kart modunun "data-rail-kart" deseniyle AYNI.
+let GOZCU_LOG = [];
 // Seçilebilecek akış adları — sayfa açılışında BİR KEZ okunuyor (bkz.
 // akislarYukle). Dosya listesi koşarken değişmiyor; her yoklamada yeniden
 // istemek, değişmeyen bir şeyi saniyede bir sormak olurdu.
@@ -1342,8 +1432,16 @@ async function gozcuKomut(ne, dugme) {
       not.style.cssText = "flex-basis:100%";
       document.getElementById("bar").append(not);
     }
+    // Başlatma/durdurma gözcü.log'a yeni satır düşürür — gözcü paneli
+    // AÇIKSA günlüğü TAZELE, yoksa operatör panele girene kadar eski
+    // kalırdı.
+    if (RAIL.mode === "daemon") void railGozcuYukle();
   } catch (e) {
     dugme.disabled = false;
+    // İSTENEN durdurma/yeniden başlatma BAŞARISIZ oldu — GOZCU_BEKLEYEN'i
+    // ASILI bırakmak çipi sonsuza kadar "duruyor" gösterirdi, oysa hiçbir
+    // şey durmuyor.
+    GOZCU_BEKLEYEN = null;
     const kutu = el("div", "redd", e.message);
     kutu.style.cssText = "flex-basis:100%";
     document.getElementById("bar").append(kutu);
@@ -1748,20 +1846,99 @@ function hashOku() {
 window.addEventListener("hashchange", hashOku);
 
 /**
- * Gözcü çipinin durum kararı — SAF, DOM yok.
+ * Gözcünün TEMEL üç hâli — SAF, DOM yok.
  *
- * Üç durum da MEVCUT modelden (m.daemon) ayrılıyor, yeni bir durum
- * UYDURULMUYOR: "stopping"/"unmanaged" (DEVIR.md'nin gözcü paneli
- * tablosu) bugünkü /durum ucunun BİLMEDİĞİ bilgi — ekranın gözcüyü
- * BAŞLATAN komut mu açtığını bilme yolu yok, yalnızca kilidin var/canlı
- * olduğunu biliyor. Etiket metinleri ESKİ koddakiyle AYNEN — bu salt bir
- * çizim/kontrast düzeltmesi, davranış değişmiyor ("bayat kilit" ibaresi
- * tarayici.test.ts'in "#bar .pill" sınamasına bağlı, KALDIRILMADI).
+ * ÜÇ durum (yok/açık/çökmüş) yalnızca MEVCUT modelden (m.daemon)
+ * ayrılıyor; davranış/etiket metinleri ESKİ koddakiyle AYNEN
+ * (page.test.ts bunu birebir sınıyor — "bayat kilit" ibaresi
+ * tarayici.test.ts'in "#bar .pill" sınamasına da bağlı, KALDIRILMADI).
+ *
+ * Bu fonksiyon artık DOĞRUDAN çizilmiyor — 'gozcuPanelDurum' (aşağıda)
+ * BEŞ duruma (DEVIR.md §2: on/stopping/off/stale/unmanaged) genişletirken
+ * bunu YAPI TAŞI olarak kullanıyor, aynı sınıflandırmayı İKİNCİ kez
+ * yazmamak için (kart c-20261105-92d731 — önceki kart "stopping/
+ * unmanaged ekranın bilmediği bilgi" diyordu; bu kart GOZCU_AYAR/
+ * GOZCU_BEKLEYEN ile o bilgiyi gerçekten taşıyor).
  */
 function gozcuDurum(g) {
   if (g === null) return { durum: "yok", etiket: "gözcü yok" };
   if (g.alive) return { durum: "acik", etiket: "gözcü açık" };
   return { durum: "cokmus", etiket: "gözcü kapalı (bayat kilit)" };
+}
+
+/**
+ * Gözcü panelinin BEŞ durumu — SAF, DOM yok (DEVIR.md §2, kart
+ * c-20261105-92d731).
+ *
+ * 'yonetiliyor' ÖNCE sorulur: bu ekran gözcü bayraklarıyla açılmadıysa
+ * (GOZCU_AYAR === null) durum HER ZAMAN "unmanaged" — gerçekten bir
+ * gözcü koşuyor olsa BİLE (başka bir kabuktan açılmış olabilir, SAPMALAR
+ * §2.6 kural 2: "başka bir ekranın başlattığı gözcü durdurulmaz"). Bu
+ * ekranın kendi YÖNETME YETKİSİ ile gözcünün GERÇEKTEN çalışıp
+ * çalışmaması İKİ AYRI SORU; "unmanaged" yalnızca birincisini cevaplıyor.
+ *
+ * 'duruyor' (GOZCU_BEKLEYEN !== null) "açık" durumunu "stopping"e
+ * ÇEVİRİR — SIGTERM gönderildi ama süreç henüz ÖLMEDİ, model hâlâ
+ * alive:true okur (bkz. gozcuKomut yorumu); bu bayrak olmadan çip
+ * düğmeye basıldıktan sonra bir tur boyunca "açık" demeye devam ederdi.
+ */
+function gozcuPanelDurum(g, yonetiliyor, duruyor) {
+  if (!yonetiliyor) return { durum: "unmanaged", etiket: "gözcü · elle" };
+  const taban = gozcuDurum(g);
+  if (taban.durum === "yok") return { durum: "off", etiket: "gözcü kapalı" };
+  if (taban.durum === "cokmus") return { durum: "stale", etiket: "gözcü çökmüş" };
+  return duruyor ? { durum: "stopping", etiket: "gözcü duruyor…" } : { durum: "on", etiket: "gözcü açık" };
+}
+
+/**
+ * Topoloji uyarısı — gözcü AÇIKKEN akış kaydedildiyse (DEVIR.md §2,
+ * orphan.ts/serve.ts uyarılarının görsel karşılığı). SAF, DOM yok.
+ *
+ * 'g.info.hash' gözcü AÇILIRKEN donan topoloji hash'i (bkz. LockInfo,
+ * watch/lock.ts); 'flowHash' ekranın O AN okuduğu akışın hash'i
+ * (m.flow.hash, model.ts). İkisi ayrışıyorsa gözcü ESKİ rol listesiyle
+ * koşuyor — yalnızca "on" durumunda anlamlı: "stopping"/"stale"/"off"da
+ * zaten eski süreç ölüyor/ölmüş, uyarı "yeniden başlat" vaat eder ama
+ * başlatılacak bir şey yoktur.
+ */
+function gozcuTopoUyari(g, flowHash, durum) {
+  return durum === "on" && g !== null && g.info.hash !== flowHash;
+}
+
+/**
+ * "unmanaged" panelindeki iki örnek komut — SAF, DOM yok.
+ *
+ * ui/cli.ts'in kendi USAGE metnindeki İKİ satırın (bkz. o dosyadaki
+ * "GÖZCÜYÜ EKRANDAN yönetmek" ve "Bayrak vermezsen" paragrafları) akış
+ * adıyla doldurulmuş hâli — ikinci bir "nasıl açılır" cümlesi İCAT
+ * ETMİYOR, var olanı burada da aynen gösteriyor. Model adı ÖRNEK: ekran
+ * gerçek bayrakları bilmiyor (bilse "unmanaged" olmazdı), o yüzden
+ * burada yazan model/araç seçimi bir ÖNERİ, bir İDDİA değil.
+ */
+function gozcuKomutOrnekleri(flowName) {
+  return {
+    cmd1: "npx tsx src/watch/cli.ts " + flowName + " --serve --model claude:claude-sonnet-5",
+    cmd2: "npx tsx src/ui/cli.ts " + flowName + " --model claude:claude-sonnet-5",
+  };
+}
+
+/**
+ * Panelin tek başlat/durdur düğmesinin etiketi — SAF, DOM yok.
+ *
+ * 'canli' İKEN "Gözcüyü durdur" (ESKİ davranış, bkz. page.test.ts "gözcü
+ * düğmesi" takımı — bu tam ifade SINANIYOR, KALDIRILMADI). Değilken iki
+ * alt durum var: kilit HİÇ yok (g === null, "Gözcüyü başlat") ve kilit
+ * VAR ama ölü (g !== null, bayat kilit, "Kilidi devral ve başlat" —
+ * SAPMALAR §2.6 kural 1'in simetriği: "durdur" demek yapamayacağı şeyi
+ * vaat etmekti, burada "başlat" tek başına yeterince açık değil, kilidi
+ * DEVRALDIĞINI söylemeli). Her iki alt durumda da tıklama AYNI
+ * "/gozcu/baslat" komutuna gidiyor (bkz. gozcuKomut) — liveLock bayat
+ * kilidi zaten "tutan yok" sayıyor (watch/lock.ts), yani sunucu tarafında
+ * İKİ ayrı yol yok, yalnızca ETİKET ayrışıyor.
+ */
+function gozcuEylemEtiketi(g) {
+  const canli = Boolean(g && g.alive);
+  return g && !canli ? "Kilidi devral ve başlat" : (canli ? "Gözcüyü durdur" : "Gözcüyü başlat");
 }
 
 /** Pano rozetinin sayısı — kapıda bekleyen kart. SAF, DOM yok. */
@@ -1875,42 +2052,49 @@ function ciz(m) {
     hataKabi.replaceChildren();
   }
 
-  // GÖZCÜ ÇİPİ (bkz. gozcuDurum ve .pill yorumu — SAPMALAR §1'in gözcü
-  // noktası düzeltmelerini burada TÜKETİR).
+  // GÖZCÜ ÇİPİ — DEVIR.md §2, kart c-20261105-92d731. Önceki kart burada
+  // ayrı bir "Gözcüyü başlat/durdur" düğmesi tutuyordu ÇÜNKÜ sağ panel
+  // henüz yoktu; o düğme artık YOK, eylem PANELE taşındı (bkz.
+  // railGozcuCiz) — çip tek başına tıklanabilir, sağ paneli gözcü moduna
+  // açıyor (gozcuAc).
   const g = m.daemon;
-  const durumBilgi = gozcuDurum(g);
-  const pill = el("span", "pill " + durumBilgi.durum);
+  // DURDURMA/YENİDEN BAŞLATMA bekleniyorsa VE gözcü GERÇEKTEN öldüyse
+  // (artık canlı değil): beklenen iş bitti. "yenidenBaslatiliyor" ise
+  // şimdi "/gozcu/baslat" tetiklenir — DEVIR'in "Yeniden başlat" düğmesi
+  // tam bunu vaat ediyor ("durdur, sonra başlat"), ama durdurma ANLIK
+  // DEĞİL (bkz. server.ts "/gozcu/durdur"), o yüzden "başlat" ayrı bir
+  // adım olarak BURADA, süreç gerçekten bittiğinde tetiklenir — hemen
+  // ardı ardına çağırmak "zaten bir gözcü açık" hatasına çarpardı.
+  if (GOZCU_BEKLEYEN !== null && !(g && g.alive)) {
+    const bekleyen = GOZCU_BEKLEYEN;
+    GOZCU_BEKLEYEN = null;
+    if (bekleyen === "yenidenBaslatiliyor") void gozcuKomut("baslat", document.createElement("button"));
+  }
+  const durumBilgi = gozcuPanelDurum(g, Boolean(GOZCU_AYAR), GOZCU_BEKLEYEN !== null);
+  const topoUyari = gozcuTopoUyari(g, m.flow.hash, durumBilgi.durum);
+  const pillSinif = "pill" + (durumBilgi.durum === "stale" || topoUyari
+    ? " dikkat"
+    : RAIL.mode === "daemon" ? " railAcik" : "");
+  const pill = el("button", pillSinif);
+  pill.type = "button";
   pill.append(el("span", "dot " + durumBilgi.durum));
-  pill.append(document.createTextNode(durumBilgi.etiket));
+  // TOPOLOJİ UYARISI çipin ETİKETİNİ de değiştiriyor (DEVIR.md §2: "çip
+  // etiketi 'gözcü · yeniden başlat' olur").
+  pill.append(document.createTextNode(topoUyari ? "gözcü · yeniden başlat" : durumBilgi.etiket));
+  // "bayat kilit" İBARESİ KALDIRILMADI (tarayici.test.ts "#bar .pill"
+  // sınaması buna bağlı) — kilit GERÇEKTEN ölüyse gösteriliyor, "stale"
+  // durumuna değil gozcuDurum'un KENDİ sınıflandırmasına ("cokmus")
+  // bakarak: "unmanaged" bir ekranda bile kilit ölü olabilir
+  // (SAPMALAR'ın "unmanaged" önceliği YALNIZCA eylem yetkisini kapatıyor,
+  // teşhis bilgisini DEĞİL) — ikisi ayrı olmazsa bu ekran "elle" derken
+  // bayat kilit bilgisini GİZLERDİ.
+  if (gozcuDurum(g).durum === "cokmus") pill.append(el("span", "mono", "bayat kilit"));
   if (g) pill.append(el("span", "mono", "pid " + g.info.pid));
   const ok = el("span", "ok", "→");
   ok.setAttribute("aria-hidden", "true");
   pill.append(ok);
+  pill.addEventListener("click", () => { gozcuAc(); });
   bar.append(pill);
-
-  // GÖZCÜ DÜĞMESİ. Ekrandan kart açılabiliyordu ama hiçbir şey koşmuyordu:
-  // gözcü ayrı bir kabukta elle başlatılıyordu. Düğme PARAMETRE SEÇMİYOR —
-  // model ve araç listesi ekranı açan komutta kuruldu; bu düğme yalnızca
-  // onu çalıştırıp durduruyor.
-  //
-  // Düğme kilidin VARLIĞINA değil CANLI olmasına bakıyor. İlk yazımda
-  // g degiskenini kullanmıştım ve gerçek tarayıcıda çıktı: bayat kilitte (gözcü
-  // çökmüş, dosya kalmış) düğme "Gözcüyü durdur" diyordu ve basınca
-  // "bu gözcüyü bu ekran başlatmadı" cevabı geliyordu. Yapamayacağı şeyi
-  // vaat eden düğme — bugün "Geri gönder"de düzeltilen kusurun aynısı.
-  // Hap zaten "gözcü kapalı (bayat kilit)" diyor; düğme onunla aynı
-  // gerçeği okumak zorunda.
-  //
-  // Bu düğme DEVIR.md'nin üst çubuğunda YOK — tasarımda çip tıklanınca
-  // sağ panel gözcü moduna açılır ve düğme ORADA durur. Bu kart o paneli
-  // kurmuyor, o yüzden düğme ÇİPİN YANINDA bir köprü olarak kalıyor:
-  // aksi hâlde gözcüyü ekrandan başlatma/durdurma yeteneği bu karttan
-  // sonra kaybolurdu.
-  const canli = Boolean(g && g.alive);
-  const gozcuDugme = el("button", "mini", canli ? "Gözcüyü durdur" : "Gözcüyü başlat");
-  gozcuDugme.type = "button";
-  gozcuDugme.addEventListener("click", () => void gozcuKomut(canli ? "durdur" : "baslat", gozcuDugme));
-  bar.append(gozcuDugme);
 
   bar.append(el("div", "spacer"));
   // SAYAÇLAR — açık/bitti/toplam maliyet. "Aktivasyon" eski üst çubukta
@@ -3749,6 +3933,155 @@ function railDuzenlePaneliCiz(kutu, m) {
   if (DUZENLE_ONIZLEME === null) void duzenleOnizlemeYukle();
 }
 
+/** "Gözcü" girişi — çip bunu çağırır (bkz. ciz() "GÖZCÜ ÇİPİ" bloğu). */
+function gozcuAc() {
+  RAIL = { mode: "daemon", roleId: null, cardId: null, cardFrom: "overview" };
+  railYenidenCiz();
+}
+
+/** Genel bakışa döner — MOD 5'in duzenleKapat()'ıyla AYNI desen. */
+function gozcuKapat() {
+  RAIL = { mode: "overview", roleId: null, cardId: null, cardFrom: "overview" };
+  railYenidenCiz();
+}
+
+/**
+ * ".skein/gozcu.log" son satırlarını okur — sagPanelCiz bunu "daemon"
+ * moduna İLK girişte BİR KEZ çağırıyor ("data-rail-gozcu" koruması,
+ * railKartYukle'nin "data-rail-kart"ıyla AYNI desen) VE gozcuKomut
+ * başarılı her başlat/durdur sonrası (yeni satırlar düşmüş olabilir).
+ * Okunamazsa (dosya yok, gözcü hiç açılmamış) sessizce BOŞ liste —
+ * bu bir hata değil, "henüz günlük yok" demek.
+ */
+async function railGozcuYukle() {
+  try {
+    const cevap = await fetch("/gozcu/log", { cache: "no-store" });
+    const veri = await cevap.json();
+    GOZCU_LOG = (cevap.ok && Array.isArray(veri.satirlar)) ? veri.satirlar : [];
+  } catch (e) {
+    GOZCU_LOG = [];
+  }
+  if (RAIL.mode === "daemon") railYenidenCiz();
+}
+
+/**
+ * MOD 4 — Gözcü (DEVIR.md §2, kart c-20261105-92d731). Durum/düğme/bilgi
+ * tablosu HER ciz() turunda TAZE çiziliyor ("overview"/"role" modlarıyla
+ * AYNI ilke — bkz. railGenelBakisCiz) çünkü gözcünün canlı/çökmüş/duran
+ * olması saniyeler içinde değişir; günlük kuyruğu (GOZCU_LOG) ise ayrı
+ * bir ritimle yükleniyor (yukarıdaki railGozcuYukle yorumu).
+ */
+function railGozcuCiz(kutu, m) {
+  kutu.replaceChildren();
+
+  const geri = el("button", "railGeri", "← Genel bakış");
+  geri.type = "button";
+  geri.addEventListener("click", () => { gozcuKapat(); });
+  kutu.append(geri);
+
+  const g = m.daemon;
+  const yonetiliyor = Boolean(GOZCU_AYAR);
+  const duruyor = GOZCU_BEKLEYEN !== null;
+  const durumBilgi = gozcuPanelDurum(g, yonetiliyor, duruyor);
+  const topoUyari = gozcuTopoUyari(g, m.flow.hash, durumBilgi.durum);
+
+  kutu.append(el("div", "railUst", "Gözcü"));
+  const baslikSatir = el("div", "railGozcuBaslikSatir");
+  baslikSatir.append(el("span", "railGozcuNokta " + durumBilgi.durum));
+  baslikSatir.append(el("h2", "railGozcuBaslik", durumBilgi.etiket));
+  kutu.append(baslikSatir);
+
+  const ACIKLAMA = {
+    on: "Kuyrukları izliyor; kart gördüğü rolü koşturuyor. Kuyruk boşalınca uyur, ölmez.",
+    stopping: "Durdurma sinyali gitti. Gözcü süren ajan turunu bitirip çıkacak — anlık değil.",
+    off: "Hiçbir rol koşmuyor. Açılan kartlar kuyrukta bekler.",
+    stale: ".skein/daemon.json duruyor ama süreç yaşamıyor: gözcü çökmüş. Başlatınca kilit devralınır.",
+    unmanaged: "Ekran gözcü bayrakları olmadan açıldı, o yüzden buradan başlatılamaz. Gözcüyü ayrı bir kabukta koşturabilirsin.",
+  };
+  kutu.append(el("div", "railGozcuAciklama", ACIKLAMA[durumBilgi.durum]));
+
+  if (topoUyari) {
+    const uyari = el("div", "railGozcuUyari");
+    uyari.append(el("div", "railGozcuUyariMetin",
+      "Akış gözcü açıldıktan sonra değişti. Gözcü eski rol listesini taşıyor — yeni roller kuyruğa bakılmadan kalır."));
+    const yenidenBtn = el("button", "railBtn primary", "Yeniden başlat");
+    yenidenBtn.type = "button";
+    yenidenBtn.addEventListener("click", () => {
+      GOZCU_BEKLEYEN = "yenidenBaslatiliyor";
+      void gozcuKomut("durdur", yenidenBtn);
+    });
+    uyari.append(yenidenBtn);
+    kutu.append(uyari);
+  }
+
+  const eylemler = el("div", "railGozcuEylemler");
+  if (durumBilgi.durum === "unmanaged") {
+    const ornekler = gozcuKomutOrnekleri(m.flow.name);
+    eylemler.append(el("div", "railGozcuKomutEtiket", "Ayrı kabukta:"));
+    eylemler.append(el("code", "railGozcuKomut", ornekler.cmd1));
+    eylemler.append(el("div", "railGozcuKomutEtiket", "ya da ekranı bayraklarla aç, düğme çıkar:"));
+    eylemler.append(el("code", "railGozcuKomut", ornekler.cmd2));
+  } else if (durumBilgi.durum === "stopping") {
+    const b = el("button", "railBtn", "Süren tur bitiyor…");
+    b.type = "button";
+    b.disabled = true;
+    eylemler.append(b);
+  } else {
+    const canli = Boolean(g && g.alive);
+    const etiket = gozcuEylemEtiketi(g);
+    const b = el("button", "railBtn" + (canli ? "" : " primary"), etiket);
+    b.type = "button";
+    b.addEventListener("click", () => {
+      // Durdurma İSTENDİ ama ANLIK değil (bkz. gozcuPanelDurum yorumu) —
+      // çip/panel bir SONRAKİ yoklamada "stopping" göstersin diye bayrak
+      // BURADA, cevap gelmeden ÖNCE kuruluyor.
+      if (canli) GOZCU_BEKLEYEN = "durduruluyor";
+      void gozcuKomut(canli ? "durdur" : "baslat", b);
+    });
+    eylemler.append(b);
+  }
+  kutu.append(eylemler);
+
+  // BİLGİ TABLOSU — pid/akış/mod/açıldı/kilit. Gözcü GERÇEKTEN BAŞKA bir
+  // kabuktan açılmış olsa bile (g !== null) gösteriliyor: "unmanaged"
+  // yalnızca BU EKRANIN yönetme yetkisini söylüyor, kilidin varlığını
+  // DEĞİL (bkz. gozcuPanelDurum yorumu).
+  if (g) {
+    const bilgi = el("div", "railGozcuBilgi");
+    const satir = (etiket, deger) => {
+      const s = el("div", "railGozcuBilgiSatir");
+      s.append(el("span", null, etiket));
+      s.append(el("b", null, deger));
+      bilgi.append(s);
+    };
+    satir("pid", String(g.info.pid) + (g.alive ? "" : " · yaşamıyor"));
+    satir("akış", g.info.flow);
+    satir("mod", g.info.mode === "serve" ? "serve · uzun ömürlü" : "batch · tek seferlik");
+    satir("açıldı", g.info.startedAt);
+    satir("kilit", ".skein/daemon.json");
+    kutu.append(bilgi);
+  }
+
+  if (yonetiliyor && GOZCU_AYAR.bayraklar.length > 0) {
+    kutu.append(el("div", "railAraBaslik", "Gözcüye geçen bayraklar"));
+    const bayraklar = el("div", "railGozcuBayraklar");
+    GOZCU_AYAR.bayraklar.forEach((b) => bayraklar.append(el("span", "tag tag-outline", b)));
+    kutu.append(bayraklar);
+  }
+
+  kutu.append(el("div", "railGozcuLogBaslik", ".skein/gozcu.log · son satırlar"));
+  if (GOZCU_LOG.length === 0) {
+    kutu.append(el("div", "railBos", "günlük boş"));
+  } else {
+    GOZCU_LOG.forEach((l) => {
+      const satir = el("div", "railGozcuLogSatir");
+      satir.append(el("span", "saat", l.at));
+      satir.append(el("span", l.hata ? "hata" : null, l.mesaj));
+      kutu.append(satir);
+    });
+  }
+}
+
 /** Sağ paneli RAIL'in o anki moduna göre doldurur — ciz()'in her çağrısında. */
 function sagPanelCiz(m) {
   const kutu = document.getElementById("sagPanel");
@@ -3758,6 +4091,10 @@ function sagPanelCiz(m) {
   // (railKartYukle'nin "data-rail-kart"ı) — yoksa her saniyelik yoklama
   // (yokla/ciz) formu sıfırlar, operatör yazarken kutular BAŞA döner.
   if (RAIL.mode !== "edit") kutu.removeAttribute("data-rail-edit");
+  // MOD 4 kendi "data-rail-gozcu" bayrağıyla AYNI korumayı kullanıyor —
+  // yalnızca GOZCU_LOG'un İLK yüklemesini bir kez tetiklemek için (bkz.
+  // railGozcuYukle); durum/düğme HER turda zaten taze (railGozcuCiz).
+  if (RAIL.mode !== "daemon") kutu.removeAttribute("data-rail-gozcu");
   if (RAIL.mode === "role") {
     railRolCiz(kutu, m, RAIL.roleId);
     return;
@@ -3767,6 +4104,14 @@ function sagPanelCiz(m) {
       kutu.dataset.railKart = RAIL.cardId;
       void railKartYukle(kutu, RAIL.cardId);
     }
+    return;
+  }
+  if (RAIL.mode === "daemon") {
+    if (kutu.dataset.railGozcu !== "1") {
+      kutu.dataset.railGozcu = "1";
+      void railGozcuYukle();
+    }
+    railGozcuCiz(kutu, m);
     return;
   }
   if (RAIL.mode === "edit") {

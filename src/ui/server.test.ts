@@ -14,7 +14,10 @@ import type { FlowDraft } from "../flow/draft.js";
 import { snapshot, type TopologySnapshot } from "../flow/snapshot.js";
 import { request } from "node:http";
 import { connect } from "node:net";
-import { bizeAit, izinliAdlar, jokerArayuz, serveUi, type UiServer } from "./server.js";
+import {
+  bizeAit, gozcuLogKuyruk, gozcuLogSatiriAyristir, izinliAdlar, jokerArayuz, satirYaziciKur, serveUi,
+  type UiServer,
+} from "./server.js";
 
 const FLOW = `
 name: test
@@ -1698,6 +1701,169 @@ describe("serveUi — ekrandan gözcü", () => {
     await fetch(`${srv.url}gozcu/baslat`, { method: "POST", headers: { "x-skein-token": srv.token } });
     await srv.close();
     expect(s.oldurulen).toEqual(["SIGTERM"]);
+  });
+
+  /**
+   * GÖZCÜ AYARI SAYFAYA GÖMÜLÜ (kart c-20261105-92d731, DEVIR.md §2'nin
+   * "unmanaged" durumu). `page.test.ts` renderPage()'in İKİNCİ parametresini
+   * birim sınıyor; bu test o ikinci parametrenin SUNUCUDAN DOĞRU geldiğini
+   * doğruluyor — iki yarı birlikte "ekran gerçekten bilir" iddiasını kapatır.
+   */
+  it("GET / — gözcü bayraklarıyla açılan ekran GOZCU_AYAR'ı bayraklarla gömer", async () => {
+    const { srv } = await gozculu();
+    try {
+      const html = await (await fetch(srv.url)).text();
+      expect(html).toContain('const GOZCU_AYAR = {"bayraklar":["--model","claude:m"]};');
+    } finally {
+      await srv.close();
+    }
+  });
+
+  it("GET / — bayraksız açılan ekranda GOZCU_AYAR null", async () => {
+    const srv = await serveUi({ root, queue, topology, flowName: "test", flowHash: gercekFlow.hash });
+    try {
+      const html = await (await fetch(srv.url)).text();
+      expect(html).toContain("const GOZCU_AYAR = null;");
+    } finally {
+      await srv.close();
+    }
+  });
+});
+
+/**
+ * GET /gozcu/log — ".skein/gozcu.log" son satırları (DEVIR.md §2, kart
+ * c-20261105-92d731). Okuma ucu TOKEN GEREKTİRMİYOR — diğer okuma uçlarıyla
+ * (/durum, /promptlar) AYNI kural, yalnızca yazma korunuyor (SAPMALAR §2.3).
+ */
+describe("GET /gozcu/log — gözcü günlüğü", () => {
+  it("dosya yoksa boş liste döner, hata DEĞİL", async () => {
+    const srv = await serveUi({ root, queue, topology, flowName: "test", flowHash: gercekFlow.hash });
+    try {
+      const res = await fetch(`${srv.url}gozcu/log`);
+      expect(res.status).toBe(200);
+      expect((await res.json() as { satirlar: unknown[] }).satirlar).toEqual([]);
+    } finally {
+      await srv.close();
+    }
+  });
+
+  it("satırları saat/mesaj/hata olarak ayrıştırıp döner", async () => {
+    await mkdir(join(root, ".skein"), { recursive: true });
+    await writeFile(
+      join(root, ".skein", "gozcu.log"),
+      "09:12 gözcü açık · pid 48213\n09:13 ✗ kaçak döngü\n",
+    );
+    const srv = await serveUi({ root, queue, topology, flowName: "test", flowHash: gercekFlow.hash });
+    try {
+      const res = await fetch(`${srv.url}gozcu/log`);
+      const veri = await res.json() as { satirlar: { at: string; mesaj: string; hata: boolean }[] };
+      expect(veri.satirlar).toEqual([
+        { at: "09:12", mesaj: "gözcü açık · pid 48213", hata: false },
+        { at: "09:13", mesaj: "✗ kaçak döngü", hata: true },
+      ]);
+    } finally {
+      await srv.close();
+    }
+  });
+});
+
+/**
+ * GOZCULOGSATIRIAYRISTIR — tek bir günlük satırının ayrıştırılması. SAF.
+ */
+describe("gozcuLogSatiriAyristir — tek satır ayrıştırma", () => {
+  it("'HH:MM mesaj' biçimini ayırır", () => {
+    expect(gozcuLogSatiriAyristir("14:05 kuyruk boş, bekleniyor")).toEqual({
+      at: "14:05", mesaj: "kuyruk boş, bekleniyor", hata: false,
+    });
+  });
+
+  // SINIR: mesaj "✗" ile başlıyorsa hata:true — bu tek işaret
+  // satirYaziciKur'un STDERR'den gelen satırlara EKLEDİĞİ işaret.
+  it("mesaj '✗' ile başlıyorsa hata:true", () => {
+    expect(gozcuLogSatiriAyristir("14:06 ✗ kaçak döngü").hata).toBe(true);
+  });
+
+  // BİÇİME UYMAYAN satır SESSİZCE ATILMIYOR: saat boş, mesaj ham satırın
+  // kendisi — BİLDİRİLMEYEN SIFIR DEĞİLDİR, ayrıştıramadığımızı gizlemek
+  // de aynı kusur sınıfı.
+  it("biçime uymayan satırı ham hâliyle gösterir", () => {
+    expect(gozcuLogSatiriAyristir("saatsiz ham satır")).toEqual({
+      at: "", mesaj: "saatsiz ham satır", hata: false,
+    });
+  });
+});
+
+/** GOZCULOGKUYRUK — dosyadan son N satırı okur. */
+describe("gozcuLogKuyruk — dosyadan son satırlar", () => {
+  it("dosya yoksa boş liste", async () => {
+    expect(await gozcuLogKuyruk(join(root, "yok-boyle-dosya.log"))).toEqual([]);
+  });
+
+  it("satır sayısı n'den fazlaysa yalnızca SON n'i döner", async () => {
+    const yol = join(root, "cok-satirli.log");
+    const satirlar = Array.from({ length: 5 }, (_, i) => `09:${String(i).padStart(2, "0")} satır ${i}`);
+    await writeFile(yol, satirlar.join("\n") + "\n");
+    const sonuc = await gozcuLogKuyruk(yol, 2);
+    expect(sonuc.map((s) => s.mesaj)).toEqual(["satır 3", "satır 4"]);
+  });
+});
+
+/**
+ * SATIRYAZICIKUR — bir alt sürecin çıktısını saat damgalı satırlara bölen
+ * yazıcı (kart c-20261105-92d731). Sahte `WritableStream` ile `write()`
+ * çağrılarını yakalıyor — gerçek bir alt süreç başlatmadan.
+ */
+describe("satirYaziciKur — alt süreç çıktısını saat damgalı satırlara böler", () => {
+  function sahteLog(): { yazilanlar: string[]; log: NodeJS.WritableStream } {
+    const yazilanlar: string[] = [];
+    return { yazilanlar, log: { write: (s: string) => { yazilanlar.push(s); return true; } } as NodeJS.WritableStream };
+  }
+
+  it("tamamlanmış satırı SAAT DAMGASIYLA yazar", () => {
+    const { yazilanlar, log } = sahteLog();
+    satirYaziciKur(log, false)(Buffer.from("kuyruk boş, bekleniyor\n"));
+    expect(yazilanlar).toHaveLength(1);
+    expect(yazilanlar[0]).toMatch(/^\d{2}:\d{2} kuyruk boş, bekleniyor\n$/);
+  });
+
+  // STDERR kaynaklı satır "✗ " ile işaretlenir — gozcuLogSatiriAyristir
+  // bunu "hata" sayıyor. Zaten "✗" ile başlıyorsa İKİNCİ bir işaret
+  // EKLENMİYOR ("✗ ✗ ..." çiftlenmesin).
+  it("stdout satırını İŞARETLEMEZ, stderr satırını '✗ ' ile işaretler", () => {
+    const stdout = sahteLog();
+    satirYaziciKur(stdout.log, false)(Buffer.from("normal satır\n"));
+    expect(stdout.yazilanlar[0]).toMatch(/normal satır\n$/);
+    expect(stdout.yazilanlar[0]).not.toContain("✗");
+
+    const stderr = sahteLog();
+    satirYaziciKur(stderr.log, true)(Buffer.from("patladı\n"));
+    expect(stderr.yazilanlar[0]).toMatch(/✗ patladı\n$/);
+  });
+
+  it("stderr satırı ZATEN '✗' ile başlıyorsa işareti ÇİFTLEMEZ", () => {
+    const { yazilanlar, log } = sahteLog();
+    satirYaziciKur(log, true)(Buffer.from("✗ kaçak döngü\n"));
+    expect(yazilanlar[0]).toMatch(/✗ kaçak döngü\n$/);
+    expect(yazilanlar[0]).not.toContain("✗ ✗");
+  });
+
+  // SATIR TAMAMLANMADAN yazılmaz: tek bir satır İKİ `data` olayına
+  // bölünürse (büyük bir çıktı parçalanmışsa) ortasına saat damgası
+  // SIKIŞMAMALI.
+  it("satır İKİ 'data' olayına bölünse de TEK satır olarak yazar", () => {
+    const { yazilanlar, log } = sahteLog();
+    const yaz = satirYaziciKur(log, false);
+    yaz(Buffer.from("yarım "));
+    expect(yazilanlar).toEqual([]); // satır sonu gelmeden HİÇ yazılmaz
+    yaz(Buffer.from("satır\n"));
+    expect(yazilanlar).toHaveLength(1);
+    expect(yazilanlar[0]).toMatch(/yarım satır\n$/);
+  });
+
+  it("sonu '\\n' olmayan kalıntı yazılmaz", () => {
+    const { yazilanlar, log } = sahteLog();
+    satirYaziciKur(log, false)(Buffer.from("tamamlanmamış"));
+    expect(yazilanlar).toEqual([]);
   });
 });
 
