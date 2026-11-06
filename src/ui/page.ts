@@ -698,7 +698,22 @@ const PAGE = `<!doctype html>
     border-bottom: var(--border-row) solid var(--color-divider); font-size: var(--fs-12); line-height: 1.4;
   }
   .railGozcuLogSatir .saat { color: var(--label-ink); }
-  .railGozcuLogSatir .hata { color: var(--color-accent-700); }
+  /*
+   * REDDEDİLEN commit b74e6ee'nin kusuru: çıplak accent-700 metin burada
+   * panelin ambient zemini --color-bg üstünde duruyordu — koyu temada
+   * ÖLÇÜLDÜ 2.47:1, IKINCIL_ETIKET_ESIGI'nin (3:1) bile altında. YENİ bir
+   * token çifti TÜRETMEK yerine SAPMALAR.md §1'in yöntemi tekrarlanıyor:
+   * zaten token-kontrast.test.ts'te AÇIK VE KOYU için ölçülmüş,
+   * TEMA-DEĞİŞMEZ accent-700/accent-100 çifti ("Sağ panel kapı kutusu üst
+   * etiketi") burada dolgulu bir rozet olarak yeniden kullanılıyor —
+   * ".duzenleHata"nın (yukarıda, satır ~635) aynı çifti kullanmasıyla
+   * BİREBİR aynı gerekçe. Zemin metinle birlikte taşındığı için hata
+   * satırı artık hangi temada olursa olsun kendi zemininden ayrışıyor.
+   */
+  .railGozcuLogSatir .hata {
+    display: inline-block; color: var(--color-accent-700); background: var(--color-accent-100);
+    padding: 1px var(--space-2);
+  }
 
   /*
    * BİLDİRİM — DEVIR.md "Interactions & Behavior": "Her çıkış kartı

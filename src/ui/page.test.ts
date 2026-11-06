@@ -685,6 +685,28 @@ describe("renderPage — gözcü ayarı gömülü", () => {
 });
 
 /**
+ * GÖZCÜ GÜNLÜĞÜ HATA SATIRI — reviewer ret notu (REDDEDİLEN commit
+ * b74e6ee): çıplak accent-700 metin panelin ambient zemini --color-bg
+ * üstünde duruyordu, koyu temada 2.47:1 (3:1 eşiğinin altı). Kontrast
+ * KANITI token-kontrast.test.ts'teki accent-700/accent-100 çiftinde
+ * ("Sağ panel kapı kutusu üst etiketi") zaten AÇIK VE KOYU için ölçülü;
+ * bu test SADECE ".railGozcuLogSatir .hata" kuralının o rozeti GERÇEKTEN
+ * kullandığını doğruluyor — zemin satırı silinirse (çıplak metne geri
+ * dönülürse) bu test düşer, zemin geri eklenirse yeşile döner.
+ */
+describe("renderPage — gözcü günlüğü hata satırı zeminli rozet kullanır", () => {
+  it(".railGozcuLogSatir .hata accent-700/accent-100 rozeti taşır, çıplak metin DEĞİL", () => {
+    const html = renderPage("x");
+    const kuralBas = html.indexOf(".railGozcuLogSatir .hata {");
+    expect(kuralBas).toBeGreaterThan(-1);
+    const kuralSon = html.indexOf("}", kuralBas);
+    const kural = html.slice(kuralBas, kuralSon);
+    expect(kural).toContain("color: var(--color-accent-700)");
+    expect(kural).toContain("background: var(--color-accent-100)");
+  });
+});
+
+/**
  * ROZET SAYILARI — Pano/Ajanlar sekme rozetlerinin KARAR noktaları
  * (kart c-20261105-6d7f66). SAF, DOM yok.
  */
