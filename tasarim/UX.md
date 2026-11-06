@@ -39,6 +39,47 @@ demiyor. Bilmeyen bir okuyucu için `≥` gürültü.
 **Yapılacak:** işarete dokunulduğunda/üzerine gelindiğinde kaç turun
 ölçülmediğini söyleyen kısa bir açıklama.
 
+### 1.3 Ekran dinlenme hâlinde kendini açıklamıyor
+
+Operatör taze bir klonda `npm start` dedi ve "animasyonlar çalışmıyor,
+tasarımı beğenmedim" dedi. Ölçüldü: animasyon **doğru** çalışıyor.
+Koşul `rolKartlari.some(c => c.state === "active") && daemon?.alive` —
+çalışan kart VE canlı gözcü, ikisi birden. Taze klonda ikisi de yok,
+dolayısıyla hiçbir şey kıpırdamıyor. Dört tarayıcı sınaması bunu
+kanıtlıyor (koşul sağlanınca çırpıyor, gözcü kapalıyken çırpmıyor,
+reduced-motion'da çırpmıyor).
+
+Ama şikâyet yine de haklı: **çalışmayan bir ekranla bozuk bir ekran
+birbirinden ayırt edilemiyor.** Ekran "şu an koşan bir şey yok, gözcüyü
+başlatırsan buradaki kuşlar kanat çırpar" demiyor.
+
+**Yapılacak:** boş durumda ekranın kendini anlatması. Formasyon
+alanında "gözcü kapalı — başlatmak için üst çubuktaki çipe bas" gibi
+bir yönlendirme; kuşların yanında neyin ne zaman canlanacağını söyleyen
+bir satır.
+
+### 1.4 Üst çubukta koşan ajan göstergesi YOK
+
+Operatörün doğrudan isteği: "başlatınca hangi agent çalışıyor görmeliyim
+önyüzden."
+
+Envanter:
+- **Var:** kartın üzerinde canlı adım satırı (araç adı, yol, `adım N`),
+  `.card.live` accent kenarı, Ajanlar sekmesinde rol başına durum,
+  formasyonda kuş rengi ve kanat çırpma.
+- **Yok:** üst çubukta hiçbir şey. Orada yalnızca `açık`, `bitti`,
+  `toplam maliyet` var.
+
+Yani bilgi ekranda var ama **bir bakışta** yok: Pano'da aktif kartı
+bulman ya da Ajanlar sekmesine geçmen gerekiyor. Üst çubuk her sekmede
+görünen tek yer; koşan ajan oraya ait.
+
+**Yapılacak:** gözcü çipinin yanına "coder · Bash · adım 143" gibi tek
+satırlık canlı gösterge. Tıklayınca o ajanın Ajanlar sekmesini açar.
+Hiçbir şey koşmuyorsa "boşta" der — 1.3'ün yarısını da çözer.
+
+---
+
 ---
 
 ## 2. Operatörün yapamadıkları
@@ -146,7 +187,9 @@ rolde V yerine düz çizgi.
 |---|---|---|
 | 1 | 2.1 kurtarma yolu + engel gürültüsü | gecenin en pahalı sorunu |
 | 2 | 1.1 sahte tıkanıklık uyarısı | ekranın en görünür yeri yalan söylüyor |
-| 3 | 2.4 bayat kilit bildirimi | 36 dakika sessiz durma |
+| 3 | 1.4 üst çubukta koşan ajan göstergesi | operatörün doğrudan isteği |
+| 4 | 1.3 boş durumda ekranın kendini anlatması | "çalışmıyor" sanılıyor |
+| 5 | 2.4 bayat kilit bildirimi | 36 dakika sessiz durma |
 | 4 | 3.2 gövde zemini | iki palet bir arada, tek satırlık iş |
 | 5 | 2.3 kuyruk sırası | operatörün elini bağlıyor |
 | 6 | 3.1 lejant aralıkları | tek satırlık iş |
