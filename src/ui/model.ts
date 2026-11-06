@@ -102,12 +102,12 @@ export interface UiModel {
    * "hâlâ sıkışık mı" sorusunun tam cevabı. Kalıcı bir engel dosyası
    * tutmak gerekmiyor; durum diskte zaten yazılı.
    */
-  blockages: UiEngel[];
+  blockages: UiBlockage[];
   at: string;
 }
 
 /** Alınamayan bir kart dosyası, ekranın göreceği hâli. */
-export interface UiEngel {
+export interface UiBlockage {
   path: string;
   /** `errno` kodu — "alınamadı" tek başına nedeni söylemiyor. */
   code: string;
@@ -346,20 +346,20 @@ export async function buildModel(options: BuildOptions): Promise<UiModel> {
     : { katilimcilar: [...topology.plan.katilimcilar], tur: topology.plan.tur };
 
   const byCard = groupEvents(events);
-  const bizimMi = (card: Card): boolean => card.topology.flow === topology.flow;
+  const isOurs = (card: Card): boolean => card.topology.flow === topology.flow;
   const ui = cards.map((card) =>
     toUiCard(card, byCard.get(card.id) ?? [], {
       // Başka akışın kartı bu panonun yargısına girmiyor: yetimlik ve
       // bayatlık ikisi de EKRANIN akışına göre tanımlı.
-      orphan: bizimMi(card) && isOrphan(card, topology),
-      stale: bizimMi(card) && isStale(card, options.flowHash),
-      otherFlow: !bizimMi(card),
+      orphan: isOurs(card) && isOrphan(card, topology),
+      stale: isOurs(card) && isStale(card, options.flowHash),
+      otherFlow: !isOurs(card),
     }),
   );
 
   // `totals.engelliKart` da `engeller`'den okuyor — aynı liste, tek
   // sayım kuralı (`kartSayisi`), iki yerde iki ayrı yorum riski yok.
-  const blockages = await surenEngeller(events);
+  const blockages = await activeBlockages(events);
 
   return {
     flow: {
@@ -410,7 +410,7 @@ export async function buildModel(options: BuildOptions): Promise<UiModel> {
  * bir kart/kuyruk dosyasını işaret eder — eski anlam korunuyor: her PATH
  * ayrı bir karttır.
  */
-export function cardCount(blockages: UiEngel[]): number {
+export function cardCount(blockages: UiBlockage[]): number {
   const gruplar = new Set<string>();
   for (const blockage of blockages) {
     gruplar.add(blockage.code === "KIRLI" ? `rol:${blockage.role}` : `yol:${blockage.path}`);
@@ -441,7 +441,7 @@ export function cardCount(blockages: UiEngel[]): number {
  * (yoksa `undefined`), çıktı bir boolean. DOM yok, I/O yok — `surenEngeller`
  * günlüğü zaten okudu, bu fonksiyon sadece karar veriyor.
  */
-export function kirliSuruyorMu(blockage: UiEngel, lastTurnStart: string | undefined): boolean {
+export function dirtyStillHolds(blockage: UiBlockage, lastTurnStart: string | undefined): boolean {
   // Bu rol hiç tur başlatmamışsa (ya da engelden önce başlatılmışsa) ağacın
   // o zamandan beri temizlendiğine dair bir kanıt yok: engel hâlâ sürüyor
   // sayılır — bilmiyorsak çözülmüş SAYMIYORUZ, aynı projenin "bilmiyorsak
@@ -456,14 +456,14 @@ export function kirliSuruyorMu(blockage: UiEngel, lastTurnStart: string | undefi
  * Aynı yol için birden çok kayıt olabilir (her geçişte bir tane); en
  * yenisi tutuluyor, yoksa ekran aynı engeli onlarca kez basardı.
  */
-async function surenEngeller(events: SkeinEvent[]): Promise<UiEngel[]> {
-  const sonKayit = new Map<string, UiEngel>();
+async function activeBlockages(events: SkeinEvent[]): Promise<UiBlockage[]> {
+  const lastRecord = new Map<string, UiBlockage>();
   for (const event of events) {
     if (event.type !== "queue.blocked") continue;
     const e = event as unknown as { path: string; code: string; message: string; role: string; at: string };
     if (typeof e.path !== "string" || e.path === "") continue;
     // Son kayıt kazanır: olaylar sırayla okunuyor.
-    sonKayit.set(e.path, {
+    lastRecord.set(e.path, {
       path: e.path,
       code: typeof e.code === "string" ? e.code : "?",
       message: typeof e.message === "string" ? e.message : "",
@@ -481,12 +481,12 @@ async function surenEngeller(events: SkeinEvent[]): Promise<UiEngel[]> {
     lastTurnStart.set(event.role, event.at);
   }
 
-  const suren: UiEngel[] = [];
-  for (const blockage of sonKayit.values()) {
+  const ongoing: UiBlockage[] = [];
+  for (const blockage of lastRecord.values()) {
     if (blockage.code === "KIRLI") {
       // Dosyanın varlığı bu kod için hiçbir şey söylemiyor (bkz.
       // `kirliSuruyorMu`); karar olay günlüğünden türüyor.
-      if (kirliSuruyorMu(blockage, lastTurnStart.get(blockage.role))) suren.push(blockage);
+      if (dirtyStillHolds(blockage, lastTurnStart.get(blockage.role))) ongoing.push(blockage);
       continue;
     }
     // Diğer kodlarda yol bir kart/kuyruk dosyası: dosya yerinde değilse
@@ -497,10 +497,10 @@ async function surenEngeller(events: SkeinEvent[]): Promise<UiEngel[]> {
     } catch {
       continue;
     }
-    suren.push(blockage);
+    ongoing.push(blockage);
   }
   // En yeni önce: ekranda ilk göreceği şey en son olan olmalı.
-  return suren.sort((a, b) => b.at.localeCompare(a.at));
+  return ongoing.sort((a, b) => b.at.localeCompare(a.at));
 }
 
 function groupEvents(events: SkeinEvent[]): Map<string, SkeinEvent[]> {
@@ -758,15 +758,15 @@ export async function buildDetail(options: DetailOptions, id: string): Promise<U
     }
   }
 
-  const bizim = card.topology.flow === options.topology.flow;
+  const ours = card.topology.flow === options.topology.flow;
 
   return {
     card: toUiCard(card, mine, {
       // Kart detayında da aynı kural: başka akışın kartı bu panonun
       // yargısına girmiyor.
-      orphan: bizim && isOrphan(card, options.topology),
-      stale: bizim && isStale(card, options.flowHash),
-      otherFlow: !bizim,
+      orphan: ours && isOrphan(card, options.topology),
+      stale: ours && isStale(card, options.flowHash),
+      otherFlow: !ours,
     }),
     history,
     diff: commit === null ? null : await readDiff(options, commit),

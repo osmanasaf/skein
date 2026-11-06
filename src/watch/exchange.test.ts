@@ -65,9 +65,9 @@ let options: TickOptions;
 /** Sahte dosya sistemi: yol → içerik. */
 let files: Map<string, string>;
 
-const PLAN_YOLU = (id: string) => `docs/plan/${id}.md`;
+const PLAN_PATH = (id: string) => `docs/plan/${id}.md`;
 // 6e: her itirazcının kendi dosyası. Bu akışta itirazcı tek: `architect`.
-const ITIRAZ_YOLU = (id: string) => `docs/plan/${id}.itiraz.architect.md`;
+const OBJECTION_PATH = (id: string) => `docs/plan/${id}.itiraz.architect.md`;
 
 /** Rolün ağacındaki mutlak yol. */
 const at = (workspace: string, rel: string): string =>
@@ -128,16 +128,16 @@ afterEach(async () => {
 const put = async (): Promise<Card> =>
   queue.add(newCard({ title: "iş", task: "undo ekle", topology }));
 
-const kabulEt = (summary = "tamam") => async (req: InvokeRequest): Promise<void> => {
+const accept = (summary = "tamam") => async (req: InvokeRequest): Promise<void> => {
   await writeFile(join(req.workdir, VERDICT_FILE), JSON.stringify({ decision: "accept", summary }));
 };
 
 /** Planı yazma turunu koşar; kart architect'e geçer. */
 async function writePlan(card: Card, textBody = "# Plan\nselector.ts sürüme bakıyor.\n"): Promise<void> {
-  files.set(at("main", PLAN_YOLU(card.id)), textBody);
+  files.set(at("main", PLAN_PATH(card.id)), textBody);
   files.set(at("main", "src/var.ts"), "export const x = 1;\n");
   files.set(at("architect", "src/var.ts"), "export const x = 1;\n");
-  claude.answer = kabulEt("plan yazıldı");
+  claude.answer = accept("plan yazıldı");
   await tick("planner", options);
 }
 
@@ -147,7 +147,7 @@ describe("alışveriş — plan yazma turu", () => {
     await writePlan(card);
     const moved = await queue.get(card.id);
     expect(moved?.role).toBe("architect");
-    expect(moved?.plan?.path).toBe(PLAN_YOLU(card.id));
+    expect(moved?.plan?.path).toBe(PLAN_PATH(card.id));
   });
 
   it("itiraz turunun iş metni biçimi ve kanıt kuralını taşır", async () => {
@@ -156,7 +156,7 @@ describe("alışveriş — plan yazma turu", () => {
     const moved = (await queue.get(card.id)) as Card;
     const text = buildTaskText(moved, roleOf(topology, "architect")!);
     expect(text).toContain("## Plana itiraz et");
-    expect(text).toContain(ITIRAZ_YOLU(card.id));
+    expect(text).toContain(OBJECTION_PATH(card.id));
     expect(text).toContain("Neyi yanlışlar");
     expect(text).toContain("sessizlik anlaşma sayılmaz");
   });
@@ -166,7 +166,7 @@ describe("alışveriş — itiraz turu", () => {
   it("itiraz dosyası yoksa tur kabul edilmez", async () => {
     const card = await put();
     await writePlan(card);
-    claude.answer = kabulEt("itirazım yok");
+    claude.answer = accept("itirazım yok");
 
     const result = await tick("architect", options);
     expect(result.status).toBe("escalated");
@@ -176,8 +176,8 @@ describe("alışveriş — itiraz turu", () => {
   it("geçerli itiraz kartı yazara geri gönderir", async () => {
     const card = await put();
     await writePlan(card);
-    files.set(at("architect", ITIRAZ_YOLU(card.id)), itiraz("açık"));
-    claude.answer = kabulEt("bir itirazım var");
+    files.set(at("architect", OBJECTION_PATH(card.id)), itiraz("açık"));
+    claude.answer = accept("bir itirazım var");
 
     const result = await tick("architect", options);
     expect(result.status).toBe("accepted");
@@ -192,8 +192,8 @@ describe("alışveriş — itiraz turu", () => {
   it("kanıtı depoda olmayan itiraz sayılmaz, kart ilerler", async () => {
     const card = await put();
     await writePlan(card);
-    files.set(at("architect", ITIRAZ_YOLU(card.id)), itiraz("açık", "`src/olmayan.ts:3`"));
-    claude.answer = kabulEt("itiraz ettim");
+    files.set(at("architect", OBJECTION_PATH(card.id)), itiraz("açık", "`src/olmayan.ts:3`"));
+    claude.answer = accept("itiraz ettim");
 
     await tick("architect", options);
     // İtiraz geçersiz → alışveriş itirazsız kapanır → zincir devam eder.
@@ -208,8 +208,8 @@ describe("alışveriş — itiraz turu", () => {
     const card = await put();
     const logPath = join(root, "olaylar.jsonl");
     await writePlan(card);
-    files.set(at("architect", ITIRAZ_YOLU(card.id)), itiraz("açık", "`src/olmayan.ts:3`"));
-    claude.answer = kabulEt("itiraz ettim");
+    files.set(at("architect", OBJECTION_PATH(card.id)), itiraz("açık", "`src/olmayan.ts:3`"));
+    claude.answer = accept("itiraz ettim");
 
     await tick("architect", { ...options, log: new EventLog(logPath, "r1") });
 
@@ -221,8 +221,8 @@ describe("alışveriş — itiraz turu", () => {
   it("itirazsız tur alışverişi kapatır ve kart zincirden devam eder", async () => {
     const card = await put();
     await writePlan(card);
-    files.set(at("architect", ITIRAZ_YOLU(card.id)), "# İtirazlar\n\nPlan bana doğru geldi.\n");
-    claude.answer = kabulEt("itirazım yok");
+    files.set(at("architect", OBJECTION_PATH(card.id)), "# İtirazlar\n\nPlan bana doğru geldi.\n");
+    claude.answer = accept("itirazım yok");
 
     await tick("architect", options);
     expect((await queue.get(card.id))?.role).toBe("coder");
@@ -233,18 +233,18 @@ describe("alışveriş — cevap turu", () => {
   /** İtiraz turunu da koşar; kart yazarda cevap bekler. */
   async function itirazaKadar(card: Card): Promise<void> {
     await writePlan(card);
-    files.set(at("architect", ITIRAZ_YOLU(card.id)), itiraz("açık"));
-    claude.answer = kabulEt("itirazım var");
+    files.set(at("architect", OBJECTION_PATH(card.id)), itiraz("açık"));
+    claude.answer = accept("itirazım var");
     await tick("architect", options);
     // İtiraz dosyası yazarın ağacına da ulaşmış olmalı (gerçekte merge).
-    files.set(at("main", ITIRAZ_YOLU(card.id)), itiraz("açık"));
+    files.set(at("main", OBJECTION_PATH(card.id)), itiraz("açık"));
   }
 
   it("kabul edilen itiraz planı değiştirmemişse tur kabul edilmez", async () => {
     const card = await put();
     await itirazaKadar(card);
-    files.set(at("main", ITIRAZ_YOLU(card.id)), itiraz("kabul"));
-    claude.answer = kabulEt("haklısın");
+    files.set(at("main", OBJECTION_PATH(card.id)), itiraz("kabul"));
+    claude.answer = accept("haklısın");
 
     const result = await tick("planner", options);
     expect(result.status).toBe("escalated");
@@ -255,9 +255,9 @@ describe("alışveriş — cevap turu", () => {
     const DUZELTILMIS = "# Plan\nSürüm ileri gider; selector.ts korunur.\n";
     const card = await put();
     await itirazaKadar(card);
-    files.set(at("main", ITIRAZ_YOLU(card.id)), itiraz("kabul"));
-    files.set(at("main", PLAN_YOLU(card.id)), DUZELTILMIS);
-    claude.answer = kabulEt("planı düzelttim");
+    files.set(at("main", OBJECTION_PATH(card.id)), itiraz("kabul"));
+    files.set(at("main", PLAN_PATH(card.id)), DUZELTILMIS);
+    claude.answer = accept("planı düzelttim");
 
     const result = await tick("planner", options);
     expect(result.status).toBe("accepted");
@@ -278,8 +278,8 @@ describe("alışveriş — cevap turu", () => {
   it("gerekçeli ret kartı ilerletir, plan değişmeden", async () => {
     const card = await put();
     await itirazaKadar(card);
-    files.set(at("main", ITIRAZ_YOLU(card.id)), itiraz("ret: ölçüm bunu göstermiyor"));
-    claude.answer = kabulEt("katılmıyorum");
+    files.set(at("main", OBJECTION_PATH(card.id)), itiraz("ret: ölçüm bunu göstermiyor"));
+    claude.answer = accept("katılmıyorum");
 
     const result = await tick("planner", options);
     expect(result.status).toBe("accepted");
@@ -290,7 +290,7 @@ describe("alışveriş — cevap turu", () => {
   it("açık bırakılan itiraz kartı KİLİT kapısına çıkarır", async () => {
     const card = await put();
     await itirazaKadar(card);
-    claude.answer = kabulEt("cevap vermedim");
+    claude.answer = accept("cevap vermedim");
 
     const result = await tick("planner", options);
     expect(result.status).toBe("escalated");
@@ -303,8 +303,8 @@ describe("alışveriş — cevap turu", () => {
   it("insana çıkan itiraz kartı kapıya çıkarır", async () => {
     const card = await put();
     await itirazaKadar(card);
-    files.set(at("main", ITIRAZ_YOLU(card.id)), itiraz("insana: bu bir değer kararı"));
-    claude.answer = kabulEt("karar insana");
+    files.set(at("main", OBJECTION_PATH(card.id)), itiraz("insana: bu bir değer kararı"));
+    claude.answer = accept("karar insana");
 
     const result = await tick("planner", options);
     expect(result.status).toBe("escalated");
@@ -325,7 +325,7 @@ describe("alışveriş — planlama turunda ret kanalı yok (kural 22)", () => {
   it("itiraz turunda 'reject' kartı geri göndermez; itiraz dosyası okunur", async () => {
     const card = await put();
     await writePlan(card);
-    files.set(at("architect", ITIRAZ_YOLU(card.id)), itiraz("açık"));
+    files.set(at("architect", OBJECTION_PATH(card.id)), itiraz("açık"));
     claude.answer = reddet("plan yanlış");
 
     const result = await tick("architect", options);
@@ -359,19 +359,19 @@ describe("alışveriş — planlama turunda ret kanalı yok (kural 22)", () => {
   it("ret gerekçesi uyarıya olduğu gibi giriyor", async () => {
     const card = await put();
     await writePlan(card);
-    files.set(at("architect", ITIRAZ_YOLU(card.id)), itiraz("açık"));
-    const uzunGerekce =
+    files.set(at("architect", OBJECTION_PATH(card.id)), itiraz("açık"));
+    const longRationale =
       "Birinci paragraf: depo dosyası sözleşmeyi zorunlu kılmıyor.\n\n" +
       "İkinci paragraf: tüketici modül bu değişmezi kendi okuyor.\n\n" +
       "Üçüncü paragraf: bu yüzden plan olduğu gibi ilerlerse kusur tekrar yazılır.";
-    claude.answer = reddet(uzunGerekce);
+    claude.answer = reddet(longRationale);
 
     const result = await tick("architect", options);
 
     expect(result.status).toBe("accepted");
     const warnings = result.status === "accepted" ? (result.warnings ?? []).join("\n") : "";
     // Kırpma YOK: kırpmak kusurun daha küçük bir hâlini üretmek olurdu.
-    expect(warnings).toContain(uzunGerekce);
+    expect(warnings).toContain(longRationale);
     // Kanal uyarısı da duruyor; ikisi birbirinin yerine geçmiyor.
     expect(warnings).toMatch(/kural 22/);
   });
@@ -380,7 +380,7 @@ describe("alışveriş — planlama turunda ret kanalı yok (kural 22)", () => {
     const card = await put();
     const logPath = join(root, "olaylar.jsonl");
     await writePlan(card);
-    files.set(at("architect", ITIRAZ_YOLU(card.id)), itiraz("açık"));
+    files.set(at("architect", OBJECTION_PATH(card.id)), itiraz("açık"));
     claude.answer = reddet("plan tüketici modülü hiç saymıyor");
 
     await tick("architect", { ...options, log: new EventLog(logPath, "r1") });
@@ -420,7 +420,7 @@ describe("alışveriş — planlama turunda ret kanalı yok (kural 22)", () => {
   it("birleştirme düşerse gerekçe tırmanma sebebine giriyor", async () => {
     const card = await put();
     await writePlan(card);
-    files.set(at("architect", ITIRAZ_YOLU(card.id)), itiraz("açık"));
+    files.set(at("architect", OBJECTION_PATH(card.id)), itiraz("açık"));
     claude.answer = reddet("plan yanlış ve sebebi şu");
 
     const result = await tick("architect", {
@@ -438,8 +438,8 @@ describe("alışveriş — planlama turunda ret kanalı yok (kural 22)", () => {
   it("planlama dışı rolde ret kanalı çalışmaya devam eder", async () => {
     const card = await put();
     await writePlan(card);
-    files.set(at("architect", ITIRAZ_YOLU(card.id)), "# İtirazlar\n\nİtirazım yok.\n");
-    claude.answer = kabulEt("itirazım yok");
+    files.set(at("architect", OBJECTION_PATH(card.id)), "# İtirazlar\n\nİtirazım yok.\n");
+    claude.answer = accept("itirazım yok");
     await tick("architect", options);
     expect((await queue.get(card.id))?.role).toBe("coder");
 
@@ -458,13 +458,13 @@ describe("alışveriş — günlük", () => {
     const withLog = { ...options, log };
 
     await writePlan(card);
-    files.set(at("architect", ITIRAZ_YOLU(card.id)), itiraz("açık"));
-    claude.answer = kabulEt("itiraz");
+    files.set(at("architect", OBJECTION_PATH(card.id)), itiraz("açık"));
+    claude.answer = accept("itiraz");
     await tick("architect", withLog);
 
-    files.set(at("main", ITIRAZ_YOLU(card.id)), itiraz("kabul"));
-    files.set(at("main", PLAN_YOLU(card.id)), "# Plan\nDüzeltildi.\n");
-    claude.answer = kabulEt("düzelttim");
+    files.set(at("main", OBJECTION_PATH(card.id)), itiraz("kabul"));
+    files.set(at("main", PLAN_PATH(card.id)), "# Plan\nDüzeltildi.\n");
+    claude.answer = accept("düzelttim");
     await tick("planner", withLog);
 
     const { events } = await readEvents(logPath);
@@ -487,11 +487,11 @@ describe("alışveriş — günlük", () => {
 describe("alışveriş — kilit kapısından çıkış", () => {
   async function kilide(card: Card): Promise<void> {
     await writePlan(card);
-    files.set(at("architect", ITIRAZ_YOLU(card.id)), itiraz("açık"));
-    claude.answer = kabulEt("itirazım var");
+    files.set(at("architect", OBJECTION_PATH(card.id)), itiraz("açık"));
+    claude.answer = accept("itirazım var");
     await tick("architect", options);
-    files.set(at("main", ITIRAZ_YOLU(card.id)), itiraz("açık"));
-    claude.answer = kabulEt("cevap vermedim");
+    files.set(at("main", OBJECTION_PATH(card.id)), itiraz("açık"));
+    claude.answer = accept("cevap vermedim");
     await tick("planner", options);
   }
 
@@ -526,7 +526,7 @@ describe("alışveriş — kilit kapısından çıkış", () => {
  * için değil.
  */
 describe("yükümlülük — kabul edilmiş itiraz bağlayıcı", () => {
-  const FLOW_DENETCI = `
+  const FLOW_AUDITOR = `
 name: denetci-test
 constitution:
   - ../prompts/base.md
@@ -567,7 +567,7 @@ reject:
   beforeEach(async () => {
     await mkdir(join(root, WORKTREE_DIR, "reviewer"), { recursive: true });
     await writeFile(join(root, "roles", "reviewer.prompt"), "# reviewer\n");
-    await writeFile(join(root, "hub", "flows", "denetci-test.yaml"), FLOW_DENETCI);
+    await writeFile(join(root, "hub", "flows", "denetci-test.yaml"), FLOW_AUDITOR);
     const flow = await loadFlow(join(root, "hub", "flows", "denetci-test.yaml"), {
       root, providers: knownProviderSet(),
     });
@@ -575,35 +575,35 @@ reject:
   });
 
   /** Alışverişi KABUL edilmiş itirazla bitirir; kart `coder`'a geçer. */
-  async function kabulluAlisveris(): Promise<Card> {
+  async function exchangeWithAcceptance(): Promise<Card> {
     const card = await queue.add(newCard({ title: "iş", task: "undo ekle", topology: topoSnapshot }));
-    files.set(at("main", PLAN_YOLU(card.id)), "# Plan\nselector.ts sürüme bakıyor.\n");
+    files.set(at("main", PLAN_PATH(card.id)), "# Plan\nselector.ts sürüme bakıyor.\n");
     // Kanıt yolu GERÇEKTEN var olmalı: yoksa itiraz "depoda olmayan yol"
     // diye elenir ve kabul hiç oluşmaz.
     files.set(at("main", "src/var.ts"), "export const x = 1;\n");
     files.set(at("architect", "src/var.ts"), "export const x = 1;\n");
-    claude.answer = kabulEt("plan yazıldı");
+    claude.answer = accept("plan yazıldı");
     await tick("planner", options);
-    files.set(at("architect", ITIRAZ_YOLU(card.id)), itiraz("açık"));
-    claude.answer = kabulEt("itirazım var");
+    files.set(at("architect", OBJECTION_PATH(card.id)), itiraz("açık"));
+    claude.answer = accept("itirazım var");
     await tick("architect", options);
-    files.set(at("main", ITIRAZ_YOLU(card.id)), itiraz("kabul"));
-    files.set(at("main", PLAN_YOLU(card.id)), "# Plan\nSürüm ileri gider.\n");
-    claude.answer = kabulEt("planı düzelttim");
+    files.set(at("main", OBJECTION_PATH(card.id)), itiraz("kabul"));
+    files.set(at("main", PLAN_PATH(card.id)), "# Plan\nSürüm ileri gider.\n");
+    claude.answer = accept("planı düzelttim");
     await tick("planner", options);
     return (await queue.get(card.id)) as Card;
   }
 
   /** Kartı `coder`'dan geçirip `reviewer`'a getirir. */
   async function denetciyeKadar(): Promise<Card> {
-    const card = await kabulluAlisveris();
-    claude.answer = kabulEt("kodu yazdım");
+    const card = await exchangeWithAcceptance();
+    claude.answer = accept("kodu yazdım");
     await tick("coder", options);
     return (await queue.get(card.id)) as Card;
   }
 
   /** İki itiraz: birincisi kabul, ikincisi insana. */
-  const ikiItiraz = (d1: string, d2: string) => `# İtirazlar
+  const twoObjections = (d1: string, d2: string) => `# İtirazlar
 
 ## İtiraz 1 — architect
 **Ne:** Plan geçmişi baştan oynatıyor.
@@ -629,21 +629,21 @@ reject:
   // yükümlülükler bu yoldan hiçbir zaman yazılamıyordu.
   it("insana çıkan alışverişte kabul edilen itiraz karta YAZILIR", async () => {
     const card = await queue.add(newCard({ title: "iş", task: "undo ekle", topology: topoSnapshot }));
-    files.set(at("main", PLAN_YOLU(card.id)), "# Plan\nselector.ts sürüme bakıyor.\n");
+    files.set(at("main", PLAN_PATH(card.id)), "# Plan\nselector.ts sürüme bakıyor.\n");
     files.set(at("main", "src/var.ts"), "export const x = 1;\n");
     files.set(at("architect", "src/var.ts"), "export const x = 1;\n");
-    claude.answer = kabulEt("plan yazıldı");
+    claude.answer = accept("plan yazıldı");
     await tick("planner", options);
 
-    files.set(at("architect", ITIRAZ_YOLU(card.id)), ikiItiraz("açık", "açık"));
-    claude.answer = kabulEt("iki itirazım var");
+    files.set(at("architect", OBJECTION_PATH(card.id)), twoObjections("açık", "açık"));
+    claude.answer = accept("iki itirazım var");
     await tick("architect", options);
 
     // Yazar birincisini kabul ediyor, ikincisini insana çıkarıyor.
-    files.set(at("main", ITIRAZ_YOLU(card.id)),
-      ikiItiraz("kabul: planı düzelttim", "insana: bu bir değer kararı"));
-    files.set(at("main", PLAN_YOLU(card.id)), "# Plan\nSürüm ileri gider.\n");
-    claude.answer = kabulEt("birini kabul ettim, birini insana çıkardım");
+    files.set(at("main", OBJECTION_PATH(card.id)),
+      twoObjections("kabul: planı düzelttim", "insana: bu bir değer kararı"));
+    files.set(at("main", PLAN_PATH(card.id)), "# Plan\nSürüm ileri gider.\n");
+    claude.answer = accept("birini kabul ettim, birini insana çıkardım");
     const result = await tick("planner", options);
 
     expect(result.status).toBe("escalated");
@@ -659,7 +659,7 @@ reject:
   });
 
   it("kabul edilen itirazı karta yazar — kimlik `rol#no`", async () => {
-    const card = await kabulluAlisveris();
+    const card = await exchangeWithAcceptance();
     expect(card.role).toBe("coder");
     expect(card.plan?.kabuller).toEqual([{
       id: "architect#1",
@@ -675,7 +675,7 @@ reject:
   // yalnızca onu okursa ölçülebilir. Üreticiye itiraz listesini de verirsen
   // o soruyu bir daha hiç soramazsın.
   it("üreticiye yükümlülük listesi VERİLMEZ", async () => {
-    const card = await kabulluAlisveris();
+    const card = await exchangeWithAcceptance();
     const text = buildTaskText(card, roleOf(topoSnapshot, "coder")!);
     expect(text).toContain("## Plan");
     expect(text).not.toContain("## İtiraz üzerine değişen maddeler");
@@ -703,7 +703,7 @@ reject:
   // Cevapsız madde karşılanmış SAYILMAZ: cevap vermemek bir cevap değildir.
   it("yanıtlanmayan yükümlülükle kabul kartı geçirmez", async () => {
     await denetciyeKadar();
-    claude.answer = kabulEt("denetledim");
+    claude.answer = accept("denetledim");
     const result = await tick("reviewer", options);
     expect(result.status).toBe("escalated");
     expect(result.status === "escalated" && result.reason).toMatch(/yükümlülüğü yanıtlamadı/);
@@ -773,7 +773,7 @@ reject:
   // vermemeyi bir cevap saymak olurdu.
   it("yanıtlanmayan madde günlüğe yazılmaz", async () => {
     await denetciyeKadar();
-    claude.answer = kabulEt("denetledim");
+    claude.answer = accept("denetledim");
     const filePath = join(root, "cevapsiz.jsonl");
     const result = await tick("reviewer", { ...options, log: new EventLog(filePath, "r1") });
 

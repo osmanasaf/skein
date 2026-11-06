@@ -85,7 +85,7 @@ export async function serve(
   const announced = new Set<string>();
   // Aynı hata her yoklamada tekrarlanırsa terminal okunmaz olur: canlı
   // koşuda 3 saniyede 48 kez yazdı. Yalnızca DEĞİŞEN hata duyurulur.
-  let sonHata: string | null = null;
+  let lastError: string | null = null;
 
   while (!aborted()) {
     if (options.refresh !== undefined) {
@@ -93,15 +93,15 @@ export async function serve(
       // Yeni topoloji bu geçişten itibaren geçerli; yoldaki kartlar kendi
       // dondurulmuş topolojileriyle yaşamaya devam ediyor (değişmez 4).
       if (reload.kind === "reloaded") {
-        sonHata = null;
+        lastError = null;
         options.onReload?.(reload);
       } else if (reload.kind === "failed") {
-        if (reload.message !== sonHata) {
-          sonHata = reload.message;
+        if (reload.message !== lastError) {
+          lastError = reload.message;
           options.onReload?.(reload);
         }
       } else {
-        sonHata = null;
+        lastError = null;
       }
     }
 

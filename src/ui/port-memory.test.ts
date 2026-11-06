@@ -293,8 +293,8 @@ describe("portuHatirlayarakAc", () => {
 
   it("DOLU DIŞINDA bir hata ÖRTÜLMEZ, olduğu gibi fırlar", async () => {
     await writeLastPort(root, 7777);
-    const baskaHata = new Error("izin yok") as NodeJS.ErrnoException;
-    baskaHata.code = "EACCES";
+    const otherError = new Error("izin yok") as NodeJS.ErrnoException;
+    otherError.code = "EACCES";
     // `ac` yalnızca HATIRLANAN portla çağrıldığında fırlatıyor — "düş"
     // dalı (boş port) GERÇEKTEN denenseydi BAŞARILI dönerdi. Bu yüzden
     // iddia yalnızca "reddediyor" değil, "başka bir porta hiç DÜŞMEDEN
@@ -303,10 +303,10 @@ describe("portuHatirlayarakAc", () => {
     // sonuç değişmezdi).
     await expect(
       openRememberingPort(root, undefined, async (p) => {
-        if (p === 7777) throw baskaHata;
+        if (p === 7777) throw otherError;
         return { port: p ?? 0 };
       }),
-    ).rejects.toBe(baskaHata);
+    ).rejects.toBe(otherError);
   });
 
   /**

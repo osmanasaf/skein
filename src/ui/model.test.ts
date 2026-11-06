@@ -12,8 +12,8 @@ import { snapshot, type TopologySnapshot } from "../flow/snapshot.js";
 import { acquireLock } from "../watch/lock.js";
 import { tick } from "../watch/tick.js";
 import {
-  activationSteps, buildDetail, buildModel, buildSteps, cardCount, kirliSuruyorMu,
-  type BuildOptions, type UiEngel,
+  activationSteps, buildDetail, buildModel, buildSteps, cardCount, dirtyStillHolds,
+  type BuildOptions, type UiBlockage,
 } from "./model.js";
 
 const FLOW = `
@@ -843,7 +843,7 @@ reject:
  * olmaması — `rename` başardığı an o yol kaybolur.
  */
 describe("buildModel — kuyruk engeli", () => {
-  async function engelKaydi(filePath: string): Promise<void> {
+  async function blockageRecord(filePath: string): Promise<void> {
     const log = new EventLog(logPath, "kosu-1");
     await log.append({
       type: "queue.blocked",
@@ -858,7 +858,7 @@ describe("buildModel — kuyruk engeli", () => {
     const filePath = join(root, ".skein", "queue", "coder", "0-x-c-1.json");
     await mkdir(dirname(filePath), { recursive: true });
     await writeFile(filePath, "{}");
-    await engelKaydi(filePath);
+    await blockageRecord(filePath);
 
     const m = await buildModel(base);
 
@@ -870,7 +870,7 @@ describe("buildModel — kuyruk engeli", () => {
 
   it("dosya gitmişse engel bildirilmiyor", async () => {
     // Kayıt var ama dosya yok: kart alındı ya da taşındı, engel çözüldü.
-    await engelKaydi(join(root, ".skein", "queue", "coder", "0-x-c-yok.json"));
+    await blockageRecord(join(root, ".skein", "queue", "coder", "0-x-c-yok.json"));
 
     const m = await buildModel(base);
 
@@ -905,7 +905,7 @@ describe("buildModel — kuyruk engeli", () => {
  * düşer; geri alınca yeşile döner.
  */
 describe("kartSayisi", () => {
-  const blockage = (ovr: Partial<UiEngel>): UiEngel => ({
+  const blockage = (ovr: Partial<UiBlockage>): UiBlockage => ({
     path: "p", code: "KIRLI", message: "m", role: "coder", at: "2026-11-06T00:00:00.000Z", ...ovr,
   });
 
@@ -939,27 +939,27 @@ describe("kartSayisi", () => {
  * `undefined` dalını `false`'a çevirirsen ilk/son sınama düşer.
  */
 describe("kirliSuruyorMu", () => {
-  const blockage: UiEngel = {
+  const blockage: UiBlockage = {
     path: "src/ui/server.ts", code: "KIRLI", message: "m", role: "coder",
     at: "2026-11-06T02:29:00.000Z",
   };
 
   it("rol hiç tur başlatmadıysa sürüyor sayılır — bilmiyorsak çözülmüş sayma", () => {
-    expect(kirliSuruyorMu(blockage, undefined)).toBe(true);
+    expect(dirtyStillHolds(blockage, undefined)).toBe(true);
   });
 
   it("engelden SONRA bir agent.started varsa çözülmüş sayılır", () => {
-    expect(kirliSuruyorMu(blockage, "2026-11-06T05:00:00.000Z")).toBe(false);
+    expect(dirtyStillHolds(blockage, "2026-11-06T05:00:00.000Z")).toBe(false);
   });
 
   it("agent.started engelden ÖNCEYSE hâlâ sürüyor sayılır", () => {
-    expect(kirliSuruyorMu(blockage, "2026-11-06T01:00:00.000Z")).toBe(true);
+    expect(dirtyStillHolds(blockage, "2026-11-06T01:00:00.000Z")).toBe(true);
   });
 
   // Tam aynı an: kesinlikle SONRA değil, o yüzden temkinli taraf seçiliyor
   // — "daha yeni" (SAPMALAR'ın "bilmiyorsak başlatma" ilkesiyle aynı).
   it("agent.started engelle TAM AYNI anda sayılırsa hâlâ sürüyor sayılır", () => {
-    expect(kirliSuruyorMu(blockage, blockage.at)).toBe(true);
+    expect(dirtyStillHolds(blockage, blockage.at)).toBe(true);
   });
 });
 
@@ -971,7 +971,7 @@ describe("kirliSuruyorMu", () => {
  * kaybolmaz, çözülme olaya bağlı olmalı).
  */
 describe("buildModel — KIRLI engeli", () => {
-  async function kirliKaydi(filePath: string): Promise<void> {
+  async function dirtyRecord(filePath: string): Promise<void> {
     const log = new EventLog(logPath, "kosu-1");
     await log.append({ type: "queue.blocked", role: "coder", path: filePath, code: "KIRLI", message: "kirli ağaç" });
   }
@@ -980,7 +980,7 @@ describe("buildModel — KIRLI engeli", () => {
     const source = join(root, "src", "ui", "server.ts");
     await mkdir(dirname(source), { recursive: true });
     await writeFile(source, "// kaynak\n");
-    await kirliKaydi(source);
+    await dirtyRecord(source);
 
     const once = await buildModel(base);
     expect(once.blockages).toHaveLength(1);
@@ -1005,7 +1005,7 @@ describe("buildModel — KIRLI engeli", () => {
     const source = join(root, "src", "ui", "server.ts");
     await mkdir(dirname(source), { recursive: true });
     await writeFile(source, "// kaynak\n");
-    await kirliKaydi(source);
+    await dirtyRecord(source);
 
     const m = await buildModel(base);
     expect(m.blockages).toHaveLength(1);

@@ -144,8 +144,8 @@ describe("iş metni", () => {
 
   it("plan dondurulmuşsa sürümünü de söyler", async () => {
     const card = await put();
-    const donmus: Card = { ...card, plan: { path: "docs/plan/x.md", hash: "abcdef0123456789" } };
-    const text = buildTaskText(donmus, roleOf(topology, "coder")!);
+    const frozen: Card = { ...card, plan: { path: "docs/plan/x.md", hash: "abcdef0123456789" } };
+    const text = buildTaskText(frozen, roleOf(topology, "coder")!);
     expect(text).toContain("abcdef012345");
   });
 

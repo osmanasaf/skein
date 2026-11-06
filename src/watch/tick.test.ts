@@ -607,11 +607,11 @@ describe("tick — işlenmemiş iş devredilemez", () => {
   it("kirli ağaçla kabul kartı kapıya çıkarır", async () => {
     const card = await put();
     claude.answer = writes({ decision: "accept" });
-    let cagri = 0;
+    let call = 0;
 
     const result = await tick("coder", {
       ...options,
-      dirtyPaths: async () => (cagri++ === 0 ? [] : ["src/retry.ts", "src/retry.test.ts"]),
+      dirtyPaths: async () => (call++ === 0 ? [] : ["src/retry.ts", "src/retry.test.ts"]),
     });
 
     expect(result.status).toBe("escalated");
@@ -732,9 +732,9 @@ describe("tick — sessiz başarısızlık yasağı", () => {
    * raporlama yolu burada parayla ölçülüyor: insan turu yeniden koşturup
    * aynı bedeli ikinci kez ödüyor.
    */
-  const kayanHead = (...degerler: string[]) => {
+  const kayanHead = (...valueList: string[]) => {
     let i = 0;
-    return async (): Promise<string | undefined> => degerler[Math.min(i++, degerler.length - 1)];
+    return async (): Promise<string | undefined> => valueList[Math.min(i++, valueList.length - 1)];
   };
 
   it("zaman aşımında ajan commit attıysa gerekçe bunu SÖYLER", async () => {
@@ -984,10 +984,10 @@ describe("tick — prompt derleme", () => {
     await tick("coder", options);
 
     const text = await readFile(claude.calls[0]?.promptFile as string, "utf8");
-    const anayasa = text.indexOf('name="anayasa:1"');
+    const constitutionText = text.indexOf('name="anayasa:1"');
     const theRole = text.indexOf('name="rol:coder"');
-    expect(anayasa).toBeGreaterThanOrEqual(0);
-    expect(theRole).toBeGreaterThan(anayasa);
+    expect(constitutionText).toBeGreaterThanOrEqual(0);
+    expect(theRole).toBeGreaterThan(constitutionText);
   });
 
   it("görev metni prompt dosyasına GİRMEZ — hash görevden bağımsız kalmalı", async () => {

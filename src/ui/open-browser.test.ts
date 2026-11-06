@@ -25,13 +25,13 @@ describe("tarayiciKomutu", () => {
 });
 
 /** Gerçek `PipedChild`'ın bu fonksiyonun kullandığı kadarını taklit eder. */
-function sahteÇocuk(): PipedChild {
+function fakeChild(): PipedChild {
   return new EventEmitter() as unknown as PipedChild;
 }
 
 describe("tarayiciyiAc", () => {
   it("doğru komutu doğru argümanlarla, seçilen platforma göre çağırır", () => {
-    const spawn = vi.fn(() => sahteÇocuk());
+    const spawn = vi.fn(() => fakeChild());
     openBrowser("http://127.0.0.1:1234/", { platform: "darwin", spawn });
     expect(spawn).toHaveBeenCalledWith("open", ["http://127.0.0.1:1234/"]);
   });
@@ -52,7 +52,7 @@ describe("tarayiciyiAc", () => {
 
   it("çocuk süreç ASENKRON `error` yayarsa log çağrılıyor, ama fonksiyon zaten dönmüştür", () => {
     const log = vi.fn();
-    const child = sahteÇocuk();
+    const child = fakeChild();
     openBrowser("http://x", { platform: "linux", spawn: () => child, log });
     // Fonksiyon senkron döndü, henüz log çağrılmadı — `error` olayı sonradan gelir.
     expect(log).not.toHaveBeenCalled();
@@ -62,7 +62,7 @@ describe("tarayiciyiAc", () => {
 
   it("başarılı açılışta log HİÇ çağrılmaz", () => {
     const log = vi.fn();
-    openBrowser("http://x", { platform: "linux", spawn: () => sahteÇocuk(), log });
+    openBrowser("http://x", { platform: "linux", spawn: () => fakeChild(), log });
     expect(log).not.toHaveBeenCalled();
   });
 });

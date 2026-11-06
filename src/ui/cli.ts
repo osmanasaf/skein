@@ -8,10 +8,10 @@ import { LiveFlow } from "../flow/live.js";
 import { isEntryPoint, tsxCliPath } from "../proc/process.js";
 import { openBrowser } from "./open-browser.js";
 import { openRememberingPort, readLastFlow, writeLastFlow } from "./port-memory.js";
-import { serveUi, type CanliAkis } from "./server.js";
+import { serveUi, type LiveFlowState } from "./server.js";
 
 /** Akış argümanı verilmediğinde, hatırlanan kayıt da yoksa/bozuksa düşülecek akış. */
-const GUNLUK_TEK = "gunluk-tek";
+const DAILY_SINGLE = "gunluk-tek";
 
 const USAGE = `Kullanım:
   npm start [-- [akış] [--port <n>]]
@@ -110,13 +110,13 @@ async function listFlowNames(root: string): Promise<string[]> {
  * `LiveFlow.open` kendi hata mesajıyla bildirir, bugünkü (değişmeyen)
  * davranışın aynısı.
  */
-async function varsayilanAkisAdi(
+async function defaultFlowName(
   root: string, flows: readonly string[], loadOptions: LoadOptions,
 ): Promise<string> {
   const candidates: string[] = [];
   const remembered = await readLastFlow(root);
   if (remembered !== undefined) candidates.push(remembered);
-  candidates.push(GUNLUK_TEK);
+  candidates.push(DAILY_SINGLE);
 
   for (const name of candidates) {
     // YOKSA bu adım hiç denenmiyor — "bozuk" ile "hiç yok" burada aynı
@@ -150,18 +150,18 @@ async function main(argv: string[]): Promise<number> {
   let port: number | undefined;
   let host: string | undefined;
   let saltOkunur = false;
-  let tarayiciYok = false;
+  let noBrowser = false;
   // Gözcüye AYNEN geçirilecek bayraklar. Ekran onları yorumlamıyor,
   // yalnızca taşıyor: hangi modelin hangi araçlarla koşacağına karar veren
   // yer `watch/cli.ts` olmalı, ekran değil.
-  const gozcuBayraklari: string[] = [];
+  const watcherFlags: string[] = [];
   let modelVar = false;
   for (let i = 0; i < argv.length; i += 1) {
     const value = argv[i] as string;
     if (value === "--port") port = Number(argv[++i]);
     else if (value === "--host") host = argv[++i];
     else if (value === "--salt-okunur") saltOkunur = true;
-    else if (value === "--tarayici-yok") tarayiciYok = true;
+    else if (value === "--tarayici-yok") noBrowser = true;
     else if (
       value === "--model" || value === "--allow-tool" ||
       value === "--permission-mode" || value === "--bin" || value === "--poll" ||
@@ -177,7 +177,7 @@ async function main(argv: string[]): Promise<number> {
         return 1;
       }
       if (value === "--model") modelVar = true;
-      gozcuBayraklari.push(value, fieldValue);
+      watcherFlags.push(value, fieldValue);
     } else if (!value.startsWith("--") && flowName === undefined) flowName = value;
     // TANIMADIĞIN BAYRAĞI SESSİZCE YUTMA — gözcü CLI'ındaki kuralın
     // aynısı, aynı sebeple. Burada ek bir tuzak var: bayrak yutulunca
@@ -191,7 +191,7 @@ async function main(argv: string[]): Promise<number> {
   // `--model` olmadan gözcü koşmuyor (akış dosyası model taşımıyor), yani
   // düğme kurulsaydı her basışta aynı hatayı verirdi. Yarım kurulmuş bir
   // düğme sunmaktansa sebebini söyleyip hiç sunmamak doğru.
-  if (gozcuBayraklari.length > 0 && !modelVar) {
+  if (watcherFlags.length > 0 && !modelVar) {
     console.error("✗ gözcü bayrakları verildi ama --model yok; gözcü modelsiz koşamaz");
     return 1;
   }
@@ -213,7 +213,7 @@ async function main(argv: string[]): Promise<number> {
       console.error(`✗ hub/flows altında hiç akış yok: ${join(root, "hub", "flows")}`);
       return 1;
     }
-    flowName = await varsayilanAkisAdi(root, flows, loadOptions);
+    flowName = await defaultFlowName(root, flows, loadOptions);
   }
 
   // Akış yaşayan: her okumadan önce yoklanıyor. Dosya değişirse ekran yeni
@@ -250,16 +250,16 @@ async function main(argv: string[]): Promise<number> {
     // taşıyor, burada tekrar uygulanmıyor.
     flowChoice: {
       list: () => listFlowNames(root),
-      open: async (name: string): Promise<{ live: CanliAkis; flowPath: string }> => {
+      open: async (name: string): Promise<{ live: LiveFlowState; flowPath: string }> => {
         const newPath = join(root, "hub", "flows", `${name}.yaml`);
-        const yeniLive = await LiveFlow.open(newPath, loadOptions);
+        const newLive = await LiveFlow.open(newPath, loadOptions);
         // Kayıt YALNIZCA açılış BAŞARILIYSA güncelleniyor — yukarıdaki satır
         // fırlasa buraya hiç ulaşılmaz. Bu, ekrandaki seçiciden akış
         // değiştirmenin "son açılan" hafızasını da güncellediği tek yer:
         // yapmazsak seçiciyle geçilen akış ekranda görünür ama bir sonraki
         // `npm start` hâlâ eski kaydı okur — "son açılan" yalan olurdu.
         await writeLastFlow(root, name);
-        return { live: yeniLive, flowPath: newPath };
+        return { live: newLive, flowPath: newPath };
       },
     },
     // Akış düzenleme açık: ekranın ürettiği dosya tam olarak bu yol.
@@ -273,7 +273,7 @@ async function main(argv: string[]): Promise<number> {
     ...(host === undefined ? {} : { host }),
     // Gözcü düğmesi YALNIZCA bayrak verildiyse açılıyor; verilmediyse uç
     // 404 dönüyor ve ekran bugünkü hâlinde kalıyor.
-    ...(gozcuBayraklari.length === 0
+    ...(watcherFlags.length === 0
       ? {}
       : {
           watcher: {
@@ -285,7 +285,7 @@ async function main(argv: string[]): Promise<number> {
               tsxCliPath(root),
               join(root, "src", "watch", "cli.ts"),
             ],
-            bayraklar: gozcuBayraklari,
+            bayraklar: watcherFlags,
           },
         }),
   };
@@ -305,8 +305,8 @@ async function main(argv: string[]): Promise<number> {
       ? `\nSalt okunur. Durdurmak için Ctrl-C.`
       : `\nKapı kararı ve akış düzenleme açık. Durdurmak için Ctrl-C.`,
   );
-  if (gozcuBayraklari.length > 0) {
-    console.log(`gözcü düğmesi AÇIK — bayraklar: ${gozcuBayraklari.join(" ")}`);
+  if (watcherFlags.length > 0) {
+    console.log(`gözcü düğmesi AÇIK — bayraklar: ${watcherFlags.join(" ")}`);
     console.log(`gözcü çıktısı: ${join(root, ".skein", "gozcu.log")}`);
   }
 
@@ -314,7 +314,7 @@ async function main(argv: string[]): Promise<number> {
   // araçta başlamanın kendisi en zor adım olmamalı. Bu HİÇBİR KOŞULDA
   // ekranı düşürmez (`tarayiciyiAc` kendi içinde yutuyor); yalnızca
   // `--tarayici-yok` ile (uzaktan/konteyner koşumu) devre dışı.
-  if (!tarayiciYok) openBrowser(server.url);
+  if (!noBrowser) openBrowser(server.url);
 
   const stop = (): void => {
     void server.close().then(() => process.exit(0));

@@ -20,7 +20,7 @@ import { renderPage } from "./page.js";
 import { readLastTheme, writeLastTheme, type Theme } from "./port-memory.js";
 
 /** Ekranın baktığı akışın yaşayan hâli. */
-export interface CanliAkis {
+export interface LiveFlowState {
   topology: TopologySnapshot;
   flow: Flow;
   error: string | null;
@@ -41,7 +41,7 @@ export interface ServeUiOptions extends DetailOptions {
    * dosyası değiştiyse ekran yeni sütunları çiziyor, geçersizse eskisiyle
    * çizmeye devam edip gerekçeyi gösteriyor.
    */
-  live?: CanliAkis;
+  live?: LiveFlowState;
   /**
    * Akışı EKRANDAN değiştirmek.
    *
@@ -57,7 +57,7 @@ export interface ServeUiOptions extends DetailOptions {
     /** Seçilebilecek akış adları. */
     list: () => Promise<string[]>;
     /** Adı verilen akışı açar. Başarısızsa FIRLATIR ve eskisi durur. */
-    open: (itemName: string) => Promise<{ live: CanliAkis; flowPath: string }>;
+    open: (itemName: string) => Promise<{ live: LiveFlowState; flowPath: string }>;
   };
   /**
    * Akış dosyasının yolu ve yükleme seçenekleri — ekrandan düzenleme için
@@ -104,12 +104,12 @@ export interface ServeUiOptions extends DetailOptions {
      */
     bayraklar: string[];
     /** Test edilebilirlik için; varsayılan gerçek süreç başlatma. */
-    spawn?: (argv: string[]) => GozcuSurec;
+    spawn?: (argv: string[]) => WatcherProcess;
   };
 }
 
 /** Başlatılan gözcü sürecinin ekranın ihtiyaç duyduğu kadarı. */
-export interface GozcuSurec {
+export interface WatcherProcess {
   pid: number | undefined;
   kill: (signal?: NodeJS.Signals) => void;
   /**
@@ -159,7 +159,7 @@ function queryParam(req: IncomingMessage, name: string): string {
  * Etiketler `promptLayers`in (flow/snapshot.ts) kullandığı adlandırmayla
  * aynı: "anayasa:N" ve "rol:<id>".
  */
-function promptListesi(topology: TopologySnapshot): { label: string; path: string }[] {
+function promptList(topology: TopologySnapshot): { label: string; path: string }[] {
   const items: { label: string; path: string }[] = [];
   topology.constitution.forEach((filePath, i) => items.push({ label: `anayasa:${i + 1}`, path: filePath }));
   topology.roles.forEach((theRole) => items.push({ label: `rol:${theRole.id}`, path: theRole.prompt }));
@@ -200,7 +200,7 @@ function promptIcerigiSorunu(text: string): string | null {
  * SORUYOR; operatör doldurmasa da akış geçerli kalır, ama ne doldurması
  * gerektiği açık.
  */
-function rolPromptSablonu(id: string): string {
+function rolePromptTemplate(id: string): string {
   return `# Rolün: ${id}\n\n` +
     `## Sahiplendiğin\n\n- (bu rol hangi davranışı/işi üstleniyor?)\n\n` +
     `## Nasıl çalışırsın\n\n- (bu rol işini nasıl yapıyor, hangi sırayla?)\n\n` +
@@ -224,7 +224,7 @@ function rolPromptSablonu(id: string): string {
  * engellememeli, `m.bozuk`/`m.engeller`in "izole et ama SAKLAMA" ilkesinin
  * aynısı burada da geçerli.
  */
-async function akisOzetiYukle(
+async function loadFlowSummary(
   root: string, itemName: string, loadOptions: LoadOptions | undefined,
 ): Promise<{ name: string; draft: FlowDraft | null; error?: string }> {
   const secenekler = loadOptions ?? { root, providers: knownProviderSet() };
@@ -256,10 +256,10 @@ async function akisOzetiYukle(
  * orada "varsa kabul", burada "varsa reddet" (benzersizlik), ikisi de
  * dizgi temizlemiyor, üyelikle karar veriyor.
  */
-async function hedefAkisYolu(
-  newName: string | undefined, aktifYol: string, options: ServeUiOptions,
+async function targetFlowPath(
+  newName: string | undefined, activePath: string, options: ServeUiOptions,
 ): Promise<string> {
-  if (newName === undefined) return aktifYol;
+  if (newName === undefined) return activePath;
   if (!/^[a-z0-9-]+$/.test(newName)) {
     throw new Error("Akış adı yalnızca a-z0-9- içerebilir.");
   }
@@ -267,8 +267,8 @@ async function hedefAkisYolu(
   if (setting === undefined) {
     throw new Error("Bu ekran yeni akış oluşturmaya açık değil.");
   }
-  const mevcutAdlar = await setting.list();
-  if (mevcutAdlar.includes(newName)) {
+  const existingNames = await setting.list();
+  if (existingNames.includes(newName)) {
     throw new Error(`Bu ad zaten kullanılıyor: ${newName}`);
   }
   return join(options.root, "hub", "flows", `${newName}.yaml`);
@@ -283,13 +283,13 @@ async function hedefAkisYolu(
  * `flow/draft.ts`e taşınıp dışa açılmadı: tek kullanıcısı burası, ikinci bir
  * yer açılırsa o zaman paylaşılan bir yere taşınır.
  */
-function goreliYol(flowDir: string, abs: string): string {
+function relativePath(flowDir: string, abs: string): string {
   const r = relative(flowDir, abs).split(sep).join("/");
   return r.startsWith(".") ? r : `./${r}`;
 }
 
 /** Gözcü günlüğünün ekrana giden hâli — `GET /gozcu/log` (kart c-20261105-92d731). */
-export interface GozcuLogSatiri {
+export interface WatcherLogLine {
   at: string;
   message: string;
   /** DEVIR.md §2: "hatalar accent-700" — kaynak STDERR'se true (bkz. satirYaziciKur). */
@@ -305,7 +305,7 @@ export interface GozcuLogSatiri {
  * ham satırın kendisi olarak gösteriliyor: BİLDİRİLMEYEN SIFIR DEĞİLDİR,
  * ayrıştıramadığımız bir satırı gizlemek de aynı kusur sınıfı.
  */
-export function gozcuLogSatiriAyristir(rawText: string): GozcuLogSatiri {
+export function parseWatcherLogLine(rawText: string): WatcherLogLine {
   const match = /^(\d{2}:\d{2}) (.*)$/.exec(rawText);
   const message = match ? (match[2] ?? "") : rawText;
   return { at: match ? (match[1] ?? "") : "", message, error: message.startsWith("✗") };
@@ -319,7 +319,7 @@ export function gozcuLogSatiriAyristir(rawText: string): GozcuLogSatiri {
  * Dosya yoksa (gözcü bu ekrandan HİÇ açılmamış) BOŞ liste — bu bir okuma
  * hatası değil, "henüz günlük yok" demek.
  */
-export async function gozcuLogKuyruk(path: string, n = 20): Promise<GozcuLogSatiri[]> {
+export async function watcherLogQueue(path: string, n = 20): Promise<WatcherLogLine[]> {
   let text: string;
   try {
     text = await readFile(path, "utf8");
@@ -327,7 +327,7 @@ export async function gozcuLogKuyruk(path: string, n = 20): Promise<GozcuLogSati
     return [];
   }
   const lines = text.split("\n").filter((s) => s !== "");
-  return lines.slice(-n).map(gozcuLogSatiriAyristir);
+  return lines.slice(-n).map(parseWatcherLogLine);
 }
 
 /**
@@ -341,7 +341,7 @@ export async function gozcuLogKuyruk(path: string, n = 20): Promise<GozcuLogSati
  * her `console.log`/`console.error` kendi `\n`'ini taşıyor, ve bu dosyanın
  * tek tüketicisi (tail) zaten tamamlanmamış bir satırı gösteremez.
  */
-export function satirYaziciKur(log: NodeJS.WritableStream, hataKaynagi: boolean): (chunk: Buffer) => void {
+export function makeLineWriter(log: NodeJS.WritableStream, errorSource: boolean): (chunk: Buffer) => void {
   let left = "";
   return (chunk: Buffer) => {
     left += chunk.toString("utf8");
@@ -349,7 +349,7 @@ export function satirYaziciKur(log: NodeJS.WritableStream, hataKaynagi: boolean)
     left = pieces.pop() ?? "";
     for (const line of pieces) {
       const saat = new Date().toTimeString().slice(0, 5);
-      const gosterim = hataKaynagi && !line.startsWith("✗") ? `✗ ${line}` : line;
+      const gosterim = errorSource && !line.startsWith("✗") ? `✗ ${line}` : line;
       log.write(`${saat} ${gosterim}\n`);
     }
   };
@@ -376,7 +376,7 @@ export function jokerArayuz(host: string): boolean {
   return host === "0.0.0.0" || host === "::" || host === "";
 }
 
-export function izinliAdlar(host: string): Set<string> {
+export function allowedNames(host: string): Set<string> {
   const out = new Set<string>(DONGU_ADLARI);
   // Açıkça yazılmış bir ad varsa o da bizim: `--host` ile ağa açmayı
   // seçen kullanıcı yerel-araç varsayımından bilerek çıkıyor.
@@ -385,7 +385,7 @@ export function izinliAdlar(host: string): Set<string> {
 }
 
 /** `ad:port` ya da `http://ad:port` bize mi ait. */
-export function bizeAit(
+export function isOurOwn(
   raw: string | undefined, names: Set<string>, port: number,
 ): boolean {
   if (typeof raw !== "string" || raw === "") return false;
@@ -419,8 +419,8 @@ export function bizeAit(
  * Başlıksız istek reddediliyor: HTTP/1.1 `Host`u zorunlu kılıyor ve
  * "başlık yoksa geç" demek kapıyı başlığı atlayan her istemciye açmaktı.
  */
-function bizeMiGeldi(req: IncomingMessage, names: Set<string>, port: number): boolean {
-  return bizeAit(req.headers["host"], names, port);
+function cameToUs(req: IncomingMessage, names: Set<string>, port: number): boolean {
+  return isOurOwn(req.headers["host"], names, port);
 }
 
 /**
@@ -442,7 +442,7 @@ function yetkili(
 ): string | null {
   if (req.headers["x-skein-token"] !== token) return "jeton yok ya da yanlış";
   const origin = req.headers["origin"];
-  if (typeof origin === "string" && !bizeAit(origin, names, port)) {
+  if (typeof origin === "string" && !isOurOwn(origin, names, port)) {
     return `beklenmeyen kaynak: ${origin}`;
   }
   return null;
@@ -482,7 +482,7 @@ function yetkili(
 export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
   const host = options.host ?? "127.0.0.1";
   const token = options.token ?? randomBytes(24).toString("hex");
-  const names = izinliAdlar(host);
+  const names = allowedNames(host);
   // Port `listen`den SONRA biliniyor (0 = boş port seç), ama istek
   // işleyicisi ondan önce kuruluyor. Kapanış üzerinden okumak, portu iki
   // yerde tutmaktan iyi: bu projede aynı bilginin iki kopyası üç kez kusur
@@ -519,12 +519,12 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
    * açılamazsa fırlatır ve eskisi aynen durur — `LiveFlow`'un kendi
    * kuralının aynısı, "yarı yüklenmiş akış" diye bir durum yok.
    */
-  let active: { live: CanliAkis | undefined; flowPath: string | undefined } = {
+  let active: { live: LiveFlowState | undefined; flowPath: string | undefined } = {
     live: options.live,
     flowPath: options.flowPath,
   };
 
-  let cocuk: GozcuSurec | null = null;
+  let cocuk: WatcherProcess | null = null;
 
   /**
    * Gerçek süreç başlatma — gözcünün çıktısı `.skein/gozcu.log`'a gidiyor.
@@ -539,12 +539,12 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
    * "✗ " ile işaretleniyor (zaten öyle başlamıyorsa) — `/gozcu/log`
    * (gozcuLogKuyruk) bunu "hata" sayıp accent-700 gösterir.
    */
-  const gercekSpawn = (root: string) => (argv: string[]): GozcuSurec => {
+  const realSpawn = (root: string) => (argv: string[]): WatcherProcess => {
     const [command, ...args] = argv;
     const child = spawnPortable(command as string, args, { cwd: root });
     const log = createWriteStream(join(root, ".skein", "gozcu.log"), { flags: "a" });
-    child.stdout?.on("data", satirYaziciKur(log, false));
-    child.stderr?.on("data", satirYaziciKur(log, true));
+    child.stdout?.on("data", makeLineWriter(log, false));
+    child.stderr?.on("data", makeLineWriter(log, true));
     return {
       pid: child.pid,
       onExit: (cb) => {
@@ -585,7 +585,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
     // korumuyordu ve `GET /` sayfaya gömülü jetonu veriyordu. Yani
     // rebinding ile bir saldırgan sayfası önce jetonu okuyup sonra
     // yazabilirdi.
-    if (!bizeMiGeldi(req, names, portu())) {
+    if (!cameToUs(req, names, portu())) {
       res.writeHead(403, { "content-type": "text/plain; charset=utf-8" });
       res.end("beklenmeyen ana bilgisayar adı\n");
       return;
@@ -611,14 +611,14 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
         }));
         return;
       }
-      const basla = path === "/gozcu/baslat";
+      const start = path === "/gozcu/baslat";
       let message: string | null = null;
       (async () => {
         const o = await current();
-        const kilitYolu = join(o.root, ".skein", "daemon.json");
-        const tutan = await liveLock(kilitYolu);
+        const lockPath = join(o.root, ".skein", "daemon.json");
+        const tutan = await liveLock(lockPath);
 
-        if (basla) {
+        if (start) {
           // Kilit TEK yazıcı kuralının kendisi: ikinci gözcü, birincinin
           // elindeki kartı çökmüş sanıp kuyruğa geri atar ve aynı iş ikinci
           // kez, para harcayarak yapılır. Ekran o kuralı atlamıyor.
@@ -627,7 +627,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
               `Zaten bir gözcü açık: pid ${tutan.pid}, akış ${tutan.flow}.`,
             );
           }
-          const spawn = setting.spawn ?? gercekSpawn(o.root);
+          const spawn = setting.spawn ?? realSpawn(o.root);
           // Akış adı EKRANIN o an baktığı akıştan geliyor; bayraklar
           // terminalden. Akış değiştirince düğme doğru akışı koşturuyor.
           const baslayan = spawn([...setting.command, o.flowName, "--serve", ...setting.bayraklar]);
@@ -768,18 +768,18 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
           // (draftAlanlari kendi beyaz listesini okur, zararsız).
           const bodyText = JSON.parse(body === "" ? "{}" : body) as FlowDraft & { newName?: unknown };
           const newName = typeof bodyText.newName === "string" ? bodyText.newName : undefined;
-          const hedefYol = await hedefAkisYolu(newName, flowPath, options);
+          const targetPath = await targetFlowPath(newName, flowPath, options);
           // Önizleme YAZMAZ: ekranda denenen her taslak diske düşseydi gözcü
           // yarım taslakları okurdu. `yeniAd`'lı önizleme de aynı kuralı
           // taşıyor — benzersizlik/karakter kümesi hatası burada da ERKEN
           // yakalanır, ama dosyaya hiçbir koşulda dokunulmaz.
           if (!write) {
-            const result = await checkDraft(hedefYol, bodyText, loadOptions);
+            const result = await checkDraft(targetPath, bodyText, loadOptions);
             res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
             res.end(JSON.stringify(result));
             return;
           }
-          const result = await writeDraft(hedefYol, bodyText, loadOptions);
+          const result = await writeDraft(targetPath, bodyText, loadOptions);
           if (!result.ok) {
             res.writeHead(409, { "content-type": "application/json; charset=utf-8" });
             res.end(JSON.stringify({ error: result.message }));
@@ -874,7 +874,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
           // ÜYELİK: yol, akışın bildirdiği listede AYNEN var mı. `../` ya da
           // mutlak yol, şekli ne olursa olsun, listede olmadığı için burada
           // aynen reddedilir — dizgi temizlenerek değil.
-          const items = promptListesi(o.topology);
+          const items = promptList(o.topology);
           if (!items.some((p) => p.path === filePath)) {
             throw new Error(`Bilinmeyen prompt yolu: ${filePath}`);
           }
@@ -930,8 +930,8 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
       // komutun verdiği kadar" kuralının aynısı.
       const flowPath = active.flowPath;
       const loadOptions = options.loadOptions;
-      const canliAkis = active.live;
-      if (flowPath === undefined || loadOptions === undefined || canliAkis === undefined) {
+      const liveFlow = active.live;
+      if (flowPath === undefined || loadOptions === undefined || liveFlow === undefined) {
         res.writeHead(404, { "content-type": "application/json; charset=utf-8" });
         res.end(JSON.stringify({ error: "Bu ekran rol eklemeye açık değil." }));
         return;
@@ -956,7 +956,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
           // çünkü boş dosya kural 9'a takılır (bkz. yukarıdaki yorum).
           const promptText = typeof promptRaw === "string" && promptRaw.trim() !== ""
             ? promptRaw
-            : rolPromptSablonu(id || "yeni-rol");
+            : rolePromptTemplate(id || "yeni-rol");
 
           if (id === "") throw new Error("`id` boş olamaz.");
           if (after === "") {
@@ -966,27 +966,27 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
           }
 
           await current(); // akışı yokla — en güncel `canliAkis.flow` üstünden çalışıyoruz.
-          const draftDoc = fromFlow(canliAkis.flow);
+          const draftDoc = fromFlow(liveFlow.flow);
 
           // AYNI ID REDDEDİLİR — ve DOSYA YAZILMADAN: bu denetim her türlü
           // dosya yazmadan ÖNCE.
           if (draftDoc.roles.some((r) => r.id === id)) {
             throw new Error(`Rol zaten var: ${id}`);
           }
-          const sonraIdx = draftDoc.roles.findIndex((r) => r.id === after);
-          if (sonraIdx === -1) {
+          const afterIdx = draftDoc.roles.findIndex((r) => r.id === after);
+          if (afterIdx === -1) {
             throw new Error(`Bilinmeyen rol: ${after}`);
           }
 
           // Yeni rolün prompt dosyası, `sonra`nın promptuyla AYNI dizinde —
           // akışların bugünkü kuralı (bütün rol promptları aynı dizinde)
           // bu akışta da geçerli kalıyor, uç bunu uydurmuyor.
-          const sonraRolTam = canliAkis.flow.roles.find((r) => r.id === after);
-          if (sonraRolTam === undefined) {
+          const afterRoleFull = liveFlow.flow.roles.find((r) => r.id === after);
+          if (afterRoleFull === undefined) {
             throw new Error(`Bilinmeyen rol: ${after}`);
           }
-          const promptAbs = join(dirname(sonraRolTam.promptPath), `${id}.md`);
-          const promptGoreli = goreliYol(dirname(flowPath), promptAbs);
+          const promptAbs = join(dirname(afterRoleFull.promptPath), `${id}.md`);
+          const promptRelative = relativePath(dirname(flowPath), promptAbs);
 
           const issue = promptIcerigiSorunu(promptText);
           if (issue !== null) throw new Error(issue);
@@ -994,27 +994,27 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
           // ATOMİKLİK, adım 1: prompt dosyasını YAZ. Eski içerik (varsa)
           // GERİ ALMA için saklanıyor — bu yol normalde yeni bir dosya ama
           // aynı ada rastlayan yetim bir dosya varsa onu da korumalıyız.
-          const eskiMetin = await readFile(promptAbs, "utf8").catch(() => undefined);
+          const oldText = await readFile(promptAbs, "utf8").catch(() => undefined);
           await writeFile(promptAbs, promptText, "utf8");
 
-          const yeniRol: DraftRole = {
-            id, provider, workspace, prompt: promptGoreli,
-            next: (draftDoc.roles[sonraIdx] as DraftRole).next,
+          const newRole: DraftRole = {
+            id, provider, workspace, prompt: promptRelative,
+            next: (draftDoc.roles[afterIdx] as DraftRole).next,
             ...(receive === undefined ? {} : { receive }),
             ...(reject === undefined ? {} : { reject }),
           };
-          const yeniRoller = draftDoc.roles.map((r, i) =>
-            i === sonraIdx ? { ...r, next: id } : r);
-          yeniRoller.splice(sonraIdx + 1, 0, yeniRol);
-          const yeniTaslak: FlowDraft = { ...draftDoc, roles: yeniRoller };
+          const newRoles = draftDoc.roles.map((r, i) =>
+            i === afterIdx ? { ...r, next: id } : r);
+          newRoles.splice(afterIdx + 1, 0, newRole);
+          const newDraft: FlowDraft = { ...draftDoc, roles: newRoles };
 
           // ATOMİKLİK, adım 2: akışı DOĞRULA ve YAZ.
-          const result = await writeDraft(flowPath, yeniTaslak, loadOptions);
+          const result = await writeDraft(flowPath, newDraft, loadOptions);
           if (!result.ok) {
             // DOĞRULAMA BAŞARISIZ — adım 1 GERİ ALINIYOR: yarı yaratılmış
             // bir rol (dosyası var, akışta yok) bırakmıyoruz.
-            if (eskiMetin === undefined) await unlink(promptAbs).catch(() => {});
-            else await writeFile(promptAbs, eskiMetin, "utf8");
+            if (oldText === undefined) await unlink(promptAbs).catch(() => {});
+            else await writeFile(promptAbs, oldText, "utf8");
             return { code: 409 as const, error: result.message };
           }
           const model = await buildModel(await current());
@@ -1048,12 +1048,12 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
           // yapıyordu; ekran kendi tek akışını geçiriyor ve başka akışın
           // SAĞLAM kartını "akışta rolü yok" diye kapatabiliyordu.
           const mevcut = await o.queue.get(id);
-          const kendiAkisi = mevcut === null
+          const ownFlow = mevcut === null
             ? o.topology
             : await loadFlow(join(o.root, "hub", "flows", `${mevcut.topology.flow}.yaml`), {
               root: o.root, providers: knownProviderSet(),
             }).then((flow) => snapshot(flow, o.root)).catch(() => null);
-          const { card, reason } = await closeOrphan(o.root, o.queue, kendiAkisi, id, o.logPath);
+          const { card, reason } = await closeOrphan(o.root, o.queue, ownFlow, id, o.logPath);
           return { card, reason, model: await buildModel(o) };
         })
         .then(({ card, reason, model }) => {
@@ -1156,7 +1156,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
           // `Promise.all([])` anında çözülür, tek bir fazladan dosya
           // okuması olmaz.
           const summary = await Promise.all(
-            flows.map((itemName) => akisOzetiYukle(options.root, itemName, options.loadOptions)),
+            flows.map((itemName) => loadFlowSummary(options.root, itemName, options.loadOptions)),
           );
           return { flows, active: o.flowName, summary };
         })
@@ -1186,7 +1186,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
             "content-type": "application/json; charset=utf-8",
             "cache-control": "no-store",
           });
-          res.end(JSON.stringify({ prompts: promptListesi(o.topology) }));
+          res.end(JSON.stringify({ prompts: promptList(o.topology) }));
         },
         (error: unknown) => {
           res.writeHead(500, { "content-type": "application/json; charset=utf-8" });
@@ -1201,7 +1201,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
       current()
         .then(async (o) => {
           // ÜYELİK — `/prompt/yaz` ile aynı kapı: yol listede AYNEN var mı.
-          const items = promptListesi(o.topology);
+          const items = promptList(o.topology);
           if (!items.some((p) => p.path === filePath)) {
             throw new Error(`Bilinmeyen prompt yolu: ${filePath}`);
           }
@@ -1316,7 +1316,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
 
     if (path === "/gozcu/log") {
       current().then(async (o) => {
-        const lines = await gozcuLogKuyruk(join(o.root, ".skein", "gozcu.log"));
+        const lines = await watcherLogQueue(join(o.root, ".skein", "gozcu.log"));
         res.writeHead(200, {
           "content-type": "application/json; charset=utf-8",
           "cache-control": "no-store",

@@ -311,9 +311,9 @@ describe("serve — yetim kart", () => {
 describe("serve — akışı yeniden yükleme", () => {
   it("geçişler arasında yokluyor ve yeni topolojiyi kullanıyor", async () => {
     const stop = new AbortController();
-    const tekRol: TopologySnapshot = { ...topology, roles: [topology.roles[0] as TopologySnapshot["roles"][number]] };
+    const singleRole: TopologySnapshot = { ...topology, roles: [topology.roles[0] as TopologySnapshot["roles"][number]] };
     // Kaynak canlı: ilk geçişte tek rol, yeniden yükleme sonrası iki rol.
-    const source = { topology: tekRol };
+    const source = { topology: singleRole };
     let yuklendi = 0;
 
     const running = serve(source, {

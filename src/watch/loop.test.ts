@@ -24,7 +24,7 @@ roles:
     next: done
 `;
 
-class SessizAdapter implements Adapter {
+class QuietAdapter implements Adapter {
   readonly id = "claude";
   readonly model = "sahte-1";
   calls = 0;
@@ -38,7 +38,7 @@ let root: string;
 let queue: CardQueue;
 let topology: TopologySnapshot;
 let options: TickOptions;
-let adapter: SessizAdapter;
+let adapter: QuietAdapter;
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "skein-loop-"));
@@ -57,7 +57,7 @@ beforeEach(async () => {
     providers: knownProviderSet(),
   });
   topology = snapshot(flow, root);
-  adapter = new SessizAdapter();
+  adapter = new QuietAdapter();
   options = {
     root,
     queue,

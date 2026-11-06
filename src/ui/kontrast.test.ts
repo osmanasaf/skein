@@ -1,18 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { goreliParlaklik, kontrastOrani, NORMAL_METIN_ESIGI, IKINCIL_ETIKET_ESIGI } from "./kontrast.js";
+import { relativeLuminance, kontrastOrani, NORMAL_TEXT_THRESHOLD, SECONDARY_LABEL_THRESHOLD } from "./kontrast.js";
 
 describe("goreliParlaklik", () => {
   it("siyah 0, beyaz 1", () => {
-    expect(goreliParlaklik("#000000")).toBeCloseTo(0, 5);
-    expect(goreliParlaklik("#FFFFFF")).toBeCloseTo(1, 5);
+    expect(relativeLuminance("#000000")).toBeCloseTo(0, 5);
+    expect(relativeLuminance("#FFFFFF")).toBeCloseTo(1, 5);
   });
 
   it("gecersiz hex reddediliyor", () => {
     // Kısa form (#RGB) ve eksik '#' bu dosyada hiç üretilmiyor; sessizce
     // yanlış sayı üretmek yerine BAĞIRMASI gerekiyor.
-    expect(() => goreliParlaklik("#FFF")).toThrow();
-    expect(() => goreliParlaklik("FFFFFF")).toThrow();
-    expect(() => goreliParlaklik("#GGGGGG")).toThrow();
+    expect(() => relativeLuminance("#FFF")).toThrow();
+    expect(() => relativeLuminance("FFFFFF")).toThrow();
+    expect(() => relativeLuminance("#GGGGGG")).toThrow();
   });
 });
 
@@ -39,16 +39,16 @@ describe("kontrastOrani", () => {
   });
 
   it("daha acik zemin orani buyutur", () => {
-    const koyuZemin = kontrastOrani("#333333", "#555555");
-    const acikZemin = kontrastOrani("#333333", "#FFFFFF");
-    expect(acikZemin).toBeGreaterThan(koyuZemin);
+    const darkBackground = kontrastOrani("#333333", "#555555");
+    const lightBackground = kontrastOrani("#333333", "#FFFFFF");
+    expect(lightBackground).toBeGreaterThan(darkBackground);
   });
 });
 
 describe("esik sabitleri", () => {
   it("normal metin esigi 4.5, ikincil etiket esigi 3", () => {
-    expect(NORMAL_METIN_ESIGI).toBe(4.5);
-    expect(IKINCIL_ETIKET_ESIGI).toBe(3);
+    expect(NORMAL_TEXT_THRESHOLD).toBe(4.5);
+    expect(SECONDARY_LABEL_THRESHOLD).toBe(3);
   });
 });
 
@@ -69,11 +69,11 @@ describe("esik sabitleri", () => {
  */
 describe("eşikler WCAG AA'nın kendisidir", () => {
   it("normal metin eşiği 4.5:1 — gevşetilemez", () => {
-    expect(NORMAL_METIN_ESIGI).toBe(4.5);
+    expect(NORMAL_TEXT_THRESHOLD).toBe(4.5);
   });
 
   it("ikincil etiket eşiği 3:1 — gevşetilemez", () => {
-    expect(IKINCIL_ETIKET_ESIGI).toBe(3);
+    expect(SECONDARY_LABEL_THRESHOLD).toBe(3);
   });
 });
 
@@ -88,7 +88,7 @@ describe("eşikler WCAG AA'nın kendisidir", () => {
 describe("kontrastOrani bilinen-kötü çifti REDDEDER", () => {
   it("açık gri üstünde beyaz AA'yı geçemez", () => {
     const ratio = kontrastOrani("#ffffff", "#bbbbbb");
-    expect(ratio).toBeLessThan(NORMAL_METIN_ESIGI);
+    expect(ratio).toBeLessThan(NORMAL_TEXT_THRESHOLD);
   });
 
   it("aynı renk 1:1'dir — ayırt edilemez", () => {

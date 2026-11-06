@@ -16,7 +16,7 @@ import { snapshot, type TopologySnapshot } from "../flow/snapshot.js";
 import { request } from "node:http";
 import { connect } from "node:net";
 import {
-  bizeAit, gozcuLogKuyruk, gozcuLogSatiriAyristir, izinliAdlar, jokerArayuz, satirYaziciKur, serveUi,
+  isOurOwn, watcherLogQueue, parseWatcherLogLine, allowedNames, jokerArayuz, makeLineWriter, serveUi,
   type UiServer,
 } from "./server.js";
 
@@ -36,7 +36,7 @@ let root: string;
 let queue: CardQueue;
 let topology: TopologySnapshot;
 let server: UiServer;
-let gercekFlow: Flow;
+let realFlow: Flow;
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "skein-uisrv-"));
@@ -54,7 +54,7 @@ beforeEach(async () => {
     providers: knownProviderSet(),
   });
   topology = snapshot(flow, root);
-  gercekFlow = flow;
+  realFlow = flow;
   server = await serveUi({ root, queue, topology, flowName: flow.name, flowHash: flow.hash });
 });
 afterEach(async () => {
@@ -246,13 +246,13 @@ describe("serveUi — tema anahtarı", () => {
       headers: { "content-type": "application/json", "x-skein-token": server.token },
       body: JSON.stringify({ tema: "koyu" }),
     });
-    const ekran = JSON.parse(await readFile(join(root, ".skein", "ekran.json"), "utf8")) as { tema?: string };
-    expect(ekran.tema).toBe("koyu");
+    const screen = JSON.parse(await readFile(join(root, ".skein", "ekran.json"), "utf8")) as { tema?: string };
+    expect(screen.tema).toBe("koyu");
 
     // Aynı kök dizinle YENİ bir ekran: port/akış hafızasının izlediği
     // AYNI "diskten oku" ilkesi — işlem belleğinde TUTULAN bir değer
     // değil.
-    const s2 = await serveUi({ root, queue, topology, flowName: gercekFlow.name, flowHash: gercekFlow.hash });
+    const s2 = await serveUi({ root, queue, topology, flowName: realFlow.name, flowHash: realFlow.hash });
     try {
       const html = await (await fetch(s2.url)).text();
       expect(htmlEtiketi(html)).toBe('<html lang="tr" data-theme="dark">');
@@ -434,10 +434,10 @@ describe("serveUi — yetim kart", () => {
 
 describe("serveUi — yaşayan akış", () => {
   /** Topolojiyi sonradan değiştirebilen sahte bir kaynak. */
-  function sahteLive(baslangic: TopologySnapshot) {
+  function fakeLive(startState: TopologySnapshot) {
     return {
-      topology: baslangic,
-      flow: gercekFlow,
+      topology: startState,
+      flow: realFlow,
       error: null as string | null,
       yoklandi: 0,
       async refresh() {
@@ -447,7 +447,7 @@ describe("serveUi — yaşayan akış", () => {
   }
 
   it("her okumada akışı yokluyor", async () => {
-    const live = sahteLive(topology);
+    const live = fakeLive(topology);
     const s = await serveUi({ root, queue, topology, flowName: "test", flowHash: "aaa", live });
     try {
       await fetch(`${s.url}durum`);
@@ -459,7 +459,7 @@ describe("serveUi — yaşayan akış", () => {
   });
 
   it("yeniden yüklenen topolojiyi çizime yansıtır", async () => {
-    const live = sahteLive({ ...topology, roles: [] });
+    const live = fakeLive({ ...topology, roles: [] });
     const s = await serveUi({ root, queue, topology, flowName: "test", flowHash: "aaa", live });
     try {
       const once = (await (await fetch(`${s.url}durum`)).json()) as { roles: unknown[] };
@@ -476,7 +476,7 @@ describe("serveUi — yaşayan akış", () => {
   // Kullanıcı YAML'ı bozduğunda hiçbir şey olmuyordu; düzenlemenin neden
   // tutmadığı görünmüyordu.
   it("akış geçersizse gerekçeyi modele koyar", async () => {
-    const live = sahteLive(topology);
+    const live = fakeLive(topology);
     live.error = "[kural 4] tam olarak bir rolün `next` değeri `done` olmalı";
     const s = await serveUi({ root, queue, topology, flowName: "test", flowHash: "aaa", live });
     try {
@@ -494,9 +494,9 @@ describe("serveUi — akış düzenleme", () => {
 
   beforeEach(async () => {
     s = await serveUi({
-      root, queue, topology, flowName: "test", flowHash: gercekFlow.hash,
-      live: { topology, flow: gercekFlow, error: null, refresh: async () => {} },
-      flowPath: gercekFlow.path,
+      root, queue, topology, flowName: "test", flowHash: realFlow.hash,
+      live: { topology, flow: realFlow, error: null, refresh: async () => {} },
+      flowPath: realFlow.path,
       loadOptions: opts(),
       providerIds: ["claude", "codex"],
     });
@@ -546,9 +546,9 @@ describe("serveUi — akış düzenleme", () => {
 
   // Ekranda denenen her taslak diske düşseydi gözcü yarım taslakları okurdu.
   it("önizleme dosyaya dokunmaz", async () => {
-    const once = await readFile(gercekFlow.path, "utf8");
+    const once = await readFile(realFlow.path, "utf8");
     await send("akis/onizleme", { name: "x", constitution: [], roles: [] });
-    expect(await readFile(gercekFlow.path, "utf8")).toBe(once);
+    expect(await readFile(realFlow.path, "utf8")).toBe(once);
   });
 
   it("geçerli taslağı dosyaya yazar", async () => {
@@ -560,18 +560,18 @@ describe("serveUi — akış düzenleme", () => {
     const res = await send("akis/yaz", data.draft);
 
     expect(res.status).toBe(200);
-    expect(await readFile(gercekFlow.path, "utf8")).toContain("ekrandan yazıldı");
+    expect(await readFile(realFlow.path, "utf8")).toContain("ekrandan yazıldı");
   });
 
   // Ekranın ürettiği dosyayı gözcü de okuyor; bozuk YAML yazmak çalışan bir
   // sistemi ekrandan bozmak olurdu.
   it("geçersiz taslağı YAZMAZ", async () => {
-    const once = await readFile(gercekFlow.path, "utf8");
+    const once = await readFile(realFlow.path, "utf8");
 
     const res = await send("akis/yaz", { name: "test", constitution: [], roles: [] });
 
     expect(res.status).toBe(409);
-    expect(await readFile(gercekFlow.path, "utf8")).toBe(once);
+    expect(await readFile(realFlow.path, "utf8")).toBe(once);
   });
 
   it("jetonsuz yazma reddedilir", async () => {
@@ -657,7 +657,7 @@ roles:
     });
 
   /** Draft'ı okur, "reviewer"i sayfanın `rolSil`iyle AYNI şekilde çıkarır. */
-  async function reviewerCikarilmisTaslak(): Promise<FlowDraft> {
+  async function reviewerRemovedDraft(): Promise<FlowDraft> {
     const data = (await (await fetch(`${s2.url}akis`)).json()) as { draft: FlowDraft };
     const draftDoc = data.draft;
     const giden = draftDoc.roles.find((r) => r.id === "reviewer");
@@ -678,7 +678,7 @@ roles:
   }
 
   it("doğru BAĞLANMIŞ taslak (next kaydırılmış, reject temizlenmiş) doğrulamadan GEÇER", async () => {
-    const draftDoc = await reviewerCikarilmisTaslak();
+    const draftDoc = await reviewerRemovedDraft();
     // BEKLENEN RECONNECT: coder artık doğrudan gatekeeper'a next veriyor.
     expect(draftDoc.roles.find((r) => r.id === "coder")?.next).toBe("gatekeeper");
     // BEKLENEN TEMİZLİK: var olmayan role işaret eden reject kalmıyor.
@@ -689,7 +689,7 @@ roles:
   });
 
   it("TEMİZLENMEMİŞ referans (gatekeeper hâlâ silinen reviewer'ı reddediyor) kural numarasıyla REDDEDİLİR", async () => {
-    const draftDoc = await reviewerCikarilmisTaslak();
+    const draftDoc = await reviewerRemovedDraft();
     // MUTASYON BURADA ELLE: reconnect/temizlik adımı atlanmış GİBİ davran —
     // "çıkarılan role işaret eden kenarlar temizlenmezse ne olur" sorusunun
     // kanıtı. Diyagramın `rolSil`i bunu asla üretmemeli; bu taslak onun
@@ -708,7 +708,7 @@ roles:
 
   it("geçersiz (temizlenmemiş) taslak YAZILMAZ, ESKİ akış (3 rol) aynen durur", async () => {
     const once = await readFile(cokluPath, "utf8");
-    const draftDoc = await reviewerCikarilmisTaslak();
+    const draftDoc = await reviewerRemovedDraft();
     const notCleaned: FlowDraft = {
       ...draftDoc,
       roles: draftDoc.roles.map((r) => (r.id === "gatekeeper" ? { ...r, reject: "reviewer" } : r)),
@@ -721,7 +721,7 @@ roles:
   });
 
   it("doğru taslak yazılınca zincir KOPMADAN 2 role düşer, coder DOĞRUDAN gatekeeper'a next veriyor", async () => {
-    const draftDoc = await reviewerCikarilmisTaslak();
+    const draftDoc = await reviewerRemovedDraft();
 
     const res = await gonder2("akis/yaz", draftDoc);
     expect(res.status).toBe(200);
@@ -753,9 +753,9 @@ describe("serveUi — rol promptları", () => {
 
   beforeEach(async () => {
     s = await serveUi({
-      root, queue, topology, flowName: "test", flowHash: gercekFlow.hash,
-      live: { topology, flow: gercekFlow, error: null, refresh: async () => {} },
-      flowPath: gercekFlow.path,
+      root, queue, topology, flowName: "test", flowHash: realFlow.hash,
+      live: { topology, flow: realFlow, error: null, refresh: async () => {} },
+      flowPath: realFlow.path,
       loadOptions: opts(),
     });
   });
@@ -763,7 +763,7 @@ describe("serveUi — rol promptları", () => {
     await s.close();
   });
 
-  const promptGonder = (bodyText: unknown, token?: string) =>
+  const sendPrompt = (bodyText: unknown, token?: string) =>
     fetch(`${s.url}prompt/yaz`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-skein-token": token ?? s.token },
@@ -811,7 +811,7 @@ describe("serveUi — rol promptları", () => {
   });
 
   it("POST /prompt/yaz dosyayı gerçekten değiştirir ve yeni modeli döner", async () => {
-    const res = await promptGonder({ path: "roles/coder.prompt", text: "# coder\nyeni satır\n" });
+    const res = await sendPrompt({ path: "roles/coder.prompt", text: "# coder\nyeni satır\n" });
     const v = (await res.json()) as { model: { flow: { name: string } } };
 
     expect(res.status).toBe(200);
@@ -824,7 +824,7 @@ describe("serveUi — rol promptları", () => {
   // olsa da yazılamaz, ve denemenin kendisi dosyaya DOKUNMAZ.
   it("POST /prompt/yaz listede olmayan yolu reddeder, dosya DEĞİŞMEZ", async () => {
     const once = await readFile(join(root, "hub", "flows", "test.yaml"), "utf8");
-    const res = await promptGonder({ path: "hub/flows/test.yaml", text: "name: ele-gecirildi\n" });
+    const res = await sendPrompt({ path: "hub/flows/test.yaml", text: "name: ele-gecirildi\n" });
     const v = (await res.json()) as { error: string };
 
     expect(res.status).toBe(400);
@@ -834,7 +834,7 @@ describe("serveUi — rol promptları", () => {
 
   it("POST /prompt/yaz '../' içeren yolu reddeder, akışın GERÇEK dosyaları DEĞİŞMEZ", async () => {
     const once = await readFile(join(root, "roles", "coder.prompt"), "utf8");
-    const res = await promptGonder({ path: "../../../etc/passwd", text: "ele geçirildi" });
+    const res = await sendPrompt({ path: "../../../etc/passwd", text: "ele geçirildi" });
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toContain("Bilinmeyen prompt yolu");
     expect(await readFile(join(root, "roles", "coder.prompt"), "utf8")).toBe(once);
@@ -842,7 +842,7 @@ describe("serveUi — rol promptları", () => {
 
   it("POST /prompt/yaz mutlak yolu reddeder, akışın GERÇEK dosyaları DEĞİŞMEZ", async () => {
     const once = await readFile(join(root, "roles", "coder.prompt"), "utf8");
-    const res = await promptGonder({ path: "/etc/passwd", text: "ele geçirildi" });
+    const res = await sendPrompt({ path: "/etc/passwd", text: "ele geçirildi" });
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toContain("Bilinmeyen prompt yolu");
     expect(await readFile(join(root, "roles", "coder.prompt"), "utf8")).toBe(once);
@@ -862,7 +862,7 @@ describe("serveUi — rol promptları", () => {
    * Sınamanın ısırması, kusurun kendisinden önce gelir: ısırmayan bir
    * sınama kuralı yazmış gibi yapar, yazmaz.
    */
-  const disKurban = async () => {
+  const outsideVictim = async () => {
     const dir = await mkdtemp(join(tmpdir(), "skein-kurban-"));
     await mkdir(join(dir, "roles"), { recursive: true });
     const file = join(dir, "roles", "coder.prompt");
@@ -873,7 +873,7 @@ describe("serveUi — rol promptları", () => {
   };
 
   it("GET /prompt listedeki yolla BİTEN ama kök dışına çıkan yolu reddeder", async () => {
-    const k = await disKurban();
+    const k = await outsideVictim();
     try {
       const res = await fetch(`${s.url}prompt?yol=${encodeURIComponent(k.path)}`);
       const v = (await res.json()) as { error?: string; text?: string };
@@ -889,9 +889,9 @@ describe("serveUi — rol promptları", () => {
   });
 
   it("POST /prompt/yaz listedeki yolla BİTEN dış yolu reddeder, DIŞ DOSYA DEĞİŞMEZ", async () => {
-    const k = await disKurban();
+    const k = await outsideVictim();
     try {
-      const res = await promptGonder({ path: k.path, text: "ele geçirildi\n" });
+      const res = await sendPrompt({ path: k.path, text: "ele geçirildi\n" });
 
       expect(res.status).toBe(400);
       expect(((await res.json()) as { error: string }).error).toContain("Bilinmeyen prompt yolu");
@@ -907,7 +907,7 @@ describe("serveUi — rol promptları", () => {
   // akış dosyası değişmediği sürece prompt dosyalarına hiç bakmıyor.
   it("POST /prompt/yaz boş metni reddeder, dosya DEĞİŞMEZ", async () => {
     const once = await readFile(join(root, "roles", "coder.prompt"), "utf8");
-    const res = await promptGonder({ path: "roles/coder.prompt", text: "   \n" });
+    const res = await sendPrompt({ path: "roles/coder.prompt", text: "   \n" });
     const v = (await res.json()) as { error: string };
 
     expect(res.status).toBe(400);
@@ -991,10 +991,10 @@ describe("serveUi — yeni rol", () => {
     // GERÇEK `LiveFlow` — sahte (no-op) `refresh` burada YETMEZ: bu
     // sınamaların asıl iddiası modelin YAZILAN YENİ rolü GERÇEKTEN
     // göstermesi, yoklama gerçekten dosyayı okumalı.
-    const live = await LiveFlow.open(gercekFlow.path, opts());
+    const live = await LiveFlow.open(realFlow.path, opts());
     s = await serveUi({
-      root, queue, topology, flowName: "test", flowHash: gercekFlow.hash,
-      live, flowPath: gercekFlow.path, loadOptions: opts(),
+      root, queue, topology, flowName: "test", flowHash: realFlow.hash,
+      live, flowPath: realFlow.path, loadOptions: opts(),
     });
   });
   afterEach(async () => {
@@ -1012,7 +1012,7 @@ describe("serveUi — yeni rol", () => {
   // roles/coder.prompt — yeni rolün promptu AYNI dizinde (roles/) kuruluyor.
   // Fonksiyon: `root` yalnızca `beforeEach` koştuktan SONRA biliniyor, bu
   // yüzden burada (describe gövdesinde, testlerden ÖNCE) sabitlenemez.
-  const yeniRolYolu = () => join(root, "roles", "reviewer.md");
+  const newRolePath = () => join(root, "roles", "reviewer.md");
 
   it("rol VE promptu BİRLİKTE yaratılır, zincire 'sonra'nın ARDINA bağlanır", async () => {
     const res = await send({
@@ -1024,12 +1024,12 @@ describe("serveUi — yeni rol", () => {
     expect(v.model.roles.map((r) => r.id)).toEqual(["coder", "reviewer"]);
 
     // Prompt BOŞ değil — ŞABLONDAN yazıldı (gövde prompt vermedi).
-    const promptText = await readFile(yeniRolYolu(), "utf8");
+    const promptText = await readFile(newRolePath(), "utf8");
     expect(promptText).toContain("Rolün: reviewer");
     expect(promptText.trim()).not.toBe("");
 
     // YAML da GERÇEKTEN değişti — yeni rol, eski rolün next'i, ikisi de.
-    const yaml = await readFile(gercekFlow.path, "utf8");
+    const yaml = await readFile(realFlow.path, "utf8");
     expect(yaml).toContain("id: reviewer");
     expect(yaml).toContain("next: reviewer"); // coder.next artık reviewer
   });
@@ -1040,7 +1040,7 @@ describe("serveUi — yeni rol", () => {
       prompt: "# özel prompt\nbaştan yazıldı\n",
     });
     expect(res.status).toBe(200);
-    expect(await readFile(yeniRolYolu(), "utf8")).toBe("# özel prompt\nbaştan yazıldı\n");
+    expect(await readFile(newRolePath(), "utf8")).toBe("# özel prompt\nbaştan yazıldı\n");
   });
 
   /**
@@ -1050,7 +1050,7 @@ describe("serveUi — yeni rol", () => {
    * YOK, YAML DEĞİŞMEMİŞ.
    */
   it("geçersiz akış üretirse rol VE prompt dosyası İKİSİ DE GERİ ALINIR", async () => {
-    const beforeYaml = await readFile(gercekFlow.path, "utf8");
+    const beforeYaml = await readFile(realFlow.path, "utf8");
 
     const res = await send({
       id: "reviewer", provider: "claude", workspace: "main", sonra: "coder",
@@ -1061,9 +1061,9 @@ describe("serveUi — yeni rol", () => {
     expect(v.error).toContain("kural 2");
 
     // YAML DEĞİŞMEMİŞ.
-    expect(await readFile(gercekFlow.path, "utf8")).toBe(beforeYaml);
+    expect(await readFile(realFlow.path, "utf8")).toBe(beforeYaml);
     // Dosya diskte YOK — GERİ ALINDI, kalıcı bırakılmadı.
-    await expect(readFile(yeniRolYolu(), "utf8")).rejects.toThrow();
+    await expect(readFile(newRolePath(), "utf8")).rejects.toThrow();
   });
 
   it("AYNI ID reddedilir, dosya YAZILMADAN", async () => {
@@ -1077,7 +1077,7 @@ describe("serveUi — yeni rol", () => {
   });
 
   it("bilinmeyen 'sonra' reddedilir, hiçbir şey değişmez", async () => {
-    const beforeYaml = await readFile(gercekFlow.path, "utf8");
+    const beforeYaml = await readFile(realFlow.path, "utf8");
     const res = await send({
       id: "reviewer", provider: "claude", workspace: "reviewer", sonra: "boyle-bir-rol-yok",
     });
@@ -1085,23 +1085,23 @@ describe("serveUi — yeni rol", () => {
 
     expect(res.status).toBe(400);
     expect(v.error).toContain("Bilinmeyen rol");
-    expect(await readFile(gercekFlow.path, "utf8")).toBe(beforeYaml);
-    await expect(readFile(yeniRolYolu(), "utf8")).rejects.toThrow();
+    expect(await readFile(realFlow.path, "utf8")).toBe(beforeYaml);
+    await expect(readFile(newRolePath(), "utf8")).rejects.toThrow();
   });
 
   it("jetonsuz istek 403, hiçbir şey değişmez", async () => {
-    const beforeYaml = await readFile(gercekFlow.path, "utf8");
+    const beforeYaml = await readFile(realFlow.path, "utf8");
     const res = await fetch(`${s.url}rol/yeni`, {
       method: "POST",
       body: JSON.stringify({ id: "reviewer", provider: "claude", workspace: "reviewer", sonra: "coder" }),
     });
     expect(res.status).toBe(403);
-    expect(await readFile(gercekFlow.path, "utf8")).toBe(beforeYaml);
-    await expect(readFile(yeniRolYolu(), "utf8")).rejects.toThrow();
+    expect(await readFile(realFlow.path, "utf8")).toBe(beforeYaml);
+    await expect(readFile(newRolePath(), "utf8")).rejects.toThrow();
   });
 
   it("başka kaynaktan gelen istek reddedilir, hiçbir şey değişmez", async () => {
-    const beforeYaml = await readFile(gercekFlow.path, "utf8");
+    const beforeYaml = await readFile(realFlow.path, "utf8");
     const res = await fetch(`${s.url}rol/yeni`, {
       method: "POST",
       headers: {
@@ -1111,8 +1111,8 @@ describe("serveUi — yeni rol", () => {
       body: JSON.stringify({ id: "reviewer", provider: "claude", workspace: "reviewer", sonra: "coder" }),
     });
     expect(res.status).toBe(403);
-    expect(await readFile(gercekFlow.path, "utf8")).toBe(beforeYaml);
-    await expect(readFile(yeniRolYolu(), "utf8")).rejects.toThrow();
+    expect(await readFile(realFlow.path, "utf8")).toBe(beforeYaml);
+    await expect(readFile(newRolePath(), "utf8")).rejects.toThrow();
   });
 });
 
@@ -1165,13 +1165,13 @@ roles:
 `;
 
   /** İkinci akış dosyasını yazar ve iki akış arasında seçim yapabilen bir ekran açar. */
-  async function akisSecerSunucu(): Promise<UiServer> {
+  async function flowChoosingServer(): Promise<UiServer> {
     await writeFile(join(root, "hub", "flows", "ikinci.yaml"), FLOW2);
     const live = await LiveFlow.open(join(root, "hub", "flows", "test.yaml"), {
       root, providers: knownProviderSet(),
     });
     return serveUi({
-      root, queue, topology, flowName: "test", flowHash: gercekFlow.hash, live,
+      root, queue, topology, flowName: "test", flowHash: realFlow.hash, live,
       flowChoice: {
         list: async () => ["test", "ikinci"],
         open: async (itemName) => {
@@ -1185,7 +1185,7 @@ roles:
   }
 
   it("GET /akislar listeyi ve aktif akışı döner", async () => {
-    const s = await akisSecerSunucu();
+    const s = await flowChoosingServer();
     try {
       const v = (await (await fetch(`${s.url}akislar`)).json()) as {
         flows: string[]; active: string;
@@ -1205,7 +1205,7 @@ roles:
    * akış "test" olsa bile "ikinci"nin de rolleri burada.
    */
   it("GET /akislar her akış için rol zincirini özetliyor", async () => {
-    const s = await akisSecerSunucu();
+    const s = await flowChoosingServer();
     try {
       const v = (await (await fetch(`${s.url}akislar`)).json()) as {
         summary: { name: string; draft: { roles: { id: string }[] } | null; error?: string }[];
@@ -1239,7 +1239,7 @@ roles:
       root, providers: knownProviderSet(),
     });
     const s = await serveUi({
-      root, queue, topology, flowName: "test", flowHash: gercekFlow.hash, live,
+      root, queue, topology, flowName: "test", flowHash: realFlow.hash, live,
       flowChoice: {
         list: async () => ["test", "ikinci", "bozuk"],
         open: async (itemName) => {
@@ -1254,10 +1254,10 @@ roles:
       const v = (await (await fetch(`${s.url}akislar`)).json()) as {
         summary: { name: string; draft: unknown; error?: string }[];
       };
-      const bozukOzet = v.summary.find((o) => o.name === "bozuk");
+      const corruptSummary = v.summary.find((o) => o.name === "bozuk");
       const digerleri = v.summary.filter((o) => o.name !== "bozuk");
-      expect(bozukOzet?.draft).toBeNull();
-      expect(bozukOzet?.error).toContain("kural");
+      expect(corruptSummary?.draft).toBeNull();
+      expect(corruptSummary?.error).toContain("kural");
       expect(digerleri.every((o) => o.draft !== null)).toBe(true);
     } finally {
       await s.close();
@@ -1284,7 +1284,7 @@ roles:
   });
 
   it("seçim akışı değiştiriyor ve sonraki okumalar yeni akışı görüyor", async () => {
-    const s = await akisSecerSunucu();
+    const s = await flowChoosingServer();
     try {
       const res = await fetch(`${s.url}akis/sec`, {
         method: "POST",
@@ -1319,7 +1319,7 @@ roles:
       root, providers: knownProviderSet(),
     });
     const s = await serveUi({
-      root, queue, topology, flowName: "test", flowHash: gercekFlow.hash, live,
+      root, queue, topology, flowName: "test", flowHash: realFlow.hash, live,
       // Düzenleme de AÇIK: `aktif.flowPath` yalnızca `model`den değil,
       // `/akis/yaz`ın GERÇEKTEN hangi dosyaya yazdığından da sınanabilsin —
       // yarı güncellenmiş bir `flowPath` (yeni ada erken bağlanmış) `live`
@@ -1365,13 +1365,13 @@ roles:
         draft: { description?: string };
       }).draft;
       draft.description = "atomiklik sınaması";
-      const yazRes = await fetch(`${s.url}akis/yaz`, {
+      const writeRes = await fetch(`${s.url}akis/yaz`, {
         method: "POST",
         headers: { "content-type": "application/json", "x-skein-token": s.token },
         body: JSON.stringify(draft),
       });
-      expect(yazRes.status).toBe(200);
-      expect(await readFile(gercekFlow.path, "utf8")).toContain("atomiklik sınaması");
+      expect(writeRes.status).toBe(200);
+      expect(await readFile(realFlow.path, "utf8")).toContain("atomiklik sınaması");
     } finally {
       await s.close();
     }
@@ -1393,7 +1393,7 @@ roles:
       root, providers: knownProviderSet(),
     });
     return serveUi({
-      root, queue, topology, flowName: "test", flowHash: gercekFlow.hash, live,
+      root, queue, topology, flowName: "test", flowHash: realFlow.hash, live,
       flowChoice: {
         list: async () => ["test", "ikinci"],
         open: async () => {
@@ -1449,7 +1449,7 @@ roles:
   });
 
   it("jetonsuz seçim isteği 403 ve akış DEĞİŞMİYOR", async () => {
-    const s = await akisSecerSunucu();
+    const s = await flowChoosingServer();
     try {
       const res = await fetch(`${s.url}akis/sec`, {
         method: "POST",
@@ -1466,7 +1466,7 @@ roles:
   });
 
   it("başka kaynaktan gelen seçim isteği reddedilir", async () => {
-    const s = await akisSecerSunucu();
+    const s = await flowChoosingServer();
     try {
       const res = await fetch(`${s.url}akis/sec`, {
         method: "POST",
@@ -1506,9 +1506,9 @@ describe("serveUi — yeni akış oluşturma (yeniAd)", () => {
 
   beforeEach(async () => {
     s = await serveUi({
-      root, queue, topology, flowName: "test", flowHash: gercekFlow.hash,
-      live: { topology, flow: gercekFlow, error: null, refresh: async () => {} },
-      flowPath: gercekFlow.path,
+      root, queue, topology, flowName: "test", flowHash: realFlow.hash,
+      live: { topology, flow: realFlow, error: null, refresh: async () => {} },
+      flowPath: realFlow.path,
       loadOptions: opts(),
       providerIds: ["claude"],
       flowChoice: {
@@ -1528,7 +1528,7 @@ describe("serveUi — yeni akış oluşturma (yeniAd)", () => {
       body: JSON.stringify(bodyText),
     });
 
-  const yeniDraft = (itemName: string): FlowDraft => ({
+  const freshDraft = (itemName: string): FlowDraft => ({
     name: itemName,
     constitution: ["../prompts/base.md"],
     roles: [{
@@ -1540,14 +1540,14 @@ describe("serveUi — yeni akış oluşturma (yeniAd)", () => {
   });
 
   it("geçerli yeniAd ile YENİ dosyayı yazar, aktif akışa DOKUNMAZ", async () => {
-    const res = await send("akis/yaz", { ...yeniDraft("kopya"), newName: "kopya" });
+    const res = await send("akis/yaz", { ...freshDraft("kopya"), newName: "kopya" });
     expect(res.status).toBe(200);
 
     const newPath = join(root, "hub", "flows", "kopya.yaml");
     expect(await readFile(newPath, "utf8")).toContain("id: coder");
     // Aktif akış (test.yaml) AYNEN duruyor — yazma BAŞKA bir dosyaya gitti.
-    const eskiIcerik = await readFile(gercekFlow.path, "utf8");
-    expect(eskiIcerik).not.toContain("kopya");
+    const oldContent = await readFile(realFlow.path, "utf8");
+    expect(oldContent).not.toContain("kopya");
     const v = (await res.json()) as { model: { flow: { name: string } } };
     expect(v.model.flow.name).toBe("test");
   });
@@ -1555,7 +1555,7 @@ describe("serveUi — yeni akış oluşturma (yeniAd)", () => {
   // Önizleme hiçbir koşulda dosyaya dokunmaz — `yeniAd`'lı dal da aynı
   // kuralı taşıyor.
   it("geçerli yeniAd ile önizleme hiçbir dosyaya YAZMAZ", async () => {
-    const res = await send("akis/onizleme", { ...yeniDraft("kopya"), newName: "kopya" });
+    const res = await send("akis/onizleme", { ...freshDraft("kopya"), newName: "kopya" });
     const v = (await res.json()) as { ok: boolean; yaml: string };
     expect(v.ok).toBe(true);
     const newPath = join(root, "hub", "flows", "kopya.yaml");
@@ -1563,19 +1563,19 @@ describe("serveUi — yeni akış oluşturma (yeniAd)", () => {
   });
 
   it("zaten var olan bir ad reddedilir, hiçbir dosya değişmez", async () => {
-    const once = await readFile(gercekFlow.path, "utf8");
-    const res = await send("akis/yaz", { ...yeniDraft("test"), newName: "test" });
+    const once = await readFile(realFlow.path, "utf8");
+    const res = await send("akis/yaz", { ...freshDraft("test"), newName: "test" });
     const v = (await res.json()) as { error: string };
     expect(res.status).toBe(400);
     expect(v.error).toContain("zaten kullanılıyor");
-    expect(await readFile(gercekFlow.path, "utf8")).toBe(once);
+    expect(await readFile(realFlow.path, "utf8")).toBe(once);
   });
 
   // Karakter kümesi DİZGİ TEMİZLEYEREK değil REDDEDİLEREK uygulanıyor —
   // `duzenleAdSanitize` (page.ts) ekranda zaten temizliyor, sunucu burada
   // ikinci bir savunma hattı.
   it("geçersiz karakter içeren yeniAd reddedilir", async () => {
-    const res = await send("akis/yaz", { ...yeniDraft("Kopya Adı"), newName: "Kopya Adı" });
+    const res = await send("akis/yaz", { ...freshDraft("Kopya Adı"), newName: "Kopya Adı" });
     const v = (await res.json()) as { error: string };
     expect(res.status).toBe(400);
     expect(v.error).toContain("a-z0-9-");
@@ -1584,23 +1584,23 @@ describe("serveUi — yeni akış oluşturma (yeniAd)", () => {
   });
 
   it("akisSecimi verilmemişse yeniAd 404 değil 400 ile reddedilir, hiçbir dosya yazılmaz", async () => {
-    const saltAkisSecimsiz = await serveUi({
-      root, queue, topology, flowName: "test", flowHash: gercekFlow.hash,
-      live: { topology, flow: gercekFlow, error: null, refresh: async () => {} },
-      flowPath: gercekFlow.path,
+    const readOnlyNoFlowChoice = await serveUi({
+      root, queue, topology, flowName: "test", flowHash: realFlow.hash,
+      live: { topology, flow: realFlow, error: null, refresh: async () => {} },
+      flowPath: realFlow.path,
       loadOptions: opts(),
     });
     try {
-      const res = await fetch(`${saltAkisSecimsiz.url}akis/yaz`, {
+      const res = await fetch(`${readOnlyNoFlowChoice.url}akis/yaz`, {
         method: "POST",
-        headers: { "content-type": "application/json", "x-skein-token": saltAkisSecimsiz.token },
-        body: JSON.stringify({ ...yeniDraft("kopya"), newName: "kopya" }),
+        headers: { "content-type": "application/json", "x-skein-token": readOnlyNoFlowChoice.token },
+        body: JSON.stringify({ ...freshDraft("kopya"), newName: "kopya" }),
       });
       expect(res.status).toBe(400);
       const newPath = join(root, "hub", "flows", "kopya.yaml");
       await expect(readFile(newPath, "utf8")).rejects.toThrow();
     } finally {
-      await saltAkisSecimsiz.close();
+      await readOnlyNoFlowChoice.close();
     }
   });
 
@@ -1613,7 +1613,7 @@ describe("serveUi — yeni akış oluşturma (yeniAd)", () => {
     data.description = "yeniAd olmadan";
     const res = await send("akis/yaz", data);
     expect(res.status).toBe(200);
-    expect(await readFile(gercekFlow.path, "utf8")).toContain("yeniAd olmadan");
+    expect(await readFile(realFlow.path, "utf8")).toContain("yeniAd olmadan");
   });
 });
 
@@ -1644,9 +1644,9 @@ describe("adres kapıları", () => {
   });
 
   it("IPv6 döngü kaynağı da kabul edilir", () => {
-    const names = izinliAdlar("127.0.0.1");
-    expect(bizeAit(`http://[::1]:7777`, names, 7777)).toBe(true);
-    expect(bizeAit(`http://localhost:7777`, names, 7777)).toBe(true);
+    const names = allowedNames("127.0.0.1");
+    expect(isOurOwn(`http://[::1]:7777`, names, 7777)).toBe(true);
+    expect(isOurOwn(`http://localhost:7777`, names, 7777)).toBe(true);
   });
 
   it("yabancı kaynak hâlâ reddedilir", async () => {
@@ -1668,10 +1668,10 @@ describe("adres kapıları", () => {
   // Port eşleşmesi zorunlu: aynı makinedeki BAŞKA bir yerel servis bizim
   // kaynağımız değil.
   it("döngü adı ama yanlış port bizim değil", () => {
-    const names = izinliAdlar("127.0.0.1");
-    expect(bizeAit("http://127.0.0.1:9999", names, 7777)).toBe(false);
+    const names = allowedNames("127.0.0.1");
+    expect(isOurOwn("http://127.0.0.1:9999", names, 7777)).toBe(false);
     // Portsuz `Host: 127.0.0.1` (port 80) de bizim değil.
-    expect(bizeAit("127.0.0.1", names, 7777)).toBe(false);
+    expect(isOurOwn("127.0.0.1", names, 7777)).toBe(false);
   });
 
   /**
@@ -1682,7 +1682,7 @@ describe("adres kapıları", () => {
    * sınamıyorlardı — tarayıcı başlığı 127.0.0.1 kalıyordu, yani "yabancı
    * Host reddedilir" iddiası kendi kurduğu durumu hiç kurmuyordu.
    */
-  const hamIstek = (filePath: string, host: string): Promise<{ status: number; body: string }> =>
+  const rawRequest = (filePath: string, host: string): Promise<{ status: number; body: string }> =>
     new Promise((resolve, reject) => {
       const req = request(
         { host: "127.0.0.1", port: server.port, path: filePath, method: "GET", headers: { Host: host } },
@@ -1706,7 +1706,7 @@ describe("adres kapıları", () => {
     // BURADA: okuma ucu olması bu denetimden MUAF tutmuyor —
     // tasarim/SAPMALAR.md §3'ün "taşınacak" notu tam bunu söylüyor.
     for (const filePath of ["/", "/durum", "/adimlar?kart=x"]) {
-      const res = await hamIstek(filePath, `kotu.example:${server.port}`);
+      const res = await rawRequest(filePath, `kotu.example:${server.port}`);
       expect(res.status).toBe(403);
     }
   });
@@ -1714,13 +1714,13 @@ describe("adres kapıları", () => {
   // Asıl bedel bu: `GET /` sayfaya YAZMA JETONUNU gömüyor, yani rebinding
   // ile okunan bir sayfa yazma hakkını da taşır.
   it("yabancı Host sayfaya gömülü jetonu vermiyor", async () => {
-    const res = await hamIstek("/", `kotu.example:${server.port}`);
+    const res = await rawRequest("/", `kotu.example:${server.port}`);
     expect(res.status).toBe(403);
     expect(res.body).not.toContain(server.token);
   });
 
   it("döngü adıyla gelen Host geçer", async () => {
-    const res = await hamIstek("/", `localhost:${server.port}`);
+    const res = await rawRequest("/", `localhost:${server.port}`);
     expect(res.status).toBe(200);
     expect(res.body).toContain(server.token);
   });
@@ -1751,14 +1751,14 @@ describe("adres kapıları", () => {
   // `http://0.0.0.0:port` olmamalı — o geçerli bir tarayıcı adresi değil.
   it("joker arayüz döngü adına çevrilir", async () => {
     const s = await serveUi({
-      root, queue, topology, flowName: gercekFlow.name, flowHash: gercekFlow.hash,
+      root, queue, topology, flowName: realFlow.name, flowHash: realFlow.hash,
       host: "0.0.0.0",
     });
     try {
       expect(jokerArayuz("0.0.0.0")).toBe(true);
       expect(s.url).toContain("127.0.0.1");
       expect(s.url).not.toContain("0.0.0.0");
-      expect(izinliAdlar("0.0.0.0").has("0.0.0.0")).toBe(false);
+      expect(allowedNames("0.0.0.0").has("0.0.0.0")).toBe(false);
     } finally {
       await s.close();
     }
@@ -1838,10 +1838,10 @@ describe("serveUi — ekrandan kart açmak", () => {
  * pinlemek.
  */
 describe("serveUi — ekrandan gözcü", () => {
-  const KOMUT = ["node", "tsx", "watch/cli.ts"];
-  const BAYRAKLAR = ["--model", "claude:m"];
+  const COMMAND = ["node", "tsx", "watch/cli.ts"];
+  const FLAGS = ["--model", "claude:m"];
   /** Sunucunun kurması BEKLENEN tam komut. */
-  const BEKLENEN = [...KOMUT, "test", "--serve", ...BAYRAKLAR];
+  const EXPECTED = [...COMMAND, "test", "--serve", ...FLAGS];
 
   /** Başlatılan sahte süreçleri kaydeder. */
   function stubbed() {
@@ -1869,8 +1869,8 @@ describe("serveUi — ekrandan gözcü", () => {
   async function gozculu(): Promise<{ srv: UiServer; s: ReturnType<typeof stubbed> }> {
     const s = stubbed();
     const srv = await serveUi({
-      root, queue, topology, flowName: "test", flowHash: gercekFlow.hash,
-      watcher: { command: KOMUT, bayraklar: BAYRAKLAR, spawn: s.spawn as never },
+      root, queue, topology, flowName: "test", flowHash: realFlow.hash,
+      watcher: { command: COMMAND, bayraklar: FLAGS, spawn: s.spawn as never },
     });
     return { srv, s };
   }
@@ -1886,7 +1886,7 @@ describe("serveUi — ekrandan gözcü", () => {
       // Akış adı ekranın baktığı akıştan, BAYRAKLAR terminalden —
       // düğme bayrakları ne seçiyor ne değiştiriyor. Düğmenin model
       // seçebilmesi, ekranın yetkisini sessizce büyütmek olurdu.
-      expect(s.calls).toEqual([BEKLENEN]);
+      expect(s.calls).toEqual([EXPECTED]);
     } finally {
       await srv.close();
     }
@@ -2037,7 +2037,7 @@ describe("serveUi — ekrandan gözcü", () => {
   // düzenlemeyle aynı kural — ekranın yetkisi onu açan komutun verdiği kadar.
   it("gözcü bayrağı verilmeden açılan ekranda uç 404", async () => {
     const srv = await serveUi({
-      root, queue, topology, flowName: "test", flowHash: gercekFlow.hash,
+      root, queue, topology, flowName: "test", flowHash: realFlow.hash,
     });
     try {
       const res = await fetch(`${srv.url}gozcu/baslat`, {
@@ -2075,7 +2075,7 @@ describe("serveUi — ekrandan gözcü", () => {
   });
 
   it("GET / — bayraksız açılan ekranda GOZCU_AYAR null", async () => {
-    const srv = await serveUi({ root, queue, topology, flowName: "test", flowHash: gercekFlow.hash });
+    const srv = await serveUi({ root, queue, topology, flowName: "test", flowHash: realFlow.hash });
     try {
       const html = await (await fetch(srv.url)).text();
       expect(html).toContain("const GOZCU_AYAR = null;");
@@ -2092,7 +2092,7 @@ describe("serveUi — ekrandan gözcü", () => {
  */
 describe("GET /gozcu/log — gözcü günlüğü", () => {
   it("dosya yoksa boş liste döner, hata DEĞİL", async () => {
-    const srv = await serveUi({ root, queue, topology, flowName: "test", flowHash: gercekFlow.hash });
+    const srv = await serveUi({ root, queue, topology, flowName: "test", flowHash: realFlow.hash });
     try {
       const res = await fetch(`${srv.url}gozcu/log`);
       expect(res.status).toBe(200);
@@ -2108,7 +2108,7 @@ describe("GET /gozcu/log — gözcü günlüğü", () => {
       join(root, ".skein", "gozcu.log"),
       "09:12 gözcü açık · pid 48213\n09:13 ✗ kaçak döngü\n",
     );
-    const srv = await serveUi({ root, queue, topology, flowName: "test", flowHash: gercekFlow.hash });
+    const srv = await serveUi({ root, queue, topology, flowName: "test", flowHash: realFlow.hash });
     try {
       const res = await fetch(`${srv.url}gozcu/log`);
       const data = await res.json() as { lines: { at: string; message: string; error: boolean }[] };
@@ -2127,7 +2127,7 @@ describe("GET /gozcu/log — gözcü günlüğü", () => {
  */
 describe("gozcuLogSatiriAyristir — tek satır ayrıştırma", () => {
   it("'HH:MM mesaj' biçimini ayırır", () => {
-    expect(gozcuLogSatiriAyristir("14:05 kuyruk boş, bekleniyor")).toEqual({
+    expect(parseWatcherLogLine("14:05 kuyruk boş, bekleniyor")).toEqual({
       at: "14:05", message: "kuyruk boş, bekleniyor", error: false,
     });
   });
@@ -2135,14 +2135,14 @@ describe("gozcuLogSatiriAyristir — tek satır ayrıştırma", () => {
   // SINIR: mesaj "✗" ile başlıyorsa hata:true — bu tek işaret
   // satirYaziciKur'un STDERR'den gelen satırlara EKLEDİĞİ işaret.
   it("mesaj '✗' ile başlıyorsa hata:true", () => {
-    expect(gozcuLogSatiriAyristir("14:06 ✗ kaçak döngü").error).toBe(true);
+    expect(parseWatcherLogLine("14:06 ✗ kaçak döngü").error).toBe(true);
   });
 
   // BİÇİME UYMAYAN satır SESSİZCE ATILMIYOR: saat boş, mesaj ham satırın
   // kendisi — BİLDİRİLMEYEN SIFIR DEĞİLDİR, ayrıştıramadığımızı gizlemek
   // de aynı kusur sınıfı.
   it("biçime uymayan satırı ham hâliyle gösterir", () => {
-    expect(gozcuLogSatiriAyristir("saatsiz ham satır")).toEqual({
+    expect(parseWatcherLogLine("saatsiz ham satır")).toEqual({
       at: "", message: "saatsiz ham satır", error: false,
     });
   });
@@ -2151,14 +2151,14 @@ describe("gozcuLogSatiriAyristir — tek satır ayrıştırma", () => {
 /** GOZCULOGKUYRUK — dosyadan son N satırı okur. */
 describe("gozcuLogKuyruk — dosyadan son satırlar", () => {
   it("dosya yoksa boş liste", async () => {
-    expect(await gozcuLogKuyruk(join(root, "yok-boyle-dosya.log"))).toEqual([]);
+    expect(await watcherLogQueue(join(root, "yok-boyle-dosya.log"))).toEqual([]);
   });
 
   it("satır sayısı n'den fazlaysa yalnızca SON n'i döner", async () => {
     const filePath = join(root, "cok-satirli.log");
     const lines = Array.from({ length: 5 }, (_, i) => `09:${String(i).padStart(2, "0")} satır ${i}`);
     await writeFile(filePath, lines.join("\n") + "\n");
-    const result = await gozcuLogKuyruk(filePath, 2);
+    const result = await watcherLogQueue(filePath, 2);
     expect(result.map((s) => s.message)).toEqual(["satır 3", "satır 4"]);
   });
 });
@@ -2169,14 +2169,14 @@ describe("gozcuLogKuyruk — dosyadan son satırlar", () => {
  * çağrılarını yakalıyor — gerçek bir alt süreç başlatmadan.
  */
 describe("satirYaziciKur — alt süreç çıktısını saat damgalı satırlara böler", () => {
-  function sahteLog(): { writtenList: string[]; log: NodeJS.WritableStream } {
+  function fakeLog(): { writtenList: string[]; log: NodeJS.WritableStream } {
     const writtenList: string[] = [];
     return { writtenList, log: { write: (s: string) => { writtenList.push(s); return true; } } as NodeJS.WritableStream };
   }
 
   it("tamamlanmış satırı SAAT DAMGASIYLA yazar", () => {
-    const { writtenList, log } = sahteLog();
-    satirYaziciKur(log, false)(Buffer.from("kuyruk boş, bekleniyor\n"));
+    const { writtenList, log } = fakeLog();
+    makeLineWriter(log, false)(Buffer.from("kuyruk boş, bekleniyor\n"));
     expect(writtenList).toHaveLength(1);
     expect(writtenList[0]).toMatch(/^\d{2}:\d{2} kuyruk boş, bekleniyor\n$/);
   });
@@ -2185,19 +2185,19 @@ describe("satirYaziciKur — alt süreç çıktısını saat damgalı satırlara
   // bunu "hata" sayıyor. Zaten "✗" ile başlıyorsa İKİNCİ bir işaret
   // EKLENMİYOR ("✗ ✗ ..." çiftlenmesin).
   it("stdout satırını İŞARETLEMEZ, stderr satırını '✗ ' ile işaretler", () => {
-    const stdout = sahteLog();
-    satirYaziciKur(stdout.log, false)(Buffer.from("normal satır\n"));
+    const stdout = fakeLog();
+    makeLineWriter(stdout.log, false)(Buffer.from("normal satır\n"));
     expect(stdout.writtenList[0]).toMatch(/normal satır\n$/);
     expect(stdout.writtenList[0]).not.toContain("✗");
 
-    const stderr = sahteLog();
-    satirYaziciKur(stderr.log, true)(Buffer.from("patladı\n"));
+    const stderr = fakeLog();
+    makeLineWriter(stderr.log, true)(Buffer.from("patladı\n"));
     expect(stderr.writtenList[0]).toMatch(/✗ patladı\n$/);
   });
 
   it("stderr satırı ZATEN '✗' ile başlıyorsa işareti ÇİFTLEMEZ", () => {
-    const { writtenList, log } = sahteLog();
-    satirYaziciKur(log, true)(Buffer.from("✗ kaçak döngü\n"));
+    const { writtenList, log } = fakeLog();
+    makeLineWriter(log, true)(Buffer.from("✗ kaçak döngü\n"));
     expect(writtenList[0]).toMatch(/✗ kaçak döngü\n$/);
     expect(writtenList[0]).not.toContain("✗ ✗");
   });
@@ -2206,8 +2206,8 @@ describe("satirYaziciKur — alt süreç çıktısını saat damgalı satırlara
   // bölünürse (büyük bir çıktı parçalanmışsa) ortasına saat damgası
   // SIKIŞMAMALI.
   it("satır İKİ 'data' olayına bölünse de TEK satır olarak yazar", () => {
-    const { writtenList, log } = sahteLog();
-    const writeIt = satirYaziciKur(log, false);
+    const { writtenList, log } = fakeLog();
+    const writeIt = makeLineWriter(log, false);
     writeIt(Buffer.from("yarım "));
     expect(writtenList).toEqual([]); // satır sonu gelmeden HİÇ yazılmaz
     writeIt(Buffer.from("satır\n"));
@@ -2216,8 +2216,8 @@ describe("satirYaziciKur — alt süreç çıktısını saat damgalı satırlara
   });
 
   it("sonu '\\n' olmayan kalıntı yazılmaz", () => {
-    const { writtenList, log } = sahteLog();
-    satirYaziciKur(log, false)(Buffer.from("tamamlanmamış"));
+    const { writtenList, log } = fakeLog();
+    makeLineWriter(log, false)(Buffer.from("tamamlanmamış"));
     expect(writtenList).toEqual([]);
   });
 });

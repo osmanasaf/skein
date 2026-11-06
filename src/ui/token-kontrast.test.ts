@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { renderPage } from "./page.js";
-import { kontrastOrani, NORMAL_METIN_ESIGI, IKINCIL_ETIKET_ESIGI } from "./kontrast.js";
+import { kontrastOrani, NORMAL_TEXT_THRESHOLD, SECONDARY_LABEL_THRESHOLD } from "./kontrast.js";
 
 /**
  * TOKEN DEĞERLERİ CSS METNİNDEN OKUNUR, AYRI BİR LİSTEYE KOPYALANMAZ.
@@ -23,11 +23,11 @@ import { kontrastOrani, NORMAL_METIN_ESIGI, IKINCIL_ETIKET_ESIGI } from "./kontr
  * sayfanın gerçek CSS metninden okunuyor — `cozumle()` zinciri izleyip asıl
  * hex'e iniyor, ikinci bir kaynak hiç açılmıyor.
  */
-function tokenlariAyristir(gövdeMetni: string): Map<string, string> {
+function tokenlariAyristir(bodyTextValue: string): Map<string, string> {
   const lookup = new Map<string, string>();
   const desen = /--([a-z0-9-]+):\s*(#[0-9A-Fa-f]{6}|var\(--[a-z0-9-]+\))\s*;/g;
   let eslesme: RegExpExecArray | null;
-  while ((eslesme = desen.exec(gövdeMetni)) !== null) {
+  while ((eslesme = desen.exec(bodyTextValue)) !== null) {
     const name = eslesme[1];
     const value = eslesme[2];
     if (name !== undefined && value !== undefined) lookup.set(name, value);
@@ -45,19 +45,19 @@ function tokenlariAyristir(gövdeMetni: string): Map<string, string> {
  * üzerine biniyor"). Koyu haritayı açığın üstüne yazarak birleştiriyoruz,
  * çünkü koyu blok --mono gibi değişmeyen token'ları tekrar etmiyor.
  */
-function temaTokenlari(html: string): { isOpen: Map<string, string>; darkBlock: Map<string, string> } {
-  const kokBas = html.indexOf(":root {");
-  const kokSon = html.indexOf("\n  }", kokBas);
-  const acikGovde = html.slice(kokBas, kokSon);
+function themeTokens(html: string): { isOpen: Map<string, string>; darkBlock: Map<string, string> } {
+  const rootStart = html.indexOf(":root {");
+  const rootEnd = html.indexOf("\n  }", rootStart);
+  const lightBody = html.slice(rootStart, rootEnd);
 
   const darkQueryStart = html.indexOf("prefers-color-scheme: dark");
   const darkRootStart = html.indexOf(":root:not(", darkQueryStart);
   const darkRootEnd = html.indexOf("\n    }", darkRootStart);
-  const koyuGovde = html.slice(darkRootStart, darkRootEnd);
+  const darkBody = html.slice(darkRootStart, darkRootEnd);
 
-  const isOpen = tokenlariAyristir(acikGovde);
+  const isOpen = tokenlariAyristir(lightBody);
   const darkBlock = new Map(isOpen);
-  for (const [name, value] of tokenlariAyristir(koyuGovde)) darkBlock.set(name, value);
+  for (const [name, value] of tokenlariAyristir(darkBody)) darkBlock.set(name, value);
   return { isOpen, darkBlock };
 }
 
@@ -65,7 +65,7 @@ function temaTokenlari(html: string): { isOpen: Map<string, string>; darkBlock: 
  * `@media (prefers-color-scheme: dark) { :root:not(...) { ... } }`
  * bloğunun SADECE EZDİĞİ token'larını (açıkla birleştirmeden) döner.
  */
-function medyaEzmesi(html: string): Map<string, string> {
+function mediaOverride(html: string): Map<string, string> {
   const darkQueryStart = html.indexOf("prefers-color-scheme: dark");
   const darkRootStart = html.indexOf(":root:not(", darkQueryStart);
   const darkRootEnd = html.indexOf("\n    }", darkRootStart);
@@ -77,7 +77,7 @@ function medyaEzmesi(html: string): Map<string, string> {
  * OS tercihinden BAĞIMSIZ "koyu" seçildiğinde uygulanan blok (kart
  * c-20261106-e62847, page.ts'teki TEMA ANAHTARI yorumu).
  */
-function zorlananKoyuTokenlari(html: string): Map<string, string> {
+function forcedDarkTokens(html: string): Map<string, string> {
   const bas = html.indexOf(':root[data-theme="dark"] {');
   const last = html.indexOf("\n  }", bas);
   return tokenlariAyristir(html.slice(bas, last));
@@ -94,20 +94,20 @@ function cozumle(lookup: Map<string, string>, name: string, derinlik = 0): strin
   if (value === undefined) throw new Error("token bulunamadi: " + name);
   const match = /^var\(--([a-z0-9-]+)\)$/.exec(value);
   if (match) {
-    const ic = match[1];
-    if (ic === undefined) throw new Error("gecersiz var() referansi: " + value);
-    return cozumle(lookup, ic, derinlik + 1);
+    const inner = match[1];
+    if (inner === undefined) throw new Error("gecersiz var() referansi: " + value);
+    return cozumle(lookup, inner, derinlik + 1);
   }
   return value;
 }
 
 /** Haritadan bir token okur; yoksa (örn. "#fff" gibi sabit bir renk) hex'i aynen döndürür. */
-function colour(lookup: Map<string, string>, adVeyaHex: string): string {
-  if (adVeyaHex.startsWith("#")) return adVeyaHex;
-  return cozumle(lookup, adVeyaHex);
+function colour(lookup: Map<string, string>, nameOrHex: string): string {
+  if (nameOrHex.startsWith("#")) return nameOrHex;
+  return cozumle(lookup, nameOrHex);
 }
 
-type Esik = typeof NORMAL_METIN_ESIGI | typeof IKINCIL_ETIKET_ESIGI;
+type Threshold = typeof NORMAL_TEXT_THRESHOLD | typeof SECONDARY_LABEL_THRESHOLD;
 
 /**
  * Sayfada GERÇEKTEN üst üste binen metin/zemin çiftleri.
@@ -118,31 +118,31 @@ type Esik = typeof NORMAL_METIN_ESIGI | typeof IKINCIL_ETIKET_ESIGI;
  * gövde metni NORMAL_METIN_ESIGI (4.5:1), küçük/ikincil etiket
  * IKINCIL_ETIKET_ESIGI (3:1) — kart metninde yazılı kural.
  */
-const CIFTLER: [string, string, string, Esik][] = [
+const CIFTLER: [string, string, string, Threshold][] = [
   // normal metin — gövde, başlık, uyarı
-  ["ink/bg — sütun başlığı zemin üstünde", "ink", "bg", NORMAL_METIN_ESIGI],
-  ["ink/surface — kart başlığı kart üstünde", "ink", "surface", NORMAL_METIN_ESIGI],
-  ["ink/gate-bg — kapı kartında başlık", "ink", "gate-bg", NORMAL_METIN_ESIGI],
-  ["ink/accent-soft — gözcü açık hapı", "ink", "accent-soft", NORMAL_METIN_ESIGI],
-  ["ink/surface-2 — form girdisi metni", "ink", "surface-2", NORMAL_METIN_ESIGI],
-  ["ink-2/surface — ikincil gövde kart üstünde", "ink-2", "surface", NORMAL_METIN_ESIGI],
-  ["ink-2/bg — kuyruk engeli bandı metni", "ink-2", "bg", NORMAL_METIN_ESIGI],
-  ["ink-2/gate-bg — kapı kartında adım metni", "ink-2", "gate-bg", NORMAL_METIN_ESIGI],
-  ["ink-2/surface-2 — gözcü kapalı hapı", "ink-2", "surface-2", NORMAL_METIN_ESIGI],
-  ["reject-ink/surface — dosya satırı silinen", "reject-ink", "surface", NORMAL_METIN_ESIGI],
-  ["reject-ink/bg — bant başlığı zemin üstünde", "reject-ink", "bg", NORMAL_METIN_ESIGI],
-  ["reject-ink/gate-bg — ret sayacı kapı kartında", "reject-ink", "gate-bg", NORMAL_METIN_ESIGI],
-  ["accept/surface — dosya satırı eklenen", "accept", "surface", NORMAL_METIN_ESIGI],
-  ["gate-ink/gate-bg — kapı gerekçesi", "gate-ink", "gate-bg", NORMAL_METIN_ESIGI],
-  ["beyaz/gate — birincil kapı düğmesi", "#FFFFFF", "gate", NORMAL_METIN_ESIGI],
-  ["beyaz/reject — yetim kart kapatma düğmesi", "#FFFFFF", "reject", NORMAL_METIN_ESIGI],
-  ["beyaz/accent — akış/prompt kaydet düğmesi", "#FFFFFF", "accent", NORMAL_METIN_ESIGI],
+  ["ink/bg — sütun başlığı zemin üstünde", "ink", "bg", NORMAL_TEXT_THRESHOLD],
+  ["ink/surface — kart başlığı kart üstünde", "ink", "surface", NORMAL_TEXT_THRESHOLD],
+  ["ink/gate-bg — kapı kartında başlık", "ink", "gate-bg", NORMAL_TEXT_THRESHOLD],
+  ["ink/accent-soft — gözcü açık hapı", "ink", "accent-soft", NORMAL_TEXT_THRESHOLD],
+  ["ink/surface-2 — form girdisi metni", "ink", "surface-2", NORMAL_TEXT_THRESHOLD],
+  ["ink-2/surface — ikincil gövde kart üstünde", "ink-2", "surface", NORMAL_TEXT_THRESHOLD],
+  ["ink-2/bg — kuyruk engeli bandı metni", "ink-2", "bg", NORMAL_TEXT_THRESHOLD],
+  ["ink-2/gate-bg — kapı kartında adım metni", "ink-2", "gate-bg", NORMAL_TEXT_THRESHOLD],
+  ["ink-2/surface-2 — gözcü kapalı hapı", "ink-2", "surface-2", NORMAL_TEXT_THRESHOLD],
+  ["reject-ink/surface — dosya satırı silinen", "reject-ink", "surface", NORMAL_TEXT_THRESHOLD],
+  ["reject-ink/bg — bant başlığı zemin üstünde", "reject-ink", "bg", NORMAL_TEXT_THRESHOLD],
+  ["reject-ink/gate-bg — ret sayacı kapı kartında", "reject-ink", "gate-bg", NORMAL_TEXT_THRESHOLD],
+  ["accept/surface — dosya satırı eklenen", "accept", "surface", NORMAL_TEXT_THRESHOLD],
+  ["gate-ink/gate-bg — kapı gerekçesi", "gate-ink", "gate-bg", NORMAL_TEXT_THRESHOLD],
+  ["beyaz/gate — birincil kapı düğmesi", "#FFFFFF", "gate", NORMAL_TEXT_THRESHOLD],
+  ["beyaz/reject — yetim kart kapatma düğmesi", "#FFFFFF", "reject", NORMAL_TEXT_THRESHOLD],
+  ["beyaz/accent — akış/prompt kaydet düğmesi", "#FFFFFF", "accent", NORMAL_TEXT_THRESHOLD],
   // ikincil etiket — küçük büyük harf etiketler, sayaçlar
-  ["ink-3/bg — boş sütun, altbilgi", "ink-3", "bg", IKINCIL_ETIKET_ESIGI],
-  ["ink-3/surface — kuyrukta etiketi", "ink-3", "surface", IKINCIL_ETIKET_ESIGI],
-  ["ink-3/gate-bg — kapı kartında sayaç", "ink-3", "gate-bg", IKINCIL_ETIKET_ESIGI],
-  ["accent-ink/surface — çalışıyor etiketi", "accent-ink", "surface", IKINCIL_ETIKET_ESIGI],
-  ["gate/gate-bg — kapı etiketi kendi kartında", "gate", "gate-bg", IKINCIL_ETIKET_ESIGI],
+  ["ink-3/bg — boş sütun, altbilgi", "ink-3", "bg", SECONDARY_LABEL_THRESHOLD],
+  ["ink-3/surface — kuyrukta etiketi", "ink-3", "surface", SECONDARY_LABEL_THRESHOLD],
+  ["ink-3/gate-bg — kapı kartında sayaç", "ink-3", "gate-bg", SECONDARY_LABEL_THRESHOLD],
+  ["accent-ink/surface — çalışıyor etiketi", "accent-ink", "surface", SECONDARY_LABEL_THRESHOLD],
+  ["gate/gate-bg — kapı etiketi kendi kartında", "gate", "gate-bg", SECONDARY_LABEL_THRESHOLD],
 
   // --- Modernist token katmanı (c-20261105-fc7a36) ---
   // Bu çiftler henüz hiçbir seçicide kullanılmıyor — ekranın görünüşü bu
@@ -152,57 +152,57 @@ const CIFTLER: [string, string, string, Esik][] = [
   // değere dönerse bu takım kırmızıya döner.
   //
   // normal metin
-  ["Modernist gövde metni — zemin üstünde", "color-text", "color-bg", NORMAL_METIN_ESIGI],
-  ["Modernist gövde metni — yüzey üstünde", "color-text", "color-surface", NORMAL_METIN_ESIGI],
+  ["Modernist gövde metni — zemin üstünde", "color-text", "color-bg", NORMAL_TEXT_THRESHOLD],
+  ["Modernist gövde metni — yüzey üstünde", "color-text", "color-surface", NORMAL_TEXT_THRESHOLD],
   [
     "SAPMALAR §1 — 11-12px/600 etiket, zemin üstünde (neutral-700, neutral-600 DEĞİL)",
     "label-ink",
     "color-bg",
-    NORMAL_METIN_ESIGI,
+    NORMAL_TEXT_THRESHOLD,
   ],
-  ["Modernist lejant metni — zemin üstünde", "label-ink", "color-bg", NORMAL_METIN_ESIGI],
+  ["Modernist lejant metni — zemin üstünde", "label-ink", "color-bg", NORMAL_TEXT_THRESHOLD],
   [
     "Modernist kapı gerekçesi — kapı kartında (accent-800/accent-100)",
     "color-accent-800",
     "color-accent-100",
-    NORMAL_METIN_ESIGI,
+    NORMAL_TEXT_THRESHOLD,
   ],
   [
     "Modernist rozet — tag-accent (accent-800/accent-100)",
     "color-accent-800",
     "color-accent-100",
-    NORMAL_METIN_ESIGI,
+    NORMAL_TEXT_THRESHOLD,
   ],
   [
     "Modernist rozet — tag-neutral (neutral-800/neutral-100)",
     "color-neutral-800",
     "color-neutral-100",
-    NORMAL_METIN_ESIGI,
+    NORMAL_TEXT_THRESHOLD,
   ],
   // büyük metin ve grafik (durum göstergeleri, simgeler)
   [
     "SAPMALAR §2 — kuyruk kart karesi kenarı, zemin üstünde (kenar artık --color-text)",
     "queue-square-border",
     "color-bg",
-    IKINCIL_ETIKET_ESIGI,
+    SECONDARY_LABEL_THRESHOLD,
   ],
   [
     "SAPMALAR §3 — gözcü noktası (kapalı/elle) kenarı, zemin üstünde",
     "daemon-dot-off-border",
     "color-bg",
-    IKINCIL_ETIKET_ESIGI,
+    SECONDARY_LABEL_THRESHOLD,
   ],
   [
     "SAPMALAR §4 — gözcü noktası (duruyor) kenarı, zemin üstünde",
     "daemon-dot-stopping-border",
     "color-bg",
-    IKINCIL_ETIKET_ESIGI,
+    SECONDARY_LABEL_THRESHOLD,
   ],
   [
     "SAPMALAR §5 — boş rol kuşu, zemin üstünde (neutral-600, neutral-400 DEĞİL)",
     "empty-bird-ink",
     "color-bg",
-    IKINCIL_ETIKET_ESIGI,
+    SECONDARY_LABEL_THRESHOLD,
   ],
 
   // --- Üst çubuk ve sekme iskeleti (c-20261105-6d7f66) ---
@@ -223,19 +223,19 @@ const CIFTLER: [string, string, string, Esik][] = [
     "Modernist marka simgesi/açık gözcü noktası — accent, zemin üstünde (büyük grafik)",
     "color-accent",
     "color-bg",
-    IKINCIL_ETIKET_ESIGI,
+    SECONDARY_LABEL_THRESHOLD,
   ],
   [
     "Modernist birincil düğme ve dolu rozet — beyaz metin, solid-accent zemin (temadan bağımsız)",
     "#FFFFFF",
     "solid-accent",
-    NORMAL_METIN_ESIGI,
+    NORMAL_TEXT_THRESHOLD,
   ],
   [
     "Modernist nötr rozet/Pano araç satırı — metin, neutral-200 zemin üstünde",
     "color-text",
     "color-neutral-200",
-    NORMAL_METIN_ESIGI,
+    NORMAL_TEXT_THRESHOLD,
   ],
 
   // --- Sağ panel (c-20261105-d500f1) ---
@@ -253,25 +253,25 @@ const CIFTLER: [string, string, string, Esik][] = [
     "Sağ panel kapı kutusu üst etiketi — accent-700, accent-100 zemin üstünde",
     "color-accent-700",
     "color-accent-100",
-    NORMAL_METIN_ESIGI,
+    NORMAL_TEXT_THRESHOLD,
   ],
   [
     "Sağ panel kapı kutusu başlık düğmesi — neutral-900, accent-100 zemin üstünde",
     "color-neutral-900",
     "color-accent-100",
-    NORMAL_METIN_ESIGI,
+    NORMAL_TEXT_THRESHOLD,
   ],
   [
     "Sağ panel Genel bakış — kapıda bekleyen sayısı, accent zemin üstünde (büyük metin)",
     "color-accent",
     "color-bg",
-    IKINCIL_ETIKET_ESIGI,
+    SECONDARY_LABEL_THRESHOLD,
   ],
   [
     "Bildirim — beyaz metin, toast-bg zemin üstünde (DEVIR.md: 'koyu zemin', temadan bağımsız)",
     "#FFFFFF",
     "toast-bg",
-    NORMAL_METIN_ESIGI,
+    NORMAL_TEXT_THRESHOLD,
   ],
 
   // --- Promptlar sekmesi (DEVIR.md §5) ---
@@ -285,7 +285,7 @@ const CIFTLER: [string, string, string, Esik][] = [
     "Promptlar sekmesi — kaydedilmemiş taslak işareti, seçili öğenin accent-100 zemini üstünde",
     "color-accent",
     "color-accent-100",
-    IKINCIL_ETIKET_ESIGI,
+    SECONDARY_LABEL_THRESHOLD,
   ],
 
   // --- Ajanlar sekmesi (DEVIR.md §6) — denetim kartı c-20261105-387d01 ---
@@ -300,7 +300,7 @@ const CIFTLER: [string, string, string, Esik][] = [
     "Ajanlar 'Şu an' kutusu — ölçülmeyen maliyet uyarısı (.bad), surface zemin üstünde",
     "bad-ink",
     "color-surface",
-    NORMAL_METIN_ESIGI,
+    NORMAL_TEXT_THRESHOLD,
   ],
 
   // --- Koyu tema — accent rampası + color-neutral-900 (c-20261106-e62847) ---
@@ -322,25 +322,25 @@ const CIFTLER: [string, string, string, Esik][] = [
     "Formasyon 'ret' etiketi — çıplak accent-700, zemin üstünde (büyük grafik)",
     "color-accent-700",
     "color-bg",
-    IKINCIL_ETIKET_ESIGI,
+    SECONDARY_LABEL_THRESHOLD,
   ],
   [
     "Formasyon 'insan onayı' etiketi — çıplak accent-700, zemin üstünde (büyük grafik)",
     "color-accent-700",
     "color-bg",
-    IKINCIL_ETIKET_ESIGI,
+    SECONDARY_LABEL_THRESHOLD,
   ],
   [
     "Formasyon 'planlama' etiketi — çıplak accent-800, zemin üstünde (büyük grafik)",
     "color-accent-800",
     "color-bg",
-    IKINCIL_ETIKET_ESIGI,
+    SECONDARY_LABEL_THRESHOLD,
   ],
   [
     "Rolleri düzenle — geçersiz ad girişi kenarı/sil düğmesi hover'ı, accent-700, surface zemin üstünde",
     "color-accent-700",
     "color-surface",
-    IKINCIL_ETIKET_ESIGI,
+    SECONDARY_LABEL_THRESHOLD,
   ],
   // --solid-accent(-hover) BİLİNÇLİ OLARAK hiçbir temada ezilmiyor
   // (page.ts'teki SOLID-* yorumu) — "Yeni kart"/rozet çiftiyle AYNI
@@ -349,30 +349,30 @@ const CIFTLER: [string, string, string, Esik][] = [
     "Yeni kart düğmesi (hover) — beyaz metin, solid-accent-hover zemin (temadan bağımsız)",
     "#FFFFFF",
     "solid-accent-hover",
-    NORMAL_METIN_ESIGI,
+    NORMAL_TEXT_THRESHOLD,
   ],
 ];
 
 describe("token kontrastı — açık tema", () => {
-  const { isOpen } = temaTokenlari(renderPage("x"));
+  const { isOpen } = themeTokens(renderPage("x"));
 
-  it.each(CIFTLER)("%s", (_etiket, a, b, threshold) => {
+  it.each(CIFTLER)("%s", (_label, a, b, threshold) => {
     const ratio = kontrastOrani(colour(isOpen, a), colour(isOpen, b));
     expect(ratio).toBeGreaterThanOrEqual(threshold);
   });
 });
 
 describe("token kontrastı — koyu tema", () => {
-  const { darkBlock } = temaTokenlari(renderPage("x"));
+  const { darkBlock } = themeTokens(renderPage("x"));
 
-  it.each(CIFTLER)("%s", (_etiket, a, b, threshold) => {
+  it.each(CIFTLER)("%s", (_label, a, b, threshold) => {
     const ratio = kontrastOrani(colour(darkBlock, a), colour(darkBlock, b));
     expect(ratio).toBeGreaterThanOrEqual(threshold);
   });
 });
 
 /** "#RRGGBB" metninden 0-255 arası ORTALAMA kanal (kaba parlaklık) — tarayici.test.ts'teki `parlaklik()`'in AYNI formülü, ama "rgb(r, g, b)" DEĞİL kaynak metnin kendi hex'i üzerinde. */
-function parlaklikHex(hex: string): number {
+function luminanceHex(hex: string): number {
   const match = /^#([0-9A-Fa-f]{6})$/.exec(hex);
   if (!match) throw new Error("gecersiz renk: " + hex);
   const value = match[1];
@@ -411,25 +411,25 @@ describe("SAPMALAR §2.5 — zemin dolgusu (fill, kenar DEĞİL): gövdeden (col
   ] as const;
 
   it.each(FILL_TOKENLARI)("%s/color-bg — AÇIK temada", (name) => {
-    const { isOpen } = temaTokenlari(renderPage("x"));
-    const diff = Math.abs(parlaklikHex(colour(isOpen, name)) - parlaklikHex(colour(isOpen, "color-bg")));
+    const { isOpen } = themeTokens(renderPage("x"));
+    const diff = Math.abs(luminanceHex(colour(isOpen, name)) - luminanceHex(colour(isOpen, "color-bg")));
     expect(diff).toBeLessThanOrEqual(100);
   });
 
   it.each(FILL_TOKENLARI)("%s/color-bg — KOYU temada (reviewer'ın yakaladığı kusur: ÖNCEDEN hiç ezilmiyordu — neutral-400 fark 159, neutral-500 fark 128, ikisi de >100)", (name) => {
-    const { darkBlock } = temaTokenlari(renderPage("x"));
-    const diff = Math.abs(parlaklikHex(colour(darkBlock, name)) - parlaklikHex(colour(darkBlock, "color-bg")));
+    const { darkBlock } = themeTokens(renderPage("x"));
+    const diff = Math.abs(luminanceHex(colour(darkBlock, name)) - luminanceHex(colour(darkBlock, "color-bg")));
     expect(diff).toBeLessThanOrEqual(100);
   });
 
   it("--color-neutral-400 koyu temada ESKİ açık ham değerine (neutral-400, #bab6b6) EŞİT DEĞİL — bu, tam reviewer'ın bulduğu kusurdu", () => {
-    const { darkBlock } = temaTokenlari(renderPage("x"));
+    const { darkBlock } = themeTokens(renderPage("x"));
     expect(cozumle(darkBlock, "color-neutral-400")).not.toBe("#bab6b6");
     expect(cozumle(darkBlock, "color-neutral-400")).toBe("#444141");
   });
 
   it("--color-neutral-500 koyu temada ESKİ açık ham değerine (neutral-500, #9b9797) EŞİT DEĞİL — tam reviewer'ın bulduğu kusurdu", () => {
-    const { darkBlock } = temaTokenlari(renderPage("x"));
+    const { darkBlock } = themeTokens(renderPage("x"));
     expect(cozumle(darkBlock, "color-neutral-500")).not.toBe("#9b9797");
     expect(cozumle(darkBlock, "color-neutral-500")).toBe("#605d5d");
   });
@@ -441,7 +441,7 @@ describe("token ayrıştırma — bağlantı sınaması", () => {
   // değişirse (yeni bir token eklenir/silinirse) bu da değişmeli —
   // sabit bir sayı yerine "önemli miktarda token" iddia ediliyor.
   it("her iki temada da aynı token adları tanımlı", () => {
-    const { isOpen, darkBlock } = temaTokenlari(renderPage("x"));
+    const { isOpen, darkBlock } = themeTokens(renderPage("x"));
     expect(isOpen.size).toBeGreaterThan(15);
     expect([...isOpen.keys()].sort()).toEqual([...darkBlock.keys()].sort());
   });
@@ -466,27 +466,27 @@ describe("token ayrıştırma — bağlantı sınaması", () => {
 describe("tema anahtarı — :root[data-theme=\"dark\"] @media'daki koyu ezmesiyle BİREBİR AYNI", () => {
   it("iki blok da AYNI token adlarını taşıyor", () => {
     const html = renderPage("x");
-    const medya = medyaEzmesi(html);
-    const forced = zorlananKoyuTokenlari(html);
+    const media = mediaOverride(html);
+    const forced = forcedDarkTokens(html);
     expect(forced.size).toBeGreaterThan(5);
-    expect([...medya.keys()].sort()).toEqual([...forced.keys()].sort());
+    expect([...media.keys()].sort()).toEqual([...forced.keys()].sort());
   });
 
   it("ortak her token AYNI ham değere çözülüyor", () => {
     const html = renderPage("x");
-    const { isOpen } = temaTokenlari(html);
-    const forced = zorlananKoyuTokenlari(html);
+    const { isOpen } = themeTokens(html);
+    const forced = forcedDarkTokens(html);
     // var() zincirleri (ör. "--color-accent-100: var(--color-accent-900)")
     // EZİLMEYEN taban token'lara (color-accent-900 gibi) iniyor — bunlar
     // sadece açık :root'ta tanımlı, bu yüzden ÇÖZÜMLEME açığın üstüne
     // kurulan haritayla yapılıyor (temaTokenlari'nin "koyu" haritasıyla
     // AYNI desen).
-    const medyaCozumlu = new Map(isOpen);
-    for (const [name, value] of medyaEzmesi(html)) medyaCozumlu.set(name, value);
-    const zorlananCozumlu = new Map(isOpen);
-    for (const [name, value] of forced) zorlananCozumlu.set(name, value);
+    const mediaResolved = new Map(isOpen);
+    for (const [name, value] of mediaOverride(html)) mediaResolved.set(name, value);
+    const forcedResolved = new Map(isOpen);
+    for (const [name, value] of forced) forcedResolved.set(name, value);
     for (const name of forced.keys()) {
-      expect(colour(zorlananCozumlu, name)).toBe(colour(medyaCozumlu, name));
+      expect(colour(forcedResolved, name)).toBe(colour(mediaResolved, name));
     }
   });
 });

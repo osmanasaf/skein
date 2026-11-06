@@ -87,14 +87,14 @@ describe("acquireLock", () => {
   it("kilit dosyası yarım yazılmış hâlde hiç görünmez", async () => {
     const uzun: LockInfo = { ...info(100), flow: "f".repeat(8 * 1024 * 1024) };
 
-    let bitti = false;
+    let isDone = false;
     const run = acquireLock(path, uzun).then(() => {
-      bitti = true;
+      isDone = true;
     });
 
     let halfDone = 0;
     let gozlem = 0;
-    while (!bitti) {
+    while (!isDone) {
       gozlem += 1;
       let present = true;
       try {
@@ -116,18 +116,18 @@ describe("acquireLock", () => {
   // Yarışın SONUCU da ayrıca pinlenmeli: `claim` EEXIST'i "aldım" sayarsa
   // bu test düşer. Yukarıdaki pencere testinin yerine geçmez.
   it("aynı anda gelen çağrılardan yalnızca biri kilidi alır", async () => {
-    const sonuclar = await Promise.all(
+    const results = await Promise.all(
       Array.from({ length: 12 }, (_, i) => acquireLock(path, info(100 + i), { alive: () => true })),
     );
 
-    const fields = sonuclar.filter((r) => r.kind === "acquired");
+    const fields = results.filter((r) => r.kind === "acquired");
     expect(fields).toHaveLength(1);
     // Hiçbiri CANLI bir kilidi devralmış olmamalı: `took` yalnızca ölü
     // sahibi işaretler, burada herkes canlı.
     expect(fields[0]).toEqual({ kind: "acquired" });
     const sahip = await readLock(path);
     expect(sahip).not.toBeNull();
-    for (const r of sonuclar) {
+    for (const r of results) {
       if (r.kind === "busy") expect(r.holder.pid).toBe(sahip?.pid);
     }
   });

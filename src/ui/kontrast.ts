@@ -37,7 +37,7 @@ function dogrusallastir(kanal: number): number {
 }
 
 /** WCAG göreli parlaklığı (relative luminance), 0 (siyah) ile 1 (beyaz) arasında. */
-export function goreliParlaklik(hex: string): number {
+export function relativeLuminance(hex: string): number {
   const [r, g, b] = kanallaraAyir(hex);
   return 0.2126 * dogrusallastir(r) + 0.7152 * dogrusallastir(g) + 0.0722 * dogrusallastir(b);
 }
@@ -49,15 +49,15 @@ export function goreliParlaklik(hex: string): number {
  * ayrımını kendi içinde yapıyor.
  */
 export function kontrastOrani(renk1: string, renk2: string): number {
-  const l1 = goreliParlaklik(renk1);
-  const l2 = goreliParlaklik(renk2);
+  const l1 = relativeLuminance(renk1);
+  const l2 = relativeLuminance(renk2);
   const isOpen = Math.max(l1, l2);
   const darkBlock = Math.min(l1, l2);
   return (isOpen + 0.05) / (darkBlock + 0.05);
 }
 
 /** Normal metin eşiği — WCAG AA, 4.5:1. */
-export const NORMAL_METIN_ESIGI = 4.5;
+export const NORMAL_TEXT_THRESHOLD = 4.5;
 
 /** Büyük metin ve ikincil etiket eşiği — WCAG AA, 3:1. */
-export const IKINCIL_ETIKET_ESIGI = 3;
+export const SECONDARY_LABEL_THRESHOLD = 3;

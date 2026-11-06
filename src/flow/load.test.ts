@@ -658,11 +658,11 @@ audit:
   // eklenmemişti: yalnızca `tur`da ayrışan iki akış aynı damgayı
   // üretiyordu, yani damga davranışı belirleyen bir kararı gizliyordu.
   it("tur tavanı hash'i değiştirir", async () => {
-    const bir = await load(await write(withPlanUc(
+    const one = await load(await write(withPlanUc(
       "planlama:\n  katilimcilar: [analyst, architect]\n  tur: 1\n  plan: docs/plan/{kart}.md"), "t1.yaml"));
     const uc = await load(await write(withPlanUc(
       "planlama:\n  katilimcilar: [analyst, architect]\n  tur: 3\n  plan: docs/plan/{kart}.md"), "t3.yaml"));
-    expect(bir.hash).not.toBe(uc.hash);
+    expect(one.hash).not.toBe(uc.hash);
   });
 
   // Körleme topolojinin parçası: değişirse yoldaki kart eskisiyle yaşar.
