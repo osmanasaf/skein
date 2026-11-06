@@ -1008,6 +1008,63 @@ reject:
     }, 60_000);
 
     /**
+     * KART MODUNDAN KARAR — reviewer'ın 1. ret gerekçesi (bu kenarda 1. ret,
+     * reddedilen commit 6b171a0): Kart moduna (railBaslikBtn ile) girip AYNI
+     * karttaki .railKapiKutu'dan karar verildiğinde panel BAYAT kalıyordu —
+     * istek çekirdekte gerçekten başarıyla sonuçlanıyor ama RAIL.cardId
+     * DEĞİŞMEDİĞİ için railYenidenYuklenmeliMi hiçbir zaman "evet" demiyor,
+     * panel eski kapı kutusunu ve karar()'ın disable ettiği düğmeyi
+     * SONSUZA DEK göstermeye devam ediyordu (yukarıdaki test AYNI senaryoyu
+     * yalnızca Genel bakış modundan sınıyordu — Kart modundan HİÇ
+     * sınanmamıştı). Düzeltme karar()'ın kendisinde: Kart modunda AYNI
+     * karttaysak panelin "data-rail-kart" damgası karar BAŞARIYLA
+     * sonuçlanınca SİLİNİYOR, böylece hemen ardından gelen ciz() çağrısı
+     * sagPanelCiz'i GERÇEKTEN yeniden fetch'e zorluyor.
+     */
+    it("Kart modunda kapı kartının çıkış düğmesine basınca panel KENDİLİĞİNDEN güncelleniyor (bayat kalmıyor)", async () => {
+      await queue.add(newCard({ title: "kart modunda karar verilecek", task: "iş", topology }));
+      const taken = await al(queue, "coder");
+      await queue.escalate(taken, "geçici bir hata");
+
+      const { page, hatalar } = await ac();
+      try {
+        await page.waitForSelector(".railBaslikBtn", { timeout: 15_000 });
+        await page.click(".railBaslikBtn");
+        await page.waitForSelector(".railKartBaslik", { timeout: 10_000 });
+
+        // Kart modunda da aynı kapı kutusu/düğme çıkıyor (DEVIR/SAPMALAR'ın
+        // "kapı çıkışları MEVCUT mantıkla BİREBİR aynı" şartı).
+        await page.waitForSelector(".railKapiKutu", { timeout: 10_000 });
+        expect(await page.textContent(".railDurumEtiket")).toBe("kaçış kapısı");
+
+        const dugme = '.railKapiKutu .railCikis button:has-text("Yeniden koş")';
+        await page.waitForSelector(dugme, { timeout: 10_000 });
+        await page.click(dugme);
+
+        // Çekirdek GERÇEKTEN kuyruğa bıraktı mı — ekranın iddiasına değil
+        // kuyruğa bak (aynı disiplin: yukarıdaki "...sayısı güncelleniyor"
+        // sınaması).
+        await page.waitForTimeout(500);
+        const guncel = await queue.get(taken.id);
+        expect(guncel?.state).not.toBe("gate");
+
+        // PANEL KENDİLİĞİNDEN GÜNCELLENİYOR MU — bu kartın ASIL şartı. Sayfa
+        // hiç yeniden yüklenmedi, RAIL.cardId HİÇ değişmedi (hâlâ aynı kart,
+        // hâlâ Kart modu) — eski kapı kutusu/etiket/devre dışı düğme KALICI
+        // KALMAMALI.
+        await page.waitForSelector(".railKapiKutu", { state: "detached", timeout: 10_000 });
+        expect(await page.textContent(".railDurumEtiket")).toBe("kuyrukta");
+
+        // Hâlâ Kart modundayız — '←' basmadan, RAIL hiç değişmeden.
+        expect(await page.textContent(".railKartBaslik")).toBe("kart modunda karar verilecek");
+
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+      }
+    }, 60_000);
+
+    /**
      * KİLİTLENME KORUMASI — Rol modu açıkken AKIŞ DEĞİŞİP o rol
      * kaybolursa (akış dosyası elle düzenlenir, gözcü/ekran yeniden
      * taramadan önce RAIL hâlâ eski role işaret eder) "← Genel bakış"

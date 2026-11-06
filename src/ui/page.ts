@@ -1182,6 +1182,19 @@ function bildirimGoster(mesaj) {
  * Ekran kendi kopyasını güncellemiyor: çekirdek kararı uyguluyor, cevaptaki
  * yeni model çiziliyor. Çekirdek reddederse mesajı aynen gösteriyoruz;
  * o mesaj gerekçeyi ve çıkış yolunu zaten söylüyor.
+ *
+ * KART MODU TAZELEME — reviewer'ın 1. ret gerekçesi: bu karar Sağ panelin
+ * Kart modundaki .railKapiKutu'dan verilmişse (RAIL.cardId === id), aşağıdaki
+ * ciz(veri.model) çağrısı sagPanelCiz'i de tetikler ama sagPanelCiz Kart
+ * modunda SADECE kutu.dataset.railKart !== RAIL.cardId ise yeniden fetch eder
+ * (bkz. railYenidenYuklenmeliMi) — id burada DEĞİŞMEDİĞİ için o koruma
+ * panelin GET /kart/<id>'i YENİDEN çekmesini sonsuza dek engellerdi, kart
+ * çekirdekte gerçekten kuyruğa düşse bile ekran eski kapı kutusunu ve devre
+ * dışı düğmeyi göstermeye devam ederdi. Panelin "data-rail-kart" damgasını
+ * burada SİLEREK sagPanelCiz'e "bu id için de yeniden yükle" sinyalini
+ * BİZ veriyoruz — Genel bakış/Rol modundan verilen kararlarda (RAIL.cardId
+ * farklı ya da null) bu dal hiç çalışmıyor, onlar zaten mevcut davranışla
+ * aynı kalıyor.
  */
 async function karar(id, secim, dugme, kart) {
   const kutular = kart.querySelectorAll("button");
@@ -1194,6 +1207,10 @@ async function karar(id, secim, dugme, kart) {
     });
     const veri = await cevap.json();
     if (!cevap.ok) throw new Error(veri.hata || cevap.status);
+    if (RAIL.mode === "card" && RAIL.cardId === id) {
+      const sagPanel = document.getElementById("sagPanel");
+      if (sagPanel) sagPanel.removeAttribute("data-rail-kart");
+    }
     ciz(veri.model);
     // Düğmenin KENDİ etiketi ("Yeniden koş", "Geçir", "Üretici haklı" …) —
     // kapiCikislari'nin ürettiği metin, burada İKİNCİ bir ifade İCAT
