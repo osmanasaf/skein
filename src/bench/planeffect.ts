@@ -374,9 +374,9 @@ function obligationStats(runs: ArmRun[]): ObligationStats {
   // önceki karar geçmiştir. O yüzden sayılar `(runId, id)` başına SON
   // kayıttan okunuyor, `records` ise geçmişi olduğu gibi taşıyor — teşhis
   // değeri tam orada: bir maddenin karşılanmadıdan karşılandıya geçişi.
-  const son = new Map<string, ObligationRecord>();
-  for (const o of records) son.set(`${o.runId}\u0000${o.id}`, o);
-  const current = [...son.values()];
+  const last = new Map<string, ObligationRecord>();
+  for (const o of records) last.set(`${o.runId}\u0000${o.id}`, o);
+  const current = [...last.values()];
   const met = current.filter((o) => o.durum === "karsilandi").length;
   const unmet = current.filter((o) => o.durum === "karsilanmadi").length;
   return { total: met + unmet, met, unmet, records };

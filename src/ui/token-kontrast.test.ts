@@ -45,7 +45,7 @@ function tokenlariAyristir(gövdeMetni: string): Map<string, string> {
  * üzerine biniyor"). Koyu haritayı açığın üstüne yazarak birleştiriyoruz,
  * çünkü koyu blok --mono gibi değişmeyen token'ları tekrar etmiyor.
  */
-function temaTokenlari(html: string): { acik: Map<string, string>; koyu: Map<string, string> } {
+function temaTokenlari(html: string): { isOpen: Map<string, string>; koyu: Map<string, string> } {
   const kokBas = html.indexOf(":root {");
   const kokSon = html.indexOf("\n  }", kokBas);
   const acikGovde = html.slice(kokBas, kokSon);
@@ -55,10 +55,10 @@ function temaTokenlari(html: string): { acik: Map<string, string>; koyu: Map<str
   const koyuKokSon = html.indexOf("\n    }", koyuKokBas);
   const koyuGovde = html.slice(koyuKokBas, koyuKokSon);
 
-  const acik = tokenlariAyristir(acikGovde);
-  const koyu = new Map(acik);
+  const isOpen = tokenlariAyristir(acikGovde);
+  const koyu = new Map(isOpen);
   for (const [ad, deger] of tokenlariAyristir(koyuGovde)) koyu.set(ad, deger);
-  return { acik, koyu };
+  return { isOpen, koyu };
 }
 
 /**
@@ -79,8 +79,8 @@ function medyaEzmesi(html: string): Map<string, string> {
  */
 function zorlananKoyuTokenlari(html: string): Map<string, string> {
   const bas = html.indexOf(':root[data-theme="dark"] {');
-  const son = html.indexOf("\n  }", bas);
-  return tokenlariAyristir(html.slice(bas, son));
+  const last = html.indexOf("\n  }", bas);
+  return tokenlariAyristir(html.slice(bas, last));
 }
 
 /**
@@ -354,10 +354,10 @@ const CIFTLER: [string, string, string, Esik][] = [
 ];
 
 describe("token kontrastı — açık tema", () => {
-  const { acik } = temaTokenlari(renderPage("x"));
+  const { isOpen } = temaTokenlari(renderPage("x"));
 
   it.each(CIFTLER)("%s", (_etiket, a, b, esik) => {
-    const oran = kontrastOrani(renk(acik, a), renk(acik, b));
+    const oran = kontrastOrani(renk(isOpen, a), renk(isOpen, b));
     expect(oran).toBeGreaterThanOrEqual(esik);
   });
 });
@@ -411,15 +411,15 @@ describe("SAPMALAR §2.5 — zemin dolgusu (fill, kenar DEĞİL): gövdeden (col
   ] as const;
 
   it.each(FILL_TOKENLARI)("%s/color-bg — AÇIK temada", (ad) => {
-    const { acik } = temaTokenlari(renderPage("x"));
-    const fark = Math.abs(parlaklikHex(renk(acik, ad)) - parlaklikHex(renk(acik, "color-bg")));
-    expect(fark).toBeLessThanOrEqual(100);
+    const { isOpen } = temaTokenlari(renderPage("x"));
+    const diff = Math.abs(parlaklikHex(renk(isOpen, ad)) - parlaklikHex(renk(isOpen, "color-bg")));
+    expect(diff).toBeLessThanOrEqual(100);
   });
 
   it.each(FILL_TOKENLARI)("%s/color-bg — KOYU temada (reviewer'ın yakaladığı kusur: ÖNCEDEN hiç ezilmiyordu — neutral-400 fark 159, neutral-500 fark 128, ikisi de >100)", (ad) => {
     const { koyu } = temaTokenlari(renderPage("x"));
-    const fark = Math.abs(parlaklikHex(renk(koyu, ad)) - parlaklikHex(renk(koyu, "color-bg")));
-    expect(fark).toBeLessThanOrEqual(100);
+    const diff = Math.abs(parlaklikHex(renk(koyu, ad)) - parlaklikHex(renk(koyu, "color-bg")));
+    expect(diff).toBeLessThanOrEqual(100);
   });
 
   it("--color-neutral-400 koyu temada ESKİ açık ham değerine (neutral-400, #bab6b6) EŞİT DEĞİL — bu, tam reviewer'ın bulduğu kusurdu", () => {
@@ -441,9 +441,9 @@ describe("token ayrıştırma — bağlantı sınaması", () => {
   // değişirse (yeni bir token eklenir/silinirse) bu da değişmeli —
   // sabit bir sayı yerine "önemli miktarda token" iddia ediliyor.
   it("her iki temada da aynı token adları tanımlı", () => {
-    const { acik, koyu } = temaTokenlari(renderPage("x"));
-    expect(acik.size).toBeGreaterThan(15);
-    expect([...acik.keys()].sort()).toEqual([...koyu.keys()].sort());
+    const { isOpen, koyu } = temaTokenlari(renderPage("x"));
+    expect(isOpen.size).toBeGreaterThan(15);
+    expect([...isOpen.keys()].sort()).toEqual([...koyu.keys()].sort());
   });
 });
 
@@ -474,16 +474,16 @@ describe("tema anahtarı — :root[data-theme=\"dark\"] @media'daki koyu ezmesiy
 
   it("ortak her token AYNI ham değere çözülüyor", () => {
     const html = renderPage("x");
-    const { acik } = temaTokenlari(html);
+    const { isOpen } = temaTokenlari(html);
     const zorlanan = zorlananKoyuTokenlari(html);
     // var() zincirleri (ör. "--color-accent-100: var(--color-accent-900)")
     // EZİLMEYEN taban token'lara (color-accent-900 gibi) iniyor — bunlar
     // sadece açık :root'ta tanımlı, bu yüzden ÇÖZÜMLEME açığın üstüne
     // kurulan haritayla yapılıyor (temaTokenlari'nin "koyu" haritasıyla
     // AYNI desen).
-    const medyaCozumlu = new Map(acik);
+    const medyaCozumlu = new Map(isOpen);
     for (const [ad, deger] of medyaEzmesi(html)) medyaCozumlu.set(ad, deger);
-    const zorlananCozumlu = new Map(acik);
+    const zorlananCozumlu = new Map(isOpen);
     for (const [ad, deger] of zorlanan) zorlananCozumlu.set(ad, deger);
     for (const ad of zorlanan.keys()) {
       expect(renk(zorlananCozumlu, ad)).toBe(renk(medyaCozumlu, ad));

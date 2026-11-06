@@ -499,9 +499,9 @@ describe("6c — açık turda sıra, sayaç ve kilit", () => {
     await tick("architect", options);
 
     const kayitlar = await turlar();
-    const son = kayitlar[kayitlar.length - 1];
+    const last = kayitlar[kayitlar.length - 1];
     // Görünen toplam üç itiraz ama bu turun katkısı BİR.
-    expect(son).toMatchObject({ round: 2, newObjections: 1 });
+    expect(last).toMatchObject({ round: 2, newObjections: 1 });
   });
 
   async function turBir(card: Card): Promise<void> {

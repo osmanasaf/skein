@@ -51,9 +51,9 @@ export function goreliParlaklik(hex: string): number {
 export function kontrastOrani(renk1: string, renk2: string): number {
   const l1 = goreliParlaklik(renk1);
   const l2 = goreliParlaklik(renk2);
-  const acik = Math.max(l1, l2);
+  const isOpen = Math.max(l1, l2);
   const koyu = Math.min(l1, l2);
-  return (acik + 0.05) / (koyu + 0.05);
+  return (isOpen + 0.05) / (koyu + 0.05);
 }
 
 /** Normal metin eşiği — WCAG AA, 4.5:1. */

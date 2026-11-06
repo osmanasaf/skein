@@ -723,15 +723,15 @@ async function planStep(
     // Bu turda EKLENEN itiraz sayısı. Dosya birikimli; turun kendi katkısı
     // tur başındaki sayıdan çıkarılarak bulunuyor. Doğal sonlanma kuralı
     // buna dayanıyor: bir tur hiç yeni itiraz eklemediyse alışveriş biter.
-    const taban = objectionBaseline(card, phase.round);
-    const yeni = dosya.valid.length - taban;
+    const baseline = objectionBaseline(card, phase.round);
+    const fresh = dosya.valid.length - baseline;
 
     await options.log?.append({
       type: "plan.round", card: card.id, role: role.id, round: phase.round,
       // Körleme ETKİN mi — üç koşulun hepsi: akış istemiş, tur 1 ve en az
       // iki itirazcı. Atıl körlemeyi `true` yazmak, yapılmamış bir şeyi
       // yapılmış göstermek olurdu.
-      blind: kor, newObjections: Math.max(0, yeni), openObjections: dosya.acik.length,
+      blind: kor, newObjections: Math.max(0, fresh), openObjections: dosya.isOpen.length,
       invalid: gecersiz,
     });
 
@@ -775,14 +775,14 @@ async function planStep(
     }
 
     // Turun SON itirazcısı: alışveriş burada bitebilir.
-    if (yeni <= 0) {
-      if (dosya.acik.length > 0) {
+    if (fresh <= 0) {
+      if (dosya.isOpen.length > 0) {
         // Tur yeni bir şey eklemedi ama açık itiraz duruyor: kilit. Kaçış
         // değil — turlar tamamlandı, kod yerinde, insan planı olduğu gibi
         // kabul edip ilerletebilir.
         const reason = `Planlama alışverişi tükendi: tur ${phase.round} yeni itiraz eklemedi ` +
-          `ama ${dosya.acik.length} itiraz açık kaldı: ` +
-          dosya.acik.map((i) => `#${i.no} ${i.ne}`).join(" · ") + ".";
+          `ama ${dosya.isOpen.length} itiraz açık kaldı: ` +
+          dosya.isOpen.map((i) => `#${i.no} ${i.ne}`).join(" · ") + ".";
         await options.log?.append({
           type: "plan.settled", card: card.id, role: role.id, outcome: "tukendi",
           rounds: phase.round, objections: dosya.valid.length, accepted: dosya.kabul.length,
@@ -819,7 +819,7 @@ async function planStep(
   }
 
   // CEVAP turu — turun sonunda yazar bütün itirazları yanıtlar.
-  const acik = dosya.acik;
+  const isOpen = dosya.isOpen;
   const insana = dosya.insana;
   const kabul = dosya.kabul;
   const limit = card.topology.plan?.tur ?? 1;
@@ -832,7 +832,7 @@ async function planStep(
   await options.log?.append({
     type: "plan.round", card: card.id, role: role.id, round: phase.round,
     blind: kor, newObjections: Math.max(0, yazarYeni),
-    openObjections: dosya.acik.length, invalid: gecersiz,
+    openObjections: dosya.isOpen.length, invalid: gecersiz,
   });
 
   const cevapKaydi = (
@@ -897,7 +897,7 @@ async function planStep(
   // yok. Körlü turda sonlanma kararını verebilen tek rol yazar, çünkü
   // itirazcılar kendi dosyalarından başkasını görmüyor. Açık turda yazara
   // ancak yeni itiraz varken gelinir, yani bu dal orada ateşlenmez.
-  if (yazarYeni <= 0 && acik.length === 0) {
+  if (yazarYeni <= 0 && isOpen.length === 0) {
     const sonra = afterPlanning(card.topology);
     if (sonra !== null) {
       await options.log?.append({
@@ -915,9 +915,9 @@ async function planStep(
   // Tavan dolduğunda açık itiraz varsa kilit. Kaçış değil — turlar
   // tamamlandı, kod yerinde, insan planı olduğu gibi kabul edip
   // ilerletebilir ya da `retry` ile alışverişi yeniden açabilir.
-  if (acik.length > 0 && phase.round >= limit) {
-    const reason = `Planlama tavanı doldu (${limit} tur), ${acik.length} itiraz açık kaldı: ` +
-      acik.map((i) => `#${i.no} ${i.ne}`).join(" · ") +
+  if (isOpen.length > 0 && phase.round >= limit) {
+    const reason = `Planlama tavanı doldu (${limit} tur), ${isOpen.length} itiraz açık kaldı: ` +
+      isOpen.map((i) => `#${i.no} ${i.ne}`).join(" · ") +
       `. Cevapsız bırakılan itiraz kabul sayılmaz.`;
     await options.log?.append({
       type: "plan.settled", card: card.id, role: role.id, outcome: "tukendi",
@@ -1071,22 +1071,22 @@ async function handOverCode(
 
   const kaynaklar: { id: string; dir: string }[] = [];
   for (const id of sources ?? [role.id]) {
-    const kaynak = roleOf(card.topology, id);
-    if (kaynak === null) return `Kaynak rol topolojide yok: ${id}`;
-    if (kaynak.workspace === next.workspace) continue;
+    const source = roleOf(card.topology, id);
+    if (source === null) return `Kaynak rol topolojide yok: ${id}`;
+    if (source.workspace === next.workspace) continue;
     kaynaklar.push({
       id,
-      dir: id === role.id ? fromDir : await resolveWorkspace(options.root, kaynak.workspace),
+      dir: id === role.id ? fromDir : await resolveWorkspace(options.root, source.workspace),
     });
   }
   if (kaynaklar.length === 0) return null;
 
   const toDir = await resolveWorkspace(options.root, next.workspace);
-  for (const kaynak of kaynaklar) {
+  for (const source of kaynaklar) {
     const result = await (options.mergeForward ?? mergeForward)({
-      fromDir: kaynak.dir,
+      fromDir: source.dir,
       toDir,
-      message: `skein: ${kaynak.id} → ${next.id} (${card.id})`,
+      message: `skein: ${source.id} → ${next.id} (${card.id})`,
       ignoreDirty: ORCHESTRATOR_PATHS,
     });
 
@@ -1097,9 +1097,9 @@ async function handOverCode(
       case "conflict":
         // Çakışmayı üçüncü bir ajanın tahmin etmesi değil, insanın çözmesi
         // gereken yer burası.
-        return `\`${kaynak.id}\` → \`${next.id}\` birleştirmesi çakıştı: ${result.paths.join(", ")}`;
+        return `\`${source.id}\` → \`${next.id}\` birleştirmesi çakıştı: ${result.paths.join(", ")}`;
       case "blocked":
-        return `\`${kaynak.id}\` → \`${next.id}\` kodu taşınamadı: ${result.reason}`;
+        return `\`${source.id}\` → \`${next.id}\` kodu taşınamadı: ${result.reason}`;
     }
   }
   return null;

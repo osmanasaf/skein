@@ -34,14 +34,14 @@
  */
 export function renderPage(
   token: string,
-  gozcu: { bayraklar: string[] } | null = null,
+  watcher: { bayraklar: string[] } | null = null,
   tema: "sistem" | "acik" | "koyu" = "sistem",
 ): string {
   const nitelik = tema === "acik" ? ' data-theme="light"' : tema === "koyu" ? ' data-theme="dark"' : "";
   return PAGE
     .replace("__TEMA_NITELIGI__", nitelik)
     .replace("__JETON__", token)
-    .replace("__GOZCU_AYAR__", JSON.stringify(gozcu));
+    .replace("__GOZCU_AYAR__", JSON.stringify(watcher));
 }
 
 const PAGE = `<!doctype html>
@@ -1760,8 +1760,8 @@ function kisaSayi(n) {
 //   - olculmeyen yok            -> tam rakam
 //   - olculmeyen var, dolar var -> alt sinir isareti
 //   - olculmeyen var, dolar yok -> rakam DEGIL, "olculmedi"; token varsa o
-function maliyetMetni(tutar, olculmeyen, tokens) {
-  if (!olculmeyen) return para(tutar);
+function maliyetMetni(tutar, unmeasured, tokens) {
+  if (!unmeasured) return para(tutar);
   if (tutar) return "\u2265" + para(tutar);
   return tokens ? "maliyet \u00f6l\u00e7\u00fclmedi \u00b7 \u2265" + kisaSayi(tokens) + " token"
                 : "maliyet \u00f6l\u00e7\u00fclmedi";
@@ -1828,12 +1828,12 @@ function gerekceKur(kutu, gerekce) {
 
   const ajanMetni = gerekce.slice(ayrac + AJAN_AYRAC.length);
   const detay = el("details", "ajanDetay");
-  const ozet = el("summary", null, "Ajan şunu söyledi — " + ozetle(ajanMetni));
+  const summary = el("summary", null, "Ajan şunu söyledi — " + ozetle(ajanMetni));
   // Kart kendisi de tıklanabilir (detay panelini açar, bkz. kartDugumBaslat)
   // — katlıyı açmak o paneli de tetiklemesin, "Geçir/Geri gönder"
   // düğmelerindeki aynı önlem.
-  ozet.addEventListener("click", (e) => e.stopPropagation());
-  detay.append(ozet);
+  summary.addEventListener("click", (e) => e.stopPropagation());
+  detay.append(summary);
   const govde = el("div", jsonGibiMi(ajanMetni) ? "ajanTam mono" : "ajanTam");
   govde.textContent = ajanMetni;
   detay.append(govde);
@@ -1972,9 +1972,9 @@ async function kapatKart(id, kart) {
       method: "POST",
       headers: { "content-type": "application/json", "x-skein-token": JETON },
     });
-    const veri = await cevap.json();
-    if (!cevap.ok) throw new Error(veri.hata || cevap.status);
-    ciz(veri.model);
+    const data = await cevap.json();
+    if (!cevap.ok) throw new Error(data.hata || cevap.status);
+    ciz(data.model);
   } catch (e) {
     dugmeler.forEach((b) => (b.disabled = false));
     const eski = kart.querySelector(".redd");
@@ -2029,13 +2029,13 @@ async function karar(id, secim, dugme, kart) {
       headers: { "content-type": "application/json", "x-skein-token": JETON },
       body: JSON.stringify({ karar: secim }),
     });
-    const veri = await cevap.json();
-    if (!cevap.ok) throw new Error(veri.hata || cevap.status);
+    const data = await cevap.json();
+    if (!cevap.ok) throw new Error(data.hata || cevap.status);
     if (RAIL.mode === "card" && RAIL.cardId === id) {
       const sagPanel = document.getElementById("sagPanel");
       if (sagPanel) sagPanel.removeAttribute("data-rail-kart");
     }
-    ciz(veri.model);
+    ciz(data.model);
     // Düğmenin KENDİ etiketi ("Yeniden koş", "Geçir", "Üretici haklı" …) —
     // kapiCikislari'nin ürettiği metin, burada İKİNCİ bir ifade İCAT
     // EDİLMİYOR.
@@ -2064,14 +2064,14 @@ async function gozcuKomut(ne, dugme) {
       method: "POST",
       headers: { "content-type": "application/json", "x-skein-token": JETON },
     });
-    const veri = await cevap.json();
-    if (!cevap.ok) throw new Error(veri.hata || cevap.status);
-    ciz(veri.model);
+    const data = await cevap.json();
+    if (!cevap.ok) throw new Error(data.hata || cevap.status);
+    ciz(data.model);
     // Durdurma ANLIK DEĞİL: gözcü süren turu bitirip çıkıyor. Bunu
     // söylemezsek kullanıcı hapta hâlâ "gözcü açık" görüp düğmenin
     // çalışmadığını sanar — ölçüldü, tam olarak bu oldu.
-    if (veri.mesaj) {
-      const not = el("div", "ipucu", veri.mesaj);
+    if (data.mesaj) {
+      const not = el("div", "ipucu", data.mesaj);
       not.style.cssText = "flex-basis:100%";
       document.getElementById("bar").append(not);
     }
@@ -2113,14 +2113,14 @@ async function akisSec(ad, secici) {
       headers: { "content-type": "application/json", "x-skein-token": JETON },
       body: JSON.stringify({ ad }),
     });
-    const veri = await cevap.json();
-    if (!cevap.ok) throw new Error(veri.hata || cevap.status);
+    const data = await cevap.json();
+    if (!cevap.ok) throw new Error(data.hata || cevap.status);
     // Açık panel (kart detayı, akış düzenleyici) ESKİ akışa ait olabilir —
     // özellikle düzenleyicinin taslağı eski akışın dosyasından okunmuştu.
     // Yeni akışa geçince kapatmak, bayat bir taslağı düzenlemeye devam
     // etmekten iyi.
     location.hash = "";
-    ciz(veri.model);
+    ciz(data.model);
   } catch (e) {
     secici.value = geriDon;
     const kutu = el("div", "redd", e.message);
@@ -2176,13 +2176,13 @@ function kartIcerik(kutu, c) {
   // akış varsa ikisinin kartları aynı .skein/ altında duruyor. Bu pano
   // onları yargılamıyor (yetim de bayat da saymıyor, kapatma düğmesi de
   // çıkmıyor) ama GÖRÜNMEZ de olmamalı.
-  if (c.digerAkis) {
+  if (c.otherFlow) {
     const d = el("div", "cid", "başka akışın kartı — bu pano onu yargılamıyor");
     d.style.color = "var(--ink-2)";
     kutu.append(d);
   }
 
-  if (c.stale && !c.orphan && !c.digerAkis) {
+  if (c.stale && !c.orphan && !c.otherFlow) {
     const d = el("div", "cid", "eski damga — kart kendi topolojisiyle yürüyor");
     d.style.color = "var(--ink-2)";
     kutu.append(d);
@@ -2209,9 +2209,9 @@ function kartIcerik(kutu, c) {
   if (c.durationMs) meta.append(el("span", null, sure(c.durationMs)));
   // Kosul artik SADECE dolara bakmiyor: olculmemis bir aktivasyon da
   // soylenmeli, dolari sifir olsa bile.
-  if (c.costUsd || c.olculmeyen) {
-    meta.append(el("span", c.olculmeyen ? "bad" : null,
-      maliyetMetni(c.costUsd, c.olculmeyen, c.tokens)));
+  if (c.costUsd || c.unmeasured) {
+    meta.append(el("span", c.unmeasured ? "bad" : null,
+      maliyetMetni(c.costUsd, c.unmeasured, c.tokens)));
   }
   kutu.append(meta);
 
@@ -2344,9 +2344,9 @@ function detayCiz(d) {
   if (d.card.rejects) m.append(el("span", "bad", d.card.rejects + " ret"));
   m.append(el("span", null, d.card.turns + " tur"));
   if (d.card.durationMs) m.append(el("span", null, sure(d.card.durationMs)));
-  if (d.card.costUsd || d.card.olculmeyen) {
-    m.append(el("span", d.card.olculmeyen ? "bad" : null,
-      maliyetMetni(d.card.costUsd, d.card.olculmeyen, d.card.tokens)));
+  if (d.card.costUsd || d.card.unmeasured) {
+    m.append(el("span", d.card.unmeasured ? "bad" : null,
+      maliyetMetni(d.card.costUsd, d.card.unmeasured, d.card.tokens)));
   }
   p.append(m);
 
@@ -2394,11 +2394,11 @@ function izZamanCizelgesiKur(history) {
       // Tam olarak bu oldu: ajanın yazdığı yorum ters tırnak içeriyordu,
       // ne kodu yazan ne denetleyen rol derleyici koşturabildiği için
       // ikisi de "elle doğruladım" deyip geçti.
-      let ozet = "tur " + h.plan.round;
-      if (h.plan.objections !== null) ozet += ", " + h.plan.objections + " itiraz";
-      if (h.plan.accepted !== null) ozet += ", " + h.plan.accepted + " kabul";
-      if (h.plan.invalid !== null) ozet += ", " + h.plan.invalid + " sayılmadı";
-      bas.append(el("em", null, "(" + ozet + ")"));
+      let summary = "tur " + h.plan.round;
+      if (h.plan.objections !== null) summary += ", " + h.plan.objections + " itiraz";
+      if (h.plan.accepted !== null) summary += ", " + h.plan.accepted + " kabul";
+      if (h.plan.invalid !== null) summary += ", " + h.plan.invalid + " sayılmadı";
+      bas.append(el("em", null, "(" + summary + ")"));
     }
     gov.append(bas);
     if (h.note) gov.append(el("p", null, h.note));
@@ -2453,8 +2453,8 @@ function kodDegisikligiKur(diff) {
  * liste İCAT EDİLMİYOR.
  */
 function kapat() {
-  const aktif = sekmeAdi(decodeURIComponent(location.hash.replace(/^#/, "")));
-  if (aktif !== "pano") {
+  const active = sekmeAdi(decodeURIComponent(location.hash.replace(/^#/, "")));
+  if (active !== "pano") {
     document.getElementById("panel").replaceChildren();
     return;
   }
@@ -2483,13 +2483,13 @@ function sekmeAdi(h) {
  * saniyeye kadar geç kalırdı — hash değişti ama ekran henüz söylemedi.
  */
 function sekmeUygula() {
-  const aktif = sekmeAdi(decodeURIComponent(location.hash.replace(/^#/, "")));
+  const active = sekmeAdi(decodeURIComponent(location.hash.replace(/^#/, "")));
   ["Pano", "Akislar", "Promptlar", "Ajanlar"].forEach((parca) => {
     const kutu = document.getElementById("icerik" + parca);
-    if (kutu) kutu.style.display = parca.toLowerCase() === aktif ? "" : "none";
+    if (kutu) kutu.style.display = parca.toLowerCase() === active ? "" : "none";
   });
   document.querySelectorAll(".navSekme").forEach((b) => {
-    const eslesiyor = b.dataset.sekme === aktif;
+    const eslesiyor = b.dataset.sekme === active;
     b.classList.toggle("navSekme-aktif", eslesiyor);
     b.setAttribute("aria-current", eslesiyor ? "page" : "false");
   });
@@ -2551,9 +2551,9 @@ function gozcuDurum(g) {
  */
 function gozcuPanelDurum(g, yonetiliyor, duruyor) {
   if (!yonetiliyor) return { durum: "unmanaged", etiket: "gözcü · elle" };
-  const taban = gozcuDurum(g);
-  if (taban.durum === "yok") return { durum: "off", etiket: "gözcü kapalı" };
-  if (taban.durum === "cokmus") return { durum: "stale", etiket: "gözcü çökmüş" };
+  const baseline = gozcuDurum(g);
+  if (baseline.durum === "yok") return { durum: "off", etiket: "gözcü kapalı" };
+  if (baseline.durum === "cokmus") return { durum: "stale", etiket: "gözcü çökmüş" };
   return duruyor ? { durum: "stopping", etiket: "gözcü duruyor…" } : { durum: "on", etiket: "gözcü açık" };
 }
 
@@ -2644,7 +2644,7 @@ function calisanAjanSayisi(cards) {
 function gozcuBeklemeSonucu(bekleyen, g) {
   if (bekleyen === null) return null;
   if (g && g.alive) return null;
-  return { yenidenBaslat: bekleyen === "yenidenBaslatiliyor" };
+  return { restart: bekleyen === "yenidenBaslatiliyor" };
 }
 
 /**
@@ -2771,7 +2771,7 @@ function ciz(m) {
     ["akislar", "Akışlar", AKISLAR.length, "notr"],
     ["promptlar", "Promptlar", promptKaydedilmemisSayisi(PROMPT_ORIJINAL, PROMPT_METIN), "notr"],
     ["ajanlar", "Ajanlar", calisanAjanSayisi(m.cards), "accent"],
-  ].forEach(([ad, etiket, sayi, renk]) => {
+  ].forEach(([ad, etiket, count, renk]) => {
     const b = el("button", "navSekme" + (ad === aktifSekme ? " navSekme-aktif" : ""));
     b.type = "button";
     // data-sekme: sekmeUygula() TIKLANIR TIKLANMAZ (bir sonraki saniyelik
@@ -2780,7 +2780,7 @@ function ciz(m) {
     b.dataset.sekme = ad;
     b.setAttribute("aria-current", ad === aktifSekme ? "page" : "false");
     b.append(document.createTextNode(etiket + " "));
-    b.append(el("span", "navRozet navRozet-" + renk, String(sayi)));
+    b.append(el("span", "navRozet navRozet-" + renk, String(count)));
     b.addEventListener("click", () => { location.hash = ad; });
     nav.append(b);
   });
@@ -2861,7 +2861,7 @@ function ciz(m) {
   const beklemeSonucu = gozcuBeklemeSonucu(GOZCU_BEKLEYEN, g);
   if (beklemeSonucu) {
     GOZCU_BEKLEYEN = null;
-    if (beklemeSonucu.yenidenBaslat) void gozcuKomut("baslat", document.createElement("button"));
+    if (beklemeSonucu.restart) void gozcuKomut("baslat", document.createElement("button"));
   }
   const durumBilgi = gozcuPanelDurum(g, Boolean(GOZCU_AYAR), GOZCU_BEKLEYEN !== null);
   const topoUyari = gozcuTopoUyari(g, m.flow.hash, durumBilgi.durum);
@@ -2903,7 +2903,7 @@ function ciz(m) {
   // §2.1'in korunacak davranışı, burada hiç değişmedi.
   const maliyetSayac = el("div", "sayac");
   maliyetSayac.append(document.createTextNode("toplam maliyet "));
-  maliyetSayac.append(el("b", null, (m.totals.olculmeyen ? "≥" : "") + para(m.totals.costUsd)));
+  maliyetSayac.append(el("b", null, (m.totals.unmeasured ? "≥" : "") + para(m.totals.costUsd)));
   bar.append(maliyetSayac);
 
   // TEMA ANAHTARI — kart c-20261106-e62847 (UX.md "operatör koyu temayı
@@ -2911,10 +2911,10 @@ function ciz(m) {
   bar.append(temaAnahtariKur());
 
   // yeni kart dugmesi: ekranin en cok kullanilan eylemi, ust cubugun ana dugmesi.
-  const yeni = el("button", "yeniKart", "Yeni kart");
-  yeni.type = "button";
-  yeni.addEventListener("click", () => { location.hash = "yeni"; });
-  bar.append(yeni);
+  const fresh = el("button", "yeniKart", "Yeni kart");
+  fresh.type = "button";
+  fresh.addEventListener("click", () => { location.hash = "yeni"; });
+  bar.append(fresh);
 
   // Hiçbir kart ekrandan düşmemeli. Rolü yaşayan akışta olmayan kart
   // hiçbir sütuna uymuyor; kendi şeridinde, sebebiyle birlikte duruyor.
@@ -2934,10 +2934,10 @@ function ciz(m) {
       "Bu dosyalar ayrıştırılamadı, yani içerdikleri kartlar hiçbir yerde görünmüyor. " +
       "Tarama onlarda durmuyor — bir bozuk dosya bütün kuyruğu tutmasın diye — ama " +
       "bu bir veri kaybı: dosyayı elle onar ya da sil."));
-    const liste = el("div", "mono");
-    liste.style.cssText = "font-size:var(--fs-tight);line-height:1.7";
-    m.bozuk.forEach((yol) => liste.append(el("div", null, yol)));
-    band.append(liste);
+    const items = el("div", "mono");
+    items.style.cssText = "font-size:var(--fs-tight);line-height:1.7";
+    m.bozuk.forEach((yol) => items.append(el("div", null, yol)));
+    band.append(items);
     bantlar.push(band);
   }
 
@@ -2956,17 +2956,17 @@ function ciz(m) {
       "Bu kartlar kuyrukta duruyor ama role verilemiyor ve bu bir yarış değil: " +
       "dosya kilitli, izin yok ya da yolda bir şey var. Kart kendiliğinden " +
       "ilerlemeyecek — aşağıdaki kodu ve yolu kullanarak engeli kaldır."));
-    const liste = el("div", "mono");
-    liste.style.cssText = "font-size:var(--fs-tight);line-height:1.7";
+    const items = el("div", "mono");
+    items.style.cssText = "font-size:var(--fs-tight);line-height:1.7";
     m.engeller.forEach((e) => {
-      liste.append(el("div", null, e.code + "  " + e.role + "  " + e.path));
+      items.append(el("div", null, e.code + "  " + e.role + "  " + e.path));
       if (e.message) {
         const alt = el("div", null, e.message);
         alt.style.cssText = "color:var(--ink-3)";
-        liste.append(alt);
+        items.append(alt);
       }
     });
-    band.append(liste);
+    band.append(items);
     bantlar.push(band);
   }
 
@@ -2974,7 +2974,7 @@ function ciz(m) {
   // yetim de sayılmadıkları için eskiden ekrandan tamamen kaybolurlardı.
   // Bir kartın ekrandan yok olması en kötü görünüm hatası.
   const roller = new Set(m.roles.map((r) => r.id));
-  const digerler = m.cards.filter((c) => c.digerAkis && !roller.has(c.role) && c.state !== "done");
+  const digerler = m.cards.filter((c) => c.otherFlow && !roller.has(c.role) && c.state !== "done");
   if (digerler.length) {
     const band = el("div", "band");
     band.append(el("h2", null, digerler.length + " kart başka bir akışta"));
@@ -3036,11 +3036,11 @@ function ciz(m) {
 async function akislarYukle() {
   try {
     const cevap = await fetch("/akislar", { cache: "no-store" });
-    const veri = await cevap.json();
-    AKISLAR = (cevap.ok && Array.isArray(veri.akislar)) ? veri.akislar : [];
+    const data = await cevap.json();
+    AKISLAR = (cevap.ok && Array.isArray(data.flows)) ? data.flows : [];
     // 'ozet': Akışlar sekmesinin kart ızgarası — AYNI istekten, İKİNCİ bir
     // yoklama açmadan (bkz. AKISLAR_OZET yorumu).
-    AKISLAR_OZET = (cevap.ok && Array.isArray(veri.ozet)) ? veri.ozet : [];
+    AKISLAR_OZET = (cevap.ok && Array.isArray(data.summary)) ? data.summary : [];
   } catch (e) {
     // Liste okunamadıysa seçici hiç çıkmaz (AKISLAR boş kalır) — sessizce
     // "başarılı ama boş" ile gerçek bir okuma hatasını karıştırmıyoruz,
@@ -3151,9 +3151,9 @@ async function akisKartSec(ad) {
       headers: { "content-type": "application/json", "x-skein-token": JETON },
       body: JSON.stringify({ ad }),
     });
-    const veri = await cevap.json();
-    if (!cevap.ok) throw new Error(veri.hata || cevap.status);
-    ciz(veri.model);
+    const data = await cevap.json();
+    if (!cevap.ok) throw new Error(data.hata || cevap.status);
+    ciz(data.model);
     return true;
   } catch (e) {
     bildirimGoster("Akış değiştirilemedi: " + e.message);
@@ -3183,8 +3183,8 @@ async function akisKartSecVeAc(ad, hedef) {
  * engellememeli" ilkesinin ekran tarafı (bkz. m.bozuk/m.engeller).
  */
 function akisKartKur(ad, aktifAd) {
-  const ozet = akisOzetBul(AKISLAR_OZET, ad);
-  const draft = ozet ? ozet.draft : null;
+  const summary = akisOzetBul(AKISLAR_OZET, ad);
+  const draft = summary ? summary.draft : null;
   const rolIdler = draft ? draft.roles.map((r) => r.id) : [];
 
   const kart = el("div", akisKartSinifi(ad, aktifAd));
@@ -3199,8 +3199,8 @@ function akisKartKur(ad, aktifAd) {
   ust.append(el("div", "akisKartRolSayisi", rolIdler.length ? rolIdler.length + " rol" : "rol sayısı bilinmiyor"));
   kart.append(ust);
 
-  if (ozet && ozet.hata) {
-    kart.append(el("p", "akisKartHata", ozet.hata));
+  if (summary && summary.hata) {
+    kart.append(el("p", "akisKartHata", summary.hata));
   } else if (draft) {
     kart.append(el("p", "akisKartAciklama", draft.description || "(açıklama yok)"));
     kart.append(el("div", "akisKartZincir", akisZinciriMetni(rolIdler)));
@@ -3323,7 +3323,7 @@ function yeniAkisAc(onerilenler) {
       const yazCevap = await fetch("/akis/yaz", {
         method: "POST",
         headers: { "content-type": "application/json", "x-skein-token": JETON },
-        body: JSON.stringify({ ...yeniTaslak, yeniAd: adI.value }),
+        body: JSON.stringify({ ...yeniTaslak, newName: adI.value }),
       });
       const yazVeri = await yazCevap.json();
       if (!yazCevap.ok) throw new Error(yazVeri.hata || yazCevap.status);
@@ -3383,8 +3383,8 @@ async function yokla() {
   const uyari = document.getElementById("kopuk");
   try {
     const cevap = await fetch("/durum", { cache: "no-store" });
-    const veri = await cevap.json();
-    if (!cevap.ok) throw new Error(veri.hata || cevap.status);
+    const data = await cevap.json();
+    if (!cevap.ok) throw new Error(data.hata || cevap.status);
     uyari.replaceChildren();
     // UÇUŞ TESPİTİ — "kart devredilince kuş V üzerinden uçsun" (bkz.
     // formasyonSvgKur'un üstündeki "UÇUŞ" bölümü). KASITLI OLARAK burada,
@@ -3400,17 +3400,17 @@ async function yokla() {
     const azaltilmisHareket = typeof matchMedia === "function" &&
       matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (!azaltilmisHareket) {
-      const devirler = kartDevirleriniBul(KART_SON_ROL, veri.cards);
+      const devirler = kartDevirleriniBul(KART_SON_ROL, data.cards);
       if (devirler.length) {
-        ucusPlanlariniKur(devirler, veri.roles).forEach((plan) => {
+        ucusPlanlariniKur(devirler, data.roles).forEach((plan) => {
           UCUSLAR.push({
             cardId: plan.cardId, yol: plan.yol, sure: plan.sure, baslangic: performance.now(),
           });
         });
       }
     }
-    KART_SON_ROL = rolHaritasiCikar(veri.cards);
-    ciz(veri);
+    KART_SON_ROL = rolHaritasiCikar(data.cards);
+    ciz(data);
   } catch (e) {
     // Okuma koptuğunda ekranı boşaltmak, "iş yok" ile "bakamıyorum"u
     // karıştırmak olurdu. Son çizim yerinde kalır, üstüne uyarı düşer.
@@ -3485,11 +3485,11 @@ function yeniKartAc() {
         headers: { "content-type": "application/json", "x-skein-token": JETON },
         body: JSON.stringify({ baslik: bi.value, gorev: gi.value }),
       });
-      const veri = await cevap.json();
-      if (!cevap.ok) throw new Error(veri.hata || cevap.status);
+      const data = await cevap.json();
+      if (!cevap.ok) throw new Error(data.hata || cevap.status);
       // Çekirdeğin döndürdüğü model çiziliyor: ekran kendi kopyasını
       // uydurmuyor, kartın gerçekten nereye düştüğünü çekirdek söylüyor.
-      ciz(veri.model);
+      ciz(data.model);
       location.hash = "";
     } catch (e) {
       ac.disabled = false;
@@ -3848,12 +3848,12 @@ function planlamaKatilimciKonumlari(roller, katilimcilar) {
  * V'nin kendi hattını izlemez. Aynı koldaysa (ya da biri tepedeyse) ilk
  * ile son zaten aynı doğru üzerinde, detur GEREKMİYOR.
  */
-function planlamaBandYolu(ilk, son) {
+function planlamaBandYolu(ilk, last) {
   const tepe = { x: FORMASYON_GOVDE[2][0], y: FORMASYON_GOVDE[2][1] };
-  const tepedenGecsin = ilk.kol === "sol" && son.kol === "sag";
+  const tepedenGecsin = ilk.kol === "sol" && last.kol === "sag";
   return "M " + ilk.x + " " + ilk.y +
     (tepedenGecsin ? " L " + tepe.x + " " + tepe.y : "") +
-    " L " + son.x + " " + son.y;
+    " L " + last.x + " " + last.y;
 }
 
 /**
@@ -3978,9 +3978,9 @@ function kartDevirleriniBul(oncekiRoller, kartlar) {
   const devirler = [];
   kartlar.forEach((k) => {
     if (k.orphan) return;
-    const onceki = oncekiRoller.get(k.id);
-    if (onceki !== undefined && onceki !== k.role) {
-      devirler.push({ cardId: k.id, from: onceki, to: k.role });
+    const previous = oncekiRoller.get(k.id);
+    if (previous !== undefined && previous !== k.role) {
+      devirler.push({ cardId: k.id, from: previous, to: k.role });
     }
   });
   return devirler;
@@ -4066,8 +4066,8 @@ function ucusKonumu(yol, t) {
     }
     kalan -= uzunluk;
   }
-  const son = yol[yol.length - 1];
-  return { x: son.x, y: son.y };
+  const last = yol[yol.length - 1];
+  return { x: last.x, y: last.y };
 }
 
 /**
@@ -4202,8 +4202,8 @@ function formasyonSvgKur(m) {
   const planNoktalari = m.plan ? planlamaKatilimciKonumlari(roller, m.plan.katilimcilar) : [];
   if (planNoktalari.length > 1) {
     const ilk = planNoktalari[0];
-    const son = planNoktalari[planNoktalari.length - 1];
-    const bant = sv("path", { d: planlamaBandYolu(ilk, son), fill: "none" });
+    const last = planNoktalari[planNoktalari.length - 1];
+    const bant = sv("path", { d: planlamaBandYolu(ilk, last), fill: "none" });
     // accent-200 koyu temada koyulaşıyor (kart c-20261106-e62847, bkz.
     // @media bloğundaki ACCENT RAMPASI yorumu) — bu şeridin açık-pembe
     // hâli (#ffe0d9) koyu gövdenin üstünde PARLAK bir çizgi olurdu.
@@ -4212,7 +4212,7 @@ function formasyonSvgKur(m) {
     bant.style.strokeLinecap = "butt";
     svg.append(bant);
     const etiket = sv("text", {
-      x: (ilk.x + son.x) / 2 + 40, y: (ilk.y + son.y) / 2 - 22, class: "formasyonPlanEtiket",
+      x: (ilk.x + last.x) / 2 + 40, y: (ilk.y + last.y) / 2 - 22, class: "formasyonPlanEtiket",
     });
     etiket.textContent = "planlama · en çok " + (m.plan ? m.plan.tur : 0) + " tur";
     svg.append(etiket);
@@ -4641,8 +4641,8 @@ function railKartCiz(kutu, d) {
   if (c.rejects > 0) meta.append(el("span", "bad", c.rejects + " ret"));
   meta.append(el("span", null, c.turns + " tur"));
   if (c.durationMs) meta.append(el("span", null, sure(c.durationMs)));
-  if (c.costUsd || c.olculmeyen) {
-    meta.append(el("span", c.olculmeyen ? "bad" : null, maliyetMetni(c.costUsd, c.olculmeyen, c.tokens)));
+  if (c.costUsd || c.unmeasured) {
+    meta.append(el("span", c.unmeasured ? "bad" : null, maliyetMetni(c.costUsd, c.unmeasured, c.tokens)));
   }
   kutu.append(meta);
 
@@ -4713,11 +4713,11 @@ function railYenidenYuklenmeliMi(gosterilenId, hedefId) {
  * metninin kendisi "hangi kutu" sorusuna cevap vermez.
  */
 function duzenleHatalari(roller) {
-  const hatalar = [];
+  const errors = [];
   const gecersiz = new Set();
   roller.forEach((r, i) => {
     if (!r.id || r.id.trim() === "") {
-      hatalar.push((i + 1) + ". rolün adı boş");
+      errors.push((i + 1) + ". rolün adı boş");
       gecersiz.add(i);
     }
   });
@@ -4733,8 +4733,8 @@ function duzenleHatalari(roller) {
     const ad = (r.id || "").trim();
     if (tekrarlar.has(ad)) gecersiz.add(i);
   });
-  tekrarlar.forEach((ad) => hatalar.push("'" + ad + "' adı birden çok rolde kullanılıyor"));
-  return { hatalar, gecersiz };
+  tekrarlar.forEach((ad) => errors.push("'" + ad + "' adı birden çok rolde kullanılıyor"));
+  return { errors, gecersiz };
 }
 
 /**
@@ -4827,16 +4827,16 @@ function duzenleAdSanitize(deger) {
  * yine de "boş" HALE gelebilir (kullanıcı kutuya sadece boşluk yazarsa) —
  * o durum kaskad DIŞINDA, duzenleHatalari'nin yakaladığı bir durum.
  */
-function duzenleAdDegis(taslak, i, yeniAd) {
+function duzenleAdDegis(taslak, i, newName) {
   const eski = taslak.roles[i].id;
-  if (!yeniAd || yeniAd === eski) return taslak;
-  taslak.roles[i].id = yeniAd;
+  if (!newName || newName === eski) return taslak;
+  taslak.roles[i].id = newName;
   taslak.roles.forEach((r, idx) => {
-    if (idx !== i && r.reject === eski) r.reject = yeniAd;
+    if (idx !== i && r.reject === eski) r.reject = newName;
   });
   if (taslak.planlama) {
-    taslak.planlama.katilimcilar = taslak.planlama.katilimcilar.map((k) => (k === eski ? yeniAd : k));
-    if (taslak.planlama.denetci === eski) taslak.planlama.denetci = yeniAd;
+    taslak.planlama.katilimcilar = taslak.planlama.katilimcilar.map((k) => (k === eski ? newName : k));
+    if (taslak.planlama.denetci === eski) taslak.planlama.denetci = newName;
   }
   return taslak;
 }
@@ -4993,7 +4993,7 @@ async function railDuzenleYukle(kutu) {
     try {
       const promptCevap = await fetch("/promptlar", { cache: "no-store" });
       const promptVeri = await promptCevap.json();
-      DUZENLE_PROMPTLAR = promptCevap.ok ? (promptVeri.promptlar || []) : [];
+      DUZENLE_PROMPTLAR = promptCevap.ok ? (promptVeri.prompts || []) : [];
     } catch {
       DUZENLE_PROMPTLAR = [];
     }
@@ -5124,13 +5124,13 @@ function duzenlePlanlamaKatilimKutusuCiz(taslak, i) {
     if (yeniKatilimcilar.length === 0) {
       taslak.planlama = undefined;
     } else {
-      const onceki = taslak.planlama;
+      const previous = taslak.planlama;
       taslak.planlama = {
         katilimcilar: yeniKatilimcilar,
-        plan: onceki ? onceki.plan : "docs/plan/{kart}.md",
-        tur: onceki ? onceki.tur : 1,
-        ilkTurKor: onceki ? onceki.ilkTurKor : true,
-        ...(onceki && onceki.denetci !== undefined ? { denetci: onceki.denetci } : {}),
+        plan: previous ? previous.plan : "docs/plan/{kart}.md",
+        tur: previous ? previous.tur : 1,
+        ilkTurKor: previous ? previous.ilkTurKor : true,
+        ...(previous && previous.denetci !== undefined ? { denetci: previous.denetci } : {}),
       };
       taslak.planlama.denetci = duzenleDenetciGecerle(taslak.planlama.denetci, yeniKatilimcilar, rolIdler);
     }
@@ -5144,8 +5144,8 @@ function duzenlePlanlamaBolumuCiz(taslak) {
   const kutu = el("div", "duzenleBolum");
   kutu.append(el("div", "eyebrow", "Planlama"));
   const katilimcilar = taslak.planlama ? taslak.planlama.katilimcilar : [];
-  const ozet = duzenlePlanlamaOzet(katilimcilar);
-  kutu.append(el("div", "duzenleOzet", ozet || "katılım yok — hiçbir rol planlamaya katılmıyor"));
+  const summary = duzenlePlanlamaOzet(katilimcilar);
+  kutu.append(el("div", "duzenleOzet", summary || "katılım yok — hiçbir rol planlamaya katılmıyor"));
   if (katilimcilar.length === 0 || !taslak.planlama) return kutu;
 
   const turSira = el("div", "duzenleStepperSarmal");
@@ -5313,12 +5313,12 @@ async function duzenleOnizlemeYukle() {
 function duzenleAltCubukGuncelle() {
   const taslak = DUZENLE_TASLAK;
   if (!taslak) return;
-  const { hatalar } = duzenleHatalari(taslak.roles);
+  const { errors } = duzenleHatalari(taslak.roles);
   const degisti = JSON.stringify(taslak) !== DUZENLE_ORIJINAL;
   const sunucuGecersiz = Boolean(DUZENLE_ONIZLEME && DUZENLE_ONIZLEME.ok === false);
   const durum = document.getElementById("duzenleDurumMetni");
   if (durum) {
-    durum.textContent = hatalar.length > 0 ? hatalar.length + " hata — kaydedilemez"
+    durum.textContent = errors.length > 0 ? errors.length + " hata — kaydedilemez"
       : !degisti ? "değişiklik yok"
       : sunucuGecersiz ? "akış geçersiz — kaydedilemez"
       : "değişiklik var · henüz kaydedilmedi";
@@ -5327,7 +5327,7 @@ function duzenleAltCubukGuncelle() {
   if (vazgecBtn) vazgecBtn.disabled = !degisti;
   const kaydetBtn = document.getElementById("duzenleKaydetBtn");
   if (kaydetBtn) {
-    kaydetBtn.disabled = !degisti || hatalar.length > 0
+    kaydetBtn.disabled = !degisti || errors.length > 0
       || !(DUZENLE_ONIZLEME && DUZENLE_ONIZLEME.ok === true);
   }
 }
@@ -5386,14 +5386,14 @@ function railDuzenlePaneliCiz(kutu, m) {
   kutu.append(el("div", "duzenleAciklama",
     "Sıra formasyonu belirler: ↑/↓ ile taşımak rolün V'deki yerini de değiştirir."));
 
-  const { hatalar, gecersiz } = duzenleHatalari(taslak.roles);
+  const { errors, gecersiz } = duzenleHatalari(taslak.roles);
   const uyarilar = duzenleSilmeUyarilari(DUZENLE_ORIJINAL_ROL_IDLER, taslak.roles.map((r) => r.id), m.cards);
-  hatalar.forEach((h) => kutu.append(el("div", "duzenleHata", h)));
+  errors.forEach((h) => kutu.append(el("div", "duzenleHata", h)));
   uyarilar.forEach((w) => kutu.append(el("div", "duzenleUyari", w)));
 
-  const liste = el("div", "duzenleRolListe");
-  taslak.roles.forEach((rol, i) => { liste.append(duzenleRolBlogu(taslak, i, gecersiz.has(i))); });
-  kutu.append(liste);
+  const items = el("div", "duzenleRolListe");
+  taslak.roles.forEach((rol, i) => { items.append(duzenleRolBlogu(taslak, i, gecersiz.has(i))); });
+  kutu.append(items);
 
   const ekle = el("button", "railBtn", "Rol ekle");
   ekle.type = "button";
@@ -5461,8 +5461,8 @@ function gozcuKapat() {
 async function railGozcuYukle() {
   try {
     const cevap = await fetch("/gozcu/log", { cache: "no-store" });
-    const veri = await cevap.json();
-    GOZCU_LOG = (cevap.ok && Array.isArray(veri.satirlar)) ? veri.satirlar : [];
+    const data = await cevap.json();
+    GOZCU_LOG = (cevap.ok && Array.isArray(data.lines)) ? data.lines : [];
   } catch (e) {
     GOZCU_LOG = [];
   }
@@ -6014,11 +6014,11 @@ async function akisAc() {
   DIYAGRAM_SECILI = null;
   try {
     const cevap = await fetch("/akis", { cache: "no-store" });
-    const veri = await cevap.json();
-    if (!cevap.ok) throw new Error(veri.hata || cevap.status);
-    if (!veri.draft) throw new Error("Bu ekran akış düzenlemeye açık değil.");
-    TASLAK = veri.draft;
-    SAGLAYICILAR = veri.providers || [];
+    const data = await cevap.json();
+    if (!cevap.ok) throw new Error(data.hata || cevap.status);
+    if (!data.draft) throw new Error("Bu ekran akış düzenlemeye açık değil.");
+    TASLAK = data.draft;
+    SAGLAYICILAR = data.providers || [];
   } catch (e) {
     // DİYAGRAMI ETKİLEMİYOR: /akis yalnızca "Ham YAML" sekmesinin
     // kaynağı, diyagram SON_MODEL'den geliyor. Düzenleme kapalıysa bile
@@ -6118,19 +6118,19 @@ function rolCiz(rol, i) {
 
 /** Rolü zincire ekler: önceki rolün 'next'i yeni role, yeni rolünki eskisine. */
 function rolEkle(i) {
-  const onceki = TASLAK.roles[i];
+  const previous = TASLAK.roles[i];
   let n = 1;
   while (TASLAK.roles.some((r) => r.id === "rol" + n)) n += 1;
-  const yeni = {
+  const fresh = {
     id: "rol" + n,
-    provider: onceki.provider,
+    provider: previous.provider,
     workspace: "rol" + n,
-    prompt: onceki.prompt,
+    prompt: previous.prompt,
     receive: "batch",
-    next: onceki.next,
+    next: previous.next,
   };
-  onceki.next = yeni.id;
-  TASLAK.roles.splice(i + 1, 0, yeni);
+  previous.next = fresh.id;
+  TASLAK.roles.splice(i + 1, 0, fresh);
   yenile();
 }
 
@@ -6166,16 +6166,16 @@ function rolSilById(id) {
   if (i !== -1) rolSil(i);
 }
 
-function rolAdiDegis(i, yeniAd) {
+function rolAdiDegis(i, newName) {
   const eski = TASLAK.roles[i].id;
-  if (!yeniAd || yeniAd === eski) return;
-  TASLAK.roles[i].id = yeniAd;
+  if (!newName || newName === eski) return;
+  TASLAK.roles[i].id = newName;
   TASLAK.roles.forEach((r) => {
-    if (r.next === eski) r.next = yeniAd;
-    if (r.reject === eski) r.reject = yeniAd;
-    if (r.syncBack) r.syncBack = r.syncBack.map((x) => (x === eski ? yeniAd : x));
+    if (r.next === eski) r.next = newName;
+    if (r.reject === eski) r.reject = newName;
+    if (r.syncBack) r.syncBack = r.syncBack.map((x) => (x === eski ? newName : x));
   });
-  if (TASLAK.gates) TASLAK.gates.forEach((g) => { if (g.after === eski) g.after = yeniAd; });
+  if (TASLAK.gates) TASLAK.gates.forEach((g) => { if (g.after === eski) g.after = newName; });
   yenile();
 }
 
@@ -6358,9 +6358,9 @@ function flowGoreliYolKokeCevir(goreli) {
  * (akisSecimi verilmişse) — o girdi BİLEREK ATLANIYOR: 'promptlar'
  * listesinden ZATEN sayıldı, aksi hâlde aynı akış İKİ KEZ sayılırdı.
  */
-function promptKullananListesi(promptlar, ozetListesi, aktifAd, yol) {
+function promptKullananListesi(prompts, ozetListesi, aktifAd, yol) {
   const sonuc = [];
-  promptlar.forEach((p) => {
+  prompts.forEach((p) => {
     if (p.yol !== yol) return;
     sonuc.push({ akis: aktifAd, rol: p.etiket.indexOf("rol:") === 0 ? p.etiket.slice("rol:".length) : null });
   });
@@ -6377,14 +6377,14 @@ function promptKullananListesi(promptlar, ozetListesi, aktifAd, yol) {
 }
 
 /** 'promptKullananListesi'nin SAYIMI — "N rol · M akış" (DEVIR.md §5). SAF. */
-function promptKullanimSayisi(liste) {
-  const akislar = new Set();
+function promptKullanimSayisi(items) {
+  const flows = new Set();
   let rol = 0;
-  liste.forEach((k) => {
-    akislar.add(k.akis);
+  items.forEach((k) => {
+    flows.add(k.akis);
     if (k.rol !== null) rol++;
   });
-  return { rol, akis: akislar.size };
+  return { rol, akis: flows.size };
 }
 
 /**
@@ -6414,24 +6414,24 @@ function promptKullanimEtiketi(rol, akis) {
  * HER role AYNI sırada verildiği için hangisinin örnek seçildiği şeridin
  * ANLAMINI değiştirmiyor.
  */
-function ajanOkumaSirasi(promptlar, seciliYol) {
-  const adimlar = [];
-  promptlar.forEach((p) => {
-    if (p.etiket.indexOf("anayasa:") === 0) adimlar.push({ etiket: dosyaAdiKisa(p.yol), yol: p.yol });
+function ajanOkumaSirasi(prompts, seciliYol) {
+  const steps = [];
+  prompts.forEach((p) => {
+    if (p.etiket.indexOf("anayasa:") === 0) steps.push({ etiket: dosyaAdiKisa(p.yol), yol: p.yol });
   });
-  const roller = promptlar.filter((p) => p.etiket.indexOf("rol:") === 0);
+  const roller = prompts.filter((p) => p.etiket.indexOf("rol:") === 0);
   const seciliRol = roller.find((p) => p.yol === seciliYol) || roller[0] || null;
-  if (seciliRol !== null) adimlar.push({ etiket: seciliRol.etiket.slice("rol:".length), yol: seciliRol.yol });
-  adimlar.push({ etiket: "kart metni", yol: null });
-  return adimlar.map((a) => ({ etiket: a.etiket, vurgulu: a.yol !== null && a.yol === seciliYol }));
+  if (seciliRol !== null) steps.push({ etiket: seciliRol.etiket.slice("rol:".length), yol: seciliRol.yol });
+  steps.push({ etiket: "kart metni", yol: null });
+  return steps.map((a) => ({ etiket: a.etiket, vurgulu: a.yol !== null && a.yol === seciliYol }));
 }
 
 /** Dosya yolundan uzantısız kısa ad — "hub/prompts/roles/coder.md" -> "coder". SAF. */
 function dosyaAdiKisa(yol) {
   const parcalar = yol.split("/");
-  const son = parcalar[parcalar.length - 1] || yol;
-  const nokta = son.lastIndexOf(".");
-  return nokta > 0 ? son.slice(0, nokta) : son;
+  const last = parcalar[parcalar.length - 1] || yol;
+  const nokta = last.lastIndexOf(".");
+  return nokta > 0 ? last.slice(0, nokta) : last;
 }
 
 /**
@@ -6449,31 +6449,31 @@ function dosyaAdiKisa(yol) {
  * DEĞİL, çağıran (ajanGorevKur) boş girişi hiç basmıyor.
  */
 function promptGorevOzeti(metin) {
-  const satirlar = (metin || "").split("\\n");
+  const lines = (metin || "").split("\\n");
   let i = 0;
   // Başlık satırı ("# ...") varsa atlanır — yoksa (biçimi tutmayan bir
   // dosya) her şey GİRİŞ sayılır, ilk "##" bulunana kadar.
-  if (satirlar.length && satirlar[0].trim().indexOf("# ") === 0) i = 1;
+  if (lines.length && lines[0].trim().indexOf("# ") === 0) i = 1;
 
   const girisSatirlari = [];
-  while (i < satirlar.length && satirlar[i].trim().indexOf("## ") !== 0) {
-    const satir = satirlar[i].trim();
+  while (i < lines.length && lines[i].trim().indexOf("## ") !== 0) {
+    const satir = lines[i].trim();
     if (satir !== "") girisSatirlari.push(satir);
     i += 1;
   }
 
-  if (i >= satirlar.length) return { giris: girisSatirlari.join(" "), baslik: null, maddeler: [] };
+  if (i >= lines.length) return { entry: girisSatirlari.join(" "), baslik: null, clauses: [] };
 
-  const baslik = satirlar[i].trim().slice("## ".length).trim();
+  const baslik = lines[i].trim().slice("## ".length).trim();
   i += 1;
-  const maddeler = [];
-  while (i < satirlar.length && satirlar[i].trim().indexOf("## ") !== 0) {
-    const satir = satirlar[i].trim();
-    if (satir.indexOf("- ") === 0 || satir.indexOf("* ") === 0) maddeler.push(satir.slice(2).trim());
+  const clauses = [];
+  while (i < lines.length && lines[i].trim().indexOf("## ") !== 0) {
+    const satir = lines[i].trim();
+    if (satir.indexOf("- ") === 0 || satir.indexOf("* ") === 0) clauses.push(satir.slice(2).trim());
     i += 1;
   }
 
-  return { giris: girisSatirlari.join(" "), baslik, maddeler: maddeler.slice(0, 5) };
+  return { entry: girisSatirlari.join(" "), baslik, clauses: clauses.slice(0, 5) };
 }
 
 /** Bir dosyanın editördeki metni DİSKTEKİ (son yüklenen/kaydedilen) metinden FARKLI mı. SAF. */
@@ -6498,11 +6498,11 @@ function promptDurumMetni(kirli) {
  * 'sekmeUygula'nın "data-sekme" ile nav düğmelerini DOĞRUDAN yamaladığı
  * desenin AYNISI.
  */
-function navRozetGuncelle(ad, sayi) {
+function navRozetGuncelle(ad, count) {
   document.querySelectorAll(".navSekme").forEach((b) => {
     if (b.dataset.sekme !== ad) return;
     const rozet = b.querySelector(".navRozet");
-    if (rozet) rozet.textContent = String(sayi);
+    if (rozet) rozet.textContent = String(count);
   });
 }
 
@@ -6517,9 +6517,9 @@ async function promptlarEkraniCiz() {
   const kok = document.getElementById("icerikPromptlar");
   try {
     const cevap = await fetch("/promptlar", { cache: "no-store" });
-    const veri = await cevap.json();
-    if (!cevap.ok) throw new Error(veri.hata || cevap.status);
-    PROMPTLAR = veri.promptlar || [];
+    const data = await cevap.json();
+    if (!cevap.ok) throw new Error(data.hata || cevap.status);
+    PROMPTLAR = data.prompts || [];
     if (!PROMPTLAR.length) {
       kok.replaceChildren(el("div", "ipucu", "Bu akışta düzenlenebilir prompt yok."));
       return;
@@ -6547,10 +6547,10 @@ async function promptlarMetniGetir(yol) {
   if (PROMPT_METIN[yol] !== undefined) return;
   try {
     const cevap = await fetch("/prompt?yol=" + encodeURIComponent(yol), { cache: "no-store" });
-    const veri = await cevap.json();
-    if (!cevap.ok) throw new Error(veri.hata || cevap.status);
-    PROMPT_ORIJINAL[yol] = veri.metin;
-    PROMPT_METIN[yol] = veri.metin;
+    const data = await cevap.json();
+    if (!cevap.ok) throw new Error(data.hata || cevap.status);
+    PROMPT_ORIJINAL[yol] = data.metin;
+    PROMPT_METIN[yol] = data.metin;
     delete PROMPT_HATA[yol];
   } catch (e) {
     PROMPT_HATA[yol] = e.message;
@@ -6661,9 +6661,9 @@ function promptlarCiz() {
   const kok = document.getElementById("icerikPromptlar");
   const govde = el("div", "promptlarGovde");
 
-  const liste = el("div", "promptlarListe");
-  liste.append(promptlarGrupKur("Anayasa", PROMPTLAR.filter((p) => p.etiket.indexOf("anayasa:") === 0)));
-  liste.append(promptlarGrupKur("Rol promptları", PROMPTLAR.filter((p) => p.etiket.indexOf("rol:") === 0)));
+  const items = el("div", "promptlarListe");
+  items.append(promptlarGrupKur("Anayasa", PROMPTLAR.filter((p) => p.etiket.indexOf("anayasa:") === 0)));
+  items.append(promptlarGrupKur("Rol promptları", PROMPTLAR.filter((p) => p.etiket.indexOf("rol:") === 0)));
   // YENİ ROL PROMPTU yolu bu listenin altında: zincire bir rol eklemek
   // demek, promptunu da BİRLİKTE yaratmak demek (bkz. /rol/yeni yorumu,
   // server.ts) — iki ayrı ekrana bölmek yarı yaratılmış bir rolü vaat
@@ -6672,8 +6672,8 @@ function promptlarCiz() {
   const yeniRolDugme = el("button", "railBtn promptlarYeniRol", "Yeni rol promptu");
   yeniRolDugme.type = "button";
   yeniRolDugme.addEventListener("click", () => { location.hash = "prompt/yeni"; });
-  liste.append(yeniRolDugme);
-  govde.append(liste);
+  items.append(yeniRolDugme);
+  govde.append(items);
 
   govde.append(promptlarPanelKur());
   kok.replaceChildren(govde);
@@ -6734,10 +6734,10 @@ async function promptlarKaydet() {
       headers: { "content-type": "application/json", "x-skein-token": JETON },
       body: JSON.stringify({ yol, metin }),
     });
-    const veri = await cevap.json();
-    if (!cevap.ok) throw new Error(veri.hata || cevap.status);
+    const data = await cevap.json();
+    if (!cevap.ok) throw new Error(data.hata || cevap.status);
     PROMPT_ORIJINAL[yol] = metin;
-    ciz(veri.model);
+    ciz(data.model);
     promptlarCiz();
   } catch (e) {
     if (hataKutu) {
@@ -6792,14 +6792,14 @@ async function yeniRolAc() {
   YENI_ROL_ONCEDEN_SONRA = null;
   try {
     const cevap = await fetch("/akis", { cache: "no-store" });
-    const veri = await cevap.json();
-    if (!cevap.ok) throw new Error(veri.hata || cevap.status);
+    const data = await cevap.json();
+    if (!cevap.ok) throw new Error(data.hata || cevap.status);
     // /rol/yeni'nin kendi kapısıyla AYNI koşul: taslak yoksa (salt okunur
     // ekran) uç de 404 döner — burada önceden söylemek, operatörü boş bir
     // formu doldurduktan SONRA reddedilmeye bırakmıyor.
-    if (!veri.draft) throw new Error("Bu ekran rol eklemeye açık değil.");
-    YENI_ROL_SAGLAYICILAR = veri.providers || [];
-    const roller = veri.draft.roles || [];
+    if (!data.draft) throw new Error("Bu ekran rol eklemeye açık değil.");
+    YENI_ROL_SAGLAYICILAR = data.providers || [];
+    const roller = data.draft.roles || [];
     YENI_ROL_ROLLER = roller.map((r) => r.id);
     if (!YENI_ROL_ROLLER.length) throw new Error("Akışta hiç rol yok — ardına eklenecek bir rol bulunamadı.");
     // Diyagramdan gelen ön seçim GERÇEKTEN akışta bir rolse kullanılıyor —
@@ -6819,7 +6819,7 @@ function yeniRolAlani(etiket, girisTag, id) {
   const g = el(girisTag);
   g.id = id;
   l.append(g);
-  return { etiket: l, giris: g };
+  return { etiket: l, entry: g };
 }
 
 function yeniRolEditorCiz() {
@@ -6844,12 +6844,12 @@ function yeniRolEditorCiz() {
 
   const kutu = el("div", "rol");
 
-  const { etiket: idEtiket, giris: idGiris } = yeniRolAlani("id", "input", "yeniRolId");
+  const { etiket: idEtiket, entry: idGiris } = yeniRolAlani("id", "input", "yeniRolId");
   idGiris.type = "text";
   idGiris.placeholder = "örn. reviewer";
   kutu.append(idEtiket);
 
-  const { etiket: saglayiciEtiket, giris: saglayiciSec } =
+  const { etiket: saglayiciEtiket, entry: saglayiciSec } =
     yeniRolAlani("provider", "select", "yeniRolProvider");
   YENI_ROL_SAGLAYICILAR.forEach((s) => {
     const o = el("option", null, s);
@@ -6858,7 +6858,7 @@ function yeniRolEditorCiz() {
   });
   kutu.append(saglayiciEtiket);
 
-  const { etiket: workspaceEtiket, giris: workspaceGiris } =
+  const { etiket: workspaceEtiket, entry: workspaceGiris } =
     yeniRolAlani("workspace", "input", "yeniRolWorkspace");
   workspaceGiris.type = "text";
   kutu.append(workspaceEtiket);
@@ -6867,7 +6867,7 @@ function yeniRolEditorCiz() {
   // DİYAGRAMDAN gelen ön seçim VARSAYILAN olarak işaretli (operatör
   // isterse değiştirebilir) — başlıktaki "A ile B arasına" ile AYNI yere
   // işaret ediyor.
-  const { etiket: sonraEtiket, giris: sonraSec } = yeniRolAlani("sonra — hangi rolün ARDINA", "select", "yeniRolSonra");
+  const { etiket: sonraEtiket, entry: sonraSec } = yeniRolAlani("sonra — hangi rolün ARDINA", "select", "yeniRolSonra");
   YENI_ROL_ROLLER.forEach((id) => {
     const o = el("option", null, id);
     o.value = id;
@@ -6878,7 +6878,7 @@ function yeniRolEditorCiz() {
 
   // Prompt BOŞ bırakılabilir: sunucu bu durumda ŞABLONDAN yazıyor (kural 9
   // boş dosyayı reddediyor, bkz. rolPromptSablonu yorumu).
-  const { etiket: promptEtiket, giris: promptGiris } = yeniRolAlani(
+  const { etiket: promptEtiket, entry: promptGiris } = yeniRolAlani(
     "prompt (boş bırakılırsa ŞABLONDAN yazılır)", "textarea", "yeniRolPrompt",
   );
   promptEtiket.className = "genis";
@@ -6941,11 +6941,11 @@ async function yeniRolGonder() {
       headers: { "content-type": "application/json", "x-skein-token": JETON },
       body: JSON.stringify(govde),
     });
-    const veri = await cevap.json();
-    if (!cevap.ok) throw new Error(veri.hata || cevap.status);
+    const data = await cevap.json();
+    if (!cevap.ok) throw new Error(data.hata || cevap.status);
     // Çekirdeğin döndürdüğü model çiziliyor: ekran kendi kopyasını
     // uydurmuyor, yeni rolün GERÇEKTEN nereye bağlandığını çekirdek söylüyor.
-    ciz(veri.model);
+    ciz(data.model);
     location.hash = "";
   } catch (e) {
     hataKutu.textContent = e.message;
@@ -7003,9 +7003,9 @@ function ajanSuAnKutuKur(guncelKart, daemon) {
     satir.append(el("span", null, "kapıda"));
   }
   if (guncelKart.durationMs) satir.append(el("span", null, sure(guncelKart.durationMs)));
-  if (guncelKart.costUsd || guncelKart.olculmeyen) {
-    satir.append(el("span", guncelKart.olculmeyen ? "bad" : null,
-      maliyetMetni(guncelKart.costUsd, guncelKart.olculmeyen, guncelKart.tokens)));
+  if (guncelKart.costUsd || guncelKart.unmeasured) {
+    satir.append(el("span", guncelKart.unmeasured ? "bad" : null,
+      maliyetMetni(guncelKart.costUsd, guncelKart.unmeasured, guncelKart.tokens)));
   }
   kutu.append(satir);
 
@@ -7035,13 +7035,13 @@ function ajanAdimlarKur(guncelKart, daemon) {
     kutu.append(el("div", "ipucu", "Koşan bir ajan yok."));
     return kutu;
   }
-  const adimlar = AJAN_ADIMLAR[guncelKart.id] || [];
-  if (!adimlar.length) {
+  const steps = AJAN_ADIMLAR[guncelKart.id] || [];
+  if (!steps.length) {
     kutu.append(el("div", "ipucu",
       ajanCanliMi(guncelKart, daemon) ? "ilk adım bekleniyor…" : "bu aktivasyon için kayıtlı adım yok."));
     return kutu;
   }
-  adimlar.slice().reverse().forEach((a) => {
+  steps.slice().reverse().forEach((a) => {
     const satir = el("div", "ajanAdim");
     satir.append(el("span", "seq", String(a.seq)));
     satir.append(el("span", "ad", a.name || a.kind));
@@ -7061,18 +7061,18 @@ function ajanGorevKur(meta) {
   const kutu = el("div", "ajanBolum");
   kutu.append(el("div", "railAraBaslik", "Görevi · " + meta.prompt));
 
-  const ozet = AJAN_PROMPT_OZET[meta.prompt];
-  if (ozet === undefined) {
+  const summary = AJAN_PROMPT_OZET[meta.prompt];
+  if (summary === undefined) {
     kutu.append(el("div", "ipucu", "yükleniyor…"));
-  } else if (ozet === null) {
+  } else if (summary === null) {
     kutu.append(el("div", "err", "Prompt okunamadı" + (PROMPT_HATA[meta.prompt] ? ": " + PROMPT_HATA[meta.prompt] : ".")));
   } else {
-    if (ozet.giris) kutu.append(el("p", "ajanGorevMetin", ozet.giris));
-    if (ozet.maddeler.length) {
-      const liste = el("ul", "ajanGorevListe");
-      ozet.maddeler.forEach((madde) => liste.append(el("li", null, madde)));
-      kutu.append(liste);
-    } else if (!ozet.giris) {
+    if (summary.entry) kutu.append(el("p", "ajanGorevMetin", summary.entry));
+    if (summary.clauses.length) {
+      const items = el("ul", "ajanGorevListe");
+      summary.clauses.forEach((madde) => items.append(el("li", null, madde)));
+      kutu.append(items);
+    } else if (!summary.entry) {
       kutu.append(el("div", "ipucu", "(bölüm boş)"));
     }
   }
@@ -7162,9 +7162,9 @@ function ajanlarEkraniCiz(m) {
   if (!m.roles.some((r) => r.id === AJAN_SEC)) AJAN_SEC = m.roles[0].id;
 
   const govde = el("div", "ajanlarGovde");
-  const liste = el("div", "ajanlarListe");
-  m.roles.forEach((rol) => liste.append(ajanSatirKur(m, rol)));
-  govde.append(liste);
+  const items = el("div", "ajanlarListe");
+  m.roles.forEach((rol) => items.append(ajanSatirKur(m, rol)));
+  govde.append(items);
   govde.append(ajanPanelKur(m, AJAN_SEC));
   kok.replaceChildren(govde);
 
@@ -7204,8 +7204,8 @@ async function ajanPromptYukle(yol) {
 async function ajanAdimlariYukle(kartId) {
   try {
     const cevap = await fetch("/adimlar?kart=" + encodeURIComponent(kartId), { cache: "no-store" });
-    const veri = await cevap.json();
-    if (cevap.ok && Array.isArray(veri.adimlar)) AJAN_ADIMLAR[kartId] = veri.adimlar;
+    const data = await cevap.json();
+    if (cevap.ok && Array.isArray(data.steps)) AJAN_ADIMLAR[kartId] = data.steps;
   } catch (e) {
     // Sessizce bırak: önbellekteki ESKİ liste (varsa) ekranda kalır, bir
     // sonraki yoklama yeniden deneyecek.

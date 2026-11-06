@@ -58,13 +58,13 @@ function planNote(card: Card): string {
   // İtiraz dosyası BİRİKİMLİ: tur 2'de "3 itiraz" yazmak, o turun üç itiraz
   // eklediğini sandırır. Turun kendi katkısı ayrı gösteriliyor — doğal
   // sonlanma kararı da tam bu sayıya bakıyor.
-  const yeni = kac === undefined ? undefined : kac - objectionBaseline(card, entry.round);
-  const sayi = kac === undefined
+  const fresh = kac === undefined ? undefined : kac - objectionBaseline(card, entry.round);
+  const count = kac === undefined
     ? ""
-    : `, ${kac} itiraz${yeni !== undefined && yeni !== kac ? ` (bu turda +${yeni})` : ""}` +
+    : `, ${kac} itiraz${fresh !== undefined && fresh !== kac ? ` (bu turda +${fresh})` : ""}` +
       (entry.accepted ? ` / ${entry.accepted} kabul` : "") +
       (entry.invalid ? ` / ${entry.invalid} sayılmadı` : "");
-  return `  (planlama, tur ${entry.round}${sayi})`;
+  return `  (planlama, tur ${entry.round}${count})`;
 }
 
 export function describeTick(role: string, result: TickResult): string {

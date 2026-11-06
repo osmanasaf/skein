@@ -638,9 +638,9 @@ audit:
   // 6e: körleme uygulandı (fan-out/fan-in taşıma), alan artık kabul
   // ediliyor ve varsayılanı açık.
   it("körleme alanını okur; varsayılanı açık", async () => {
-    const acik = await load(await write(withPlanUc(
+    const isOpen = await load(await write(withPlanUc(
       "planlama:\n  katilimcilar: [analyst, architect]\n  plan: docs/plan/{kart}.md"), "kor-yok.yaml"));
-    expect(acik.plan?.ilkTurKor).toBe(true);
+    expect(isOpen.plan?.ilkTurKor).toBe(true);
 
     const kapali = await load(await write(withPlanUc(
       "planlama:\n  katilimcilar: [analyst, architect]\n  ilk-tur-kor: false\n  plan: docs/plan/{kart}.md"),

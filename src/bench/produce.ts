@@ -138,11 +138,11 @@ async function fileStamp(repo: string | undefined, entry: string): Promise<numbe
 async function findEscaped(
   repo: string | undefined,
   entry: string,
-  onceki: number | undefined,
+  previous: number | undefined,
 ): Promise<string | undefined> {
   if (repo === undefined) return undefined;
   const simdi = await fileStamp(repo, entry);
   if (simdi === undefined) return undefined;
-  return onceki === undefined || simdi !== onceki ? join(repo, entry) : undefined;
+  return previous === undefined || simdi !== previous ? join(repo, entry) : undefined;
 }
 

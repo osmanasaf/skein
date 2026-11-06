@@ -55,10 +55,10 @@ export async function releaseCard(
       // `back` sessizce `retry` oluyor ama günlüğe `back` giriyordu, yani
       // "insan kartı geri gönderdi mi" sorusu günlükten yanlış
       // cevaplanıyordu — hiç geri gitmemiş kartlar `back` sayılıyordu.
-      decision: karar?.uygulanan ?? "forward",
+      decision: karar?.applied ?? "forward",
       // İstenen şey yapılamadıysa o da kaybolmamalı: insanın niyeti de
       // ölçülebilir bir olgu.
-      ...(karar !== null && karar.istenen !== karar.uygulanan
+      ...(karar !== null && karar.istenen !== karar.applied
         ? { requested: karar.istenen }
         : {}),
       kind: karar?.kind ?? "approval",
@@ -70,7 +70,7 @@ export async function releaseCard(
 
   return {
     card,
-    decision: karar?.uygulanan ?? "forward",
+    decision: karar?.applied ?? "forward",
     requested: karar?.istenen ?? "forward",
     kind: karar?.kind ?? "approval",
   };

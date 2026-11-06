@@ -42,10 +42,10 @@ describe("estimateCost", () => {
   // değiştirmemeli: tahmin, tasarımın niyetini değil kodun yaptığını anlatır.
   it("audit bayrağı bugün maliyeti değiştirmez", async () => {
     const flow = await load("daily");
-    const acik = estimateCost({ ...flow, audit: { ...flow.audit, enabled: true } });
+    const isOpen = estimateCost({ ...flow, audit: { ...flow.audit, enabled: true } });
     const kapali = estimateCost({ ...flow, audit: { ...flow.audit, enabled: false } });
-    expect(acik.perRole).toBe(1);
-    expect(acik.base).toBe(kapali.base);
+    expect(isOpen.perRole).toBe(1);
+    expect(isOpen.base).toBe(kapali.base);
   });
 
   // syncBack bir git birleştirmesi; ajan çağrısı değil. `daily`'nin bir

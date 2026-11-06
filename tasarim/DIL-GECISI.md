@@ -140,9 +140,24 @@ geçiyor). Geri kalanı her yerde çevriliyor.
 
 **Niye kör metin değiştirme ÇALIŞMAZ:** o 324 KB'ın içinde betiğin
 tanımlayıcıları, CSS sınıf adları, Türkçe arayüz metni ve serileşen
-DEĞERLER (`data-tema="acik"`) birlikte duruyor. Doğru yol: betiği JS
-olarak AYRIŞTIRIP kendi AST'si üzerinden çevirmek, sonra dizeye geri
-koymak — arayüz katmanı AYRI ve en büyük aşama.
+DEĞERLER (`data-tema="acik"`) birlikte duruyor.
+
+**ÇÖZÜLDÜ.** Betik JS olarak ayrıştırılıp KENDİ AST'si üzerinden
+çevriliyor, sunucu tarafıyla AYNI koşuda (ayrı koşu olsaydı sınır
+uyuşmazdı). Ölçümler:
+
+- `page.ts`'te TEK bir `NoSubstitutionTemplateLiteral` var (satır 47),
+  `${}` ikamesi YOK: `<style>` 170–87.855, `<script>` 88.641–323.657.
+- HAM metin üzerinde çalışılıyor: çözülmüş metin 54 karakter daha kısa
+  (27 ters bölü) ve ofisler kayardı.
+- Ham betik **sıfır sözdizimi hatasıyla** JS olarak ayrışıyor: 9981
+  tanımlayıcı, 2331 dize literali.
+- O 2331 dizeye DOKUNULMUYOR — CSS sınıf adları, Türkçe arayüz metni ve
+  serileşen değerler orada yaşıyor.
+
+**Kanıt:** çeviriden sonra ekran gerçek tarayıcıda açıldı, konsol
+hatası 0, ve seçili tema düğmesi hâlâ **"Açık"** yazıyor. Tanımlayıcılar
+İngilizce, arayüz Türkçe.
 
 **Kanıt (her iki aşama için):** Türkçe metne bakan sınamaların hepsi
 DEĞİŞMEDEN geçmeli. Değişen varsa sınır çiğnenmiştir.

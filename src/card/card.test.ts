@@ -63,9 +63,9 @@ describe("planLines", () => {
   });
 
   it("planı ve her yükümlülüğü kanıtıyla basar", async () => {
-    const taban = newCard({ title: "x", task: "y", topology: await daily() });
+    const baseline = newCard({ title: "x", task: "y", topology: await daily() });
     const card = {
-      ...taban,
+      ...baseline,
       plan: {
         path: "docs/plan/k.md", hash: "abcdef0123456789".padEnd(64, "0"),
         kabuller: [
@@ -84,8 +84,8 @@ describe("planLines", () => {
   // yükümlülük satırı basmamalı — olmayan bir şeye başlık basmak onu
   // varmış gibi okutur.
   it("kabul yoksa yükümlülük satırı basmaz", async () => {
-    const taban = newCard({ title: "x", task: "y", topology: await daily() });
-    const card = { ...taban, plan: { path: "docs/plan/k.md", hash: "a".repeat(64) } };
+    const baseline = newCard({ title: "x", task: "y", topology: await daily() });
+    const card = { ...baseline, plan: { path: "docs/plan/k.md", hash: "a".repeat(64) } };
     expect(planLines(card)).toHaveLength(1);
   });
 });
@@ -99,9 +99,9 @@ describe("parseCard / serializeCard", () => {
   // Yükümlülükler: kabul edilmiş itirazlar kartta taşınıyor, çünkü
   // denetçi başka bir turda başka bir ağaçta koşuyor.
   it("yükümlülükler gidiş dönüşte kaybolmuyor", async () => {
-    const taban = newCard({ title: "Jitter", task: "iş", topology: await daily() });
+    const baseline = newCard({ title: "Jitter", task: "iş", topology: await daily() });
     const card = {
-      ...taban,
+      ...baseline,
       plan: {
         path: "docs/plan/x.md", hash: "a".repeat(64),
         kabuller: [{ id: "architect#1", role: "architect", ne: "sürüm geriye düşer", kanit: "`src/a.ts:3`" }],
@@ -114,8 +114,8 @@ describe("parseCard / serializeCard", () => {
   // kaydı denetçiye eksik liste verir ve kapıyı eksik kurar — yani
   // denetlenmemiş bir madde denetlenmiş sayılır.
   it("eksik alanlı yükümlülüğü reddeder", async () => {
-    const taban = newCard({ title: "x", task: "y", topology: await daily() });
-    const doc = JSON.parse(serializeCard(taban)) as Record<string, unknown>;
+    const baseline = newCard({ title: "x", task: "y", topology: await daily() });
+    const doc = JSON.parse(serializeCard(baseline)) as Record<string, unknown>;
     doc["plan"] = {
       path: "docs/plan/x.md", hash: "a".repeat(64),
       kabuller: [{ id: "architect#1", role: "architect", ne: "" , kanit: "`src/a.ts:3`" }],
@@ -125,8 +125,8 @@ describe("parseCard / serializeCard", () => {
   });
 
   it("dizi olmayan yükümlülük alanını reddeder", async () => {
-    const taban = newCard({ title: "x", task: "y", topology: await daily() });
-    const doc = JSON.parse(serializeCard(taban)) as Record<string, unknown>;
+    const baseline = newCard({ title: "x", task: "y", topology: await daily() });
+    const doc = JSON.parse(serializeCard(baseline)) as Record<string, unknown>;
     doc["plan"] = { path: "docs/plan/x.md", hash: "a".repeat(64), kabuller: { a: 1 } };
     expect(() => parseCard(JSON.stringify(doc))).toThrow(/dizi olmalı/);
   });

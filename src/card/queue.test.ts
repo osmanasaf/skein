@@ -98,10 +98,10 @@ describe("CardQueue — temel hareket", () => {
 
   it("FIFO: önce açılan kart önce alınır", async () => {
     const eski = await put(daily, "eski", new Date("2026-09-01T10:00:00Z"));
-    const yeni = await put(daily, "yeni", new Date("2026-09-02T10:00:00Z"));
+    const fresh = await put(daily, "yeni", new Date("2026-09-02T10:00:00Z"));
 
     expect((await al(queue, "coder")).id).toBe(eski.id);
-    expect((await al(queue, "coder")).id).toBe(yeni.id);
+    expect((await al(queue, "coder")).id).toBe(fresh.id);
   });
 });
 
@@ -555,7 +555,7 @@ describe("CardQueue — listeleme", () => {
  */
 describe("kapiKarari", () => {
   /** Kartı `role` üzerinde kaçış kapısına koyar. */
-  async function kapida(topology: TopologySnapshot, zincir: string[]): Promise<Card> {
+  async function atGate(topology: TopologySnapshot, zincir: string[]): Promise<Card> {
     await put(topology);
     let card = await al(queue, zincir[0] as string);
     for (const sonraki of zincir.slice(1)) {
@@ -566,36 +566,36 @@ describe("kapiKarari", () => {
   }
 
   it("hedefi olmayan back retry olur ve ADI da retry'dir", async () => {
-    const card = await kapida(daily, ["coder"]);
+    const card = await atGate(daily, ["coder"]);
 
     const karar = kapiKarari(card, "back");
 
     expect(karar).toMatchObject({
       kind: "escalation",
       istenen: "back",
-      uygulanan: "retry",
+      applied: "retry",
       hedef: "coder",
     });
   });
 
   it("hedefi olan back aynen uygulanır", async () => {
-    const card = await kapida(daily, ["coder", "reviewer"]);
+    const card = await atGate(daily, ["coder", "reviewer"]);
 
     const karar = kapiKarari(card, "back");
 
-    expect(karar).toMatchObject({ istenen: "back", uygulanan: "back", hedef: "coder" });
+    expect(karar).toMatchObject({ istenen: "back", applied: "back", hedef: "coder" });
   });
 
   // Varsayılan artık tek yerde: kaçışta `retry`, diğerlerinde `forward`.
   it("karar verilmezse kapının varsayılanı kullanılır", async () => {
-    const card = await kapida(daily, ["coder"]);
-    expect(kapiKarari(card)).toMatchObject({ istenen: "retry", uygulanan: "retry" });
+    const card = await atGate(daily, ["coder"]);
+    expect(kapiKarari(card)).toMatchObject({ istenen: "retry", applied: "retry" });
   });
 
   // `release` ile AYNI kaynaktan okunduğunun kanıtı: hedef gerçekten
   // kartın gittiği yer olmalı.
   it("hedef, kartın gerçekten gittiği rol", async () => {
-    const card = await kapida(daily, ["coder", "reviewer"]);
+    const card = await atGate(daily, ["coder", "reviewer"]);
     const karar = kapiKarari(card, "back");
 
     const released = await queue.release(card.id, { decision: "back" });
@@ -604,7 +604,7 @@ describe("kapiKarari", () => {
   });
 
   it("hedefsiz back'te de hedef kartın gittiği rol", async () => {
-    const card = await kapida(daily, ["coder"]);
+    const card = await atGate(daily, ["coder"]);
     const karar = kapiKarari(card, "back");
 
     const released = await queue.release(card.id, { decision: "back" });
@@ -695,14 +695,14 @@ describe("close — kopya kartlar", () => {
   // KAZANAN aktifse kapatma yok: o turun parası ödeniyor olabilir.
   it("kazanan aktifse kapatmıyor", async () => {
     await put(daily);
-    const aktif = await al(queue, "coder");
+    const active = await al(queue, "coder");
     // Kazanan `active/` altında ve geçmişi en uzun; kuyrukta kısa geçmişli
     // bir kopya var.
-    await bayatKopya({ ...aktif, history: aktif.history.slice(0, 1), state: "queued" },
+    await bayatKopya({ ...active, history: active.history.slice(0, 1), state: "queued" },
       "queue", "coder");
 
-    await expect(queue.close(aktif.id, "gerekçe")).rejects.toThrow(/koşuyor/);
+    await expect(queue.close(active.id, "gerekçe")).rejects.toThrow(/koşuyor/);
     // Reddedilen kapatma hiçbir kopyayı silmemeli.
-    expect(await copiesOf(aktif.id)).toHaveLength(2);
+    expect(await copiesOf(active.id)).toHaveLength(2);
   });
 });

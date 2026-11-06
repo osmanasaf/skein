@@ -67,7 +67,7 @@ export interface UiModel {
      * harcanmamış sayıyordu. Gerçek bir koşuda 20 dakikalık bir tur
      * böyle görünmez oldu.
      */
-    olculmeyen: number;
+    unmeasured: number;
     activations: number;
     orphans: number;
     /**
@@ -209,7 +209,7 @@ export interface UiCard {
    * yazması ile `≥$0.59` yazması aynı şey değil; ikincisi operatöre
    * "burada ölçülmemiş harcama var" diyor.
    */
-  olculmeyen: number;
+  unmeasured: number;
   /**
    * Kartın bütün aktivasyonlarının token'ı (girdi + çıktı).
    *
@@ -242,7 +242,7 @@ export interface UiCard {
    * Başka akışın kartı bu panonun yargılayacağı şey değil: yetim de bayat
    * da sayılmıyor ve kapatma düğmesi çıkmıyor.
    */
-  digerAkis: boolean;
+  otherFlow: boolean;
   /** Kart farklı bir akış damgasıyla başladı — bilgi amaçlı. */
   stale: boolean;
   /**
@@ -353,7 +353,7 @@ export async function buildModel(options: BuildOptions): Promise<UiModel> {
       // bayatlık ikisi de EKRANIN akışına göre tanımlı.
       orphan: bizimMi(card) && isOrphan(card, topology),
       stale: bizimMi(card) && isStale(card, options.flowHash),
-      digerAkis: !bizimMi(card),
+      otherFlow: !bizimMi(card),
     }),
   );
 
@@ -380,7 +380,7 @@ export async function buildModel(options: BuildOptions): Promise<UiModel> {
       open: ui.filter((c) => c.state !== "done").length,
       done: ui.filter((c) => c.state === "done").length,
       costUsd: ui.reduce((sum, c) => sum + c.costUsd, 0),
-      olculmeyen: ui.reduce((sum, c) => sum + c.olculmeyen, 0),
+      unmeasured: ui.reduce((sum, c) => sum + c.unmeasured, 0),
       activations: events.filter((e) => e.type === "agent.started").length,
       engelliKart: kartSayisi(blockages),
     },
@@ -519,20 +519,20 @@ function groupEvents(events: SkeinEvent[]): Map<string, SkeinEvent[]> {
 function toUiCard(
   card: Card,
   events: SkeinEvent[],
-  hiza: { orphan: boolean; stale: boolean; digerAkis: boolean },
+  hiza: { orphan: boolean; stale: boolean; otherFlow: boolean },
 ): UiCard {
   let costUsd = 0;
   let durationMs = 0;
   // BİLDİRİLMEYEN SIFIR DEĞİLDİR. Dolar bildirmeyen her aktivasyon
   // sayılıyor; `?? 0` ile toplamak onları harcanmamış gösterirdi.
-  let olculmeyen = 0;
+  let unmeasured = 0;
   let tokens = 0;
   for (const event of events) {
     if (event.type !== "agent.finished") continue;
     durationMs += event.durationMs;
     const dolar = event.usage?.costUsd;
     if (typeof dolar === "number") costUsd += dolar;
-    else olculmeyen += 1;
+    else unmeasured += 1;
     tokens += (event.usage?.inputTokens ?? 0) + (event.usage?.outputTokens ?? 0);
   }
 
@@ -568,12 +568,12 @@ function toUiCard(
     lastReject,
     durationMs,
     costUsd,
-    olculmeyen,
+    unmeasured,
     tokens,
     live: card.state === "active" ? lastStep(events) : null,
     orphan: hiza.orphan,
     stale: hiza.stale,
-    digerAkis: hiza.digerAkis,
+    otherFlow: hiza.otherFlow,
     trail,
     plan: card.plan ?? null,
   };
@@ -766,7 +766,7 @@ export async function buildDetail(options: DetailOptions, id: string): Promise<U
       // yargısına girmiyor.
       orphan: bizim && isOrphan(card, options.topology),
       stale: bizim && isStale(card, options.flowHash),
-      digerAkis: !bizim,
+      otherFlow: !bizim,
     }),
     history,
     diff: commit === null ? null : await readDiff(options, commit),

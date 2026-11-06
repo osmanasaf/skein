@@ -322,7 +322,7 @@ async function finishArm(
     ...(options.onSweep === undefined ? {} : { onSweep: options.onSweep }),
   });
 
-  const son = await queue.get(card.id);
+  const last = await queue.get(card.id);
 
   // Ancak şimdi: akış bitti, gizli testler diske gelebilir.
   // Kod zincir boyunca İLERİ taşınıyor, yani son hâli zincirin SON rolünün
@@ -330,10 +330,10 @@ async function finishArm(
   // planlı kolda orada yalnızca plan belgesi vardı: süit hiç koşmuyor,
   // sonuç "ÖLÇÜLEMEDİ" görünüyordu.
   const sonRol = topology.roles[topology.roles.length - 1];
-  const kaynak = sonRol === undefined ? sandbox : workspacePath(sandbox, sonRol.workspace);
+  const source = sonRol === undefined ? sandbox : workspacePath(sandbox, sonRol.workspace);
   const cellDir = join(sandbox, ".skein", "olcum", arm);
   await mkdir(join(cellDir, "artifact"), { recursive: true });
-  await cp(join(kaynak, "src"), join(cellDir, "artifact", "src"), { recursive: true })
+  await cp(join(source, "src"), join(cellDir, "artifact", "src"), { recursive: true })
     .catch(() => undefined);
   await cp(task.hiddenDir, join(cellDir, "hidden"), { recursive: true });
   const h = await runHidden(task, cellDir, repo);
@@ -352,7 +352,7 @@ async function finishArm(
     ran: h.ran,
     red: h.red,
     total: h.hooks.length,
-    cardState: son?.state ?? "yok",
+    cardState: last?.state ?? "yok",
     ...(kacis?.reason === undefined ? {} : { escalation: kacis.reason }),
     ...armMetrics(own),
   };

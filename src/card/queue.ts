@@ -59,7 +59,7 @@ export interface KapiKarari {
    * günlükten YANLIŞ cevaplanıyordu — hiç geri gitmemiş kartlar `back`
    * olarak sayılıyordu.
    */
-  uygulanan: ReleaseDecision;
+  applied: ReleaseDecision;
   /** Kartın gittiği rol (ya da `DONE`). */
   hedef: string;
 }
@@ -91,13 +91,13 @@ export function kapiKarari(card: Card, istenenGiris?: ReleaseDecision): KapiKara
   // olmadığı için rol işi kendisi yeniden yapar — ve bu bir `retry`'dir,
   // öyle de kaydedilir.
   const geriHedefi = role.reject;
-  const uygulanan: ReleaseDecision =
+  const applied: ReleaseDecision =
     istenen === "back" && geriHedefi === null ? "retry" : istenen;
 
   const hedef =
-    uygulanan === "retry" ? role.id : uygulanan === "forward" ? ileri : (geriHedefi ?? role.id);
+    applied === "retry" ? role.id : applied === "forward" ? ileri : (geriHedefi ?? role.id);
 
-  return { kind, istenen, uygulanan, hedef };
+  return { kind, istenen, applied, hedef };
 }
 
 /**

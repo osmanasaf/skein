@@ -241,12 +241,12 @@ afterEach(async () => {
 });
 
 /** Sayfayı açar ve sayfa hatalarını toplar. */
-async function ac(): Promise<{ page: Sayfa; hatalar: string[] }> {
+async function ac(): Promise<{ page: Sayfa; errors: string[] }> {
   const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
-  const hatalar: string[] = [];
-  page.on("pageerror", (e) => hatalar.push(String(e)));
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
   await page.goto(server.url, { waitUntil: "networkidle" });
-  return { page, hatalar };
+  return { page, errors };
 }
 
 /**
@@ -257,23 +257,23 @@ async function ac(): Promise<{ page: Sayfa; hatalar: string[] }> {
  * hangi temanın koştuğu BELİRSİZ olur. Playwright'a şemayı açıkça
  * vererek bu belirsizliği kaldırıyoruz.
  */
-async function acTema(sema: "light" | "dark"): Promise<{ page: Sayfa; hatalar: string[] }> {
+async function acTema(sema: "light" | "dark"): Promise<{ page: Sayfa; errors: string[] }> {
   const page = await (browser as Tarayici).newPage({
     viewport: { width: 1280, height: 900 },
     colorScheme: sema,
   });
-  const hatalar: string[] = [];
-  page.on("pageerror", (e) => hatalar.push(String(e)));
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
   // KONSOL HATASI YOK iddiası page error'dan AYRI: bir `console.error`
   // çağrısı sayfayı çökertmez ama sessizce yutulan bir kusur olurdu.
   page.on("console", (m) => {
     const mesaj = m as { type?: () => string; text?: () => string };
     if (mesaj.type && mesaj.type() === "error") {
-      hatalar.push("konsol: " + (mesaj.text ? mesaj.text() : String(m)));
+      errors.push("konsol: " + (mesaj.text ? mesaj.text() : String(m)));
     }
   });
   await page.goto(server.url, { waitUntil: "networkidle" });
-  return { page, hatalar };
+  return { page, errors };
 }
 
 /**
@@ -285,31 +285,31 @@ async function acTema(sema: "light" | "dark"): Promise<{ page: Sayfa; hatalar: s
  * CSS'i KAYNAK METİNDEN değil tarayıcının GERÇEKTEN uyguladığı hesaplanmış
  * stilden okuyoruz.
  */
-async function acHareket(hareket: "reduce" | "no-preference"): Promise<{ page: Sayfa; hatalar: string[] }> {
+async function acHareket(hareket: "reduce" | "no-preference"): Promise<{ page: Sayfa; errors: string[] }> {
   const page = await (browser as Tarayici).newPage({
     viewport: { width: 1280, height: 900 },
     reducedMotion: hareket,
   });
-  const hatalar: string[] = [];
-  page.on("pageerror", (e) => hatalar.push(String(e)));
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
   await page.goto(server.url, { waitUntil: "networkidle" });
-  return { page, hatalar };
+  return { page, errors };
 }
 
 describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
   it("sayfa çiziliyor ve betik hata vermiyor", async () => {
-    const { page, hatalar } = await ac();
+    const { page, errors } = await ac();
     try {
       await page.waitForSelector("#bar .pill", { timeout: 15_000 });
       // İddia "bir düğüm var" DEĞİL, "pano FORMASYONU gösteriyor" — tek
       // rolli akışta (`coder`) o rol tek başına TEPEDE durmalı (DEVIR.md:
       // "tek rol varsa tepede") ve çıkış kutusu (biten kart sayısı) orada.
-      const dugumler = await page.evaluate(() =>
+      const nodes = await page.evaluate(() =>
         Array.from(document.querySelectorAll(".formasyonDugum")).map((e) => e.getAttribute("data-rol")));
-      expect(dugumler).toEqual(["coder"]);
+      expect(nodes).toEqual(["coder"]);
       const cikisSayisi = await page.textContent(".formasyonCikis text");
       expect(cikisSayisi).toBe("0");
-      expect(hatalar).toEqual([]);
+      expect(errors).toEqual([]);
     } finally {
       await page.close();
     }
@@ -334,7 +334,7 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
    * sınama hâlâ eski "gökyüzü" ailesinin koyu ucunu (#0B1118) ölçüyor.
    */
   it("açık temada zemin artık Modernist'in nötr grisi (eski 'gökyüzü' mavisi DEĞİL), konsol temiz", async () => {
-    const { page, hatalar } = await acTema("light");
+    const { page, errors } = await acTema("light");
     try {
       await page.waitForSelector("#bar .pill", { timeout: 15_000 });
       const zemin = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
@@ -342,20 +342,20 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
       expect(zemin).not.toBe("rgb(231, 236, 242)");
       // --bg (açık, ARTIK): #f3f2f2 → rgb(243, 242, 242) — --color-bg'yle AYNI hex.
       expect(zemin).toBe("rgb(243, 242, 242)");
-      expect(hatalar).toEqual([]);
+      expect(errors).toEqual([]);
     } finally {
       await page.close();
     }
   }, 60_000);
 
   it("gökyüzü paleti: koyu temada zemin doğru rgb, konsol temiz", async () => {
-    const { page, hatalar } = await acTema("dark");
+    const { page, errors } = await acTema("dark");
     try {
       await page.waitForSelector("#bar .pill", { timeout: 15_000 });
       const zemin = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
       // --bg (koyu): #0B1118 → rgb(11, 17, 24)
       expect(zemin).toBe("rgb(11, 17, 24)");
-      expect(hatalar).toEqual([]);
+      expect(errors).toEqual([]);
     } finally {
       await page.close();
     }
@@ -375,7 +375,7 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
    * (AÇIK — hiç değişmemiş) kaldı. Bu sınama tam o ölçümü pinliyor.
    */
   it("#bar koyu temada document.body ile BİRLİKTE koyulaşıyor, açık kalmıyor", async () => {
-    const { page, hatalar } = await acTema("dark");
+    const { page, errors } = await acTema("dark");
     try {
       await page.waitForSelector("#bar .pill", { timeout: 15_000 });
       const barZemin = await page.evaluate(() =>
@@ -393,7 +393,7 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
       expect(govdeZemin).toBe("rgb(11, 17, 24)");
       // --color-text'in koyu ezmesi: #F2EFEE → rgb(242, 239, 238).
       expect(sekmeMetni).toBe("rgb(242, 239, 238)");
-      expect(hatalar).toEqual([]);
+      expect(errors).toEqual([]);
     } finally {
       await page.close();
     }
@@ -422,7 +422,7 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
     const taken = await al(queue, "coder");
     await queue.escalate(taken, "sebep");
 
-    const { page, hatalar } = await acTema("dark");
+    const { page, errors } = await acTema("dark");
     try {
       await page.waitForSelector(".railKapiKutu", { timeout: 15_000 });
       const kutuZemin = await page.evaluate(() =>
@@ -434,10 +434,10 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
       // YENİ değer: --color-accent-100'ün koyu ezmesi, #4d170e → rgb(77, 23, 14).
       expect(kutuZemin).toBe("rgb(77, 23, 14)");
 
-      const fark = Math.abs(parlaklik(kutuZemin) - parlaklik(govdeZemin));
-      expect(fark).toBeLessThanOrEqual(100);
+      const diff = Math.abs(parlaklik(kutuZemin) - parlaklik(govdeZemin));
+      expect(diff).toBeLessThanOrEqual(100);
 
-      expect(hatalar).toEqual([]);
+      expect(errors).toEqual([]);
     } finally {
       await page.close();
     }
@@ -454,7 +454,7 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
    * kartın kendi 100 birimlik eşiğini AŞIYOR.
    */
   it("koyu temada '.lejant .kare.kuyrukta' (kuyruk dolgusu, queue-square-fill) artık gövdeden >100 parlaklık birimi uzak PARLAK bir yüzey DEĞİL", async () => {
-    const { page, hatalar } = await acTema("dark");
+    const { page, errors } = await acTema("dark");
     try {
       await page.waitForSelector("#lejant", { timeout: 15_000 });
       const kareZemin = await page.evaluate(() =>
@@ -466,10 +466,10 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
       // YENİ değer: --color-neutral-500'ün koyu ezmesi, #605d5d → rgb(96, 93, 93).
       expect(kareZemin).toBe("rgb(96, 93, 93)");
 
-      const fark = Math.abs(parlaklik(kareZemin) - parlaklik(govdeZemin));
-      expect(fark).toBeLessThanOrEqual(100);
+      const diff = Math.abs(parlaklik(kareZemin) - parlaklik(govdeZemin));
+      expect(diff).toBeLessThanOrEqual(100);
 
-      expect(hatalar).toEqual([]);
+      expect(errors).toEqual([]);
     } finally {
       await page.close();
     }
@@ -487,7 +487,7 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
    * §2.5" takımı token SEVİYESİNDE ikisini de kapsıyor.
    */
   it("koyu temada '.railGozcuNokta.unmanaged' (gözcü ANA göstergesi, daemon-dot-off-fill) artık gövdeden >100 parlaklık birimi uzak PARLAK bir yüzey DEĞİL", async () => {
-    const { page, hatalar } = await acTema("dark");
+    const { page, errors } = await acTema("dark");
     try {
       await page.waitForSelector("#bar .pill", { timeout: 15_000 });
       await page.click("#bar .pill");
@@ -501,10 +501,10 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
       // YENİ değer: --color-neutral-400'ün koyu ezmesi, #444141 → rgb(68, 65, 65).
       expect(noktaZemin).toBe("rgb(68, 65, 65)");
 
-      const fark = Math.abs(parlaklik(noktaZemin) - parlaklik(govdeZemin));
-      expect(fark).toBeLessThanOrEqual(100);
+      const diff = Math.abs(parlaklik(noktaZemin) - parlaklik(govdeZemin));
+      expect(diff).toBeLessThanOrEqual(100);
 
-      expect(hatalar).toEqual([]);
+      expect(errors).toEqual([]);
     } finally {
       await page.close();
     }
@@ -520,7 +520,7 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
    */
   describe("tema anahtarı", () => {
     it("'Koyu' tıklanınca OS açık olsa da ANINDA koyulaşır VE yeniden açılışta KORUNUR", async () => {
-      const { page, hatalar } = await acTema("light");
+      const { page, errors } = await acTema("light");
       try {
         await page.waitForSelector(".temaAnahtari", { timeout: 15_000 });
         expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor))
@@ -551,14 +551,14 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
         expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor))
           .toBe("rgb(11, 17, 24)");
 
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
       }
     }, 60_000);
 
     it("OS koyuyken 'Açık' seçilince gövde AÇIK kalır (mevcut kaçış yolu, şimdi arayüzden)", async () => {
-      const { page, hatalar } = await acTema("dark");
+      const { page, errors } = await acTema("dark");
       try {
         await page.waitForSelector(".temaAnahtari", { timeout: 15_000 });
         expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor))
@@ -570,14 +570,14 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
         expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor))
           .toBe("rgb(243, 242, 242)");
 
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
       }
     }, 60_000);
 
     it("'Sistem' seçimine geri dönünce OS tercihi yeniden izlenir", async () => {
-      const { page, hatalar } = await acTema("dark");
+      const { page, errors } = await acTema("dark");
       try {
         await page.waitForSelector(".temaAnahtari", { timeout: 15_000 });
         await page.click('.temaBtn:has-text("Açık")');
@@ -591,7 +591,7 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
         expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor))
           .toBe("rgb(11, 17, 24)");
 
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
       }
@@ -611,7 +611,7 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
    * AÇIKÇA koyu temada ölçüyor.
    */
   it("koyu temada 'Yeni kart' düğmesi HÂLÂ koyu dolgulu (--solid-accent, --color-accent-700'ün koyu-tema AÇIK değerine DÖNMEDİ)", async () => {
-    const { page, hatalar } = await acTema("dark");
+    const { page, errors } = await acTema("dark");
     try {
       await page.waitForSelector("#bar .pill", { timeout: 15_000 });
       const zemin = await page.evaluate(() =>
@@ -622,14 +622,14 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
       // → rgb(255, 196, 184) — bu düğme BUNA dönerse beyaz "+" metni
       // okunmaz hâle gelirdi.
       expect(zemin).not.toBe("rgb(255, 196, 184)");
-      expect(hatalar).toEqual([]);
+      expect(errors).toEqual([]);
     } finally {
       await page.close();
     }
   }, 60_000);
 
   it("formdan açılan kart panoya düşüyor", async () => {
-    const { page, hatalar } = await ac();
+    const { page, errors } = await ac();
     try {
       await page.waitForSelector("#bar .pill", { timeout: 15_000 });
       await page.click('button:has-text("Yeni kart")');
@@ -645,7 +645,7 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
       // Çekirdek GERÇEKTEN yazdı mı — sayfanın iddiasına değil kuyruğa bak.
       const kartlar = await queue.list();
       expect(kartlar.map((c) => c.title)).toEqual(["tarayıcıdan"]);
-      expect(hatalar).toEqual([]);
+      expect(errors).toEqual([]);
     } finally {
       await page.close();
     }
@@ -695,12 +695,12 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
       timedOut: true, usage: { inputTokens: 3_000_000, outputTokens: 40_000, partial: true },
     });
 
-    const { page, hatalar } = await ac();
+    const { page, errors } = await ac();
     try {
       await page.waitForSelector("#bar .sayac", { timeout: 15_000 });
       const barMetni = await page.textContent("#bar");
       expect(barMetni).toContain("toplam maliyet ≥$0.50");
-      expect(hatalar).toEqual([]);
+      expect(errors).toEqual([]);
     } finally {
       await page.close();
     }
@@ -774,7 +774,7 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
    * boyutu GERÇEK TARAYICIDA ölçmüyordu (SAPMALAR §2.7 sınıfı boşluk).
    */
   it("gözcü panelindeki durum noktası 10×10px, 2px kenarlı (üst çubuktaki .dot ile AYNI ölçü)", async () => {
-    const { page, hatalar } = await ac();
+    const { page, errors } = await ac();
     try {
       await page.waitForSelector("#bar .pill", { timeout: 15_000 });
       await page.click("#bar .pill");
@@ -787,7 +787,7 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
         return { w: r.width, h: r.height, kenar: s.borderWidth, corner: s.borderRadius };
       });
       expect(measure).toEqual({ w: 10, h: 10, kenar: "2px", corner: "0px" });
-      expect(hatalar).toEqual([]);
+      expect(errors).toEqual([]);
     } finally {
       await page.close();
     }
@@ -818,7 +818,7 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
       // override'ı o YOLU bozmuyor, pidAlive zaten test boyunca
       // KULLANILMIYOR (model her zaman verilen fonksiyona bakıyor).
       alive: gozcuAyar.alive ?? (() => true),
-      gozcu: {
+      watcher: {
         komut: ["node", "-e", ""],
         bayraklar: gozcuAyar.bayraklar ?? ["--model", "claude:m"],
         spawn: (gozcuAyar.spawn ?? (() => ({ pid: 777, kill: () => {}, onExit: () => {} }))) as never,
@@ -912,7 +912,7 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
     const flow = await loadFlow(join(root, "hub", "flows", "test.yaml"), { root, providers: knownProviderSet() });
     const s = await serveUi({
       root, queue, topology, flowName: flow.name, flowHash: flow.hash,
-      gozcu: { komut: ["node"], bayraklar: [], spawn: (() => ({ pid: 1, kill: () => {}, onExit: () => {} })) as never },
+      watcher: { komut: ["node"], bayraklar: [], spawn: (() => ({ pid: 1, kill: () => {}, onExit: () => {} })) as never },
     });
     // Ölü pid: "bayat kilitte gözcü düğmesi 'başlat' diyor" sınamasıyla AYNI
     // sabit (2^22 üstü Linux'ta ayrılmaz).
@@ -1069,7 +1069,7 @@ roles:
     });
     const s = await serveUi({
       root, queue, topology, flowName: "test", flowHash: live.flow.hash, live,
-      akisSecimi: {
+      flowChoice: {
         list: async () => ["test", "ikinci"],
         ac: async (ad) => {
           const l = await LiveFlow.open(join(root, "hub", "flows", `${ad}.yaml`), {
@@ -1081,27 +1081,27 @@ roles:
     });
 
     const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
-    const hatalar: string[] = [];
-    page.on("pageerror", (e) => hatalar.push(String(e)));
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(String(e)));
     try {
       await page.goto(s.url, { waitUntil: "networkidle" });
       await page.waitForSelector("#akisSecici", { timeout: 15_000 });
 
       // Başlangıçta ilk akışın düğümü duruyor.
-      let dugumler = await page.evaluate(() =>
+      let nodes = await page.evaluate(() =>
         Array.from(document.querySelectorAll(".formasyonDugum")).map((e) => e.getAttribute("data-rol")));
-      expect(dugumler).toContain("coder");
+      expect(nodes).toContain("coder");
 
       await page.selectOption("#akisSecici", "ikinci");
       await page.waitForSelector('.formasyonDugum[data-rol="digerrol"]', { timeout: 10_000 });
 
       // İDDİA "yeni düğüm EKLENDİ" değil, "pano DEĞİŞTİ": eski akışın rolü
       // artık hiç görünmemeli — sayfa iki akışı birden çizseydi bu kaçardı.
-      dugumler = await page.evaluate(() =>
+      nodes = await page.evaluate(() =>
         Array.from(document.querySelectorAll(".formasyonDugum")).map((e) => e.getAttribute("data-rol")));
-      expect(dugumler).toContain("digerrol");
-      expect(dugumler).not.toContain("coder");
-      expect(hatalar).toEqual([]);
+      expect(nodes).toContain("digerrol");
+      expect(nodes).not.toContain("coder");
+      expect(errors).toEqual([]);
     } finally {
       await page.close();
       await s.close();
@@ -1127,8 +1127,8 @@ roles:
     });
 
     const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
-    const hatalar: string[] = [];
-    page.on("pageerror", (e) => hatalar.push(String(e)));
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(String(e)));
     try {
       await page.goto(s.url, { waitUntil: "networkidle" });
       await page.waitForSelector("#bar .pill", { timeout: 15_000 });
@@ -1146,7 +1146,7 @@ roles:
       // İDDİA sunucunun söylediği değil, DİSKTE GERÇEKTEN ne olduğu.
       expect(await readFile(join(root, "roles", "coder.prompt"), "utf8"))
         .toBe("# coder\ntarayıcıdan değişti\n");
-      expect(hatalar).toEqual([]);
+      expect(errors).toEqual([]);
     } finally {
       await page.close();
       await s.close();
@@ -1174,8 +1174,8 @@ roles:
     });
 
     const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
-    const hatalar: string[] = [];
-    page.on("pageerror", (e) => hatalar.push(String(e)));
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(String(e)));
     try {
       await page.goto(s.url, { waitUntil: "networkidle" });
       await page.waitForSelector("#bar .pill", { timeout: 15_000 });
@@ -1194,16 +1194,16 @@ roles:
 
       // İDDİA panonun SÖYLEDİĞİ değil, DİSKTE GERÇEKTEN ne olduğu: hem
       // YAML hem de yeni promptu dosyası.
-      const dugumler = await page.evaluate(() =>
+      const nodes = await page.evaluate(() =>
         Array.from(document.querySelectorAll(".formasyonDugum")).map((e) => e.getAttribute("data-rol")));
-      expect(dugumler).toContain("coder");
-      expect(dugumler).toContain("reviewer");
+      expect(nodes).toContain("coder");
+      expect(nodes).toContain("reviewer");
 
       const yaml = await readFile(join(root, "hub", "flows", "test.yaml"), "utf8");
       expect(yaml).toContain("id: reviewer");
       const promptMetni = await readFile(join(root, "roles", "reviewer.md"), "utf8");
       expect(promptMetni).toContain("Rolün: reviewer");
-      expect(hatalar).toEqual([]);
+      expect(errors).toEqual([]);
     } finally {
       await page.close();
       await s.close();
@@ -1231,8 +1231,8 @@ roles:
     });
 
     const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
-    const hatalar: string[] = [];
-    page.on("pageerror", (e) => hatalar.push(String(e)));
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(String(e)));
     try {
       await page.goto(s.url, { waitUntil: "networkidle" });
       await page.waitForSelector("#bar .pill", { timeout: 15_000 });
@@ -1271,7 +1271,7 @@ roles:
       // DİSKTE HİÇBİR ŞEY DEĞİŞMEDİ — bu tur hiç "Kaydet"e basmadı.
       expect(await readFile(join(root, "roles", "coder.prompt"), "utf8")).toBe("# coder\n");
       expect(await readFile(join(root, "hub", "prompts", "base.md"), "utf8")).toBe("# Anayasa\n");
-      expect(hatalar).toEqual([]);
+      expect(errors).toEqual([]);
     } finally {
       await page.close();
       await s.close();
@@ -1296,8 +1296,8 @@ roles:
     });
 
     const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
-    const hatalar: string[] = [];
-    page.on("pageerror", (e) => hatalar.push(String(e)));
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(String(e)));
     try {
       await page.goto(s.url, { waitUntil: "networkidle" });
       await page.waitForSelector("#bar .pill", { timeout: 15_000 });
@@ -1311,7 +1311,7 @@ roles:
       // Hash boşalmış (Pano'ya dönülmüş) ve Rol modu AÇIK olmalı.
       await page.waitForSelector(".railRolBaslik", { timeout: 10_000 });
       expect(await page.textContent(".railRolBaslik")).toBe("coder");
-      expect(hatalar).toEqual([]);
+      expect(errors).toEqual([]);
     } finally {
       await page.close();
       await s.close();
@@ -1442,13 +1442,13 @@ reject:
     it("planlama bandı 2 katılımcıda 'en çok N tur' etiketiyle çiziliyor", async () => {
       const s = await zenginSunucusuAc();
       const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
-      const hatalar: string[] = [];
-      page.on("pageerror", (e) => hatalar.push(String(e)));
+      const errors: string[] = [];
+      page.on("pageerror", (e) => errors.push(String(e)));
       try {
         await page.goto(s.url, { waitUntil: "networkidle" });
         await page.waitForSelector(".formasyonPlanEtiket", { timeout: 15_000 });
         expect(await page.textContent(".formasyonPlanEtiket")).toBe("planlama · en çok 2 tur");
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
         await s.close();
@@ -1458,13 +1458,13 @@ reject:
     it("onay kapısı dik çizgi + 'insan onayı' etiketiyle çiziliyor", async () => {
       const s = await zenginSunucusuAc();
       const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
-      const hatalar: string[] = [];
-      page.on("pageerror", (e) => hatalar.push(String(e)));
+      const errors: string[] = [];
+      page.on("pageerror", (e) => errors.push(String(e)));
       try {
         await page.goto(s.url, { waitUntil: "networkidle" });
         await page.waitForSelector(".formasyonKapiEtiket", { timeout: 15_000 });
         expect(await page.textContent(".formasyonKapiEtiket")).toBe("insan onayı");
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
         await s.close();
@@ -1474,15 +1474,15 @@ reject:
     it("her ret kenarı için 'ret → hedef' etiketli bir yay çiziliyor", async () => {
       const s = await zenginSunucusuAc();
       const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
-      const hatalar: string[] = [];
-      page.on("pageerror", (e) => hatalar.push(String(e)));
+      const errors: string[] = [];
+      page.on("pageerror", (e) => errors.push(String(e)));
       try {
         await page.goto(s.url, { waitUntil: "networkidle" });
         await page.waitForSelector(".formasyonRetEtiket", { timeout: 15_000 });
         const etiketler = await page.evaluate(() =>
           Array.from(document.querySelectorAll(".formasyonRetEtiket")).map((e) => e.textContent ?? ""));
         expect(etiketler.sort()).toEqual(["ret → coder", "ret → planner"]);
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
         await s.close();
@@ -1500,13 +1500,13 @@ reject:
       const topo = snapshot(flow, root);
       const s = await serveUi({ root, queue, topology: topo, flowName: flow.name, flowHash: flow.hash });
       const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
-      const hatalar: string[] = [];
-      page.on("pageerror", (e) => hatalar.push(String(e)));
+      const errors: string[] = [];
+      page.on("pageerror", (e) => errors.push(String(e)));
       try {
         await page.goto(s.url, { waitUntil: "networkidle" });
         await page.waitForSelector(".formasyonDugum", { timeout: 15_000 });
         expect(await page.evaluate(() => document.querySelectorAll(".formasyonPlanEtiket").length)).toBe(0);
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
         await s.close();
@@ -1542,7 +1542,7 @@ reject:
       // "rect.kutu" hedefi yine de doğru ve dar bir hedef olduğu için
       // korunuyor.
       const kutu = '.formasyonDugum[data-rol="coder"] rect.kutu';
-      const { page, hatalar } = await ac();
+      const { page, errors } = await ac();
       try {
         await page.waitForSelector(kutu, { timeout: 15_000 });
 
@@ -1564,7 +1564,7 @@ reject:
         await page.waitForSelector(".railSayiSatiri", { timeout: 10_000 });
         expect(await page.evaluate(() => document.querySelector(".railRolBaslik"))).toBeNull();
 
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
       }
@@ -1579,7 +1579,7 @@ reject:
      */
     it("Rol modunda 'Prompt' düğmesi o rolün dosyasını seçili açar", async () => {
       const kutu = '.formasyonDugum[data-rol="coder"] rect.kutu';
-      const { page, hatalar } = await ac();
+      const { page, errors } = await ac();
       try {
         await page.waitForSelector(kutu, { timeout: 15_000 });
         await page.click(kutu);
@@ -1590,7 +1590,7 @@ reject:
         await page.waitForTimeout(500);
         const metin = await page.evaluate(() => document.querySelector("#promptlarMetin")?.value ?? null);
         expect(metin).toBe("# coder\n");
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
       }
@@ -1620,7 +1620,7 @@ reject:
       const taken = await al(queue, "coder");
       await queue.escalate(taken, rationale);
 
-      const { page, hatalar } = await ac();
+      const { page, errors } = await ac();
       try {
         await page.waitForSelector(".railKapiKutu", { timeout: 15_000 });
 
@@ -1640,7 +1640,7 @@ reject:
         expect(await page.evaluate(() =>
           document.querySelector(".railKapiKutu .ajanTam")?.classList.contains("mono"))).toBe(true);
 
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
       }
@@ -1651,13 +1651,13 @@ reject:
       const taken = await al(queue, "coder");
       await queue.escalate(taken, "ağaçta işlenmemiş değişiklik var: README.md");
 
-      const { page, hatalar } = await ac();
+      const { page, errors } = await ac();
       try {
         await page.waitForSelector(".railKapiKutu", { timeout: 15_000 });
         expect(await page.textContent(".railKapiKutu .reason"))
           .toBe("ağaçta işlenmemiş değişiklik var: README.md");
         expect(await page.evaluate(() => document.querySelector(".railKapiKutu .ajanDetay"))).toBeNull();
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
       }
@@ -1675,7 +1675,7 @@ reject:
       const taken = await al(queue, "coder");
       await queue.escalate(taken, "geçici bir hata");
 
-      const { page, hatalar } = await ac();
+      const { page, errors } = await ac();
       try {
         await page.waitForSelector(".railKapiKutu", { timeout: 15_000 });
         expect(await page.textContent(".railSayi")).toBe("1");
@@ -1696,7 +1696,7 @@ reject:
 
         const current = await queue.get(taken.id);
         expect(current?.state).not.toBe("gate");
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
       }
@@ -1716,7 +1716,7 @@ reject:
       const taken = await al(queue, "coder");
       await queue.escalate(taken, "geçici bir hata");
 
-      const { page, hatalar } = await acTema("dark");
+      const { page, errors } = await acTema("dark");
       try {
         await page.waitForSelector(".railKapiKutu", { timeout: 15_000 });
         await page.click('.railKapiKutu .railCikis button:has-text("Yeniden koş")');
@@ -1727,7 +1727,7 @@ reject:
         // KARŞIT İDDİA: --color-neutral-900'ün koyu-tema (ink) değeri,
         // #f8f4f4 → rgb(248, 244, 244).
         expect(zemin).not.toBe("rgb(248, 244, 244)");
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
       }
@@ -1746,7 +1746,7 @@ reject:
       const taken = await al(queue, "coder");
       await queue.escalate(taken, "elle bakılmalı");
 
-      const { page, hatalar } = await ac();
+      const { page, errors } = await ac();
       try {
         await page.waitForSelector(".railBaslikBtn", { timeout: 15_000 });
         await page.click(".railBaslikBtn");
@@ -1762,7 +1762,7 @@ reject:
         await page.waitForSelector(".railSayiSatiri", { timeout: 10_000 });
         expect(await page.evaluate(() => document.querySelector(".railKartBaslik"))).toBeNull();
 
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
       }
@@ -1784,7 +1784,7 @@ reject:
       const taken = await al(queue, "coder");
       await queue.escalate(taken, "elle bakılmalı");
 
-      const { page, hatalar } = await ac();
+      const { page, errors } = await ac();
       try {
         await page.waitForSelector(".railBaslikBtn", { timeout: 15_000 });
         await page.click(".railBaslikBtn");
@@ -1797,7 +1797,7 @@ reject:
           return { w: r.width, h: r.height, kenar: s.borderWidth, corner: s.borderRadius };
         });
         expect(measure).toEqual({ w: 10, h: 10, kenar: "2px", corner: "0px" });
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
       }
@@ -1822,7 +1822,7 @@ reject:
       const taken = await al(queue, "coder");
       await queue.escalate(taken, "geçici bir hata");
 
-      const { page, hatalar } = await ac();
+      const { page, errors } = await ac();
       try {
         await page.waitForSelector(".railBaslikBtn", { timeout: 15_000 });
         await page.click(".railBaslikBtn");
@@ -1854,7 +1854,7 @@ reject:
         // Hâlâ Kart modundayız — '←' basmadan, RAIL hiç değişmeden.
         expect(await page.textContent(".railKartBaslik")).toBe("kart modunda karar verilecek");
 
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
       }
@@ -1871,7 +1871,7 @@ reject:
      * global ortamda GÖRÜNÜR, `page.evaluate` onlara çıplak adla erişebilir.
      */
     it("Rol modundaki rol kaybolursa 'rol bulunamadı' ile BİRLİKTE 'Genel bakış' düğmesi kalır", async () => {
-      const { page, hatalar } = await ac();
+      const { page, errors } = await ac();
       try {
         await page.waitForSelector(".railSayiSatiri", { timeout: 15_000 });
         await page.evaluate(() => {
@@ -1883,7 +1883,7 @@ reject:
         // Kilit YOK: düğme hâlâ orada ve tıklanınca Genel bakışa döner.
         await page.click(".railGeri");
         await page.waitForSelector(".railSayiSatiri", { timeout: 10_000 });
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
       }
@@ -1907,26 +1907,26 @@ reject:
    * durmaz, yalnızca gerçek çizimde görünür.
    */
   it("marka simgesi bardaki svg olarak çiziliyor, iki temada da currentColor --color-accent'e eşit", async () => {
-    const { page: acik, hatalar: hatalarAcik } = await acTema("light");
+    const { page: isOpen, errors: hatalarAcik } = await acTema("light");
     try {
-      await acik.waitForSelector(".marka svg path", { timeout: 15_000 });
+      await isOpen.waitForSelector(".marka svg path", { timeout: 15_000 });
       // İŞARET currentColor KULLANIYOR: renk kararı burada DEĞİL, ".marka"
       // kuralının CSS 'color'ından geliyor — bu yüzden 'stroke'
       // özniteliğinin KENDİSİ "currentColor" dizgesi olmalı (bir hex DEĞİL).
-      const stroke = await acik.evaluate(() => document.querySelector(".marka svg path")?.getAttribute("stroke"));
+      const stroke = await isOpen.evaluate(() => document.querySelector(".marka svg path")?.getAttribute("stroke"));
       expect(stroke).toBe("currentColor");
       // currentColor'ın ÇÖZÜLMÜŞ hâli: path'in computed 'color'ı,
       // --color-accent'in gerçek değeri.
-      const ciziliRenkAcik = await acik.evaluate(() =>
+      const ciziliRenkAcik = await isOpen.evaluate(() =>
         getComputedStyle(document.querySelector(".marka svg path")).color);
       // --color-accent: #ec3013 → rgb(236, 48, 19)
       expect(ciziliRenkAcik).toBe("rgb(236, 48, 19)");
       expect(hatalarAcik).toEqual([]);
     } finally {
-      await acik.close();
+      await isOpen.close();
     }
 
-    const { page: koyu, hatalar: hatalarKoyu } = await acTema("dark");
+    const { page: koyu, errors: hatalarKoyu } = await acTema("dark");
     try {
       await koyu.waitForSelector(".marka svg path", { timeout: 15_000 });
       const ciziliRenkKoyu = await koyu.evaluate(() =>
@@ -1953,7 +1953,7 @@ reject:
    * system-ui'ına eşit kalır), tanımlı olunca GEÇER.
    */
   it("marka adı, sekme etiketleri ve 'Yeni kart' düğmesi Archivo'ya çözülüyor, gövdenin system-ui yığınına düşmüyor", async () => {
-    const { page, hatalar } = await ac();
+    const { page, errors } = await ac();
     try {
       await page.waitForSelector(".marka .markaAd", { timeout: 15_000 });
       const govdeFontu = await page.evaluate(() => getComputedStyle(document.body).fontFamily);
@@ -1971,7 +1971,7 @@ reject:
       expect(markaFontu).not.toBe(govdeFontu);
       expect(sekmeFontu).not.toBe(govdeFontu);
       expect(dugmeFontu).not.toBe(govdeFontu);
-      expect(hatalar).toEqual([]);
+      expect(errors).toEqual([]);
     } finally {
       await page.close();
     }
@@ -1986,7 +1986,7 @@ reject:
    * ÇAĞRILDIĞINI göstermez.
    */
   it("favicon aynı işaretten data URI olarak kuruluyor, dosya indirmiyor", async () => {
-    const { page, hatalar } = await ac();
+    const { page, errors } = await ac();
     try {
       await page.waitForSelector(".marka svg path", { timeout: 15_000 });
       const href = await page.evaluate(() => {
@@ -1998,7 +1998,7 @@ reject:
       // DOSYA İNDİRME YOK: href bir ağ adresi DEĞİL, gömülü veri.
       expect(href).not.toContain("http://");
       expect(href).not.toContain("https://");
-      expect(hatalar).toEqual([]);
+      expect(errors).toEqual([]);
     } finally {
       await page.close();
     }
@@ -2026,7 +2026,7 @@ reject:
     await queue.add(newCard({ title: "kanat-azalt", task: "iş", topology }));
     await al(queue, "coder");
 
-    const { page: azalt, hatalar: hatalarAzalt } = await acHareket("reduce");
+    const { page: azalt, errors: hatalarAzalt } = await acHareket("reduce");
     try {
       await azalt.waitForSelector(".formasyonKus.kanatCirpiyor", { timeout: 15_000 });
       const animAzalt = await azalt.evaluate(() =>
@@ -2046,7 +2046,7 @@ reject:
     await queue.add(newCard({ title: "kanat-normal", task: "iş", topology }));
     await al(queue, "coder");
 
-    const { page: normal, hatalar: hatalarNormal } = await acHareket("no-preference");
+    const { page: normal, errors: hatalarNormal } = await acHareket("no-preference");
     try {
       await normal.waitForSelector(".formasyonKus.kanatCirpiyor", { timeout: 15_000 });
       const animNormal = await normal.evaluate(() =>
@@ -2068,11 +2068,11 @@ reject:
   it("gözcü kapalıyken çalışan kart bile kanat çırptırmaz", async () => {
     await queue.add(newCard({ title: "gozcu-kapali", task: "iş", topology }));
     await al(queue, "coder");
-    const { page, hatalar } = await ac();
+    const { page, errors } = await ac();
     try {
       await page.waitForSelector(".formasyonDugum .kare-calisiyor", { timeout: 15_000 });
       expect(await page.evaluate(() => document.querySelectorAll(".formasyonKus.kanatCirpiyor").length)).toBe(0);
-      expect(hatalar).toEqual([]);
+      expect(errors).toEqual([]);
     } finally {
       await page.close();
     }
@@ -2198,17 +2198,17 @@ gates:
     it("gunluk-tek: iki düğüm, next ileri, reject ve syncBack GERİ ve GÖRSEL OLARAK AYRI", async () => {
       const s = await akisSunucusuAc("gunluk-tek", GUNLUK_TEK_FLOW);
       const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
-      const hatalar: string[] = [];
-      page.on("pageerror", (e) => hatalar.push(String(e)));
+      const errors: string[] = [];
+      page.on("pageerror", (e) => errors.push(String(e)));
       try {
         await page.goto(s.url, { waitUntil: "networkidle" });
         await page.waitForSelector("#bar .pill", { timeout: 15_000 });
         await page.click('button:has-text("Akışı düzenle")');
         await page.waitForSelector(".diyagram-yatay .dugum", { timeout: 10_000 });
 
-        const dugumler = await page.evaluate(() =>
+        const nodes = await page.evaluate(() =>
           Array.from(document.querySelectorAll(".diyagram-yatay .dugum")).map((d) => d.getAttribute("data-rol")));
-        expect(dugumler.sort()).toEqual(["coder", "reviewer"]);
+        expect(nodes.sort()).toEqual(["coder", "reviewer"]);
 
         const next = await page.evaluate(() =>
           document.querySelector('.diyagram-yatay .kenar[data-kind="next"][data-from="coder"][data-to="reviewer"]') !== null);
@@ -2243,7 +2243,7 @@ gates:
         expect(dashler.syncBack).not.toBeNull();
         expect(dashler.reject).not.toBe(dashler.syncBack);
 
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
         await s.close();
@@ -2294,17 +2294,17 @@ gates:
     it("ab-planli: dört rol, zincirdeki her next/reject kenarı ve yalnızca onay kapısı işaretli", async () => {
       const s = await akisSunucusuAc("ab-planli", AB_PLANLI_FLOW);
       const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
-      const hatalar: string[] = [];
-      page.on("pageerror", (e) => hatalar.push(String(e)));
+      const errors: string[] = [];
+      page.on("pageerror", (e) => errors.push(String(e)));
       try {
         await page.goto(s.url, { waitUntil: "networkidle" });
         await page.waitForSelector("#bar .pill", { timeout: 15_000 });
         await page.click('button:has-text("Akışı düzenle")');
         await page.waitForSelector(".diyagram-yatay .dugum", { timeout: 10_000 });
 
-        const dugumler = await page.evaluate(() =>
+        const nodes = await page.evaluate(() =>
           Array.from(document.querySelectorAll(".diyagram-yatay .dugum")).map((d) => d.getAttribute("data-rol")));
-        expect(dugumler.sort()).toEqual(["architect", "coder", "planner", "reviewer"]);
+        expect(nodes.sort()).toEqual(["architect", "coder", "planner", "reviewer"]);
 
         // Sayfadaki HER kenarı (from, to, kind) üçlüsü olarak çıkarıp
         // Node tarafında karşılaştırıyoruz — "Sayfa" tipi evaluate'e
@@ -2340,7 +2340,7 @@ gates:
           Array.from(document.querySelectorAll(".diyagram-yatay .kapi-isaret")).map((g) => g.getAttribute("data-after")));
         expect(kapilar).toEqual(["coder"]);
 
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
         await s.close();
@@ -2364,12 +2364,12 @@ gates:
         root, queue, topology, flowName: "test", flowHash: live.flow.hash, live,
       });
       const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
-      const hatalar: string[] = [];
-      page.on("pageerror", (e) => hatalar.push(String(e)));
+      const errors: string[] = [];
+      page.on("pageerror", (e) => errors.push(String(e)));
       page.on("console", (m) => {
         const mesaj = m as { type?: () => string; text?: () => string };
         if (mesaj.type && mesaj.type() === "error") {
-          hatalar.push("konsol: " + (mesaj.text ? mesaj.text() : String(m)));
+          errors.push("konsol: " + (mesaj.text ? mesaj.text() : String(m)));
         }
       });
       try {
@@ -2388,7 +2388,7 @@ gates:
         expect(hataMetni).toMatch(/geçersiz/);
         expect(await page.evaluate(() => document.querySelectorAll(".dugum").length)).toBe(0);
         expect(await page.evaluate(() => document.querySelectorAll(".kenar").length)).toBe(0);
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
         await s.close();
@@ -2416,8 +2416,8 @@ gates:
         loadOptions: { root, providers: knownProviderSet() },
       });
       const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
-      const hatalar: string[] = [];
-      page.on("pageerror", (e) => hatalar.push(String(e)));
+      const errors: string[] = [];
+      page.on("pageerror", (e) => errors.push(String(e)));
       try {
         await page.goto(s.url, { waitUntil: "networkidle" });
         await page.waitForSelector("#bar .pill", { timeout: 15_000 });
@@ -2435,7 +2435,7 @@ gates:
         expect(hataMetni).toMatch(/geçersiz/);
         expect(await page.evaluate(() => document.querySelectorAll(".dugum").length)).toBe(0);
         expect(await page.evaluate(() => document.querySelectorAll(".kenar").length)).toBe(0);
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
         await s.close();
@@ -2461,8 +2461,8 @@ gates:
         loadOptions: { root, providers: knownProviderSet() },
       });
       const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
-      const hatalar: string[] = [];
-      page.on("pageerror", (e) => hatalar.push(String(e)));
+      const errors: string[] = [];
+      page.on("pageerror", (e) => errors.push(String(e)));
       try {
         await page.goto(s.url, { waitUntil: "networkidle" });
         await page.waitForSelector("#bar .pill", { timeout: 15_000 });
@@ -2485,7 +2485,7 @@ gates:
         // İDDİA sunucunun söylediği değil DİSKTE GERÇEKTEN ne olduğu.
         const yaml = await readFile(join(root, "hub", "flows", "test.yaml"), "utf8");
         expect(yaml).toContain("id: coder-degisti");
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
         await s.close();
@@ -2504,8 +2504,8 @@ gates:
     it("diyagramdan düğüme tıklayınca düzenleme alanları açılıyor, provider değiştirip kaydetmek dosyayı değiştiriyor", async () => {
       const s = await akisSunucusuDuzenlenebilirAc("gunluk-tek", GUNLUK_TEK_FLOW);
       const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
-      const hatalar: string[] = [];
-      page.on("pageerror", (e) => hatalar.push(String(e)));
+      const errors: string[] = [];
+      page.on("pageerror", (e) => errors.push(String(e)));
       try {
         await page.goto(s.url, { waitUntil: "networkidle" });
         await page.waitForSelector("#bar .pill", { timeout: 15_000 });
@@ -2530,7 +2530,7 @@ gates:
 
         const yaml = await readFile(join(root, "hub", "flows", "gunluk-tek.yaml"), "utf8");
         expect(yaml).toMatch(/id: coder[\s\S]*provider: codex/);
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
         await s.close();
@@ -2546,8 +2546,8 @@ gates:
     it("diyagramdaki '+' ile iki düğüm arasına rol ekleniyor, zincire doğru yere giriyor", async () => {
       const s = await akisSunucusuDuzenlenebilirAc("gunluk-tek", GUNLUK_TEK_FLOW);
       const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
-      const hatalar: string[] = [];
-      page.on("pageerror", (e) => hatalar.push(String(e)));
+      const errors: string[] = [];
+      page.on("pageerror", (e) => errors.push(String(e)));
       try {
         await page.goto(s.url, { waitUntil: "networkidle" });
         await page.waitForSelector("#bar .pill", { timeout: 15_000 });
@@ -2577,7 +2577,7 @@ gates:
         const yaml = await readFile(join(root, "hub", "flows", "gunluk-tek.yaml"), "utf8");
         expect(yaml).toMatch(/id: coder[\s\S]*next: ortadaki/);
         expect(yaml).toMatch(/id: ortadaki[\s\S]*next: reviewer/);
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
         await s.close();
@@ -2624,8 +2624,8 @@ roles:
     it("diyagramdan rol silinince zincir KOPMUYOR, çıkarılan role işaret eden kenarlar TEMİZLENİYOR", async () => {
       const s = await akisSunucusuDuzenlenebilirAc("uclu", UCLU_FLOW);
       const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
-      const hatalar: string[] = [];
-      page.on("pageerror", (e) => hatalar.push(String(e)));
+      const errors: string[] = [];
+      page.on("pageerror", (e) => errors.push(String(e)));
       try {
         await page.goto(s.url, { waitUntil: "networkidle" });
         await page.waitForSelector("#bar .pill", { timeout: 15_000 });
@@ -2652,7 +2652,7 @@ roles:
         // ÇIKARILAN ROLE İŞARET EDEN reject TEMİZLENDİ — "reviewer" artık
         // hiçbir rolün reject hedefi değil.
         expect(yaml).not.toMatch(/reject: reviewer/);
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
         await s.close();
@@ -2669,8 +2669,8 @@ roles:
     it("diyagramdan geçersiz bir değişiklik yapınca kural mesajı EKRANDA (diyagram sekmesinde) görünüyor", async () => {
       const s = await akisSunucusuDuzenlenebilirAc("gunluk-tek", GUNLUK_TEK_FLOW);
       const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
-      const hatalar: string[] = [];
-      page.on("pageerror", (e) => hatalar.push(String(e)));
+      const errors: string[] = [];
+      page.on("pageerror", (e) => errors.push(String(e)));
       try {
         await page.goto(s.url, { waitUntil: "networkidle" });
         await page.waitForSelector("#bar .pill", { timeout: 15_000 });
@@ -2699,7 +2699,7 @@ roles:
         // GEÇERSİZKEN KAYDET KAPALI — hiçbir yarım taslak dosyaya düşemez.
         expect(await page.evaluate(() =>
           (document.querySelector("#kaydet") as unknown as { disabled: boolean } | null)?.disabled)).toBe(true);
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
         await s.close();
@@ -2751,8 +2751,8 @@ planlama:
       const yol = join(root, "hub", "flows", "planli.yaml");
       const s = await akisSunucusuDuzenlenebilirAc("planli", PLANLI_FLOW);
       const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
-      const hatalar: string[] = [];
-      page.on("pageerror", (e) => hatalar.push(String(e)));
+      const errors: string[] = [];
+      page.on("pageerror", (e) => errors.push(String(e)));
       try {
         await page.goto(s.url, { waitUntil: "networkidle" });
         await page.waitForSelector("#bar .pill", { timeout: 15_000 });
@@ -2779,7 +2779,7 @@ planlama:
         expect(yazilan).toContain("planlama:");
         expect(yazilan).toContain("denetci: reviewer");
         expect(yazilan).toContain("plan: docs/plan/{kart}.md");
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
         await s.close();
@@ -2797,7 +2797,7 @@ planlama:
    * yalnızca gerçek DOM'da görünür.
    */
   it("sekmeler arasında geçiş board'u gizleyip yer tutucuyu gösteriyor, Pano'ya dönünce formasyon aynen duruyor", async () => {
-    const { page, hatalar } = await ac();
+    const { page, errors } = await ac();
     try {
       await page.waitForSelector("#bar .pill", { timeout: 15_000 });
       // Başlangıçta Pano görünür, Akışlar gizli.
@@ -2820,7 +2820,7 @@ planlama:
       expect(await page.evaluate(() =>
         getComputedStyle(document.querySelector("#icerikAkislar")).display)).toBe("none");
       expect(await page.evaluate(() => document.querySelectorAll(".formasyonDugum").length)).toBeGreaterThan(0);
-      expect(hatalar).toEqual([]);
+      expect(errors).toEqual([]);
     } finally {
       await page.close();
     }
@@ -2836,7 +2836,7 @@ planlama:
    * sınama GERÇEKTEN ÇİZİLEN köşeyi ölçmüyordu. Burada ölçülüyor.
    */
   it("üst araç satırındaki 'Rolleri düzenle' düğmesi köşesiz (DEVIR.md Fidelity)", async () => {
-    const { page, hatalar } = await ac();
+    const { page, errors } = await ac();
     try {
       await page.waitForSelector('button:has-text("Rolleri düzenle")', { timeout: 15_000 });
       const yaricap = await page.evaluate(() => {
@@ -2845,7 +2845,7 @@ planlama:
         return b ? getComputedStyle(b).borderRadius : null;
       });
       expect(yaricap).toBe("0px");
-      expect(hatalar).toEqual([]);
+      expect(errors).toEqual([]);
     } finally {
       await page.close();
     }
@@ -2906,8 +2906,8 @@ roles:
     it("panel açılınca roller listelenir; başlıkta akış dosya yolu görünür, Kaydet değişiklik yokken devre dışıdır", async () => {
       const s = await duzenleSunucusuAc("duzenle-test1", duzenleFlowYaml("duzenle-test1"));
       const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
-      const hatalar: string[] = [];
-      page.on("pageerror", (e) => hatalar.push(String(e)));
+      const errors: string[] = [];
+      page.on("pageerror", (e) => errors.push(String(e)));
       try {
         await page.goto(s.url, { waitUntil: "networkidle" });
         await page.waitForSelector("#bar .pill", { timeout: 15_000 });
@@ -2917,7 +2917,7 @@ roles:
         expect(await page.evaluate(() => document.querySelectorAll(".duzenleRol").length)).toBe(3);
         expect(await page.textContent(".railUst")).toContain("hub/flows/duzenle-test1.yaml");
         await page.waitForSelector("#duzenleKaydetBtn[disabled]", { timeout: 10_000 });
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
         await s.close();
@@ -2927,8 +2927,8 @@ roles:
     it("aynı adı taşıyan iki rol HATA verir (accent-700), Kaydet devre dışı kalır", async () => {
       const s = await duzenleSunucusuAc("duzenle-test2", duzenleFlowYaml("duzenle-test2"));
       const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
-      const hatalar: string[] = [];
-      page.on("pageerror", (e) => hatalar.push(String(e)));
+      const errors: string[] = [];
+      page.on("pageerror", (e) => errors.push(String(e)));
       try {
         await page.goto(s.url, { waitUntil: "networkidle" });
         await page.waitForSelector("#bar .pill", { timeout: 15_000 });
@@ -2952,7 +2952,7 @@ roles:
         const disabled = await page.evaluate(() =>
           document.querySelector("#duzenleKaydetBtn")?.getAttribute("disabled") !== null);
         expect(disabled).toBe(true);
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
         await s.close();
@@ -2974,8 +2974,8 @@ roles:
         providerIds: knownProviderSet().ids(),
       });
       const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
-      const hatalar: string[] = [];
-      page.on("pageerror", (e) => hatalar.push(String(e)));
+      const errors: string[] = [];
+      page.on("pageerror", (e) => errors.push(String(e)));
       try {
         await page.goto(s.url, { waitUntil: "networkidle" });
         await page.waitForSelector("#bar .pill", { timeout: 15_000 });
@@ -2989,7 +2989,7 @@ roles:
         expect(await page.evaluate(() => document.querySelectorAll(".duzenleRol").length)).toBe(2);
         // HATA yok — silme ENGELLENMEDİ, sadece uyarıldı.
         expect(await page.evaluate(() => document.querySelectorAll(".duzenleHata").length)).toBe(0);
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
         await s.close();
@@ -3000,8 +3000,8 @@ roles:
       const ad = "duzenle-test4";
       const s = await duzenleSunucusuAc(ad, duzenleFlowYaml(ad));
       const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
-      const hatalar: string[] = [];
-      page.on("pageerror", (e) => hatalar.push(String(e)));
+      const errors: string[] = [];
+      page.on("pageerror", (e) => errors.push(String(e)));
       try {
         await page.goto(s.url, { waitUntil: "networkidle" });
         await page.waitForSelector("#bar .pill", { timeout: 15_000 });
@@ -3020,7 +3020,7 @@ roles:
         // İDDİA sunucunun söylediği değil DİSKTE GERÇEKTEN ne olduğu.
         const yaml = await readFile(join(root, "hub", "flows", `${ad}.yaml`), "utf8");
         expect(yaml).toMatch(/id: guard[\s\S]*?provider: claude/);
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
         await s.close();
@@ -3035,8 +3035,8 @@ roles:
       const ad = "duzenle-test5";
       const s = await duzenleSunucusuAc(ad, duzenleFlowYaml(ad));
       const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
-      const hatalar: string[] = [];
-      page.on("pageerror", (e) => hatalar.push(String(e)));
+      const errors: string[] = [];
+      page.on("pageerror", (e) => errors.push(String(e)));
       try {
         await page.goto(s.url, { waitUntil: "networkidle" });
         await page.waitForSelector("#bar .pill", { timeout: 15_000 });
@@ -3055,7 +3055,7 @@ roles:
         const yaml = await readFile(join(root, "hub", "flows", `${ad}.yaml`), "utf8");
         expect(yaml).toMatch(/id: guard[\s\S]*?next: reviewer/);
         expect(yaml).toMatch(/id: reviewer[\s\S]*?next: done/);
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
         await s.close();
@@ -3068,8 +3068,8 @@ roles:
       const ad = "duzenle-test6";
       const s = await duzenleSunucusuAc(ad, duzenleFlowYaml(ad));
       const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
-      const hatalar: string[] = [];
-      page.on("pageerror", (e) => hatalar.push(String(e)));
+      const errors: string[] = [];
+      page.on("pageerror", (e) => errors.push(String(e)));
       try {
         await page.goto(s.url, { waitUntil: "networkidle" });
         await page.waitForSelector("#bar .pill", { timeout: 15_000 });
@@ -3083,7 +3083,7 @@ roles:
         expect(vurgulanan).toBe("guard");
         // Panel KAPANMADI — hâlâ üç blok duruyor.
         expect(await page.evaluate(() => document.querySelectorAll(".duzenleRol").length)).toBe(3);
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
         await s.close();
@@ -3126,7 +3126,7 @@ roles:
         flowPath: live.flow.path,
         loadOptions: { root, providers: knownProviderSet() },
         providerIds: knownProviderSet().ids(),
-        akisSecimi: {
+        flowChoice: {
           // GERÇEK dizini okuyor (production'daki listFlowNames'in AYNISI)
           // — sabit bir dizi, "Yeni akış" kutusunun yazdığı dosyayı asla
           // GÖRMEZDİ ve /akis/sec "Bilinmeyen akış" diye reddederdi.
@@ -3147,8 +3147,8 @@ roles:
     it("kart ızgarası her akışı gösterir: panoda etiketi, rol sayısı ve zincir gerçek veriden", async () => {
       const s = await akislarSunucusuAc();
       const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
-      const hatalar: string[] = [];
-      page.on("pageerror", (e) => hatalar.push(String(e)));
+      const errors: string[] = [];
+      page.on("pageerror", (e) => errors.push(String(e)));
       try {
         await page.goto(s.url, { waitUntil: "networkidle" });
         await page.click('.navSekme:has-text("Akışlar")');
@@ -3170,7 +3170,7 @@ roles:
         expect(ikinci?.metin).toContain("ikinci akış");
         // Her kartın mini formasyonu gerçekten çizildi (iki akış, iki SVG).
         expect(await page.evaluate(() => document.querySelectorAll(".akisKartFormasyon").length)).toBe(2);
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
         await s.close();
@@ -3180,8 +3180,8 @@ roles:
     it("'Panoda aç' başka bir akışın kartından panoyu o akışa geçirir", async () => {
       const s = await akislarSunucusuAc();
       const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
-      const hatalar: string[] = [];
-      page.on("pageerror", (e) => hatalar.push(String(e)));
+      const errors: string[] = [];
+      page.on("pageerror", (e) => errors.push(String(e)));
       try {
         await page.goto(s.url, { waitUntil: "networkidle" });
         await page.click('.navSekme:has-text("Akışlar")');
@@ -3194,7 +3194,7 @@ roles:
         // GÖREMEZ.
         expect(await page.evaluate(() =>
           document.querySelector(".navSekme-aktif")?.textContent ?? "")).toContain("Pano");
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
         await s.close();
@@ -3204,8 +3204,8 @@ roles:
     it("'Yeni akış' kutusu şablondan YENİ bir dosya yazar ve onu rol düzenleyicisinde, PANO'DA açar", async () => {
       const s = await akislarSunucusuAc();
       const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
-      const hatalar: string[] = [];
-      page.on("pageerror", (e) => hatalar.push(String(e)));
+      const errors: string[] = [];
+      page.on("pageerror", (e) => errors.push(String(e)));
       try {
         await page.goto(s.url, { waitUntil: "networkidle" });
         await page.click('.navSekme:has-text("Akışlar")');
@@ -3235,7 +3235,7 @@ roles:
 
         const newPath = join(root, "hub", "flows", "ucuncu.yaml");
         expect(await readFile(newPath, "utf8")).toContain("id: coder");
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
         await s.close();
@@ -3254,8 +3254,8 @@ roles:
       await writeFile(join(root, "hub", "flows", "bozuk.yaml"), "name: bozuk\nroles: []\n");
       const s = await akislarSunucusuAc();
       const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
-      const hatalar: string[] = [];
-      page.on("pageerror", (e) => hatalar.push(String(e)));
+      const errors: string[] = [];
+      page.on("pageerror", (e) => errors.push(String(e)));
       try {
         await page.goto(s.url, { waitUntil: "networkidle" });
         await page.click('.navSekme:has-text("Akışlar")');
@@ -3274,7 +3274,7 @@ roles:
         });
         expect(stil?.corner).toBe("0px");
         expect(stil?.metin).toContain("okunamıyor");
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
         await s.close();
@@ -3288,8 +3288,8 @@ roles:
     it("Akışlar sekmesinde 'Yeni akış' kutusu Escape'le kapanır, sekme DEĞİŞMEZ", async () => {
       const s = await akislarSunucusuAc();
       const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
-      const hatalar: string[] = [];
-      page.on("pageerror", (e) => hatalar.push(String(e)));
+      const errors: string[] = [];
+      page.on("pageerror", (e) => errors.push(String(e)));
       try {
         await page.goto(s.url, { waitUntil: "networkidle" });
         await page.click('.navSekme:has-text("Akışlar")');
@@ -3304,7 +3304,7 @@ roles:
         expect(await page.evaluate(() => document.querySelector(".dialog"))).toBeNull();
         expect(await page.evaluate(() =>
           document.querySelector(".navSekme-aktif")?.textContent ?? "")).toContain("Akışlar");
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
         await s.close();
@@ -3359,19 +3359,19 @@ roles:
     it("solda her rol için bir satır; tıklamak sağ paneli o role çevirir", async () => {
       const s = await ikiRolSunucusuAc();
       const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
-      const hatalar: string[] = [];
-      page.on("pageerror", (e) => hatalar.push(String(e)));
+      const errors: string[] = [];
+      page.on("pageerror", (e) => errors.push(String(e)));
       try {
         await page.goto(s.url, { waitUntil: "networkidle" });
         await page.click('.navSekme:has-text("Ajanlar")');
         await page.waitForSelector(".ajanSatir", { timeout: 10_000 });
 
-        const satirlar = await page.evaluate(() =>
+        const lines = await page.evaluate(() =>
           Array.from(document.querySelectorAll(".ajanSatir")).map((s) => s.textContent));
-        expect(satirlar.some((t) => t?.includes("coder"))).toBe(true);
-        expect(satirlar.some((t) => t?.includes("reviewer"))).toBe(true);
+        expect(lines.some((t) => t?.includes("coder"))).toBe(true);
+        expect(lines.some((t) => t?.includes("reviewer"))).toBe(true);
         // Hiç kart yokken İKİSİ de boşta.
-        expect(satirlar.every((t) => t?.includes("boşta"))).toBe(true);
+        expect(lines.every((t) => t?.includes("boşta"))).toBe(true);
 
         // İLK rol varsayılan olarak seçili — sağlayıcısı, çalışma alanı,
         // alım biçimi ve "Görevi" özeti GERÇEK topolojiden geliyor.
@@ -3400,7 +3400,7 @@ roles:
         expect(reviewerPanel).toContain("kodu incele");
         expect(reviewerPanel).toContain("hata bul");
 
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
         await s.close();
@@ -3410,8 +3410,8 @@ roles:
     it("'Ajanı izle →' Rol modundan Ajanlar sekmesini O ROLÜ SEÇİLİ açar", async () => {
       const s = await ikiRolSunucusuAc();
       const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
-      const hatalar: string[] = [];
-      page.on("pageerror", (e) => hatalar.push(String(e)));
+      const errors: string[] = [];
+      page.on("pageerror", (e) => errors.push(String(e)));
       try {
         await page.goto(s.url, { waitUntil: "networkidle" });
         await page.click('.formasyonDugum[data-rol="reviewer"] rect.kutu');
@@ -3421,7 +3421,7 @@ roles:
         await page.waitForSelector(".ajanPanelAd:has-text(\"reviewer\")", { timeout: 10_000 });
         expect(await page.evaluate(() =>
           document.querySelector(".navSekme-aktif")?.textContent ?? "")).toContain("Ajanlar");
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
         await s.close();
@@ -3458,7 +3458,7 @@ roles:
         seq: 2, kind: "tool", name: "Bash", detail: "npx vitest run",
       });
 
-      const { page, hatalar } = await ac();
+      const { page, errors } = await ac();
       try {
         await page.click('.navSekme:has-text("Ajanlar")');
         await page.waitForSelector(".ajanSatir", { timeout: 10_000 });
@@ -3480,14 +3480,14 @@ roles:
         expect(suAnSatirMetni).toContain("npx vitest run");
         await page.waitForSelector(".ajanCanliEtiket", { timeout: 10_000 });
         await page.waitForSelector(".ajanAdim", { timeout: 10_000 });
-        const adimlar = await page.evaluate(() =>
+        const steps = await page.evaluate(() =>
           Array.from(document.querySelectorAll(".ajanAdim")).map((a) => a.textContent ?? ""));
-        expect(adimlar).toHaveLength(2);
-        expect(adimlar[0]).toContain("Bash");
-        expect(adimlar[0]).toContain("npx vitest run");
-        expect(adimlar[1]).toContain("Read");
+        expect(steps).toHaveLength(2);
+        expect(steps[0]).toContain("Bash");
+        expect(steps[0]).toContain("npx vitest run");
+        expect(steps[1]).toContain("Read");
 
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
       }
@@ -3514,7 +3514,7 @@ roles:
         seq: 1, kind: "tool", name: "Bash", detail: "npx vitest run",
       });
 
-      const { page, hatalar } = await ac();
+      const { page, errors } = await ac();
       try {
         await page.click('.navSekme:has-text("Ajanlar")');
         await page.waitForSelector(".ajanSatir", { timeout: 10_000 });
@@ -3533,7 +3533,7 @@ roles:
         expect(await page.evaluate(() =>
           document.querySelector(".ajanSuAn")?.classList.contains("ajanSuAn-vurgulu"))).toBe(false);
 
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
       }
@@ -3557,14 +3557,14 @@ roles:
       await queue.add(newCard({ title: "kanat-ajanlar", task: "iş", topology }));
       await al(queue, "coder");
 
-      const { page, hatalar } = await ac();
+      const { page, errors } = await ac();
       try {
         await page.click('.navSekme:has-text("Ajanlar")');
         await page.waitForSelector(".ajanKus.kanatCirpiyor", { timeout: 15_000 });
         const anim = await page.evaluate(() =>
           getComputedStyle(document.querySelector(".ajanKus.kanatCirpiyor")).animationName);
         expect(anim).not.toBe("none");
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
       }
@@ -3581,14 +3581,14 @@ roles:
       await queue.add(newCard({ title: "kanat-ajanlar-azalt", task: "iş", topology }));
       await al(queue, "coder");
 
-      const { page, hatalar } = await acHareket("reduce");
+      const { page, errors } = await acHareket("reduce");
       try {
         await page.click('.navSekme:has-text("Ajanlar")');
         await page.waitForSelector(".ajanKus.kanatCirpiyor", { timeout: 15_000 });
         const anim = await page.evaluate(() =>
           getComputedStyle(document.querySelector(".ajanKus.kanatCirpiyor")).animationName);
         expect(anim).toBe("none");
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
       }
@@ -3668,8 +3668,8 @@ roles:
       const taken = await al(queue, "coder");
 
       const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
-      const hatalar: string[] = [];
-      page.on("pageerror", (e) => hatalar.push(String(e)));
+      const errors: string[] = [];
+      page.on("pageerror", (e) => errors.push(String(e)));
       try {
         await page.goto(s.url, { waitUntil: "networkidle" });
         await page.waitForSelector('.formasyonDugum[data-rol="coder"] .kare-calisiyor', { timeout: 15_000 });
@@ -3749,7 +3749,7 @@ roles:
         expect(araKonum.w).toBeLessThan(120);
         expect(araKonum.w).toBeGreaterThan(10);
 
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
         await s.close();
@@ -3766,8 +3766,8 @@ roles:
       const taken = await al(queue, "coder");
 
       const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
-      const hatalar: string[] = [];
-      page.on("pageerror", (e) => hatalar.push(String(e)));
+      const errors: string[] = [];
+      page.on("pageerror", (e) => errors.push(String(e)));
       try {
         await page.goto(s.url, { waitUntil: "networkidle" });
         await page.waitForSelector('.formasyonDugum[data-rol="coder"] .kare-calisiyor', { timeout: 15_000 });
@@ -3786,7 +3786,7 @@ roles:
         const ucanKusSayisi = await page.evaluate(() => document.querySelectorAll(".ucanKus").length);
         expect(ucanKusSayisi).toBe(0);
 
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
         await s.close();
@@ -3807,8 +3807,8 @@ roles:
       const page = await (browser as Tarayici).newPage({
         viewport: { width: 1280, height: 900 }, reducedMotion: "reduce",
       });
-      const hatalar: string[] = [];
-      page.on("pageerror", (e) => hatalar.push(String(e)));
+      const errors: string[] = [];
+      page.on("pageerror", (e) => errors.push(String(e)));
       try {
         await page.goto(s.url, { waitUntil: "networkidle" });
         await page.waitForSelector('.formasyonDugum[data-rol="coder"] .kare-calisiyor', { timeout: 15_000 });
@@ -3823,7 +3823,7 @@ roles:
 
         const ucanKusSayisi = await page.evaluate(() => document.querySelectorAll(".ucanKus").length);
         expect(ucanKusSayisi).toBe(0);
-        expect(hatalar).toEqual([]);
+        expect(errors).toEqual([]);
       } finally {
         await page.close();
         await s.close();
@@ -3851,7 +3851,7 @@ roles:
  */
 describe("formasyon kuşu — çizilen boyut", () => {
   it("kuş kendi 46x23 kutusunda kalır, diyagramı kaplamaz", async () => {
-    const { page, hatalar } = await ac();
+    const { page, errors } = await ac();
     try {
       const measure = await page.evaluate(() => {
         const kus = document.querySelector("svg.formasyonKus");
@@ -3865,7 +3865,7 @@ describe("formasyon kuşu — çizilen boyut", () => {
       expect(measure!.g).toBeLessThan(120);
       // Sıfır da kusurdur: görünmeyen kuş da yanlış.
       expect(measure!.g).toBeGreaterThan(10);
-      expect(hatalar).toEqual([]);
+      expect(errors).toEqual([]);
     } finally {
       await page.close();
     }

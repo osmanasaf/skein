@@ -141,9 +141,9 @@ export function planObjectors(topology: TopologySnapshot): string[] {
  * kapandığında devreye giriyor.
  */
 export function afterPlanning(topology: TopologySnapshot): string | null {
-  const son = topology.plan?.katilimcilar[topology.plan.katilimcilar.length - 1];
-  if (son === undefined) return null;
-  return roleOf(topology, son)?.next ?? null;
+  const last = topology.plan?.katilimcilar[topology.plan.katilimcilar.length - 1];
+  if (last === undefined) return null;
+  return roleOf(topology, last)?.next ?? null;
 }
 
 /**

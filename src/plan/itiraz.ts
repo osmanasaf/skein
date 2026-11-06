@@ -34,7 +34,7 @@ export interface ItirazDosyasi {
   itirazlar: Itiraz[];
   /** Biçimi tutan itirazlar. */
   valid: Itiraz[];
-  acik: Itiraz[];
+  isOpen: Itiraz[];
   kabul: Itiraz[];
   insana: Itiraz[];
 }
@@ -95,7 +95,7 @@ const BASLIK_BENZERI = /^#{1,6}\s+İtiraz\s+\d/u;
  */
 function alanlar(govde: string[]): Map<string, string> {
   const out = new Map<string, string>();
-  let aktif: string | null = null;
+  let active: string | null = null;
   for (const satir of govde) {
     const temiz = satir.trim();
     // `**Ad:**` VE `**Ad**:`, ayrıca madde imi / numara öneki.
@@ -107,18 +107,18 @@ function alanlar(govde: string[]): Map<string, string> {
     const m = /^(?:[-*+]\s+|\d+[.)]\s+)?\*\*\s*([^*:]+?)\s*(?::\s*\*\*|\*\*\s*:)\s*(.*)$/u
       .exec(temiz);
     if (m) {
-      aktif = (m[1] as string).trim().toLocaleLowerCase("tr");
-      out.set(aktif, (m[2] as string).trim());
+      active = (m[1] as string).trim().toLocaleLowerCase("tr");
+      out.set(active, (m[2] as string).trim());
       continue;
     }
     // Başlık bloğu bitirir. `## İtiraz N` zaten gövdeyi bölüyor; buradaki
     // başlıklar itirazın İÇİNDEKİ serbest bölümler.
     if (/^#{1,6}\s/u.test(temiz)) {
-      aktif = null;
+      active = null;
       continue;
     }
-    if (aktif !== null && temiz !== "") {
-      out.set(aktif, `${out.get(aktif) as string} ${temiz}`.trim());
+    if (active !== null && temiz !== "") {
+      out.set(active, `${out.get(active) as string} ${temiz}`.trim());
     }
   }
   return out;
@@ -270,7 +270,7 @@ export interface ParseOptions {
  */
 export function parseItirazlar(text: string, options: ParseOptions = {}): ItirazDosyasi {
   const itirazlar: Itiraz[] = [];
-  const satirlar = text.split(/\r?\n/u);
+  const lines = text.split(/\r?\n/u);
 
   let basliklar: { no: number; role: string; govde: string[] } | null = null;
   const bitir = (): void => {
@@ -279,7 +279,7 @@ export function parseItirazlar(text: string, options: ParseOptions = {}): Itiraz
     basliklar = null;
   };
 
-  for (const satir of satirlar) {
+  for (const satir of lines) {
     const m = BASLIK.exec(satir.trim());
     if (m) {
       bitir();
@@ -321,7 +321,7 @@ function topla(itirazlar: Itiraz[]): ItirazDosyasi {
   return {
     itirazlar,
     valid,
-    acik: valid.filter((i) => i.durum === "acik"),
+    isOpen: valid.filter((i) => i.durum === "acik"),
     kabul: valid.filter((i) => i.durum === "kabul"),
     insana: valid.filter((i) => i.durum === "insana"),
   };
@@ -346,7 +346,7 @@ function kur(no: number, role: string, alan: Map<string, string>, options: Parse
   const durumRaw = alan.get("durum") ?? "";
   const cozum = durumOf(durumRaw);
 
-  const taban: Itiraz = {
+  const baseline: Itiraz = {
     no, role, ne, neden, kanit,
     durum: cozum?.durum ?? "acik",
     ...(cozum?.rationale === undefined ? {} : { rationale: cozum.rationale }),
@@ -358,13 +358,13 @@ function kur(no: number, role: string, alan: Map<string, string>, options: Parse
     kanit === "" ? "Neyi yanlışlar" : null,
   ].filter((x): x is string => x !== null);
   if (eksik.length > 0) {
-    return { ...taban, gecersiz: `eksik alan: ${eksik.join(", ")}` };
+    return { ...baseline, gecersiz: `eksik alan: ${eksik.join(", ")}` };
   }
   if (cozum === null) {
-    return { ...taban, gecersiz: `\`Durum\` okunamadı: "${durumRaw}". Beklenen: açık | kabul | ret: … | insana: …` };
+    return { ...baseline, gecersiz: `\`Durum\` okunamadı: "${durumRaw}". Beklenen: açık | kabul | ret: … | insana: …` };
   }
   if ((cozum.durum === "ret" || cozum.durum === "insana") && cozum.rationale === undefined) {
-    return { ...taban, gecersiz: `\`${cozum.durum}\` gerekçesiz olamaz` };
+    return { ...baseline, gecersiz: `\`${cozum.durum}\` gerekçesiz olamaz` };
   }
 
   // Kanıt depodan bir yere işaret etmeli — tasarımın en keskin kuralı.
@@ -374,19 +374,19 @@ function kur(no: number, role: string, alan: Map<string, string>, options: Parse
   if (options.present !== undefined) {
     const yollar = kanitYollari(kanit);
     if (yollar.length === 0) {
-      return { ...taban, gecersiz: "`Neyi yanlışlar` bir dosya yolu içermiyor" };
+      return { ...baseline, gecersiz: "`Neyi yanlışlar` bir dosya yolu içermiyor" };
     }
     const depoda = yollar.filter((y) => options.present?.(y) === true);
     if (depoda.length === 0) {
       return {
-        ...taban,
+        ...baseline,
         gecersiz: `\`Neyi yanlışlar\` depoda olmayan bir yola işaret ediyor: ${yollar.join(", ")}`,
       };
     }
     const kendi = new Set(options.ownDocs ?? []);
     if (depoda.every((y) => kendi.has(y))) {
       return {
-        ...taban,
+        ...baseline,
         gecersiz: `\`Neyi yanlışlar\` alışverişin kendi belgesine işaret ediyor: ${depoda.join(", ")}. ` +
           `Kanıt, planın DOKUNACAĞI koda işaret etmek zorunda — "plan şöyle diyor" ` +
           `bir kanıt değil, planın tekrarı.`,
@@ -394,5 +394,5 @@ function kur(no: number, role: string, alan: Map<string, string>, options: Parse
     }
   }
 
-  return taban;
+  return baseline;
 }

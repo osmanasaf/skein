@@ -113,9 +113,9 @@ async function hamKaydiYaz(root: string, alan: string, deger: unknown): Promise<
   const dir = join(root, ".skein");
   await mkdir(dir, { recursive: true });
   const mevcut = await hamKaydiOku(root);
-  const yeni = { ...mevcut, [alan]: deger };
+  const fresh = { ...mevcut, [alan]: deger };
   const tmp = join(dir, `.tmp-${randomBytes(6).toString("hex")}`);
-  await writeFile(tmp, JSON.stringify(yeni), "utf8");
+  await writeFile(tmp, JSON.stringify(fresh), "utf8");
   await rename(tmp, join(dir, DOSYA_ADI));
 }
 

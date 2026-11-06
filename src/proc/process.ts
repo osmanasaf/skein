@@ -165,14 +165,14 @@ export function tsxCliYolu(root: string): string {
  * olarak aynısı, bu kez bizim elimizden.
  */
 export function girisNoktasiMi(moduleUrl: string): boolean {
-  const giris = process.argv[1];
-  if (giris === undefined || giris === "") return false;
+  const entry = process.argv[1];
+  if (entry === undefined || entry === "") return false;
   // `resolve` bir dizge için ASLA atmaz — bu yüzden try/catch'i yok ve
   // yukarıdaki undefined/boş denetimi TAŞIYICI: onu kaldıran bir mutasyon
   // burada yakalanıyor, sessizce yutulmuyor.
-  const adaylar = new Set<string>([pathToFileURL(resolve(giris)).href]);
+  const adaylar = new Set<string>([pathToFileURL(resolve(entry)).href]);
   try {
-    adaylar.add(pathToFileURL(realpathSync(giris)).href);
+    adaylar.add(pathToFileURL(realpathSync(entry)).href);
   } catch {
     // Dosya yok (ör. `node -e`); diğer adaya bak.
   }

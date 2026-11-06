@@ -450,9 +450,9 @@ function relativize(value: string, workdir?: string): string {
   // ters eğik çizgi üretiyor, önek ise eğik çizgiyle kuruluyordu: hiçbir
   // yol kısalmıyor ve ekranda her satır mutlak yolla doluyordu.
   const duz = (x: string): string => x.split("\\").join("/");
-  const taban = duz(workdir).replace(/\/+$/u, "");
+  const baseline = duz(workdir).replace(/\/+$/u, "");
   const yol = duz(value);
-  const onek = `${taban}/`;
+  const onek = `${baseline}/`;
   // Kısalan yol POSIX ayraçlı dönüyor: ekranda ve günlükte tek biçim.
   // Eşleşmezse değer OLDUĞU GİBİ kalıyor — dizin dışındaki bir yolu
   // yeniden yazmak bilgi kaybı olurdu.

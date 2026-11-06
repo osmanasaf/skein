@@ -111,7 +111,7 @@ async function listFlowNames(root: string): Promise<string[]> {
  * davranışın aynısı.
  */
 async function varsayilanAkisAdi(
-  root: string, akislar: readonly string[], loadOptions: LoadOptions,
+  root: string, flows: readonly string[], loadOptions: LoadOptions,
 ): Promise<string> {
   const adaylar: string[] = [];
   const hatirlanan = await sonAkisiOku(root);
@@ -121,7 +121,7 @@ async function varsayilanAkisAdi(
   for (const ad of adaylar) {
     // YOKSA bu adım hiç denenmiyor — "bozuk" ile "hiç yok" burada aynı
     // kapıdan geçiyor, ikisi de sıradaki kurala düşüyor.
-    if (!akislar.includes(ad)) continue;
+    if (!flows.includes(ad)) continue;
     try {
       await loadFlow(join(root, "hub", "flows", `${ad}.yaml`), loadOptions);
       return ad;
@@ -131,7 +131,7 @@ async function varsayilanAkisAdi(
   }
 
   // Son çare: ada göre ilk, DOĞRULANMADAN — bugünkü (eski) davranış.
-  return akislar[0] as string;
+  return flows[0] as string;
 }
 
 async function main(argv: string[]): Promise<number> {
@@ -208,12 +208,12 @@ async function main(argv: string[]): Promise<number> {
   // devreye girmiyor — `flowName` burada zaten tanımlıysa bu dalın tamamı
   // atlanıyor.
   if (flowName === undefined) {
-    const akislar = await listFlowNames(root);
-    if (akislar.length === 0) {
+    const flows = await listFlowNames(root);
+    if (flows.length === 0) {
       console.error(`✗ hub/flows altında hiç akış yok: ${join(root, "hub", "flows")}`);
       return 1;
     }
-    flowName = await varsayilanAkisAdi(root, akislar, loadOptions);
+    flowName = await varsayilanAkisAdi(root, flows, loadOptions);
   }
 
   // Akış yaşayan: her okumadan önce yoklanıyor. Dosya değişirse ekran yeni
@@ -248,7 +248,7 @@ async function main(argv: string[]): Promise<number> {
     // başarısızsa (bozuk YAML, kural ihlali) fırlatıyor ve ekran o anda
     // baktığı akışta aynen kalıyor — `LiveFlow.open` zaten bu kuralı
     // taşıyor, burada tekrar uygulanmıyor.
-    akisSecimi: {
+    flowChoice: {
       list: () => listFlowNames(root),
       ac: async (ad: string): Promise<{ live: CanliAkis; flowPath: string }> => {
         const newPath = join(root, "hub", "flows", `${ad}.yaml`);
@@ -276,7 +276,7 @@ async function main(argv: string[]): Promise<number> {
     ...(gozcuBayraklari.length === 0
       ? {}
       : {
-          gozcu: {
+          watcher: {
             // Akış adı BURADA YOK: ekran hangi akışa bakıyorsa gözcü onu
             // koşuyor. Yoksa ekrandan akış değiştirince düğme hâlâ
             // eskisini başlatırdı.

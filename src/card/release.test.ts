@@ -112,9 +112,9 @@ describe("releaseCard", () => {
     await queue.add(newCard({ title: "jitter", task: "iş", topology: daily }));
     await queue.handoff(await al(queue, "coder"), {});
     // reviewer'ın ret hedefi coder: geri dönecek rol VAR.
-    const kapida = await queue.escalate(await al(queue, "reviewer"), "verdikt yok");
+    const atGate = await queue.escalate(await al(queue, "reviewer"), "verdikt yok");
 
-    const sonuc = await releaseCard(root, queue, kapida.id, "back", logPath);
+    const sonuc = await releaseCard(root, queue, atGate.id, "back", logPath);
 
     expect(sonuc.decision).toBe("back");
     expect(sonuc.requested).toBe("back");

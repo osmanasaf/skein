@@ -78,13 +78,13 @@ describe("LiveFlow", () => {
 
   it("rol eklenince yeni topolojiyi alır", async () => {
     const live = await LiveFlow.open(path, opts);
-    const onceki = live.flow.hash;
+    const previous = live.flow.hash;
     await writeFile(path, UC_ROL);
 
     const sonuc = await live.refresh();
 
     expect(sonuc.kind).toBe("reloaded");
-    expect(sonuc.kind === "reloaded" && sonuc.from).toBe(onceki);
+    expect(sonuc.kind === "reloaded" && sonuc.from).toBe(previous);
     expect(live.topology.roles.map((r) => r.id)).toEqual(["coder", "reviewer", "guard"]);
   });
 

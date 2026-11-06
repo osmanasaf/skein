@@ -51,7 +51,7 @@ ${alan}Sürüm geriye düşüyor.
   );
 
   it.each(["açık", "açık.", "Açık", "açık — not"])("açık kuyruğu okunur: %s", (durum) => {
-    expect(coz(govde(durum)).acik).toHaveLength(1);
+    expect(coz(govde(durum)).isOpen).toHaveLength(1);
   });
 
   // GEVŞETMENİN SINIRI. Ayraç zorunluluğu `kabul edilemez`i elemek için
@@ -173,7 +173,7 @@ describe("parseItirazlar", () => {
     expect(i?.role).toBe("architect");
     expect(i?.durum).toBe("acik");
     expect(i?.neden).toContain("önbellekliyor");
-    expect(d.acik).toHaveLength(1);
+    expect(d.isOpen).toHaveLength(1);
   });
 
   it("çok satırlı alanı birleştirir", () => {
@@ -192,7 +192,7 @@ describe("parseItirazlar", () => {
 `;
     const d = parseItirazlar(text, { present });
     expect(d.kabul).toHaveLength(1);
-    expect(d.acik).toHaveLength(0);
+    expect(d.isOpen).toHaveLength(0);
     expect(d.valid[1]?.durum).toBe("ret");
     expect(d.valid[1]?.rationale).toBe("ölçüm bunu göstermiyor");
   });
@@ -224,7 +224,7 @@ describe("parseItirazlar", () => {
     const text = ITIRAZ.replace("`src/selector.ts:12`", "`src/olmayan.ts:3`");
     const d = parseItirazlar(text, { present });
     expect(d.valid).toHaveLength(0);
-    expect(d.acik).toHaveLength(0);
+    expect(d.isOpen).toHaveLength(0);
     expect(d.itirazlar[0]?.gecersiz).toMatch(/depoda olmayan/);
   });
 
@@ -247,7 +247,7 @@ describe("parseItirazlar", () => {
       ownDocs: ["docs/plan/c-1.md"],
     });
     expect(d.valid).toHaveLength(0);
-    expect(d.acik).toHaveLength(0);
+    expect(d.isOpen).toHaveLength(0);
     expect(d.itirazlar[0]?.gecersiz).toMatch(/kendi belgesine/);
   });
 
@@ -309,7 +309,7 @@ describe("parseItirazlar", () => {
   it("boş dosyada itiraz yok", () => {
     const d = parseItirazlar("# İtirazlar\n\nBu turda itirazım yok.\n", { present });
     expect(d.itirazlar).toHaveLength(0);
-    expect(d.acik).toHaveLength(0);
+    expect(d.isOpen).toHaveLength(0);
   });
 
   it("yol denetimi verilmezse kanıtı olduğu gibi kabul eder", () => {
@@ -371,7 +371,7 @@ describe("Durum satırı — dört durum da gerekçe alır", () => {
 
   it("`açık — not` okunur ve açık sayılır", () => {
     const d = parseItirazlar(ile("açık — henüz yanıtlamadım"));
-    expect(d.acik).toHaveLength(1);
+    expect(d.isOpen).toHaveLength(1);
     expect(d.itirazlar[0]?.rationale).toBe("henüz yanıtlamadım");
   });
 

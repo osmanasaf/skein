@@ -148,9 +148,9 @@ describe("card CLI — hedefsiz back", () => {
     // coder zincirin başı: ret hedefi yok.
     const sonuc = await queue.take("coder");
     if (sonuc.kind !== "alindi") throw new Error("kart alınamadı");
-    const kapida = await queue.escalate(sonuc.card, "verdikt yok");
+    const atGate = await queue.escalate(sonuc.card, "verdikt yok");
 
-    const { code, out } = await card(dir, "release", kapida.id, "back");
+    const { code, out } = await card(dir, "release", atGate.id, "back");
 
     expect(code).toBe(0);
     expect(out).toContain("uygulanamadı");
@@ -177,9 +177,9 @@ describe("card CLI — hedefsiz back", () => {
     await queue.handoff(ilk.card, {});
     const ikinci = await queue.take("reviewer");
     if (ikinci.kind !== "alindi") throw new Error("kart alınamadı");
-    const kapida = await queue.escalate(ikinci.card, "verdikt yok");
+    const atGate = await queue.escalate(ikinci.card, "verdikt yok");
 
-    const { code, out } = await card(dir, "release", kapida.id, "back");
+    const { code, out } = await card(dir, "release", atGate.id, "back");
 
     expect(code).toBe(0);
     expect(out).not.toContain("uygulanamadı");

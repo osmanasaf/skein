@@ -112,7 +112,7 @@ describe("buildModel — başka akışın kartı", () => {
 
     const m = await buildModel(base);
     const c = m.cards.find((x) => x.id === card.id);
-    expect(c?.digerAkis).toBe(true);
+    expect(c?.otherFlow).toBe(true);
     expect(c?.orphan).toBe(false);
     expect(c?.stale).toBe(false);
   });
@@ -120,7 +120,7 @@ describe("buildModel — başka akışın kartı", () => {
   it("kendi akışının kartı diğer akış sayılmıyor", async () => {
     const card = await put();
     const m = await buildModel(base);
-    expect(m.cards.find((x) => x.id === card.id)?.digerAkis).toBe(false);
+    expect(m.cards.find((x) => x.id === card.id)?.otherFlow).toBe(false);
   });
 });
 
@@ -288,9 +288,9 @@ describe("buildModel — ölçüm", () => {
     const c = model.cards[0];
 
     expect(c?.costUsd).toBeCloseTo(0.5, 5);
-    expect(c?.olculmeyen).toBe(1);
+    expect(c?.unmeasured).toBe(1);
     expect(c?.tokens).toBe(3_040_000);
-    expect(model.totals.olculmeyen).toBe(1);
+    expect(model.totals.unmeasured).toBe(1);
   });
 
   // Ölçü HİÇ bildirilmediğinde de aynı: dolar da token da yok, ama
@@ -304,7 +304,7 @@ describe("buildModel — ölçüm", () => {
 
     const model = await buildModel(base);
 
-    expect(model.cards[0]?.olculmeyen).toBe(1);
+    expect(model.cards[0]?.unmeasured).toBe(1);
     expect(model.cards[0]?.tokens).toBe(0);
   });
 
@@ -320,8 +320,8 @@ describe("buildModel — ölçüm", () => {
 
     const model = await buildModel(base);
 
-    expect(model.cards[0]?.olculmeyen).toBe(0);
-    expect(model.totals.olculmeyen).toBe(0);
+    expect(model.cards[0]?.unmeasured).toBe(0);
+    expect(model.totals.unmeasured).toBe(0);
   });
 
   // Sıfır dolar BİLDİREN bir çağrı, dolar BİLDİRMEYEN bir çağrı değildir.
@@ -337,7 +337,7 @@ describe("buildModel — ölçüm", () => {
 
     const model = await buildModel(base);
 
-    expect(model.cards[0]?.olculmeyen).toBe(0);
+    expect(model.cards[0]?.unmeasured).toBe(0);
   });
 });
 
@@ -977,10 +977,10 @@ describe("buildModel — KIRLI engeli", () => {
   }
 
   it("kaynak dosya hâlâ yerinde olsa da, sonraki agent.started engeli çözer", async () => {
-    const kaynak = join(root, "src", "ui", "server.ts");
-    await mkdir(dirname(kaynak), { recursive: true });
-    await writeFile(kaynak, "// kaynak\n");
-    await kirliKaydi(kaynak);
+    const source = join(root, "src", "ui", "server.ts");
+    await mkdir(dirname(source), { recursive: true });
+    await writeFile(source, "// kaynak\n");
+    await kirliKaydi(source);
 
     const once = await buildModel(base);
     expect(once.blockages).toHaveLength(1);
@@ -998,14 +998,14 @@ describe("buildModel — KIRLI engeli", () => {
     const sonra = await buildModel(base);
     expect(sonra.blockages).toEqual([]);
     // Dosya HÂLÂ yerinde: çözülme varlığa değil olaya bağlı olduğunu kanıtlıyor.
-    await expect(stat(kaynak)).resolves.toBeDefined();
+    await expect(stat(source)).resolves.toBeDefined();
   });
 
   it("sonraki agent.started yoksa engel saatler sonra bile sürmeye devam eder", async () => {
-    const kaynak = join(root, "src", "ui", "server.ts");
-    await mkdir(dirname(kaynak), { recursive: true });
-    await writeFile(kaynak, "// kaynak\n");
-    await kirliKaydi(kaynak);
+    const source = join(root, "src", "ui", "server.ts");
+    await mkdir(dirname(source), { recursive: true });
+    await writeFile(source, "// kaynak\n");
+    await kirliKaydi(source);
 
     const m = await buildModel(base);
     expect(m.blockages).toHaveLength(1);
@@ -1135,9 +1135,9 @@ describe("activationSteps", () => {
       ev({ type: "agent.started", cell: "c-1:coder", role: "coder" }),
       ev({ type: "agent.step", cell: "c-1:coder", role: "coder", seq: 1, kind: "tool", name: "YENİ" }),
     ];
-    const adimlar = activationSteps(olaylar);
-    expect(adimlar).toHaveLength(1);
-    expect(adimlar[0]?.name).toBe("YENİ");
+    const steps = activationSteps(olaylar);
+    expect(steps).toHaveLength(1);
+    expect(steps[0]?.name).toBe("YENİ");
   });
 
   it("'text' türündeki adımları da (araç adı olmadan) taşır", () => {
@@ -1177,11 +1177,11 @@ describe("buildSteps", () => {
       seq: 2, kind: "tool", name: "Bash", detail: "npx vitest run",
     });
 
-    const adimlar = await buildSteps(base, card.id);
+    const steps = await buildSteps(base, card.id);
 
-    expect(adimlar).toHaveLength(2);
-    expect(adimlar?.[0]).toMatchObject({ seq: 1, name: "Read" });
-    expect(adimlar?.[1]).toMatchObject({ seq: 2, name: "Bash", detail: "npx vitest run" });
+    expect(steps).toHaveLength(2);
+    expect(steps?.[0]).toMatchObject({ seq: 1, name: "Read" });
+    expect(steps?.[1]).toMatchObject({ seq: 2, name: "Bash", detail: "npx vitest run" });
   });
 
   it("bitmiş aktivasyonda boş dizi döner", async () => {

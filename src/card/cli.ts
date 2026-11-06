@@ -82,7 +82,7 @@ function printCard(card: Card): void {
         // Alışveriş kartın izinde görünmeliydi ve görünmüyordu: `switch`
         // bu kaydı sessizce atlıyordu. Canlı koşuda plana itiraz eden rol
         // bu boşluğu kendi buldu ve raporuna yazdı.
-        const sayi = entry.objections === undefined
+        const count = entry.objections === undefined
           ? ""
           : `  (${entry.objections} itiraz` +
             (entry.accepted === undefined ? "" : `, ${entry.accepted} kabul`) +
@@ -92,7 +92,7 @@ function printCard(card: Card): void {
           : entry.action === "itiraz"
             ? `plana itiraz turu (tur ${entry.round})`
             : `itirazları yanıtladı (tur ${entry.round})`;
-        console.log(`    ${when}  ${entry.role} ${ne}${sayi}`);
+        console.log(`    ${when}  ${entry.role} ${ne}${count}`);
         break;
       }
       case "done":

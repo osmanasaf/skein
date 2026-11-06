@@ -123,10 +123,10 @@ describe("closeOrphan", () => {
   it("koşan kart kapatılamaz", async () => {
     await specKart();
     await al(queue, "analyst");
-    const aktif = (await queue.list())[0] as Card;
-    expect(aktif.state).toBe("active");
+    const active = (await queue.list())[0] as Card;
+    expect(active.state).toBe("active");
 
-    await expect(closeOrphan(root, queue, daily, aktif.id, logPath)).rejects.toThrow(/koşuyor/);
+    await expect(closeOrphan(root, queue, daily, active.id, logPath)).rejects.toThrow(/koşuyor/);
   });
 
   it("kapıdaki yetim kart kapatılabilir", async () => {

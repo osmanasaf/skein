@@ -567,8 +567,8 @@ function printPlanEffect(r: PlanEffectReport): void {
       // Sıfır sayının yanına etiket basmak ("0 yalnız planlıda (planlama
       // GETİRDİ)") olmayan bir şeyi varmış gibi okutuyor; etiket yalnızca
       // sayı varsa çıkıyor.
-      const kimlik = (sayi: number, ad: string, etiket: string): string =>
-        sayi > 0 ? `${sayi} ${ad} (${etiket})` : `${sayi} ${ad}`;
+      const kimlik = (count: number, ad: string, etiket: string): string =>
+        count > 0 ? `${count} ${ad} (${etiket})` : `${count} ${ad}`;
       console.log(`  kusur kimliği: ${h.ortak.length} ortak · ` +
         `${kimlik(h.yalnizPlansiz.length, "yalnız kontrolde", "planlama çözdü")} · ` +
         `${kimlik(h.yalnizPlanli.length, "yalnız planlıda", "planlama GETİRDİ")}`);

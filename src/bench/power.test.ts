@@ -56,9 +56,9 @@ describe("power2x2", () => {
 
 describe("powerLines", () => {
   it("ÖLÇEMEZ (2. koşul) gerekçesini TAŞIR — sayı tek başına öğretmiyor", () => {
-    const satirlar = powerLines({ kind: "olcemez-denetci", caught: 2 }).join(" ");
-    expect(satirlar).toMatch(/göreli azalma tanımsız/);
-    expect(satirlar).toMatch(/KAÇIRDIĞI bir kusur/);
+    const lines = powerLines({ kind: "olcemez-denetci", caught: 2 }).join(" ");
+    expect(lines).toMatch(/göreli azalma tanımsız/);
+    expect(lines).toMatch(/KAÇIRDIĞI bir kusur/);
   });
 
   it("ÖLÇER kaçan kusurları adıyla söyler", () => {

@@ -68,20 +68,20 @@ describe("girisNoktasiMi", () => {
 
   // ASIL SINAV: bu yön düşerse CLI'lar SESSİZCE hiç koşmaz.
   it("modülün KENDİSİ giriş noktasıysa true", async () => {
-    const giris = join(root, "giris.mjs");
-    await writeFile(giris, "export {};\n");
-    process.argv[1] = giris;
-    expect(girisNoktasiMi(pathToFileURL(giris).href)).toBe(true);
+    const entry = join(root, "giris.mjs");
+    await writeFile(entry, "export {};\n");
+    process.argv[1] = entry;
+    expect(girisNoktasiMi(pathToFileURL(entry).href)).toBe(true);
   });
 
   it("göreli yazılmış giriş yolunu da tanır — `resolve`'dan geçiyor", async () => {
-    const giris = join(root, "goreli.mjs");
-    await writeFile(giris, "export {};\n");
+    const entry = join(root, "goreli.mjs");
+    await writeFile(entry, "export {};\n");
     const eskiCwd = process.cwd();
     process.chdir(root);
     try {
       process.argv[1] = "goreli.mjs";
-      expect(girisNoktasiMi(pathToFileURL(giris).href)).toBe(true);
+      expect(girisNoktasiMi(pathToFileURL(entry).href)).toBe(true);
     } finally {
       process.chdir(eskiCwd);
     }

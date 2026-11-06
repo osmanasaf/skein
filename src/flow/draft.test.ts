@@ -190,10 +190,10 @@ describe("fromFlow — gidiş dönüş", () => {
     const flow = await loadFlow(yol, gercek);
     const draft = fromFlow(flow);
 
-    const acik = flow.roles.filter((r) => r.rejectExplicit).map((r) => r.id);
+    const isOpen = flow.roles.filter((r) => r.rejectExplicit).map((r) => r.id);
     const taslakta = draft.roles.filter((r) => r.reject !== undefined).map((r) => r.id);
 
-    expect(taslakta).toEqual(acik);
+    expect(taslakta).toEqual(isOpen);
   });
 });
 
@@ -208,9 +208,9 @@ describe("ekranın modellemediği bloklar korunuyor", () => {
   it("bilinmeyen üst düzey anahtar düzenlemeden sonra dosyada DURUYOR", async () => {
     await writeFile(path, `${toYaml(taslak())}\ndeneysel:\n  ileride: eklenecek\n`);
 
-    const yeni = taslak();
-    yeni.description = "ekrandan düzenlendi";
-    const sonuc = await writeDraft(path, yeni, opts);
+    const fresh = taslak();
+    fresh.description = "ekrandan düzenlendi";
+    const sonuc = await writeDraft(path, fresh, opts);
 
     expect(sonuc.ok).toBe(true);
     const yazilan = await readFile(path, "utf8");
@@ -227,9 +227,9 @@ describe("ekranın modellemediği bloklar korunuyor", () => {
 
 ${toYaml(taslak())}`);
 
-    const yeni = taslak();
-    yeni.description = "ekrandan düzenlendi";
-    expect((await writeDraft(path, yeni, opts)).ok).toBe(true);
+    const fresh = taslak();
+    fresh.description = "ekrandan düzenlendi";
+    expect((await writeDraft(path, fresh, opts)).ok).toBe(true);
 
     const yazilan = await readFile(path, "utf8");
     expect(yazilan).toContain("# Üst başlık yorumu");
@@ -241,9 +241,9 @@ ${toYaml(taslak())}`);
   // düzenlemek, kaldırılan bir alanın yerinde kalması riskini getiriyor.
   it("taslaktan silinen açıklama dosyadan da düşüyor", async () => {
     await writeFile(path, toYaml({ ...taslak(), description: "eski" }));
-    const yeni = taslak();
-    delete yeni.description;
-    expect((await writeDraft(path, yeni, opts)).ok).toBe(true);
+    const fresh = taslak();
+    delete fresh.description;
+    expect((await writeDraft(path, fresh, opts)).ok).toBe(true);
     expect(await readFile(path, "utf8")).not.toContain("eski");
   });
 });
@@ -267,9 +267,9 @@ describe("planlama bloğu — taşıma ve round-trip", () => {
   it("açıkça taşınan planlama bloğu dosyaya YAZILIR", async () => {
     await writeFile(path, toYaml(taslak()));
 
-    const yeni = taslak();
-    yeni.planlama = planBlok();
-    const sonuc = await writeDraft(path, yeni, opts);
+    const fresh = taslak();
+    fresh.planlama = planBlok();
+    const sonuc = await writeDraft(path, fresh, opts);
 
     expect(sonuc.ok).toBe(true);
     const yazilan = await readFile(path, "utf8");
@@ -287,12 +287,12 @@ describe("planlama bloğu — taşıma ve round-trip", () => {
   it("rolü yeniden adlandırıp planlama alanını GÜNCELLEMEMEK hata verir", async () => {
     await writeFile(path, toYaml(taslak()));
 
-    const yeni = taslak();
-    yeni.planlama = planBlok(); // "coder"a işaret ediyor
-    (yeni.roles[0] as { id: string }).id = "yazar"; // ama rol "yazar" oldu
-    (yeni.roles[1] as { reject?: string }).reject = "yazar";
-    (yeni.roles[1] as { syncBack?: string[] }).syncBack = ["yazar"];
-    const sonuc = await checkDraft(path, yeni, opts);
+    const fresh = taslak();
+    fresh.planlama = planBlok(); // "coder"a işaret ediyor
+    (fresh.roles[0] as { id: string }).id = "yazar"; // ama rol "yazar" oldu
+    (fresh.roles[1] as { reject?: string }).reject = "yazar";
+    (fresh.roles[1] as { syncBack?: string[] }).syncBack = ["yazar"];
+    const sonuc = await checkDraft(path, fresh, opts);
 
     expect(sonuc.ok).toBe(false);
     expect(sonuc.ok === false && sonuc.message).toMatch(/kural 17/);
@@ -331,10 +331,10 @@ describe("planlama bloğu — taşıma ve round-trip", () => {
 
 describe("writeDraft", () => {
   it("geçerli taslağı yazar", async () => {
-    const yeni = taslak();
-    yeni.description = "yazıldı";
+    const fresh = taslak();
+    fresh.description = "yazıldı";
 
-    const sonuc = await writeDraft(path, yeni, opts);
+    const sonuc = await writeDraft(path, fresh, opts);
 
     expect(sonuc.ok).toBe(true);
     expect(await readFile(path, "utf8")).toContain("description: yazıldı");
@@ -361,14 +361,14 @@ describe("writeDraft", () => {
   });
 
   it("yazılan dosya yeniden yüklenebilir", async () => {
-    const yeni = taslak();
-    yeni.roles.push({
+    const fresh = taslak();
+    fresh.roles.push({
       id: "guard", provider: "claude", workspace: "guard",
       prompt: "../../roles/reviewer.prompt", receive: "batch", next: "done",
     });
-    yeni.roles[1]!.next = "guard";
+    fresh.roles[1]!.next = "guard";
 
-    await writeDraft(path, yeni, opts);
+    await writeDraft(path, fresh, opts);
 
     const flow = await loadFlow(path, opts);
     expect(flow.roles.map((r) => r.id)).toEqual(["coder", "reviewer", "guard"]);
