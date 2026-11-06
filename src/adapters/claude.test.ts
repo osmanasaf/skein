@@ -423,10 +423,10 @@ describe("needsStdin", () => {
   });
 
   it("çok satırlı metni Windows'ta stdin'e düşürür, POSIX'te düşürmez", () => {
-    const metin = "## İş\n\nundo ekle\n";
-    expect(needsStdin(metin, true)).toBe(true);
+    const textBody = "## İş\n\nundo ekle\n";
+    expect(needsStdin(textBody, true)).toBe(true);
     // POSIX davranışı DEĞİŞMİYOR: ölçülmüş koşuların yolu aynı kalsın.
-    expect(needsStdin(metin, false)).toBe(false);
+    expect(needsStdin(textBody, false)).toBe(false);
   });
 
   it("uzun metni her platformda stdin'e düşürür", () => {
@@ -445,17 +445,17 @@ describe("needsStdin", () => {
  * göründü. Harcanan gizlenmez — akıştaki her mesaj kendi kullanımını
  * taşıyor ve kapanış gelmezse ölçü oradan toplanıyor.
  */
-const MESSAGE = (girdi: number, cikti: number, onbellek = 0) => JSON.stringify({
+const MESSAGE = (inputText: number, cikti: number, onbellek = 0) => JSON.stringify({
   type: "assistant",
   message: {
     content: [{ type: "text", text: "çalışıyorum" }],
-    usage: { input_tokens: girdi, output_tokens: cikti, cache_read_input_tokens: onbellek },
+    usage: { input_tokens: inputText, output_tokens: cikti, cache_read_input_tokens: onbellek },
   },
 });
 
 describe("akış birikimi", () => {
-  const rec = (metin: string) => {
-    const v = JSON.parse(metin) as Record<string, unknown>;
+  const rec = (textBody: string) => {
+    const v = JSON.parse(textBody) as Record<string, unknown>;
     return { type: v["type"] as string, value: v };
   };
 

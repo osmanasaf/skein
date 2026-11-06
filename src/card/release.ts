@@ -41,7 +41,7 @@ export async function releaseCard(
   // Hesabı `kapiKarari` yapıyor — `queue.release` de aynı yerden okuyor,
   // böylece günlüğe yazılan karar ile kartın gittiği yer AYNI kaynaktan
   // geliyor. Eskiden ikisi ayrı ayrı hesaplanıyordu ve ayrışıyorlardı.
-  const karar = before === null ? null : gateDecision(before, decision);
+  const verdict = before === null ? null : gateDecision(before, decision);
 
   const card = await queue.release(id, decision === undefined ? {} : { decision });
 
@@ -55,13 +55,13 @@ export async function releaseCard(
       // `back` sessizce `retry` oluyor ama günlüğe `back` giriyordu, yani
       // "insan kartı geri gönderdi mi" sorusu günlükten yanlış
       // cevaplanıyordu — hiç geri gitmemiş kartlar `back` sayılıyordu.
-      decision: karar?.applied ?? "forward",
+      decision: verdict?.applied ?? "forward",
       // İstenen şey yapılamadıysa o da kaybolmamalı: insanın niyeti de
       // ölçülebilir bir olgu.
-      ...(karar !== null && karar.requested !== karar.applied
-        ? { requested: karar.requested }
+      ...(verdict !== null && verdict.requested !== verdict.applied
+        ? { requested: verdict.requested }
         : {}),
-      kind: karar?.kind ?? "approval",
+      kind: verdict?.kind ?? "approval",
     });
   } catch {
     // Kayıt gözlem; kart zaten taşındı ve geçmişinde yazıyor. Diski dolmuş
@@ -70,8 +70,8 @@ export async function releaseCard(
 
   return {
     card,
-    decision: karar?.applied ?? "forward",
-    requested: karar?.requested ?? "forward",
-    kind: karar?.kind ?? "approval",
+    decision: verdict?.applied ?? "forward",
+    requested: verdict?.requested ?? "forward",
+    kind: verdict?.kind ?? "approval",
   };
 }

@@ -109,19 +109,19 @@ describe("card CLI — kuyruk engeli", () => {
     });
     const queue = new CardQueue(join(dir, ".skein"));
     await queue.init();
-    const kart = await queue.add(
+    const theCard = await queue.add(
       newCard({ title: "iş", task: "bir şey yap", topology: snapshot(flow, repoRoot) }),
     );
 
     // Hedef adı bir dizin: `rename` oraya taşıyamaz (Linux EISDIR,
     // Windows EPERM/EACCES) — "yolda duran bir şey" senaryosu.
-    await mkdir(join(dir, ".skein", "active", kart.role, `${kart.id}.json`), { recursive: true });
+    await mkdir(join(dir, ".skein", "active", theCard.role, `${theCard.id}.json`), { recursive: true });
 
-    const { code, out } = await card(dir, "take", kart.role);
+    const { code, out } = await card(dir, "take", theCard.role);
 
     expect(out).not.toContain("kuyruğu boş");
     expect(out).toContain("alınamadı");
-    expect(out).toContain(kart.id);
+    expect(out).toContain(theCard.id);
     // Betikler için de arıza: 0 dönerse "iş yok" sanılır.
     expect(code).toBe(1);
   });

@@ -137,20 +137,20 @@ export async function mergeForward(opts: {
   // izleniyorsa, bunu ÖNCEDEN ve yapılacak işle birlikte söylemek.
   // tick.ts rolün kendi ağacı için aynı denetimi zaten yapıyor; eksik
   // olan, HEDEF ağacın hiç sorulmamasıydı.
-  for (const yol of yoksay) {
-    if (yol === "" || yol.endsWith("/")) continue;
-    if (!(await isTracked(opts.toDir, yol))) continue;
-    const dirtyFiles = await git(opts.toDir, ["status", "--porcelain", "--", yol]);
+  for (const filePath of yoksay) {
+    if (filePath === "" || filePath.endsWith("/")) continue;
+    if (!(await isTracked(opts.toDir, filePath))) continue;
+    const dirtyFiles = await git(opts.toDir, ["status", "--porcelain", "--", filePath]);
     // `ok` de sorulmak zorunda: aynı dosyada iki satır yukarıda düzeltilen
     // kusurun aynısı, git hatası "değişmemiş" diye okunurdu.
     if (!dirtyFiles.ok) return { kind: "blocked", reason: new GitStatusError(opts.toDir, dirtyFiles.err).message };
     if (dirtyFiles.out === "") continue;
     return {
       kind: "blocked",
-      reason: `hedef ağaçta \`${yol}\` git tarafından İZLENİYOR ve değişmiş: ` +
+      reason: `hedef ağaçta \`${filePath}\` git tarafından İZLENİYOR ve değişmiş: ` +
         `orkestratörün kontrol dosyası ürünün geçmişinde duramaz, merge'ü de durduruyor.\n` +
         `  Düzeltmek için (${opts.toDir}): ` +
-        `git rm --cached ${yol} && git commit -m "orkestratör izini kaldır"`,
+        `git rm --cached ${filePath} && git commit -m "orkestratör izini kaldır"`,
     };
   }
 

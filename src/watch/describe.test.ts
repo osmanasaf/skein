@@ -157,12 +157,12 @@ describe("describeTick — kuyruk engeli", () => {
       ],
     };
 
-    const satir = describeTick("coder", result);
+    const lineText = describeTick("coder", result);
 
-    expect(satir).toContain("ALINAMADI");
-    expect(satir).toContain("EPERM");
-    expect(satir).toContain("0-x-c-1.json");
-    expect(satir).toContain("operation not permitted");
+    expect(lineText).toContain("ALINAMADI");
+    expect(lineText).toContain("EPERM");
+    expect(lineText).toContain("0-x-c-1.json");
+    expect(lineText).toContain("operation not permitted");
   });
 
   it("her engel için ayrı satır", async () => {
@@ -174,10 +174,10 @@ describe("describeTick — kuyruk engeli", () => {
       ],
     };
 
-    const satir = describeTick("coder", result);
+    const lineText = describeTick("coder", result);
 
-    expect(satir).toContain("/a.json");
-    expect(satir).toContain("/b.json");
-    expect(satir).toContain("EBUSY");
+    expect(lineText).toContain("/a.json");
+    expect(lineText).toContain("/b.json");
+    expect(lineText).toContain("EBUSY");
   });
 });

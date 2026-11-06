@@ -452,18 +452,18 @@ describe("CardQueue — çökme ve yarış", () => {
 
   it("bozuk dosya SESSİZ geçmiyor: yolu bildiriliyor", async () => {
     await put(daily);
-    const yol = join(root, ".skein", "queue", "coder", "0-000000000000000-c-bozuk.json");
-    await writeFile(yol, "{ değil");
+    const filePath = join(root, ".skein", "queue", "coder", "0-000000000000000-c-bozuk.json");
+    await writeFile(filePath, "{ değil");
 
-    expect(await queue.bozuklar()).toEqual([yol]);
+    expect(await queue.bozuklar()).toEqual([filePath]);
   });
 
   // Aranan kart bozuk olanlardan biri OLABİLİR: "böyle bir kart yok"
   // demek veri kaybını yokluk gibi okutmak olurdu.
   it("aranan kart yoksa ve bozuk dosya varsa hata veriyor", async () => {
-    const dizin = join(root, ".skein", "queue", "coder");
-    await mkdir(dizin, { recursive: true });
-    await writeFile(join(dizin, "0-000000000000000-c-bozuk.json"), "{ değil");
+    const dirPath = join(root, ".skein", "queue", "coder");
+    await mkdir(dirPath, { recursive: true });
+    await writeFile(join(dirPath, "0-000000000000000-c-bozuk.json"), "{ değil");
     await expect(queue.get("c-20260101-aaaaaa")).rejects.toThrow(/okunamıyor/);
   });
 
@@ -568,9 +568,9 @@ describe("kapiKarari", () => {
   it("hedefi olmayan back retry olur ve ADI da retry'dir", async () => {
     const card = await atGate(daily, ["coder"]);
 
-    const karar = gateDecision(card, "back");
+    const verdict = gateDecision(card, "back");
 
-    expect(karar).toMatchObject({
+    expect(verdict).toMatchObject({
       kind: "escalation",
       requested: "back",
       applied: "retry",
@@ -581,9 +581,9 @@ describe("kapiKarari", () => {
   it("hedefi olan back aynen uygulanır", async () => {
     const card = await atGate(daily, ["coder", "reviewer"]);
 
-    const karar = gateDecision(card, "back");
+    const verdict = gateDecision(card, "back");
 
-    expect(karar).toMatchObject({ requested: "back", applied: "back", target: "coder" });
+    expect(verdict).toMatchObject({ requested: "back", applied: "back", target: "coder" });
   });
 
   // Varsayılan artık tek yerde: kaçışta `retry`, diğerlerinde `forward`.
@@ -596,20 +596,20 @@ describe("kapiKarari", () => {
   // kartın gittiği yer olmalı.
   it("hedef, kartın gerçekten gittiği rol", async () => {
     const card = await atGate(daily, ["coder", "reviewer"]);
-    const karar = gateDecision(card, "back");
+    const verdict = gateDecision(card, "back");
 
     const released = await queue.release(card.id, { decision: "back" });
 
-    expect(released.role).toBe(karar.target);
+    expect(released.role).toBe(verdict.target);
   });
 
   it("hedefsiz back'te de hedef kartın gittiği rol", async () => {
     const card = await atGate(daily, ["coder"]);
-    const karar = gateDecision(card, "back");
+    const verdict = gateDecision(card, "back");
 
     const released = await queue.release(card.id, { decision: "back" });
 
-    expect(released.role).toBe(karar.target);
+    expect(released.role).toBe(verdict.target);
     expect(released.role).toBe("coder");
   });
 });
@@ -630,11 +630,11 @@ describe("close — kopya kartlar", () => {
    * Gerçekte bu, yeniden adlandırma ile unlink arasında çöken bir sürecin
    * bıraktığı hâl (bkz. recover sınaması).
    */
-  async function staleCopy(card: Card, field: string, rol: string): Promise<string> {
-    const yol = join(root, ".skein", field, rol, `${card.id}.json`);
-    await mkdir(dirname(yol), { recursive: true });
-    await writeFile(yol, serializeCard(card));
-    return yol;
+  async function staleCopy(card: Card, field: string, theRole: string): Promise<string> {
+    const filePath = join(root, ".skein", field, theRole, `${card.id}.json`);
+    await mkdir(dirname(filePath), { recursive: true });
+    await writeFile(filePath, serializeCard(card));
+    return filePath;
   }
 
   it("geçmişi uzun olanı kapatıyor, bayatı kapatmıyor", async () => {

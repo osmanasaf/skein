@@ -46,19 +46,19 @@ class RoleAdapter implements Adapter {
     // dosyasının adını değil — ilk hâli dosya adına bakıyordu ve itiraz
     // eden rolü hiç tanımıyordu.
     const text = await readFile(req.promptFile, "utf8");
-    const rol = /rol:([a-z-]+)/.exec(text)?.[1] ?? "?";
-    this.seen.push(rol);
+    const theRole = /rol:([a-z-]+)/.exec(text)?.[1] ?? "?";
+    this.seen.push(theRole);
 
-    if (rol === "planner") {
-      const kart = /Kart: `([^`]+)`/.exec(req.taskText ?? "")?.[1] ?? "x";
+    if (theRole === "planner") {
+      const theCard = /Kart: `([^`]+)`/.exec(req.taskText ?? "")?.[1] ?? "x";
       await mkdir(join(req.workdir, "docs/plan"), { recursive: true });
-      await writeFile(join(req.workdir, `docs/plan/${kart}.md`), "# Plan\nsrc/toplam.ts yazılacak.\n");
-    } else if (rol === "architect") {
-      const kart = /Kart: `([^`]+)`/.exec(req.taskText ?? "")?.[1] ?? "x";
+      await writeFile(join(req.workdir, `docs/plan/${theCard}.md`), "# Plan\nsrc/toplam.ts yazılacak.\n");
+    } else if (theRole === "architect") {
+      const theCard = /Kart: `([^`]+)`/.exec(req.taskText ?? "")?.[1] ?? "x";
       await mkdir(join(req.workdir, "docs/plan"), { recursive: true });
-      await writeFile(join(req.workdir, `docs/plan/${kart}.itiraz.architect.md`),
+      await writeFile(join(req.workdir, `docs/plan/${theCard}.itiraz.architect.md`),
         "# İtirazlar\n\nİtirazım yok.\n");
-    } else if (rol === "coder") {
+    } else if (theRole === "coder") {
       await mkdir(join(req.workdir, "src"), { recursive: true });
       await writeFile(join(req.workdir, "src/toplam.ts"), this.resolution);
     }
@@ -66,7 +66,7 @@ class RoleAdapter implements Adapter {
     // Gerçek koşuda commit'i ajan atar; burada taklit ediyoruz.
     await commit(req.workdir);
     await writeFile(join(req.workdir, VERDICT_FILE), JSON.stringify({
-      decision: "accept", summary: `${rol} tamam`,
+      decision: "accept", summary: `${theRole} tamam`,
     }));
     return { exitCode: 0, stdout: "", stderr: "", durationMs: 3, usage: { costUsd: 0.01 } };
   }
@@ -343,7 +343,7 @@ describe("kol sürdürme", () => {
  * ve aynı mantıkla yeşiller de "kusur yok" demek değildir.
  */
 describe("onKontrol", () => {
-  const kol = (over: Partial<Pick<ArmResult, "ran" | "cardState" | "red" | "escalation">> = {}) => ({
+  const armName = (over: Partial<Pick<ArmResult, "ran" | "cardState" | "red" | "escalation">> = {}) => ({
     ran: true,
     cardState: "done",
     red: ["hooks/gizli.test.ts"],
@@ -351,22 +351,22 @@ describe("onKontrol", () => {
   });
 
   it("süit koşmadıysa hiçbir okuma geçerli değil", () => {
-    const karar = preCheck(kol({ ran: false, red: [] }));
-    expect(karar.kind).toBe("olculemedi");
+    const verdict = preCheck(armName({ ran: false, red: [] }));
+    expect(verdict.kind).toBe("olculemedi");
     // "Kusur yok" diye okunmaması gerektiği SÖYLENİYOR: bildirilmemiş
     // sıfır değildir.
-    expect(karar.kind === "olculemedi" && karar.reason).toMatch(/kusur yok/i);
+    expect(verdict.kind === "olculemedi" && verdict.reason).toMatch(/kusur yok/i);
   });
 
   it("kart done değilse ŞÜPHELİ — ÖLÇER demiyor", () => {
-    const karar = preCheck(kol({ cardState: "gate", escalation: "işlenmemiş değişiklik var" }));
-    expect(karar.kind).toBe("kuskulu");
-    if (karar.kind !== "kuskulu") throw new Error("kuskulu beklendi");
+    const verdict = preCheck(armName({ cardState: "gate", escalation: "işlenmemiş değişiklik var" }));
+    expect(verdict.kind).toBe("kuskulu");
+    if (verdict.kind !== "kuskulu") throw new Error("kuskulu beklendi");
     // Sebep satırı insana GİDİYOR: iki zıt durumu yalnızca o ayırt ediyor.
-    expect(karar.reason).toContain("gate");
-    expect(karar.reason).toContain("işlenmemiş değişiklik var");
+    expect(verdict.reason).toContain("gate");
+    expect(verdict.reason).toContain("işlenmemiş değişiklik var");
     // Kancalar atılmıyor: insan onlara bakarak karar verecek.
-    expect(karar.red).toEqual(["hooks/gizli.test.ts"]);
+    expect(verdict.red).toEqual(["hooks/gizli.test.ts"]);
   });
 
   /**
@@ -377,26 +377,26 @@ describe("onKontrol", () => {
    * işin hiç yapılmamış olmasından kaynaklanıyor olabilir.
    */
   it("kart done değil ve kanca yoksa da ŞÜPHELİ, ÖLÇEMEZ değil", () => {
-    const karar = preCheck(kol({ cardState: "gate", red: [], escalation: "ret limiti doldu" }));
-    expect(karar.kind).toBe("kuskulu");
+    const verdict = preCheck(armName({ cardState: "gate", red: [], escalation: "ret limiti doldu" }));
+    expect(verdict.kind).toBe("kuskulu");
   });
 
   it("iş bitti ve kanca yoksa ÖLÇEMEZ", () => {
-    const karar = preCheck(kol({ red: [] }));
-    expect(karar.kind).toBe("olcemez");
-    expect(karar.kind === "olcemez" && karar.reason).toMatch(/azalma olmaz/);
+    const verdict = preCheck(armName({ red: [] }));
+    expect(verdict.kind).toBe("olcemez");
+    expect(verdict.kind === "olcemez" && verdict.reason).toMatch(/azalma olmaz/);
   });
 
   it("iş bitti ve kanıtlanmış kusur varsa ÖLÇER", () => {
-    const karar = preCheck(kol({ red: ["a", "b"] }));
-    expect(karar).toEqual({ kind: "olcer", red: ["a", "b"] });
+    const verdict = preCheck(armName({ red: ["a", "b"] }));
+    expect(verdict).toEqual({ kind: "olcer", red: ["a", "b"] });
   });
 
   // `escalation` yoksa da sebep satırı kartın durumunu söylemek zorunda:
   // "ŞÜPHELİ" tek başına operatöre hiçbir şey anlatmaz.
   it("escalation yoksa bile durum adı sebepte", () => {
-    const karar = preCheck(kol({ cardState: "active" }));
-    expect(karar.kind === "kuskulu" && karar.reason).toContain("active");
+    const verdict = preCheck(armName({ cardState: "active" }));
+    expect(verdict.kind === "kuskulu" && verdict.reason).toContain("active");
   });
 });
 

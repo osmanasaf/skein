@@ -22,10 +22,10 @@
  * değildir. Artık iki sağlayıcıda da ateşleniyor.
  */
 export function modelTurns(stdout: string): number | undefined {
-  const metin = stdout.trim();
-  if (metin === "") return undefined;
+  const textBody = stdout.trim();
+  if (textBody === "") return undefined;
   try {
-    const d = JSON.parse(metin) as {
+    const d = JSON.parse(textBody) as {
       usage?: { iterations?: unknown[] };
       modelUsage?: Record<string, unknown>;
     };
@@ -37,7 +37,7 @@ export function modelTurns(stdout: string): number | undefined {
   }
   let olayli = false;
   let tur = 0;
-  for (const line of metin.split("\n")) {
+  for (const line of textBody.split("\n")) {
     const text = line.trim();
     if (!text.startsWith("{")) continue;
     try {

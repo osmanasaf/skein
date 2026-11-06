@@ -122,11 +122,11 @@ export function parseVerdict(text: string): VerdictResult {
       return { kind: "invalid", problem: "`yukumlulukler` bir nesne olmalı" };
     }
     const out: Record<string, ObligationAnswer> = {};
-    for (const [id, ham] of Object.entries(yukRaw as Record<string, unknown>)) {
-      if (ham === null || typeof ham !== "object" || Array.isArray(ham)) {
+    for (const [id, rawText] of Object.entries(yukRaw as Record<string, unknown>)) {
+      if (rawText === null || typeof rawText !== "object" || Array.isArray(rawText)) {
         return { kind: "invalid", problem: `\`yukumlulukler.${id}\` bir nesne olmalı` };
       }
-      const k = ham as Record<string, unknown>;
+      const k = rawText as Record<string, unknown>;
       const durum = k["durum"];
       if (durum !== "karsilandi" && durum !== "karsilanmadi") {
         return {

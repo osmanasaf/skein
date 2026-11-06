@@ -234,6 +234,22 @@ sayıda adla bu çeviri başarıyla yapıldı (3. parti, 30 ad): yöntem
 çalışıyor, ölçek kırıyor. Kalan arayüz adları kendi aşamasında, küçük
 gruplar hâlinde ve her grupta tam suite koşarak çevrilecek.
 
+**10. DOSYA BAZINDA AD — yalnızca GERÇEKTEN yerel adlar.** Hedef adın
+zaten bildirildiği dosyalarda kalan Türkçe adlar için, o dosyaya özgü
+bir ad seçilebilir: kapsam o dosyayla sınırlı. Jenerik `Of` türevleri
+yerine bağlama uygun eşanlamlı seçiliyor (`pathOf` değil `filePath`,
+`textOf` değil `textBody`).
+
+**AMA yalnızca yerel bildirimler.** İlk sürüm her bildirimi yerel saydı
+ve YANILDI: `yakalandi` `RawVerdict` türünün ALANI; dosya bazında ayrı
+ad seçmek paylaşılan tür alanını bozdu (`judge.test.ts` `caught`
+bekliyor, `judge.ts` `yakalandi` tutuyor) — 12 tsc hatası.
+
+Ölçüt: adın o dosyadaki TÜM bildirimleri yerel bağlama (değişken,
+parametre, yıkım) olmalı VE ad hiçbir ÖZELLİK konumunda geçmemeli.
+Özellik adları dosyalar arası sözleşme; onlar genel partilerde tutarlı
+biçimde çevriliyor.
+
 **Kanıt (her iki aşama için):** Türkçe metne bakan sınamaların hepsi
 DEĞİŞMEDEN geçmeli. Değişen varsa sınır çiğnenmiştir.
 

@@ -109,11 +109,11 @@ export async function readLastTheme(root: string): Promise<Theme | undefined> {
  * atomik: `card/queue.ts`'teki kart yazma disipliniyle aynı, yarım yazılmış
  * bir dosya bir sonraki okumada "bozuk" sayılıp yok sayılır.
  */
-async function writeRawRecord(root: string, field: string, deger: unknown): Promise<void> {
+async function writeRawRecord(root: string, field: string, fieldValue: unknown): Promise<void> {
   const dir = join(root, ".skein");
   await mkdir(dir, { recursive: true });
   const mevcut = await readRawRecord(root);
-  const fresh = { ...mevcut, [field]: deger };
+  const fresh = { ...mevcut, [field]: fieldValue };
   const tmp = join(dir, `.tmp-${randomBytes(6).toString("hex")}`);
   await writeFile(tmp, JSON.stringify(fresh), "utf8");
   await rename(tmp, join(dir, FILE_NAME));

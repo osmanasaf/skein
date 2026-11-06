@@ -94,10 +94,10 @@ export function gateDecision(card: Card, requestedEntry?: ReleaseDecision): Gate
   const applied: ReleaseDecision =
     requested === "back" && geriHedefi === null ? "retry" : requested;
 
-  const hedef =
+  const destination =
     applied === "retry" ? role.id : applied === "forward" ? ileri : (geriHedefi ?? role.id);
 
-  return { kind, requested, applied, target: hedef };
+  return { kind, requested, applied, target: destination };
 }
 
 /**
@@ -643,9 +643,9 @@ export class CardQueue {
       throw new QueueError(`Kartın rolü topolojisinde yok: ${card.role} (kart ${id})`);
     }
 
-    const karar = gateDecision(card, opts.decision);
-    const kind = karar.kind;
-    const decision = karar.requested;
+    const verdict = gateDecision(card, opts.decision);
+    const kind = verdict.kind;
+    const decision = verdict.requested;
     // Kaçış kapısında tur TAMAMLANMADI: kod bir sonraki worktree'ye hiç
     // birleştirilmedi. İleri bırakmak, sonraki role bayat bir ağaçta
     // çalıştırmak olurdu — ve hiçbir yerde görünmezdi.
@@ -661,7 +661,7 @@ export class CardQueue {
       );
     }
 
-    const target = karar.target;
+    const target = verdict.target;
 
     const rejects = { ...card.rejects };
     if (role.reject !== null) delete rejects[edgeKey(role.id, role.reject)];
@@ -741,8 +741,8 @@ export class CardQueue {
     // gider ama kopyası kuyrukta kaldığı için panoda durmaya devam eder.
     // `recover()` aynı kuralla aynı şeyi yapıyor; burada yapılmaması
     // kuralın üçüncü yerde eksik yazılmasının sonucuydu.
-    for (const bayat of kopyalar.slice(1)) {
-      await rm(bayat.path, { force: true });
+    for (const isStale of kopyalar.slice(1)) {
+      await rm(isStale.path, { force: true });
     }
 
     const closed = {

@@ -377,12 +377,12 @@ export function parseCard(text: string): Card {
       if (!Array.isArray(acceptanceRaw)) {
         throw new CardError("Kart alanı geçersiz: `plan.kabuller` bir dizi olmalı");
       }
-      kabuller = acceptanceRaw.map((ham) => {
-        const k = ham as Record<string, unknown>;
-        for (const alan of ["id", "role", "ne", "kanit"] as const) {
-          if (typeof k[alan] !== "string" || (k[alan] as string).trim() === "") {
+      kabuller = acceptanceRaw.map((rawText) => {
+        const k = rawText as Record<string, unknown>;
+        for (const fieldName of ["id", "role", "ne", "kanit"] as const) {
+          if (typeof k[fieldName] !== "string" || (k[fieldName] as string).trim() === "") {
             throw new CardError(
-              `Kart alanı geçersiz: \`plan.kabuller[].${alan}\` boş olmayan metin olmalı`,
+              `Kart alanı geçersiz: \`plan.kabuller[].${fieldName}\` boş olmayan metin olmalı`,
             );
           }
         }

@@ -112,7 +112,7 @@ function printCard(card: Card): void {
  * aynı işi ikinci kez, para harcayarak yaptırır. Gözcünün kilidi tam bunu
  * önlemek için var ve bu iki yol ona bakmıyordu.
  */
-async function stopIfWatcher(root: string, komut: string): Promise<string | null> {
+async function stopIfWatcher(root: string, commandLine: string): Promise<string | null> {
   const lockPath = join(root, ".skein", "daemon.json");
   const holder: LockInfo | null = await liveLock(lockPath);
   if (holder === null) return null;
@@ -122,7 +122,7 @@ async function stopIfWatcher(root: string, komut: string): Promise<string | null
       : `Bu depoda bir toplu koşu sürüyor: pid ${holder.pid}, akış ${holder.flow}.`;
   return (
     `${kim}\n\n` +
-    `  \`card -- ${komut}\` kuyruğun AKTİF kartlarına dokunuyor; o kartlar şu an\n` +
+    `  \`card -- ${commandLine}\` kuyruğun AKTİF kartlarına dokunuyor; o kartlar şu an\n` +
     `  gözcünün elinde. Aynı iş ikinci kez, para harcayarak yapılır.\n\n` +
     `  Gözcüyü durdur; gerçekten yoksa kilidi sil:\n` +
     `    ${lockPath}\n`

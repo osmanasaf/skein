@@ -46,7 +46,7 @@ export function lastPlanEntry(card: Card): PlanEntry | null {
 function exchangeClosed(card: Card, topology: TopologySnapshot): boolean {
   const i = lastPlanIndex(card);
   if (i === -1) return false;
-  const participant = (rol: string): boolean => isPlanner(topology, rol);
+  const participant = (role: string): boolean => isPlanner(topology, role);
   for (const entry of card.history.slice(i + 1)) {
     switch (entry.event) {
       case "taken":

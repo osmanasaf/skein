@@ -216,10 +216,10 @@ describe("ui cli — port hafızası (gerçek süreç)", () => {
     child.stdout.on("data", (chunk: Buffer) => {
       cikti += chunk.toString();
     });
-    const kod = await new Promise<number | null>((res) => {
+    const statusCode = await new Promise<number | null>((res) => {
       child.on("close", (code) => res(code));
     });
-    expect(kod).toBe(0);
+    expect(statusCode).toBe(0);
     expect(cikti).toContain("Kullanım:");
     expect(cikti).not.toContain("ekran açık");
   });
@@ -242,9 +242,9 @@ describe("ui cli — port hafızası (gerçek süreç)", () => {
     let cikti = "";
     child.stdout.on("data", (c: Buffer) => { cikti += c.toString(); });
     child.stderr.on("data", (c: Buffer) => { cikti += c.toString(); });
-    const kod = await new Promise<number | null>((res) => child.on("close", res));
+    const statusCode = await new Promise<number | null>((res) => child.on("close", res));
 
-    expect(kod).toBe(1);
+    expect(statusCode).toBe(1);
     expect(cikti).toContain("--zamanasimi");
     expect(cikti).not.toContain("ekran açık");
   });
@@ -267,9 +267,9 @@ describe("ui cli — port hafızası (gerçek süreç)", () => {
     let cikti = "";
     child.stdout.on("data", (c: Buffer) => { cikti += c.toString(); });
     child.stderr.on("data", (c: Buffer) => { cikti += c.toString(); });
-    const kod = await new Promise<number | null>((res) => child.on("close", res));
+    const statusCode = await new Promise<number | null>((res) => child.on("close", res));
 
-    expect(kod).toBe(1);
+    expect(statusCode).toBe(1);
     expect(cikti).toContain("--model");
     expect(cikti).not.toContain("bilinmeyen bayrak");
   });
@@ -340,13 +340,13 @@ describe("ui cli — varsayılan akış seçimi (gerçek süreç)", () => {
   const NO_COMMAND_ENV = { ...process.env, PATH: "" };
 
   /** Tek rollü, geçerli bir akış dosyası metni — ad ve rol id'si parametreli. */
-  function flowYaml(ad: string, rol: string): string {
+  function flowYaml(itemName: string, role: string): string {
     return `
-name: ${ad}
+name: ${itemName}
 constitution:
   - ../prompts/base.md
 roles:
-  - id: ${rol}
+  - id: ${role}
     provider: claude
     workspace: main
     prompt: ../../roles/coder.prompt
@@ -354,13 +354,13 @@ roles:
 `;
   }
 
-  async function createFlow(ad: string, rol: string): Promise<void> {
-    await writeFile(join(root, "hub", "flows", `${ad}.yaml`), flowYaml(ad, rol));
+  async function createFlow(itemName: string, role: string): Promise<void> {
+    await writeFile(join(root, "hub", "flows", `${itemName}.yaml`), flowYaml(itemName, role));
   }
 
-  async function writeRemembered(ad: string): Promise<void> {
+  async function writeRemembered(itemName: string): Promise<void> {
     await mkdir(join(root, ".skein"), { recursive: true });
-    await writeFile(join(root, ".skein", "ekran.json"), JSON.stringify({ akis: ad }), "utf8");
+    await writeFile(join(root, ".skein", "ekran.json"), JSON.stringify({ akis: itemName }), "utf8");
   }
 
   async function activeFlowName(e: RunningScreen): Promise<string> {

@@ -152,12 +152,12 @@ describe("tick — kuyruk engeli", () => {
 
     await tick("coder", { ...options, log: new EventLog(logPath, "kosu-1") });
 
-    const olaylar = (await readEvents(logPath)).events.filter((e) => e.type === "queue.blocked");
-    expect(olaylar).toHaveLength(1);
-    const olay = olaylar[0] as unknown as { role: string; path: string; code: string };
-    expect(olay.role).toBe("coder");
-    expect(olay.path).toContain(card.id);
-    expect(olay.code).not.toBe("ENOENT");
+    const eventList = (await readEvents(logPath)).events.filter((e) => e.type === "queue.blocked");
+    expect(eventList).toHaveLength(1);
+    const oneEvent = eventList[0] as unknown as { role: string; path: string; code: string };
+    expect(oneEvent.role).toBe("coder");
+    expect(oneEvent.path).toContain(card.id);
+    expect(oneEvent.code).not.toBe("ENOENT");
   });
 
   // Boş kuyruk engel DEĞİL: her sessiz turda kayıt yazmak günlüğü işe
@@ -165,8 +165,8 @@ describe("tick — kuyruk engeli", () => {
   it("boş kuyruk engel kaydı yazmıyor", async () => {
     const logPath = join(root, "olaylar.jsonl");
     await tick("coder", { ...options, log: new EventLog(logPath, "kosu-1") });
-    const olaylar = (await readEvents(logPath)).events.filter((e) => e.type === "queue.blocked");
-    expect(olaylar).toHaveLength(0);
+    const eventList = (await readEvents(logPath)).events.filter((e) => e.type === "queue.blocked");
+    expect(eventList).toHaveLength(0);
   });
 });
 
@@ -985,9 +985,9 @@ describe("tick — prompt derleme", () => {
 
     const text = await readFile(claude.calls[0]?.promptFile as string, "utf8");
     const anayasa = text.indexOf('name="anayasa:1"');
-    const rol = text.indexOf('name="rol:coder"');
+    const theRole = text.indexOf('name="rol:coder"');
     expect(anayasa).toBeGreaterThanOrEqual(0);
-    expect(rol).toBeGreaterThan(anayasa);
+    expect(theRole).toBeGreaterThan(anayasa);
   });
 
   it("görev metni prompt dosyasına GİRMEZ — hash görevden bağımsız kalmalı", async () => {

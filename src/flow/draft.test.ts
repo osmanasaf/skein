@@ -12,7 +12,7 @@ let root: string;
 let path: string;
 let opts: { root: string; providers: ReturnType<typeof knownProviderSet> };
 
-const taslak = (): FlowDraft => ({
+const draftDoc = (): FlowDraft => ({
   name: "test",
   constitution: ["../prompts/base.md"],
   roles: [
@@ -35,7 +35,7 @@ beforeEach(async () => {
   await writeFile(join(root, "roles", "coder.prompt"), "# coder\n");
   await writeFile(join(root, "roles", "reviewer.prompt"), "# reviewer\n");
   path = join(root, "hub", "flows", "test.yaml");
-  await writeFile(path, toYaml(taslak()));
+  await writeFile(path, toYaml(draftDoc()));
   opts = { root, providers: knownProviderSet() };
 });
 afterEach(async () => {
@@ -44,7 +44,7 @@ afterEach(async () => {
 
 describe("toYaml", () => {
   it("ürettiği YAML gerçek yükleyiciden geçer", async () => {
-    await writeFile(path, toYaml(taslak()));
+    await writeFile(path, toYaml(draftDoc()));
     const flow = await loadFlow(path, opts);
     expect(flow.roles.map((r) => r.id)).toEqual(["coder", "reviewer"]);
   });
@@ -52,14 +52,14 @@ describe("toYaml", () => {
   // Varsayılanı olan alanı açıkça yazmak `reject: coder` gibi satırların
   // "bu kasıtlı" anlamını sulandırırdı.
   it("boş alanları yazmaz", () => {
-    const yaml = toYaml({ ...taslak(), description: "   " });
+    const yaml = toYaml({ ...draftDoc(), description: "   " });
     expect(yaml).not.toContain("description");
     expect(yaml).not.toContain("syncBack: []");
     expect(yaml).not.toContain("gates");
   });
 
   it("verilen alanları yazar", () => {
-    const yaml = toYaml({ ...taslak(), description: "kısa akış", gates: [{ after: "coder", type: "approval" }] });
+    const yaml = toYaml({ ...draftDoc(), description: "kısa akış", gates: [{ after: "coder", type: "approval" }] });
     expect(yaml).toContain("description: kısa akış");
     expect(yaml).toContain("after: coder");
   });
@@ -67,7 +67,7 @@ describe("toYaml", () => {
 
 describe("checkDraft", () => {
   it("geçerli taslakta hash ve maliyet döner", async () => {
-    const result = await checkDraft(path, taslak(), opts);
+    const result = await checkDraft(path, draftDoc(), opts);
 
     expect(result.ok).toBe(true);
     expect(result.ok && result.hash).toMatch(/^[0-9a-f]{64}$/);
@@ -77,7 +77,7 @@ describe("checkDraft", () => {
   // Kural numaraları kullanıcıya AYNEN gitmeli; ekrana ayrı bir kural
   // kopyası yazmak iki kümenin ayrışmasıyla biterdi.
   it("kural ihlalini numarasıyla bildirir", async () => {
-    const corrupt = taslak();
+    const corrupt = draftDoc();
     corrupt.roles[1]!.next = "coder"; // döngü: kimse `done`'a gitmiyor
 
     const result = await checkDraft(path, corrupt, opts);
@@ -90,7 +90,7 @@ describe("checkDraft", () => {
   // büyütürken yapılacak en kolay hata (kural 16). İki `main` ise daha önce
   // kural 2'ye takılıyor, o yüzden çakışma main DIŞINDA kuruluyor.
   it("aynı workspace'i paylaşan iki rol reddedilir", async () => {
-    const corrupt = taslak();
+    const corrupt = draftDoc();
     corrupt.roles.push({
       id: "guard", provider: "claude", workspace: "reviewer",
       prompt: "../../roles/reviewer.prompt", receive: "batch", next: "done",
@@ -103,13 +103,13 @@ describe("checkDraft", () => {
   });
 
   it("iki rol `main` isterse kural 2 reddeder", async () => {
-    const corrupt = taslak();
+    const corrupt = draftDoc();
     corrupt.roles[1]!.workspace = "main";
     expect(!(await checkDraft(path, corrupt, opts)).ok).toBe(true);
   });
 
   it("olmayan prompt dosyası reddedilir", async () => {
-    const corrupt = taslak();
+    const corrupt = draftDoc();
     corrupt.roles[0]!.prompt = "../../roles/yok.prompt";
     expect((await checkDraft(path, corrupt, opts)).ok).toBe(false);
   });
@@ -118,7 +118,7 @@ describe("checkDraft", () => {
   // düşseydi, gözcü yarım taslakları okurdu.
   it("doğrulama dosyaya dokunmaz", async () => {
     const once = await readFile(path, "utf8");
-    const corrupt = taslak();
+    const corrupt = draftDoc();
     corrupt.roles[1]!.next = "coder";
 
     await checkDraft(path, corrupt, opts);
@@ -127,7 +127,7 @@ describe("checkDraft", () => {
   });
 
   it("maliyet rol sayısıyla büyür", async () => {
-    const fourRoles = taslak();
+    const fourRoles = draftDoc();
     fourRoles.roles = [
       { id: "analyst", provider: "claude", workspace: "main", prompt: "../../roles/coder.prompt", next: "coder" },
       { id: "coder", provider: "codex", workspace: "coder", prompt: "../../roles/coder.prompt", next: "reviewer" },
@@ -151,43 +151,43 @@ describe("fromFlow — gidiş dönüş", () => {
   // kaydetme akışı sessizce başka bir şeye dönüştürmüş olur.
   // `plan4` planlama bloğunu (`denetci` dahil) taşıyan tek örnek — bloğun
   // artık MODELLİ olması (kart c-20261105-725320) hash'i bozmamalı.
-  for (const ad of ["daily", "spec", "plan4"]) {
-    it(`${ad}: taslağa çevrilip geri yazılınca hash aynı kalır`, async () => {
-      const yol = join(repoRoot, "hub", "flows", `${ad}.yaml`);
-      const once = await loadFlow(yol, actual);
+  for (const itemName of ["daily", "spec", "plan4"]) {
+    it(`${itemName}: taslağa çevrilip geri yazılınca hash aynı kalır`, async () => {
+      const filePath = join(repoRoot, "hub", "flows", `${itemName}.yaml`);
+      const once = await loadFlow(filePath, actual);
 
       const draft = fromFlow(once);
-      const sonra = await loadFlow(yol, { ...actual, text: toYaml(draft) });
+      const afterRole = await loadFlow(filePath, { ...actual, text: toYaml(draft) });
 
-      expect(sonra.hash).toBe(once.hash);
-      expect(sonra.roles.map((r) => r.id)).toEqual(once.roles.map((r) => r.id));
+      expect(afterRole.hash).toBe(once.hash);
+      expect(afterRole.roles.map((r) => r.id)).toEqual(once.roles.map((r) => r.id));
     });
   }
 
   // Kapı mesajı hash'e girmiyor; hash testi onu yakalayamaz. Ayrıca bakılıyor
   // çünkü sessizce silinmesi en kolay alan.
   it("spec: kapı mesajı korunur", async () => {
-    const yol = join(repoRoot, "hub", "flows", "spec.yaml");
-    const flow = await loadFlow(yol, actual);
+    const filePath = join(repoRoot, "hub", "flows", "spec.yaml");
+    const flow = await loadFlow(filePath, actual);
     expect(flow.gates[0]?.message).toBeDefined();
 
-    const again = await loadFlow(yol, { ...actual, text: toYaml(fromFlow(flow)) });
+    const again = await loadFlow(filePath, { ...actual, text: toYaml(fromFlow(flow)) });
 
     expect(again.gates[0]?.message).toBe(flow.gates[0]?.message);
   });
 
   it("spec: açıklama korunur", async () => {
-    const yol = join(repoRoot, "hub", "flows", "spec.yaml");
-    const flow = await loadFlow(yol, actual);
-    const again = await loadFlow(yol, { ...actual, text: toYaml(fromFlow(flow)) });
+    const filePath = join(repoRoot, "hub", "flows", "spec.yaml");
+    const flow = await loadFlow(filePath, actual);
+    const again = await loadFlow(filePath, { ...actual, text: toYaml(fromFlow(flow)) });
     expect(again.description).toBe(flow.description);
   });
 
   // Varsayılan ret hedefini dosyaya yazmak, `reject: coder` satırlarının
   // "bu kasıtlı" anlamını sulandırırdı.
   it("yazılmamış ret hedefi taslağa da yazılmaz", async () => {
-    const yol = join(repoRoot, "hub", "flows", "daily.yaml");
-    const flow = await loadFlow(yol, actual);
+    const filePath = join(repoRoot, "hub", "flows", "daily.yaml");
+    const flow = await loadFlow(filePath, actual);
     const draft = fromFlow(flow);
 
     const isOpen = flow.roles.filter((r) => r.rejectExplicit).map((r) => r.id);
@@ -206,9 +206,9 @@ describe("fromFlow — gidiş dönüş", () => {
 // modelli, bkz. alttaki describe).
 describe("ekranın modellemediği bloklar korunuyor", () => {
   it("bilinmeyen üst düzey anahtar düzenlemeden sonra dosyada DURUYOR", async () => {
-    await writeFile(path, `${toYaml(taslak())}\ndeneysel:\n  ileride: eklenecek\n`);
+    await writeFile(path, `${toYaml(draftDoc())}\ndeneysel:\n  ileride: eklenecek\n`);
 
-    const fresh = taslak();
+    const fresh = draftDoc();
     fresh.description = "ekrandan düzenlendi";
     const result = await writeDraft(path, fresh, opts);
 
@@ -225,9 +225,9 @@ describe("ekranın modellemediği bloklar korunuyor", () => {
     await writeFile(path, `# Üst başlık yorumu
 # İkinci satır
 
-${toYaml(taslak())}`);
+${toYaml(draftDoc())}`);
 
-    const fresh = taslak();
+    const fresh = draftDoc();
     fresh.description = "ekrandan düzenlendi";
     expect((await writeDraft(path, fresh, opts)).ok).toBe(true);
 
@@ -240,8 +240,8 @@ ${toYaml(taslak())}`);
   // Silinen isteğe bağlı alan dosyadan da düşmeli: belgeyi yerinde
   // düzenlemek, kaldırılan bir alanın yerinde kalması riskini getiriyor.
   it("taslaktan silinen açıklama dosyadan da düşüyor", async () => {
-    await writeFile(path, toYaml({ ...taslak(), description: "eski" }));
-    const fresh = taslak();
+    await writeFile(path, toYaml({ ...draftDoc(), description: "eski" }));
+    const fresh = draftDoc();
     delete fresh.description;
     expect((await writeDraft(path, fresh, opts)).ok).toBe(true);
     expect(await readFile(path, "utf8")).not.toContain("eski");
@@ -265,9 +265,9 @@ describe("planlama bloğu — taşıma ve round-trip", () => {
   });
 
   it("açıkça taşınan planlama bloğu dosyaya YAZILIR", async () => {
-    await writeFile(path, toYaml(taslak()));
+    await writeFile(path, toYaml(draftDoc()));
 
-    const fresh = taslak();
+    const fresh = draftDoc();
     fresh.planlama = planBlock();
     const result = await writeDraft(path, fresh, opts);
 
@@ -285,9 +285,9 @@ describe("planlama bloğu — taşıma ve round-trip", () => {
   // da konuşuyordu; farkı: artık draft'ın KENDİSİ tutarsız olduğunda da
   // konuşuyor, dosyada neyin kaldığına bakılmaksızın.
   it("rolü yeniden adlandırıp planlama alanını GÜNCELLEMEMEK hata verir", async () => {
-    await writeFile(path, toYaml(taslak()));
+    await writeFile(path, toYaml(draftDoc()));
 
-    const fresh = taslak();
+    const fresh = draftDoc();
     fresh.planlama = planBlock(); // "coder"a işaret ediyor
     (fresh.roles[0] as { id: string }).id = "yazar"; // ama rol "yazar" oldu
     (fresh.roles[1] as { reject?: string }).reject = "yazar";
@@ -302,23 +302,23 @@ describe("planlama bloğu — taşıma ve round-trip", () => {
   // `gates`/`audit` ile aynı sözleşme: modellenen bir alanı atlamak artık
   // "dokunma" değil "kaldır" anlamına geliyor.
   it("planlama taşınmazsa dosyadan DÜŞER", async () => {
-    await writeFile(path, `${toYaml(taslak())}\nplanlama:\n  katilimcilar: [coder]\n  plan: docs/plan/{kart}.md\n`);
+    await writeFile(path, `${toYaml(draftDoc())}\nplanlama:\n  katilimcilar: [coder]\n  plan: docs/plan/{kart}.md\n`);
 
-    const result = await writeDraft(path, taslak(), opts);
+    const result = await writeDraft(path, draftDoc(), opts);
 
     expect(result.ok).toBe(true);
     expect(await readFile(path, "utf8")).not.toContain("planlama");
   });
 
   it("planlama bloğu olmayan akışta hiçbir şey eklenmiyor", async () => {
-    await writeFile(path, toYaml(taslak()));
-    const result = await writeDraft(path, taslak(), opts);
+    await writeFile(path, toYaml(draftDoc()));
+    const result = await writeDraft(path, draftDoc(), opts);
     expect(result.ok).toBe(true);
     expect(await readFile(path, "utf8")).not.toContain("planlama");
   });
 
   it("fromFlow planlama bloğunu taşlağa taşır (denetci dahil)", async () => {
-    await writeFile(path, `${toYaml(taslak())}\nplanlama:\n  katilimcilar: [coder]\n  plan: docs/plan/{kart}.md\n  denetci: reviewer\n`);
+    await writeFile(path, `${toYaml(draftDoc())}\nplanlama:\n  katilimcilar: [coder]\n  plan: docs/plan/{kart}.md\n  denetci: reviewer\n`);
     const flow = await loadFlow(path, opts);
 
     const draft = fromFlow(flow);
@@ -331,7 +331,7 @@ describe("planlama bloğu — taşıma ve round-trip", () => {
 
 describe("writeDraft", () => {
   it("geçerli taslağı yazar", async () => {
-    const fresh = taslak();
+    const fresh = draftDoc();
     fresh.description = "yazıldı";
 
     const result = await writeDraft(path, fresh, opts);
@@ -344,7 +344,7 @@ describe("writeDraft", () => {
   // sistemi ekrandan bozmak olurdu.
   it("geçersiz taslağı YAZMAZ", async () => {
     const once = await readFile(path, "utf8");
-    const corrupt = taslak();
+    const corrupt = draftDoc();
     corrupt.roles[1]!.workspace = "main";
 
     const result = await writeDraft(path, corrupt, opts);
@@ -355,13 +355,13 @@ describe("writeDraft", () => {
 
   // Gözcü her geçişte bu dosyayı okuyor; yarı yazılmış bir hâli görmemeli.
   it("yazma sonrası yan dosya bırakmaz", async () => {
-    await writeDraft(path, taslak(), opts);
+    await writeDraft(path, draftDoc(), opts);
     const files = await readdir(join(root, "hub", "flows"));
     expect(files).toEqual(["test.yaml"]);
   });
 
   it("yazılan dosya yeniden yüklenebilir", async () => {
-    const fresh = taslak();
+    const fresh = draftDoc();
     fresh.roles.push({
       id: "guard", provider: "claude", workspace: "guard",
       prompt: "../../roles/reviewer.prompt", receive: "batch", next: "done",

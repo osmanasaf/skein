@@ -26,7 +26,7 @@ import { WORKTREE_DIR } from "./workspace.js";
  * sınanamaz: dosyaları her ağaca elle yazan bir test, taşımanın ne yaptığını
  * hiç sormamış olur.
  */
-const FLOW = (kor: boolean): string => `
+const FLOW = (blindMode: boolean): string => `
 name: exchange3-test
 constitution:
   - ../prompts/base.md
@@ -62,7 +62,7 @@ roles:
 planlama:
   katilimcilar: [planner, architect, analyst]
   tur: 2
-  ilk-tur-kor: ${kor}
+  ilk-tur-kor: ${blindMode}
   plan: docs/plan/{kart}.md
 reject:
   limit: 2
@@ -110,13 +110,13 @@ function resolve(abs: string): { ws: string; rel: string } | null {
   return best;
 }
 
-const yaz = (ws: string, rel: string, metin: string): void => {
-  files.set(`${ws}:${rel}`, metin);
+const write = (ws: string, rel: string, textBody: string): void => {
+  files.set(`${ws}:${rel}`, textBody);
 };
 const var_ = (ws: string, rel: string): boolean => files.has(`${ws}:${rel}`);
 
 const PLAN = (id: string) => `docs/plan/${id}.md`;
-const OBJECTION = (id: string, rol: string) => `docs/plan/${id}.itiraz.${rol}.md`;
+const OBJECTION = (id: string, theRole: string) => `docs/plan/${id}.itiraz.${theRole}.md`;
 
 interface Kayit {
   no: number;
@@ -125,9 +125,9 @@ interface Kayit {
 }
 
 /** Bir itirazcının KENDİ dosyası. Numaralar dosya içinde 1'den başlar. */
-const itirazDosyasi = (rol: string, ...records: Kayit[]): string =>
-  `# İtirazlar — ${rol}\n\n${records.map((k) => `## İtiraz ${k.no} — ${rol}
-**Ne:** ${rol} ${k.no}. itiraz.
+const itirazDosyasi = (theRole: string, ...records: Kayit[]): string =>
+  `# İtirazlar — ${theRole}\n\n${records.map((k) => `## İtiraz ${k.no} — ${theRole}
+**Ne:** ${theRole} ${k.no}. itiraz.
 **Neden:** Sebep ${k.no}.
 **Neyi yanlışlar:** \`${k.kanit ?? "src/var.ts"}:3\` — orada.
 **Durum:** ${k.durum}
@@ -135,8 +135,8 @@ const itirazDosyasi = (rol: string, ...records: Kayit[]): string =>
 
 const YOK = "# İtirazlar\n\nBenden itiraz yok; planın her iddiasını kontrol ettim.\n";
 
-async function hazirla(kor: boolean): Promise<void> {
-  await writeFile(join(root, "hub", "flows", "exchange3-test.yaml"), FLOW(kor));
+async function hazirla(blindMode: boolean): Promise<void> {
+  await writeFile(join(root, "hub", "flows", "exchange3-test.yaml"), FLOW(blindMode));
   topology = snapshot(
     await loadFlow(join(root, "hub", "flows", "exchange3-test.yaml"), { root, providers: knownProviderSet() }),
     root,
@@ -174,10 +174,10 @@ beforeEach(async () => {
       const to = resolve(`${toDir}/x`);
       if (from === null || to === null) return { kind: "merged" as const };
       birlesmeler.push(`${from.ws}→${to.ws}`);
-      for (const [key, metin] of [...files]) {
+      for (const [key, textBody] of [...files]) {
         const [ws, ...left] = key.split(":");
         if (ws !== from.ws) continue;
-        files.set(`${to.ws}:${left.join(":")}`, metin);
+        files.set(`${to.ws}:${left.join(":")}`, textBody);
       }
       return { kind: "merged" as const };
     },
@@ -202,16 +202,16 @@ afterEach(async () => {
 const put = async (): Promise<Card> =>
   queue.add(newCard({ title: "iş", task: "undo ekle", topology }));
 
-const rol = async (id: string): Promise<string | undefined> => (await queue.get(id))?.role;
+const theRole = async (id: string): Promise<string | undefined> => (await queue.get(id))?.role;
 
 /** Plan yazma turunu koşar; kart ilk itirazcıya geçer. */
 async function writePlan(card: Card): Promise<void> {
-  yaz("main", PLAN(card.id), "# Plan\nBirinci sürüm.\n");
-  yaz("main", "src/var.ts", "export const x = 1;\n");
+  write("main", PLAN(card.id), "# Plan\nBirinci sürüm.\n");
+  write("main", "src/var.ts", "export const x = 1;\n");
   await tick("planner", options);
 }
 
-const turlar = async (): Promise<{ role: string; round: number; blind: boolean; newObjections: number }[]> => {
+const roundList = async (): Promise<{ role: string; round: number; blind: boolean; newObjections: number }[]> => {
   const { events } = await readEvents(logPath);
   return events.filter((e) => e.type === "plan.round").map((e) => ({
     role: e.role, round: e.round, blind: e.blind, newObjections: e.newObjections,
@@ -224,10 +224,10 @@ describe("6e — körlü tur: taşıma dallanıyor ve toplanıyor", () => {
   it("ikinci itirazcı, birincinin itiraz dosyasını GÖRMEZ", async () => {
     const card = await put();
     await writePlan(card);
-    yaz("architect", OBJECTION(card.id, "architect"), itirazDosyasi("architect", { no: 1, durum: "açık" }));
+    write("architect", OBJECTION(card.id, "architect"), itirazDosyasi("architect", { no: 1, durum: "açık" }));
     await tick("architect", options);
 
-    expect(await rol(card.id)).toBe("analyst");
+    expect(await theRole(card.id)).toBe("analyst");
     // Kart analyst'e geçti; onun ağacı YAZARIN ağacından beslendi.
     expect(var_("analyst", PLAN(card.id))).toBe(true);
     expect(var_("analyst", OBJECTION(card.id, "architect"))).toBe(false);
@@ -239,12 +239,12 @@ describe("6e — körlü tur: taşıma dallanıyor ve toplanıyor", () => {
   it("turun sonunda bütün itirazlar yazarın ağacında toplanır", async () => {
     const card = await put();
     await writePlan(card);
-    yaz("architect", OBJECTION(card.id, "architect"), itirazDosyasi("architect", { no: 1, durum: "açık" }));
+    write("architect", OBJECTION(card.id, "architect"), itirazDosyasi("architect", { no: 1, durum: "açık" }));
     await tick("architect", options);
-    yaz("analyst", OBJECTION(card.id, "analyst"), itirazDosyasi("analyst", { no: 1, durum: "açık" }));
+    write("analyst", OBJECTION(card.id, "analyst"), itirazDosyasi("analyst", { no: 1, durum: "açık" }));
     await tick("analyst", options);
 
-    expect(await rol(card.id)).toBe("planner");
+    expect(await theRole(card.id)).toBe("planner");
     expect(var_("main", OBJECTION(card.id, "architect"))).toBe(true);
     expect(var_("main", OBJECTION(card.id, "analyst"))).toBe(true);
     // Fan-in: iki itirazcının ağacı da yazara katıldı.
@@ -257,25 +257,25 @@ describe("6e — körlü tur: taşıma dallanıyor ve toplanıyor", () => {
   it("hiç itiraz yazmayan son itirazcı, turu kapatmaz", async () => {
     const card = await put();
     await writePlan(card);
-    yaz("architect", OBJECTION(card.id, "architect"), itirazDosyasi("architect", { no: 1, durum: "açık" }));
+    write("architect", OBJECTION(card.id, "architect"), itirazDosyasi("architect", { no: 1, durum: "açık" }));
     await tick("architect", options);
-    yaz("analyst", OBJECTION(card.id, "analyst"), YOK);
+    write("analyst", OBJECTION(card.id, "analyst"), YOK);
     await tick("analyst", options);
 
     // Kart `coder`a DEĞİL yazara gitti; architect'in itirazı hayatta.
-    expect(await rol(card.id)).toBe("planner");
+    expect(await theRole(card.id)).toBe("planner");
   });
 
   it("yazar birleşmeden sonra itirazların TOPLAMINI görür", async () => {
     const card = await put();
     await writePlan(card);
-    yaz("architect", OBJECTION(card.id, "architect"), itirazDosyasi("architect", { no: 1, durum: "açık" }));
+    write("architect", OBJECTION(card.id, "architect"), itirazDosyasi("architect", { no: 1, durum: "açık" }));
     await tick("architect", options);
-    yaz("analyst", OBJECTION(card.id, "analyst"), itirazDosyasi("analyst", { no: 1, durum: "açık" }));
+    write("analyst", OBJECTION(card.id, "analyst"), itirazDosyasi("analyst", { no: 1, durum: "açık" }));
     await tick("analyst", options);
     await tick("planner", options);
 
-    const records = await turlar();
+    const records = await roundList();
     // İtirazcılar kendi dosyalarından başkasını görmüyor: ikisi de "1".
     // Turun gerçek toplamı ilk kez YAZARIN turunda biliniyor: "2".
     expect(records.map((k) => [k.role, k.newObjections])).toEqual([
@@ -289,14 +289,14 @@ describe("6e — körlü tur: taşıma dallanıyor ve toplanıyor", () => {
   it("körlü turda hiç itiraz çıkmazsa yazarın turu alışverişi kapatır", async () => {
     const card = await put();
     await writePlan(card);
-    yaz("architect", OBJECTION(card.id, "architect"), YOK);
+    write("architect", OBJECTION(card.id, "architect"), YOK);
     await tick("architect", options);
-    yaz("analyst", OBJECTION(card.id, "analyst"), YOK);
+    write("analyst", OBJECTION(card.id, "analyst"), YOK);
     await tick("analyst", options);
-    expect(await rol(card.id)).toBe("planner");
+    expect(await theRole(card.id)).toBe("planner");
 
     await tick("planner", options);
-    expect(await rol(card.id)).toBe("coder");
+    expect(await theRole(card.id)).toBe("coder");
     const { events } = await readEvents(logPath);
     expect(events.filter((e) => e.type === "plan.settled")[0]).toMatchObject({
       outcome: "anlasma", role: "planner", rounds: 1, objections: 0,
@@ -311,12 +311,12 @@ describe("6e — körlü tur: taşıma dallanıyor ve toplanıyor", () => {
   it("plan belgesini kanıt gösteren itirazı tick de geçersiz sayar", async () => {
     const card = await put();
     await writePlan(card);
-    yaz("architect", OBJECTION(card.id, "architect"),
+    write("architect", OBJECTION(card.id, "architect"),
       itirazDosyasi("architect", { no: 1, durum: "açık", kanit: PLAN(card.id) }));
     await tick("architect", options);
-    yaz("analyst", OBJECTION(card.id, "analyst"), YOK);
+    write("analyst", OBJECTION(card.id, "analyst"), YOK);
     await tick("analyst", options);
-    expect(await rol(card.id)).toBe("planner");
+    expect(await theRole(card.id)).toBe("planner");
 
     await tick("planner", options);
     const { events } = await readEvents(logPath);
@@ -334,14 +334,14 @@ describe("6e — körlü tur: taşıma dallanıyor ve toplanıyor", () => {
   it("aynı satırda plan belgesi VE kod gösteren itiraz ayakta kalır", async () => {
     const card = await put();
     await writePlan(card);
-    yaz("architect", OBJECTION(card.id, "architect"),
+    write("architect", OBJECTION(card.id, "architect"),
       `# İtirazlar — architect\n\n## İtiraz 1 — architect\n` +
       `**Ne:** Plan sürüm sayacına güveniyor.\n` +
       `**Neden:** Tüketici önbelleği sürüme bakıyor.\n` +
       `**Neyi yanlışlar:** \`${PLAN(card.id)}:44\` yüzeysel, \`src/var.ts:3\` kırılıyor.\n` +
       `**Durum:** açık\n`);
     await tick("architect", options);
-    yaz("analyst", OBJECTION(card.id, "analyst"), YOK);
+    write("analyst", OBJECTION(card.id, "analyst"), YOK);
     await tick("analyst", options);
 
     const { events } = await readEvents(logPath);
@@ -355,10 +355,10 @@ describe("6e — körlü tur: taşıma dallanıyor ve toplanıyor", () => {
   it("koda işaret eden itiraz geçerli sayılmayı sürdürür", async () => {
     const card = await put();
     await writePlan(card);
-    yaz("architect", OBJECTION(card.id, "architect"),
+    write("architect", OBJECTION(card.id, "architect"),
       itirazDosyasi("architect", { no: 1, durum: "açık", kanit: "src/var.ts" }));
     await tick("architect", options);
-    yaz("analyst", OBJECTION(card.id, "analyst"), YOK);
+    write("analyst", OBJECTION(card.id, "analyst"), YOK);
     await tick("analyst", options);
     const { events } = await readEvents(logPath);
     expect(events.filter((e) => e.type === "plan.round")[0]).toMatchObject({
@@ -371,9 +371,9 @@ describe("6e — körlü tur: taşıma dallanıyor ve toplanıyor", () => {
   it("bir itirazcının dosyası yazara ulaşmazsa tur kabul edilmez", async () => {
     const card = await put();
     await writePlan(card);
-    yaz("architect", OBJECTION(card.id, "architect"), itirazDosyasi("architect", { no: 1, durum: "açık" }));
+    write("architect", OBJECTION(card.id, "architect"), itirazDosyasi("architect", { no: 1, durum: "açık" }));
     await tick("architect", options);
-    yaz("analyst", OBJECTION(card.id, "analyst"), itirazDosyasi("analyst", { no: 1, durum: "açık" }));
+    write("analyst", OBJECTION(card.id, "analyst"), itirazDosyasi("analyst", { no: 1, durum: "açık" }));
     await tick("analyst", options);
     // Fan-in'in taşıdığı dosyayı kaybet.
     files.delete(`main:${OBJECTION(card.id, "analyst")}`);
@@ -386,12 +386,12 @@ describe("6e — körlü tur: taşıma dallanıyor ve toplanıyor", () => {
   it("iş metni turun kör olduğunu söyler", async () => {
     const card = await put();
     await writePlan(card);
-    const kart = (await queue.get(card.id)) as Card;
-    const metin = buildTaskText(kart, roleOf(topology, "architect") as never);
-    expect(metin).toMatch(/Bu tur KÖR/);
-    expect(metin).toContain(OBJECTION(card.id, "architect"));
+    const theCard = (await queue.get(card.id)) as Card;
+    const textBody = buildTaskText(theCard, roleOf(topology, "architect") as never);
+    expect(textBody).toMatch(/Bu tur KÖR/);
+    expect(textBody).toContain(OBJECTION(card.id, "architect"));
     // Kendi dosyası verilir, ötekinin yolu hiç geçmez.
-    expect(metin).not.toContain(OBJECTION(card.id, "analyst"));
+    expect(textBody).not.toContain(OBJECTION(card.id, "analyst"));
   });
 
   // Devir teslimin iki kapısı iş metninin BAŞINDA olmak zorunda. Ölçüm
@@ -402,10 +402,10 @@ describe("6e — körlü tur: taşıma dallanıyor ve toplanıyor", () => {
   it("iş metni devir teslimin iki kapısını da BAŞTA söyler", async () => {
     const card = await put();
     await writePlan(card);
-    const kart = (await queue.get(card.id)) as Card;
+    const theCard = (await queue.get(card.id)) as Card;
     for (const rolAdi of ["architect", "coder"]) {
-      const metin = buildTaskText(kart, roleOf(topology, rolAdi) as never);
-      const bas = metin.slice(0, metin.indexOf("## İş"));
+      const textBody = buildTaskText(theCard, roleOf(topology, rolAdi) as never);
+      const bas = textBody.slice(0, textBody.indexOf("## İş"));
       expect(bas).toMatch(/git commit/);
       expect(bas).toMatch(/commit'lemE/);
       expect(bas).toMatch(/git add -A/);
@@ -415,16 +415,16 @@ describe("6e — körlü tur: taşıma dallanıyor ve toplanıyor", () => {
   it("cevap turunun iş metni bütün itiraz dosyalarını sayar", async () => {
     const card = await put();
     await writePlan(card);
-    yaz("architect", OBJECTION(card.id, "architect"), itirazDosyasi("architect", { no: 1, durum: "açık" }));
+    write("architect", OBJECTION(card.id, "architect"), itirazDosyasi("architect", { no: 1, durum: "açık" }));
     await tick("architect", options);
-    yaz("analyst", OBJECTION(card.id, "analyst"), itirazDosyasi("analyst", { no: 1, durum: "açık" }));
+    write("analyst", OBJECTION(card.id, "analyst"), itirazDosyasi("analyst", { no: 1, durum: "açık" }));
     await tick("analyst", options);
 
-    const kart = (await queue.get(card.id)) as Card;
-    const metin = buildTaskText(kart, roleOf(topology, "planner") as never);
-    expect(metin).toContain(OBJECTION(card.id, "architect"));
-    expect(metin).toContain(OBJECTION(card.id, "analyst"));
-    expect(metin).toMatch(/HEPSİNİ yanıtla/);
+    const theCard = (await queue.get(card.id)) as Card;
+    const textBody = buildTaskText(theCard, roleOf(topology, "planner") as never);
+    expect(textBody).toContain(OBJECTION(card.id, "architect"));
+    expect(textBody).toContain(OBJECTION(card.id, "analyst"));
+    expect(textBody).toMatch(/HEPSİNİ yanıtla/);
   });
 });
 
@@ -436,55 +436,55 @@ describe("6c — açık turda sıra, sayaç ve kilit", () => {
   it("açık turda ikinci itirazcı birincinin itirazını GÖRÜR", async () => {
     const card = await put();
     await writePlan(card);
-    yaz("architect", OBJECTION(card.id, "architect"), itirazDosyasi("architect", { no: 1, durum: "açık" }));
+    write("architect", OBJECTION(card.id, "architect"), itirazDosyasi("architect", { no: 1, durum: "açık" }));
     await tick("architect", options);
 
-    expect(await rol(card.id)).toBe("analyst");
+    expect(await theRole(card.id)).toBe("analyst");
     expect(var_("analyst", OBJECTION(card.id, "architect"))).toBe(true);
     // Taşıma zincir boyunca ileri: dallanma yok.
     expect(birlesmeler).toEqual(["main→architect", "architect→analyst"]);
-    expect((await turlar()).every((k) => !k.blind)).toBe(true);
+    expect((await roundList()).every((k) => !k.blind)).toBe(true);
   });
 
   it("turun ortasındaki sessizlik turu bitirmez", async () => {
     const card = await put();
     await writePlan(card);
-    yaz("architect", OBJECTION(card.id, "architect"), YOK);
+    write("architect", OBJECTION(card.id, "architect"), YOK);
     await tick("architect", options);
-    expect(await rol(card.id)).toBe("analyst");
+    expect(await theRole(card.id)).toBe("analyst");
 
-    yaz("analyst", OBJECTION(card.id, "analyst"), itirazDosyasi("analyst", { no: 1, durum: "açık" }));
+    write("analyst", OBJECTION(card.id, "analyst"), itirazDosyasi("analyst", { no: 1, durum: "açık" }));
     await tick("analyst", options);
-    expect(await rol(card.id)).toBe("planner");
+    expect(await theRole(card.id)).toBe("planner");
   });
 
   /** Tur 1: iki itiraz, yazar ikisini de kabul edip planı düzeltir. */
   async function tur1(card: Card): Promise<void> {
     await writePlan(card);
-    yaz("architect", OBJECTION(card.id, "architect"), itirazDosyasi("architect", { no: 1, durum: "açık" }));
+    write("architect", OBJECTION(card.id, "architect"), itirazDosyasi("architect", { no: 1, durum: "açık" }));
     await tick("architect", options);
-    yaz("analyst", OBJECTION(card.id, "analyst"), itirazDosyasi("analyst", { no: 1, durum: "açık" }));
+    write("analyst", OBJECTION(card.id, "analyst"), itirazDosyasi("analyst", { no: 1, durum: "açık" }));
     await tick("analyst", options);
-    yaz("main", OBJECTION(card.id, "architect"), itirazDosyasi("architect", { no: 1, durum: "kabul" }));
-    yaz("main", OBJECTION(card.id, "analyst"), itirazDosyasi("analyst", { no: 1, durum: "kabul" }));
-    yaz("main", PLAN(card.id), "# Plan\nİkinci sürüm — itirazlar karşılandı.\n");
+    write("main", OBJECTION(card.id, "architect"), itirazDosyasi("architect", { no: 1, durum: "kabul" }));
+    write("main", OBJECTION(card.id, "analyst"), itirazDosyasi("analyst", { no: 1, durum: "kabul" }));
+    write("main", PLAN(card.id), "# Plan\nİkinci sürüm — itirazlar karşılandı.\n");
     await tick("planner", options);
   }
 
   it("tavan dolmadıysa ikinci tur açılır", async () => {
     const card = await put();
     await tur1(card);
-    expect(await rol(card.id)).toBe("architect");
+    expect(await theRole(card.id)).toBe("architect");
   });
 
   it("yeni itiraz eklemeyen tur alışverişi bitirir — yazarın turu koşmaz", async () => {
     const card = await put();
     await tur1(card);
     await tick("architect", options);
-    expect(await rol(card.id)).toBe("analyst");
+    expect(await theRole(card.id)).toBe("analyst");
     await tick("analyst", options);
 
-    expect(await rol(card.id)).toBe("coder");
+    expect(await theRole(card.id)).toBe("coder");
     const { events } = await readEvents(logPath);
     const settled = events.filter((e) => e.type === "plan.settled");
     expect(settled).toHaveLength(1);
@@ -494,11 +494,11 @@ describe("6c — açık turda sıra, sayaç ve kilit", () => {
   it("bu turda eklenen itiraz sayısı günlüğe AYRI düşer", async () => {
     const card = await put();
     await tur1(card);
-    yaz("architect", OBJECTION(card.id, "architect"), itirazDosyasi("architect",
+    write("architect", OBJECTION(card.id, "architect"), itirazDosyasi("architect",
       { no: 1, durum: "kabul" }, { no: 2, durum: "açık" }));
     await tick("architect", options);
 
-    const records = await turlar();
+    const records = await roundList();
     const last = records[records.length - 1];
     // Görünen toplam üç itiraz ama bu turun katkısı BİR.
     expect(last).toMatchObject({ round: 2, newObjections: 1 });
@@ -506,9 +506,9 @@ describe("6c — açık turda sıra, sayaç ve kilit", () => {
 
   async function turBir(card: Card): Promise<void> {
     await writePlan(card);
-    yaz("architect", OBJECTION(card.id, "architect"), itirazDosyasi("architect", { no: 1, durum: "açık" }));
+    write("architect", OBJECTION(card.id, "architect"), itirazDosyasi("architect", { no: 1, durum: "açık" }));
     await tick("architect", options);
-    yaz("analyst", OBJECTION(card.id, "analyst"), YOK);
+    write("analyst", OBJECTION(card.id, "analyst"), YOK);
     await tick("analyst", options);
   }
 
@@ -517,7 +517,7 @@ describe("6c — açık turda sıra, sayaç ve kilit", () => {
     await turBir(card);
     // Yazar itirazı cevapsız bıraktı → tavan dolmadı, tur 2 açıldı.
     await tick("planner", options);
-    expect(await rol(card.id)).toBe("architect");
+    expect(await theRole(card.id)).toBe("architect");
 
     await tick("architect", options);
     const result = await tick("analyst", options);
@@ -546,11 +546,11 @@ describe("6c — açık turda sıra, sayaç ve kilit", () => {
     await tick("planner", options);
 
     // Tur 2: yeni itiraz eklendi, yazar yine cevapsız bıraktı. Tavan doldu.
-    yaz("architect", OBJECTION(card.id, "architect"), itirazDosyasi("architect",
+    write("architect", OBJECTION(card.id, "architect"), itirazDosyasi("architect",
       { no: 1, durum: "açık" }, { no: 2, durum: "açık" }));
     await tick("architect", options);
     await tick("analyst", options);
-    expect(await rol(card.id)).toBe("planner");
+    expect(await theRole(card.id)).toBe("planner");
 
     const result = await tick("planner", options);
     expect(result.status).toBe("escalated");
@@ -561,7 +561,7 @@ describe("6c — açık turda sıra, sayaç ve kilit", () => {
     const card = await put();
     await turBir(card);
     await tick("planner", options);
-    yaz("architect", OBJECTION(card.id, "architect"), itirazDosyasi("architect",
+    write("architect", OBJECTION(card.id, "architect"), itirazDosyasi("architect",
       { no: 1, durum: "açık" }, { no: 2, durum: "açık" }));
     await tick("architect", options);
     await tick("analyst", options);
@@ -570,35 +570,35 @@ describe("6c — açık turda sıra, sayaç ve kilit", () => {
     const released = await queue.release(card.id, { decision: "retry" });
     expect(released.role).toBe("planner");
 
-    yaz("main", OBJECTION(card.id, "architect"), itirazDosyasi("architect",
+    write("main", OBJECTION(card.id, "architect"), itirazDosyasi("architect",
       { no: 1, durum: "ret: ölçüm bunu göstermiyor" }, { no: 2, durum: "ret: aynı sebep" }));
-    const sonuc = await tick("planner", options);
-    expect(sonuc.status).toBe("accepted");
-    expect(await rol(card.id)).toBe("coder");
+    const computed = await tick("planner", options);
+    expect(computed.status).toBe("accepted");
+    expect(await theRole(card.id)).toBe("coder");
   });
 
   it("ikinci turda itirazcıya 'düzeltme karşıladı mı' sorusu gider", async () => {
     const card = await put();
     await tur1(card);
-    const kart = (await queue.get(card.id)) as Card;
-    const metin = buildTaskText(kart, roleOf(topology, "architect") as never);
-    expect(metin).toContain("## Plana itiraz et (tur 2)");
-    expect(metin).toMatch(/düzeltmenin gerçekten karşılayıp/);
+    const theCard = (await queue.get(card.id)) as Card;
+    const textBody = buildTaskText(theCard, roleOf(topology, "architect") as never);
+    expect(textBody).toContain("## Plana itiraz et (tur 2)");
+    expect(textBody).toMatch(/düzeltmenin gerçekten karşılayıp/);
     // Tur 2 açık: körleme uyarısı geçmez.
-    expect(metin).not.toMatch(/Bu tur KÖR/);
+    expect(textBody).not.toMatch(/Bu tur KÖR/);
   });
 
   it("cevap turunda tavanın nerede olduğu yazılı", async () => {
     const card = await put();
     await writePlan(card);
-    yaz("architect", OBJECTION(card.id, "architect"), itirazDosyasi("architect", { no: 1, durum: "açık" }));
+    write("architect", OBJECTION(card.id, "architect"), itirazDosyasi("architect", { no: 1, durum: "açık" }));
     await tick("architect", options);
-    yaz("analyst", OBJECTION(card.id, "analyst"), YOK);
+    write("analyst", OBJECTION(card.id, "analyst"), YOK);
     await tick("analyst", options);
 
-    const kart = (await queue.get(card.id)) as Card;
-    const metin = buildTaskText(kart, roleOf(topology, "planner") as never);
-    expect(metin).toMatch(/Tavan 2 tur; bu tur 1/);
-    expect(metin).not.toMatch(/son tur/);
+    const theCard = (await queue.get(card.id)) as Card;
+    const textBody = buildTaskText(theCard, roleOf(topology, "planner") as never);
+    expect(textBody).toMatch(/Tavan 2 tur; bu tur 1/);
+    expect(textBody).not.toMatch(/son tur/);
   });
 });

@@ -235,20 +235,20 @@ async function runRole(card: Card, role: SnapshotRole, options: TickOptions): Pr
   } catch (cause) {
     // Bilmiyorsak BAŞLATMIYORUZ. Devir teslimdeki kuralın aynısı: üçüncü
     // bir cevap yok, ve "bilmiyorum"u "temiz" saymak kapıyı sessizce açar.
-    const mesaj = `çalışma ağacının durumu okunamadı: ${(cause as Error).message}`;
-    await queue.requeue(card, mesaj);
-    return { status: "engelli", blockages: [{ path: workdir, code: "GIT", message: mesaj }] };
+    const messageText = `çalışma ağacının durumu okunamadı: ${(cause as Error).message}`;
+    await queue.requeue(card, messageText);
+    return { status: "engelli", blockages: [{ path: workdir, code: "GIT", message: messageText }] };
   }
   if (dirtyFiles.length > 0) {
-    const mesaj =
+    const messageText =
       `\`${role.workspace}\` çalışma ağacı kirli, tur BAŞLATILMADI. ` +
       `İşlenmemiş iş başka bir rolün turuna karışır ve kime ait olduğu kaybolur.`;
-    await queue.requeue(card, mesaj);
+    await queue.requeue(card, messageText);
     // Her kirli yol AYRI engel: toplu bir satır hangi dosya olduğunu
     // söylemezdi, ve ekranda temizlenecek şeyin listesi lazım.
     return {
       status: "engelli",
-      blockages: dirtyFiles.map((yol) => ({ path: yol, code: "KIRLI", message: mesaj })),
+      blockages: dirtyFiles.map((filePath) => ({ path: filePath, code: "KIRLI", message: messageText })),
     };
   }
 
@@ -507,30 +507,30 @@ async function runRole(card: Card, role: SnapshotRole, options: TickOptions): Pr
   // çözümü prompta yazmaktı; prompt bir talimattır, kapı değil. Burası
   // kapısı: dosyalar diskte aranıyor, ajanın "yazdım" demesine
   // bakılmıyor (PHILOSOPHY 8).
-  const adim = await planStep(card, role, options, workdir, summary, verdict.verdict.decision);
-  if (adim.kind === "hata") {
+  const stepItem = await planStep(card, role, options, workdir, summary, verdict.verdict.decision);
+  if (stepItem.kind === "hata") {
     // Gerekçe burada da ekleniyor: itiraz dosyası yazmayıp "reject" diyen
     // bir rolün söyledikleri, teşhisin EN değerli parçasıdır.
-    const reason = `${adim.reason}${saidReject}`;
+    const reason = `${stepItem.reason}${saidReject}`;
     return { status: "escalated", card: await queue.escalate(card, reason), reason };
   }
-  if (adim.kind === "tasindi") {
-    if (!wrongChannel) return adim.result;
-    if (adim.result.status !== "accepted") {
+  if (stepItem.kind === "tasindi") {
+    if (!wrongChannel) return stepItem.result;
+    if (stepItem.result.status !== "accepted") {
       // Tur ilerlemedi (ör. birleştirme düştü). Gerekçe yine kaybolmamalı;
       // bu dalda taşıyıcı `warnings` değil `reason`.
-      return "reason" in adim.result
-        ? { ...adim.result, reason: `${adim.result.reason}${saidReject}` }
-        : adim.result;
+      return "reason" in stepItem.result
+        ? { ...stepItem.result, reason: `${stepItem.result.reason}${saidReject}` }
+        : stepItem.result;
     }
     // Deneme kayda geçiyor: sessizce yok saymak, rolün ne yapmaya
     // çalıştığını operatörden saklamak olurdu.
     const warning = `\`${role.id}\` verdiktte "reject" dedi; planlama turunda ret kanalı ` +
       `YOK (kural 22). Tur itiraz dosyasından okundu. Değer kararı için itirazın ` +
       `\`Durum\` satırına \`insana: <gerekçe>\` yaz.${saidReject}`;
-    return { ...adim.result, warnings: [...(adim.result.warnings ?? []), warning] };
+    return { ...stepItem.result, warnings: [...(stepItem.result.warnings ?? []), warning] };
   }
-  const plan = adim.kind === "devam" ? adim.plan : null;
+  const plan = stepItem.kind === "devam" ? stepItem.plan : null;
 
   // KUSUR 2'nin kapısı: devir teslim kodu da taşır.
   const merge = await handOverCode(card, role, options, workdir);
@@ -624,13 +624,13 @@ async function planStep(
     const plan = { path: planPath, hash: sha(planText) };
 
     const objectors = planObjectors(card.topology);
-    const hedef = objectors[0];
+    const destination = objectors[0];
     // 6a: itiraz edecek rol yok, kart zincirden devam ediyor.
-    if (hedef === undefined) return { kind: "devam", plan };
+    if (destination === undefined) return { kind: "devam", plan };
 
     return {
       kind: "tasindi",
-      result: await planMove(card, role, options, workdir, hedef, {
+      result: await planMove(card, role, options, workdir, destination, {
         at: new Date().toISOString(), event: "plan", role: role.id,
         action: "yazdi", round: 0, planHash: plan.hash,
       }, plan, summary),
@@ -648,10 +648,10 @@ async function planStep(
     if (text !== undefined) okunan.push({ ...y, text });
   }
 
-  const missing = (yol: { role: string; path: string }, neden: string): PlanStep => ({
+  const missing = (filePath: { role: string; path: string }, why: string): PlanStep => ({
     kind: "hata",
     reason: `\`${role.id}\` ${decision === "reject" ? "ret dedi" : "kabul etti"} ` +
-      `ama ${neden}: \`${yol.path}\`. ` +
+      `ama ${why}: \`${filePath.path}\`. ` +
       `İtirazın yoksa da dosyayı yaz ve bunu söyle — sessizlik anlaşma değildir.`,
   });
 
@@ -701,13 +701,13 @@ async function planStep(
   // "plan şöyle diyor" demektir, planın dokunacağı kodu göstermek değil.
   const ownDocs = [planPath, ...objectionPaths.map((y) => y.path)];
   const file = mergeObjections(okunan.map((o) => parseObjections(o.text, {
-    present: (yol) => paths.get(yol) === true,
+    present: (filePath) => paths.get(filePath) === true,
     owner: o.role,
     ownDocs,
   })));
   // "İtiraz yok" ile "itiraz var ama hiçbiri sayılmadı" aynı şey değil.
-  const gecersiz = file.objectionList.length - file.valid.length;
-  const kor = planBlind(card.topology, phase.round);
+  const isInvalid = file.objectionList.length - file.valid.length;
+  const blindMode = planBlind(card.topology, phase.round);
 
   // Kartın dondurduğu plan hash'i: itiraz turu planı DEĞİŞTİRMİYOR ve
   // itiraz edenin ağacında plan dosyası hiç bulunmayabilir.
@@ -715,7 +715,7 @@ async function planStep(
 
   if (phase.kind === "itiraz") {
     const author = planAuthor(card.topology) as string;
-    const sonra = afterPlanning(card.topology);
+    const after = afterPlanning(card.topology);
     const objectors = planObjectors(card.topology);
     const order = objectors.indexOf(role.id);
     const nextObjector = order === -1 ? undefined : objectors[order + 1];
@@ -731,20 +731,20 @@ async function planStep(
       // Körleme ETKİN mi — üç koşulun hepsi: akış istemiş, tur 1 ve en az
       // iki itirazcı. Atıl körlemeyi `true` yazmak, yapılmamış bir şeyi
       // yapılmış göstermek olurdu.
-      blind: kor, newObjections: Math.max(0, fresh), openObjections: file.isOpen.length,
-      invalid: gecersiz,
+      blind: blindMode, newObjections: Math.max(0, fresh), openObjections: file.isOpen.length,
+      invalid: isInvalid,
     });
 
     const record = (): Extract<Card["history"][number], { event: "plan" }> => ({
       at: new Date().toISOString(), event: "plan", role: role.id,
       action: "itiraz", round: phase.round, objections: file.valid.length,
-      invalid: gecersiz,
+      invalid: isInvalid,
     });
 
     // Körlü turda taşıma DALLANIYOR: hedef, bu rolün ağacından değil
     // yazarın ağacından besleniyor. Bu tek satır körlemenin kendisi —
     // ötekinin itiraz dosyası hedef ağaca hiç girmiyor.
-    const dallan = kor ? [author] : undefined;
+    const dallan = blindMode ? [author] : undefined;
 
     // Turun ortasındaki itirazcı: söz sıradakine geçer. Sonlanma kararı
     // turun SONUNDA veriliyor — ortadaki bir itirazcının sessizliği, turun
@@ -762,7 +762,7 @@ async function planStep(
     // başkasını görmüyor. "Yeni itiraz yok" ya da "açık itiraz yok" diyen
     // bir karar, öteki itirazcının itirazını sessizce çöpe atardı. Karar,
     // fan-in'den sonra hepsini gören yazarda.
-    if (kor) {
+    if (blindMode) {
       return {
         kind: "tasindi",
         result: await planMove(
@@ -786,7 +786,7 @@ async function planStep(
         await options.log?.append({
           type: "plan.settled", card: card.id, role: role.id, outcome: "tukendi",
           rounds: phase.round, objections: file.valid.length, accepted: file.acceptance.length,
-          invalid: gecersiz, path: planPath, planHash: frozenHash,
+          invalid: isInvalid, path: planPath, planHash: frozenHash,
         });
         return {
           kind: "tasindi",
@@ -799,15 +799,15 @@ async function planStep(
       }
       // Ne yeni itiraz ne açık itiraz: anlaşma. Yazarın turu koşmuyor —
       // yanıtlanacak bir şey yok ve boş bir aktivasyonun bedeli var.
-      if (sonra === null) return { kind: "yok" };
+      if (after === null) return { kind: "yok" };
       await options.log?.append({
         type: "plan.settled", card: card.id, role: role.id, outcome: "anlasma",
         rounds: phase.round, objections: file.valid.length, accepted: file.acceptance.length,
-        invalid: gecersiz, path: planPath, planHash: frozenHash,
+        invalid: isInvalid, path: planPath, planHash: frozenHash,
       });
       return {
         kind: "tasindi",
-        result: await planMove(card, role, options, workdir, sonra, record(), undefined, summary),
+        result: await planMove(card, role, options, workdir, after, record(), undefined, summary),
       };
     }
 
@@ -831,15 +831,15 @@ async function planStep(
   const authorNew = file.valid.length - authorBaseline;
   await options.log?.append({
     type: "plan.round", card: card.id, role: role.id, round: phase.round,
-    blind: kor, newObjections: Math.max(0, authorNew),
-    openObjections: file.isOpen.length, invalid: gecersiz,
+    blind: blindMode, newObjections: Math.max(0, authorNew),
+    openObjections: file.isOpen.length, invalid: isInvalid,
   });
 
   const answerRecord = (
     planHash?: string,
   ): Extract<Card["history"][number], { event: "plan" }> => ({
     at: new Date().toISOString(), event: "plan", role: role.id,
-    action: "cevap", round: phase.round, invalid: gecersiz,
+    action: "cevap", round: phase.round, invalid: isInvalid,
     objections: file.valid.length, accepted: acceptance.length,
     ...(planHash === undefined ? {} : { planHash }),
   });
@@ -872,7 +872,7 @@ async function planStep(
     await options.log?.append({
       type: "plan.settled", card: card.id, role: role.id, outcome: "insana",
       rounds: phase.round, objections: file.valid.length, accepted: acceptance.length,
-      invalid: gecersiz, path: planPath, planHash: frozenHash,
+      invalid: isInvalid, path: planPath, planHash: frozenHash,
     });
     return {
       kind: "tasindi",
@@ -898,16 +898,16 @@ async function planStep(
   // itirazcılar kendi dosyalarından başkasını görmüyor. Açık turda yazara
   // ancak yeni itiraz varken gelinir, yani bu dal orada ateşlenmez.
   if (authorNew <= 0 && isOpen.length === 0) {
-    const sonra = afterPlanning(card.topology);
-    if (sonra !== null) {
+    const after = afterPlanning(card.topology);
+    if (after !== null) {
       await options.log?.append({
         type: "plan.settled", card: card.id, role: role.id, outcome: "anlasma",
         rounds: phase.round, objections: file.valid.length, accepted: acceptance.length,
-        invalid: gecersiz, path: planPath, planHash: frozenHash,
+        invalid: isInvalid, path: planPath, planHash: frozenHash,
       });
       return {
         kind: "tasindi",
-        result: await planMove(card, role, options, workdir, sonra, answerRecord(), undefined, summary),
+        result: await planMove(card, role, options, workdir, after, answerRecord(), undefined, summary),
       };
     }
   }
@@ -922,7 +922,7 @@ async function planStep(
     await options.log?.append({
       type: "plan.settled", card: card.id, role: role.id, outcome: "tukendi",
       rounds: phase.round, objections: file.valid.length, accepted: acceptance.length,
-      invalid: gecersiz, path: planPath, planHash: newHash ?? frozenHash,
+      invalid: isInvalid, path: planPath, planHash: newHash ?? frozenHash,
     });
     return {
       kind: "tasindi",
@@ -952,16 +952,16 @@ async function planStep(
     }
   }
 
-  const sonra = afterPlanning(card.topology);
-  if (sonra === null) return { kind: "yok" };
+  const after = afterPlanning(card.topology);
+  if (after === null) return { kind: "yok" };
   await options.log?.append({
     type: "plan.settled", card: card.id, role: role.id, outcome: "anlasma",
     rounds: phase.round, objections: file.valid.length, accepted: acceptance.length,
-    invalid: gecersiz, path: planPath, planHash: newHash ?? "",
+    invalid: isInvalid, path: planPath, planHash: newHash ?? "",
   });
   return {
     kind: "tasindi",
-    result: await planMove(card, role, options, workdir, sonra, answerRecord(newHash), newPlan, summary),
+    result: await planMove(card, role, options, workdir, after, answerRecord(newHash), newPlan, summary),
   };
 }
 
@@ -971,18 +971,18 @@ async function planMove(
   role: SnapshotRole,
   options: TickOptions,
   workdir: string,
-  hedef: string,
+  destination: string,
   entry: Extract<Card["history"][number], { event: "plan" }>,
   plan: Card["plan"] | undefined,
   summary?: string,
   /** Kodun geldiği roller; körlü turda bu rol DEĞİL (bkz. `handOverCode`). */
   sources?: string[],
 ): Promise<TickResult> {
-  const merge = await handOverCode(card, role, options, workdir, hedef, sources);
+  const merge = await handOverCode(card, role, options, workdir, destination, sources);
   if (merge !== null) {
     return { status: "escalated", card: await options.queue.escalate(card, merge), reason: merge };
   }
-  const moved = await options.queue.planTurn(card, hedef, entry, plan);
+  const moved = await options.queue.planTurn(card, destination, entry, plan);
   const warnings = await syncBack(card, role, options, workdir);
   return {
     status: "accepted",

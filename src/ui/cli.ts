@@ -171,13 +171,13 @@ async function main(argv: string[]): Promise<number> {
       // sessizce düşüyordu.
       value === "--timeout"
     ) {
-      const deger = argv[++i];
-      if (deger === undefined) {
+      const fieldValue = argv[++i];
+      if (fieldValue === undefined) {
         console.error(`✗ ${value} bir değer istiyor`);
         return 1;
       }
       if (value === "--model") modelVar = true;
-      gozcuBayraklari.push(value, deger);
+      gozcuBayraklari.push(value, fieldValue);
     } else if (!value.startsWith("--") && flowName === undefined) flowName = value;
     // TANIMADIĞIN BAYRAĞI SESSİZCE YUTMA — gözcü CLI'ındaki kuralın
     // aynısı, aynı sebeple. Burada ek bir tuzak var: bayrak yutulunca

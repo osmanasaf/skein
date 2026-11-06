@@ -95,14 +95,14 @@ describe("buildModel — başka akışın kartı", () => {
   /** Kartın diskteki kaydını başka bir akışa çevirir. */
   async function baskaAkisaCevir(id: string): Promise<void> {
     const dir = join(root, ".skein", "queue", "coder");
-    for (const ad of await readdir(dir)) {
-      if (!ad.includes(id)) continue;
-      const yol = join(dir, ad);
-      const raw = JSON.parse(await readFile(yol, "utf8")) as Record<string, unknown>;
-      const topo = raw["topology"] as Record<string, unknown>;
-      topo["flow"] = "baska-akis";
-      topo["hash"] = "f".repeat(64);
-      await writeFile(yol, JSON.stringify(raw));
+    for (const itemName of await readdir(dir)) {
+      if (!itemName.includes(id)) continue;
+      const filePath = join(dir, itemName);
+      const raw = JSON.parse(await readFile(filePath, "utf8")) as Record<string, unknown>;
+      const topoSnapshot = raw["topology"] as Record<string, unknown>;
+      topoSnapshot["flow"] = "baska-akis";
+      topoSnapshot["hash"] = "f".repeat(64);
+      await writeFile(filePath, JSON.stringify(raw));
     }
   }
 
@@ -188,16 +188,16 @@ describe("buildModel — kapılar", () => {
     const flow = await loadFlow(join(root, "hub", "flows", "test.yaml"), {
       root, providers: knownProviderSet(),
     });
-    const topo = snapshot(flow, root);
-    await queue.add(newCard({ title: "iş", task: "i", topology: topo }));
+    const topoSnapshot = snapshot(flow, root);
+    await queue.add(newCard({ title: "iş", task: "i", topology: topoSnapshot }));
     const taken = await al(queue, "coder");
     await queue.handoff(taken, { commit: "abc1234" });
 
-    const m = await buildModel({ ...base, topology: topo, flowHash: flow.hash });
-    const kart = m.cards[0];
+    const m = await buildModel({ ...base, topology: topoSnapshot, flowHash: flow.hash });
+    const theCard = m.cards[0];
 
-    expect(kart?.gate).toBe("approval");
-    expect(kart?.planLock).toBe(false);
+    expect(theCard?.gate).toBe("approval");
+    expect(theCard?.planLock).toBe(false);
   });
 
   it("kapıda olmayan kartın kapısı yoktur", async () => {
@@ -633,23 +633,23 @@ describe("buildDetail — iz ve diff", () => {
 describe("buildModel — geri hedefi", () => {
   it("ret hedefi olan rolde hedefi veriyor", async () => {
     await put();
-    const ilk = await queue.take("coder");
-    if (ilk.kind !== "alindi") throw new Error("kart alınamadı");
-    const kart = await queue.handoff(ilk.card, {});
+    const firstOne = await queue.take("coder");
+    if (firstOne.kind !== "alindi") throw new Error("kart alınamadı");
+    const theCard = await queue.handoff(firstOne.card, {});
 
     const m = await buildModel(base);
 
     // reviewer'ın ret hedefi coder.
-    expect(m.cards.find((c) => c.id === kart.id)?.backTarget).toBe("coder");
+    expect(m.cards.find((c) => c.id === theCard.id)?.backTarget).toBe("coder");
   });
 
   it("zincirin başındaki rolde null", async () => {
-    const kart = await put();
+    const theCard = await put();
 
     const m = await buildModel(base);
 
     // coder'ın ret hedefi yok.
-    expect(m.cards.find((c) => c.id === kart.id)?.backTarget).toBeNull();
+    expect(m.cards.find((c) => c.id === theCard.id)?.backTarget).toBeNull();
   });
 });
 
@@ -693,9 +693,9 @@ describe("buildModel — akış diyagramı", () => {
     const flow = await loadFlow(join(root, "hub", "flows", "test.yaml"), {
       root, providers: knownProviderSet(),
     });
-    const topo = snapshot(flow, root);
+    const topoSnapshot = snapshot(flow, root);
 
-    const m = await buildModel({ ...base, topology: topo, flowHash: flow.hash });
+    const m = await buildModel({ ...base, topology: topoSnapshot, flowHash: flow.hash });
 
     expect(m.edges).toEqual(
       expect.arrayContaining([{ from: "reviewer", to: "coder", kind: "syncBack" }]),
@@ -710,9 +710,9 @@ describe("buildModel — akış diyagramı", () => {
     const flow = await loadFlow(join(root, "hub", "flows", "test.yaml"), {
       root, providers: knownProviderSet(),
     });
-    const topo = snapshot(flow, root);
+    const topoSnapshot = snapshot(flow, root);
 
-    const m = await buildModel({ ...base, topology: topo, flowHash: flow.hash });
+    const m = await buildModel({ ...base, topology: topoSnapshot, flowHash: flow.hash });
 
     expect(m.gates).toEqual([{ after: "coder", type: "approval" }]);
   });
@@ -729,9 +729,9 @@ reject:
     const flow = await loadFlow(join(root, "hub", "flows", "test.yaml"), {
       root, providers: knownProviderSet(),
     });
-    const topo = snapshot(flow, root);
+    const topoSnapshot = snapshot(flow, root);
 
-    const m = await buildModel({ ...base, topology: topo, flowHash: flow.hash });
+    const m = await buildModel({ ...base, topology: topoSnapshot, flowHash: flow.hash });
 
     expect(m.gates).toEqual([{ after: "coder", type: "none" }]);
   });
@@ -788,9 +788,9 @@ reject:
     const flow = await loadFlow(join(root, "hub", "flows", "test.yaml"), {
       root, providers: knownProviderSet(),
     });
-    const topo = snapshot(flow, root);
+    const topoSnapshot = snapshot(flow, root);
 
-    const m = await buildModel({ ...base, topology: topo, flowHash: flow.hash });
+    const m = await buildModel({ ...base, topology: topoSnapshot, flowHash: flow.hash });
 
     expect(m.plan).toEqual({ katilimcilar: ["planner", "coder"], tur: 3 });
   });
@@ -821,12 +821,12 @@ reject:
     const flow = await loadFlow(join(root, "hub", "flows", "test.yaml"), {
       root, providers: knownProviderSet(),
     });
-    const topo = snapshot(flow, root);
+    const topoSnapshot = snapshot(flow, root);
 
-    const m = await buildModel({ ...base, topology: topo, flowHash: flow.hash });
+    const m = await buildModel({ ...base, topology: topoSnapshot, flowHash: flow.hash });
     m.plan?.katilimcilar.push("uydurma");
 
-    expect(topo.plan?.katilimcilar).toEqual(["planner"]);
+    expect(topoSnapshot.plan?.katilimcilar).toEqual(["planner"]);
   });
 });
 
@@ -843,28 +843,28 @@ reject:
  * olmaması — `rename` başardığı an o yol kaybolur.
  */
 describe("buildModel — kuyruk engeli", () => {
-  async function engelKaydi(yol: string): Promise<void> {
+  async function engelKaydi(filePath: string): Promise<void> {
     const log = new EventLog(logPath, "kosu-1");
     await log.append({
       type: "queue.blocked",
       role: "coder",
-      path: yol,
+      path: filePath,
       code: "EPERM",
       message: "operation not permitted",
     });
   }
 
   it("dosya yerindeyse engel bildiriliyor", async () => {
-    const yol = join(root, ".skein", "queue", "coder", "0-x-c-1.json");
-    await mkdir(dirname(yol), { recursive: true });
-    await writeFile(yol, "{}");
-    await engelKaydi(yol);
+    const filePath = join(root, ".skein", "queue", "coder", "0-x-c-1.json");
+    await mkdir(dirname(filePath), { recursive: true });
+    await writeFile(filePath, "{}");
+    await engelKaydi(filePath);
 
     const m = await buildModel(base);
 
     expect(m.blockages).toHaveLength(1);
     // Kod ve yol olmadan "alınamadı" kullanıcıyı hiçbir yere götürmez.
-    expect(m.blockages[0]).toMatchObject({ code: "EPERM", role: "coder", path: yol });
+    expect(m.blockages[0]).toMatchObject({ code: "EPERM", role: "coder", path: filePath });
     expect(m.blockages[0]?.message).toBe("operation not permitted");
   });
 
@@ -879,12 +879,12 @@ describe("buildModel — kuyruk engeli", () => {
 
   // Gözcü her geçişte bir kayıt yazıyor: aynı engel onlarca kez basılmamalı.
   it("aynı yol için tek satır, en yeni kayıt", async () => {
-    const yol = join(root, ".skein", "queue", "coder", "0-x-c-2.json");
-    await mkdir(dirname(yol), { recursive: true });
-    await writeFile(yol, "{}");
+    const filePath = join(root, ".skein", "queue", "coder", "0-x-c-2.json");
+    await mkdir(dirname(filePath), { recursive: true });
+    await writeFile(filePath, "{}");
     const log = new EventLog(logPath, "kosu-1");
-    await log.append({ type: "queue.blocked", role: "coder", path: yol, code: "EPERM", message: "ilk" });
-    await log.append({ type: "queue.blocked", role: "coder", path: yol, code: "EBUSY", message: "son" });
+    await log.append({ type: "queue.blocked", role: "coder", path: filePath, code: "EPERM", message: "ilk" });
+    await log.append({ type: "queue.blocked", role: "coder", path: filePath, code: "EBUSY", message: "son" });
 
     const m = await buildModel(base);
 
@@ -971,9 +971,9 @@ describe("kirliSuruyorMu", () => {
  * kaybolmaz, çözülme olaya bağlı olmalı).
  */
 describe("buildModel — KIRLI engeli", () => {
-  async function kirliKaydi(yol: string): Promise<void> {
+  async function kirliKaydi(filePath: string): Promise<void> {
     const log = new EventLog(logPath, "kosu-1");
-    await log.append({ type: "queue.blocked", role: "coder", path: yol, code: "KIRLI", message: "kirli ağaç" });
+    await log.append({ type: "queue.blocked", role: "coder", path: filePath, code: "KIRLI", message: "kirli ağaç" });
   }
 
   it("kaynak dosya hâlâ yerinde olsa da, sonraki agent.started engeli çözer", async () => {
@@ -995,8 +995,8 @@ describe("buildModel — KIRLI engeli", () => {
       provider: "claude", model: "m", promptHash: "h",
     });
 
-    const sonra = await buildModel(base);
-    expect(sonra.blockages).toEqual([]);
+    const afterRole = await buildModel(base);
+    expect(afterRole.blockages).toEqual([]);
     // Dosya HÂLÂ yerinde: çözülme varlığa değil olaya bağlı olduğunu kanıtlıyor.
     await expect(stat(source)).resolves.toBeDefined();
   });
@@ -1014,10 +1014,10 @@ describe("buildModel — KIRLI engeli", () => {
   it("8 kirli dosyalı aynı rol TEK kart sayılır (totals.engelliKart)", async () => {
     const log = new EventLog(logPath, "kosu-1");
     for (let i = 0; i < 8; i += 1) {
-      const yol = join(root, "src", `dosya${i}.ts`);
-      await mkdir(dirname(yol), { recursive: true });
-      await writeFile(yol, "// x\n");
-      await log.append({ type: "queue.blocked", role: "coder", path: yol, code: "KIRLI", message: "kirli ağaç" });
+      const filePath = join(root, "src", `dosya${i}.ts`);
+      await mkdir(dirname(filePath), { recursive: true });
+      await writeFile(filePath, "// x\n");
+      await log.append({ type: "queue.blocked", role: "coder", path: filePath, code: "KIRLI", message: "kirli ağaç" });
     }
 
     const m = await buildModel(base);
@@ -1028,11 +1028,11 @@ describe("buildModel — KIRLI engeli", () => {
   // KIRLI olmayan engel (kuyruk dosyası engeli) eski davranışı korumalı:
   // dosya yerindeyse sürüyor, taşındıysa bitmiş — stat kontrolü bozulmamış.
   it("KIRLI olmayan engel eski davranışı korur: dosya yerindeyse sürüyor", async () => {
-    const yol = join(root, ".skein", "queue", "coder", "0-x-c-eski.json");
-    await mkdir(dirname(yol), { recursive: true });
-    await writeFile(yol, "{}");
+    const filePath = join(root, ".skein", "queue", "coder", "0-x-c-eski.json");
+    await mkdir(dirname(filePath), { recursive: true });
+    await writeFile(filePath, "{}");
     const log = new EventLog(logPath, "kosu-1");
-    await log.append({ type: "queue.blocked", role: "coder", path: yol, code: "EPERM", message: "izin yok" });
+    await log.append({ type: "queue.blocked", role: "coder", path: filePath, code: "EPERM", message: "izin yok" });
     await log.append({
       type: "agent.started", cell: "c-baska:coder", role: "coder",
       provider: "claude", model: "m", promptHash: "h",
@@ -1058,9 +1058,9 @@ describe("buildModel — KIRLI engeli", () => {
  */
 describe("tick → model — engel sözleşmesi", () => {
   it("tick'in yazdığı engeli ekranın modeli görüyor", async () => {
-    const kart = await put();
+    const theCard = await put();
     // Hedef adı bir dizin: `rename` oraya taşıyamaz.
-    await mkdir(join(root, ".skein", "active", "coder", `${kart.id}.json`), { recursive: true });
+    await mkdir(join(root, ".skein", "active", "coder", `${theCard.id}.json`), { recursive: true });
 
     const result = await tick("coder", {
       root,
@@ -1074,7 +1074,7 @@ describe("tick → model — engel sözleşmesi", () => {
 
     expect(m.blockages).toHaveLength(1);
     expect(m.blockages[0]?.role).toBe("coder");
-    expect(m.blockages[0]?.path).toContain(kart.id);
+    expect(m.blockages[0]?.path).toContain(theCard.id);
     // Kod gerçek bir errno olmalı: "?" demek alanın adının ayrıştığı
     // ya da hiç yazılmadığı anlamına gelir.
     expect(m.blockages[0]?.code).not.toBe("?");

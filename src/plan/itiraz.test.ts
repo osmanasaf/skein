@@ -36,7 +36,7 @@ ${field}Sürüm geriye düşüyor.
 **Neyi yanlışlar:** \`src/a.ts:1\` — orada.
 **Durum:** ${durum}
 `;
-  const resolve = (metin: string) => parseObjections(metin, { present: () => true });
+  const resolve = (textBody: string) => parseObjections(textBody, { present: () => true });
 
   // `**Durum:** kabul.` geçersiz sayılıyordu ve bedeli kaskad: kabul
   // sayımdan düşüyor, "kabul etti ama planı değiştirmedi" kapısı

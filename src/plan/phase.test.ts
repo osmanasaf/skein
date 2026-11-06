@@ -28,8 +28,8 @@ const topology = (tur: number, katilimcilar = ["planner", "architect", "analyst"
   },
 });
 
-const card = (topo: TopologySnapshot, ...history: HistoryEntry[]): Card => {
-  const base = newCard({ title: "i", task: "t", topology: topo });
+const card = (topoSnapshot: TopologySnapshot, ...history: HistoryEntry[]): Card => {
+  const base = newCard({ title: "i", task: "t", topology: topoSnapshot });
   return { ...base, history: [...base.history, ...history] };
 };
 
@@ -151,8 +151,8 @@ describe("planPhase — turun sırası", () => {
     const c = card(single,
       plan("planner", "yazdi", 0), plan("architect", "itiraz", 1, 1),
       plan("analyst", "itiraz", 1, 2), plan("planner", "cevap", 1, 2));
-    for (const rol of ["planner", "architect", "analyst", "coder"]) {
-      expect(planPhase(c, rol, single)).toEqual({ kind: "yok" });
+    for (const theRole of ["planner", "architect", "analyst", "coder"]) {
+      expect(planPhase(c, theRole, single)).toEqual({ kind: "yok" });
     }
   });
 
@@ -165,8 +165,8 @@ describe("planPhase — turun sırası", () => {
   // başa dönmek itirazcıları sonsuz döndürürdü.
   it("tanınmayan rolün itirazından sonra alışveriş ilerlemez", () => {
     const c = card(t, plan("planner", "yazdi", 0), plan("yabanci", "itiraz", 1, 1));
-    for (const rol of ["planner", "architect", "analyst"]) {
-      expect(planPhase(c, rol, t)).toEqual({ kind: "yok" });
+    for (const theRole of ["planner", "architect", "analyst"]) {
+      expect(planPhase(c, theRole, t)).toEqual({ kind: "yok" });
     }
   });
 });
@@ -219,8 +219,8 @@ describe("planPhase — insan kapıdan yeniden açarsa", () => {
       plan("planner", "yazdi", 0), plan("architect", "itiraz", 1, 1),
       plan("analyst", "itiraz", 1, 2), plan("planner", "cevap", 1, 2),
       gate("planner"), birakildi("coder"));
-    for (const rol of ["planner", "architect", "analyst"]) {
-      expect(planPhase(c, rol, t)).toEqual({ kind: "yok" });
+    for (const theRole of ["planner", "architect", "analyst"]) {
+      expect(planPhase(c, theRole, t)).toEqual({ kind: "yok" });
     }
   });
 });

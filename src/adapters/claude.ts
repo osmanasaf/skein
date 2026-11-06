@@ -317,8 +317,8 @@ function toUsage(parsed: ClaudeJsonResult | undefined): Usage | undefined {
   if (!parsed) return undefined;
   const usage: Usage = {};
   if (parsed.usage !== undefined) {
-    const girdi = inputTotal(parsed.usage);
-    if (girdi !== undefined) usage.inputTokens = girdi;
+    const inputText = inputTotal(parsed.usage);
+    if (inputText !== undefined) usage.inputTokens = inputText;
   }
   if (typeof parsed.usage?.output_tokens === "number") usage.outputTokens = parsed.usage.output_tokens;
   if (typeof parsed.total_cost_usd === "number") usage.costUsd = parsed.total_cost_usd;
@@ -358,11 +358,11 @@ export function addToTally(b: FlowTally, record: StreamRecord): void {
   if (message === null || typeof message !== "object") return;
   const u = (message as Record<string, unknown>)["usage"];
   if (u === null || typeof u !== "object") return;
-  const blok = u as NonNullable<ClaudeJsonResult["usage"]>;
-  const girdi = inputTotal(blok);
-  const cikti = blok.output_tokens;
-  if (girdi === undefined && typeof cikti !== "number") return;
-  b.input += girdi ?? 0;
+  const blockText = u as NonNullable<ClaudeJsonResult["usage"]>;
+  const inputText = inputTotal(blockText);
+  const cikti = blockText.output_tokens;
+  if (inputText === undefined && typeof cikti !== "number") return;
+  b.input += inputText ?? 0;
   b.cikti += typeof cikti === "number" ? cikti : 0;
   b.counter += 1;
 }
@@ -451,12 +451,12 @@ function relativize(value: string, workdir?: string): string {
   // yol kısalmıyor ve ekranda her satır mutlak yolla doluyordu.
   const plain = (x: string): string => x.split("\\").join("/");
   const baseline = plain(workdir).replace(/\/+$/u, "");
-  const yol = plain(value);
+  const filePath = plain(value);
   const prefix = `${baseline}/`;
   // Kısalan yol POSIX ayraçlı dönüyor: ekranda ve günlükte tek biçim.
   // Eşleşmezse değer OLDUĞU GİBİ kalıyor — dizin dışındaki bir yolu
   // yeniden yazmak bilgi kaybı olurdu.
-  return yol.startsWith(prefix) ? yol.slice(prefix.length) : value;
+  return filePath.startsWith(prefix) ? filePath.slice(prefix.length) : value;
 }
 
 /**

@@ -397,7 +397,7 @@ async function kalibre2x2(taskId: string, modelSpec: string, judgeSpec: string):
 
   console.log();
   const decision = power2x2({ ran, producerExit: p?.exitCode ?? 1, redHooks, scored, caught, missed });
-  for (const satir of powerLines(decision)) console.log(`  ${satir}`);
+  for (const lineText of powerLines(decision)) console.log(`  ${lineText}`);
   if (decision.kind === "olcer") {
     console.log(`  Sıradaki: cli.ts matrix ${taskId} ${modelSpec} <öteki-satıcı:model>`);
   }
@@ -416,7 +416,7 @@ async function planab(
    * Ölçüme etkisi yok: grup ölçülmüş KOŞU sayar, komutun kaç kol
    * koşturduğunu saymaz.
    */
-  kol?: Arm,
+  branchArm?: Arm,
   /** Yarıda kesilmiş EN YENİ kum havuzunu kaldığı yerden sürdür. */
   devam = false,
 ): Promise<void> {
@@ -432,7 +432,7 @@ async function planab(
   const rootDir = join(REPO, ".skein", "olcum");
 
   if (devam) {
-    const armName = kol ?? "planli";
+    const armName = branchArm ?? "planli";
     const prefix = `ab-${taskId}-${armName}-`;
     const candidates = (await readdir(rootDir).catch(() => [] as string[]))
       .filter((d) => d.startsWith(prefix))
@@ -465,7 +465,7 @@ async function planab(
     return;
   }
   for (let i = 1; i <= k; i += 1) {
-    for (const arm of (kol === undefined ? ["plansiz", "planli"] : [kol]) as Arm[]) {
+    for (const arm of (branchArm === undefined ? ["plansiz", "planli"] : [branchArm]) as Arm[]) {
       const stamp = new Date().toISOString().replace(/[:.]/g, "-");
       const runId = `ab-${taskId}-${arm}-${i}-${stamp}`;
       const sandbox = join(rootDir, runId);
@@ -515,9 +515,9 @@ function printPlanEffect(r: PlanEffectReport): void {
   for (const g of r.groups) {
     console.log(`\n=== ${g.taskId} × ${g.model}  ·  k=${g.repeats} ===`);
     console.log("  kol        koşu  kanca  kırmızı   oran");
-    for (const [ad, s] of [["plansız", g.plansiz], ["planlı", g.planli]] as const) {
+    for (const [itemName, s] of [["plansız", g.plansiz], ["planlı", g.planli]] as const) {
       if (s === null) continue;
-      console.log(`  ${ad.padEnd(10)}${String(s.runs).padStart(4)}${String(s.hooks).padStart(7)}` +
+      console.log(`  ${itemName.padEnd(10)}${String(s.runs).padStart(4)}${String(s.hooks).padStart(7)}` +
         `${String(s.red).padStart(9)}${pct(s.redRate).padStart(7)}` +
         (s.unmeasured > 0 ? `   (${s.unmeasured} ÖLÇÜLEMEDİ)` : "") +
         // TESLİM EDİLMEDİ üçüncü bir durum: süit koştu ama kart `done`'a
@@ -567,8 +567,8 @@ function printPlanEffect(r: PlanEffectReport): void {
       // Sıfır sayının yanına etiket basmak ("0 yalnız planlıda (planlama
       // GETİRDİ)") olmayan bir şeyi varmış gibi okutuyor; etiket yalnızca
       // sayı varsa çıkıyor.
-      const kimlik = (count: number, ad: string, etiket: string): string =>
-        count > 0 ? `${count} ${ad} (${etiket})` : `${count} ${ad}`;
+      const kimlik = (count: number, itemName: string, labelText: string): string =>
+        count > 0 ? `${count} ${itemName} (${labelText})` : `${count} ${itemName}`;
       console.log(`  kusur kimliği: ${h.shared.length} ortak · ` +
         `${kimlik(h.onlyUnplanned.length, "yalnız kontrolde", "planlama çözdü")} · ` +
         `${kimlik(h.onlyPlanned.length, "yalnız planlıda", "planlama GETİRDİ")}`);
@@ -585,10 +585,10 @@ function printPlanEffect(r: PlanEffectReport): void {
       const measuredRuns = g.plansiz?.runs ?? 0;
       // Kısayol alan açık yazıldı: özellik adı İngilizce, yerel ad
       // olduğu gibi — gölgeleme riski yok (bkz. DIL-GECISI.md).
-      const { stamp: damga } = kararlilikDamgasi(
+      const { stamp: stampText } = kararlilikDamgasi(
         measuredRuns, h.everyRunUnplanned.length, h.plansiz.length,
       );
-      console.log(`    kontrol kolu ${damga}: ` +
+      console.log(`    kontrol kolu ${stampText}: ` +
         `${h.everyRunUnplanned.length}/${h.plansiz.length} kanca ` +
         `${measuredRuns < 2 ? "tek koşuda" : "her koşuda"}`);
     }
@@ -1092,8 +1092,8 @@ if (cmd === "report") {
 } else if (cmd === "doctor") {
   await doctor(rest[0] ?? "codex:gpt-5.5");
 } else if (cmd === "planab") {
-  const gorev = rest[0];
-  if (gorev === undefined) {
+  const taskBody = rest[0];
+  if (taskBody === undefined) {
     console.error("kullanım: cli.ts planab <görev-id> [--k 3] [--model claude:claude-sonnet-5] [--kol planli|plansiz] [--devam]");
     process.exit(2);
   }
@@ -1101,10 +1101,10 @@ if (cmd === "report") {
   // adı olarak okunuyordu; canlı koşuda model "1" oldu. Değer artık
   // konumsallardan ÇIKARILIYOR ve model yalnızca `sağlayıcı:model`
   // biçimindeyse konumsal kabul ediliyor.
-  const value = (ad: string): string | undefined => {
-    const equal = argv.find((a) => a.startsWith(`${ad}=`));
-    if (equal !== undefined) return equal.slice(ad.length + 1);
-    const at = argv.indexOf(ad);
+  const value = (itemName: string): string | undefined => {
+    const equal = argv.find((a) => a.startsWith(`${itemName}=`));
+    if (equal !== undefined) return equal.slice(itemName.length + 1);
+    const at = argv.indexOf(itemName);
     return at === -1 ? undefined : argv[at + 1];
   };
   const tuketilen = new Set([value("--k"), value("--model"), value("--kol")].filter((x) => x !== undefined));
@@ -1115,15 +1115,15 @@ if (cmd === "report") {
     process.exit(2);
   }
   await planab(
-    gorev,
+    taskBody,
     Math.max(1, Number(value("--k") ?? 3)),
     value("--model") ?? konumsal.find((a) => a.includes(":")) ?? "claude:claude-sonnet-5",
     armRaw as Arm | undefined,
     argv.includes("--devam"),
   );
 } else if (cmd === "kalibre") {
-  const gorev = rest[0];
-  if (gorev === undefined) {
+  const taskBody = rest[0];
+  if (taskBody === undefined) {
     console.error("kullanım: cli.ts kalibre <görev-id> [--model sağ:model]");
     process.exit(2);
   }
@@ -1132,21 +1132,21 @@ if (cmd === "report") {
   const model = equal !== undefined
     ? equal.slice("--model=".length)
     : at === -1 ? undefined : argv[at + 1];
-  await kalibre(gorev, model ?? rest.slice(1).find((a) => a.includes(":")) ?? "claude:claude-sonnet-5");
+  await kalibre(taskBody, model ?? rest.slice(1).find((a) => a.includes(":")) ?? "claude:claude-sonnet-5");
 } else if (cmd === "kalibre2x2") {
-  const gorev = rest[0];
-  if (gorev === undefined) {
+  const taskBody = rest[0];
+  if (taskBody === undefined) {
     console.error("kullanım: cli.ts kalibre2x2 <görev-id> [--model sağ:model] [--hakem sağ:model]");
     process.exit(2);
   }
-  const flag = (ad: string): string | undefined => {
-    const equal = argv.find((a) => a.startsWith(`--${ad}=`));
-    if (equal !== undefined) return equal.slice(ad.length + 3);
-    const at = argv.indexOf(`--${ad}`);
+  const flag = (itemName: string): string | undefined => {
+    const equal = argv.find((a) => a.startsWith(`--${itemName}=`));
+    if (equal !== undefined) return equal.slice(itemName.length + 3);
+    const at = argv.indexOf(`--${itemName}`);
     return at === -1 ? undefined : argv[at + 1];
   };
   await kalibre2x2(
-    gorev,
+    taskBody,
     flag("model") ?? rest.slice(1).find((a) => a.includes(":")) ?? "claude:claude-sonnet-5",
     flag("hakem") ?? "claude:claude-opus-5",
   );

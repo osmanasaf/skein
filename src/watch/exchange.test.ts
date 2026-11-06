@@ -133,8 +133,8 @@ const kabulEt = (summary = "tamam") => async (req: InvokeRequest): Promise<void>
 };
 
 /** Planı yazma turunu koşar; kart architect'e geçer. */
-async function writePlan(card: Card, metin = "# Plan\nselector.ts sürüme bakıyor.\n"): Promise<void> {
-  files.set(at("main", PLAN_YOLU(card.id)), metin);
+async function writePlan(card: Card, textBody = "# Plan\nselector.ts sürüme bakıyor.\n"): Promise<void> {
+  files.set(at("main", PLAN_YOLU(card.id)), textBody);
   files.set(at("main", "src/var.ts"), "export const x = 1;\n");
   files.set(at("architect", "src/var.ts"), "export const x = 1;\n");
   claude.answer = kabulEt("plan yazıldı");
@@ -386,9 +386,9 @@ describe("alışveriş — planlama turunda ret kanalı yok (kural 22)", () => {
     await tick("architect", { ...options, log: new EventLog(logPath, "r1") });
 
     const settled = (await readEvents(logPath)).events.filter((e) => e.type === "card.settled");
-    const metin = JSON.stringify(settled);
+    const textBody = JSON.stringify(settled);
     // Günlük operatörün SONRADAN bakacağı yer: ekrandaki uyarı uçucu.
-    expect(metin).toContain("plan tüketici modülü hiç saymıyor");
+    expect(textBody).toContain("plan tüketici modülü hiç saymıyor");
   });
 
   /**
@@ -562,7 +562,7 @@ reject:
   limit: 2
   onExhausted: gate
 `;
-  let topo: TopologySnapshot;
+  let topoSnapshot: TopologySnapshot;
 
   beforeEach(async () => {
     await mkdir(join(root, WORKTREE_DIR, "reviewer"), { recursive: true });
@@ -571,12 +571,12 @@ reject:
     const flow = await loadFlow(join(root, "hub", "flows", "denetci-test.yaml"), {
       root, providers: knownProviderSet(),
     });
-    topo = snapshot(flow, root);
+    topoSnapshot = snapshot(flow, root);
   });
 
   /** Alışverişi KABUL edilmiş itirazla bitirir; kart `coder`'a geçer. */
   async function kabulluAlisveris(): Promise<Card> {
-    const card = await queue.add(newCard({ title: "iş", task: "undo ekle", topology: topo }));
+    const card = await queue.add(newCard({ title: "iş", task: "undo ekle", topology: topoSnapshot }));
     files.set(at("main", PLAN_YOLU(card.id)), "# Plan\nselector.ts sürüme bakıyor.\n");
     // Kanıt yolu GERÇEKTEN var olmalı: yoksa itiraz "depoda olmayan yol"
     // diye elenir ve kabul hiç oluşmaz.
@@ -628,7 +628,7 @@ reject:
   // `tur: 1` akışlarında ilk cevap turu TEK cevap turu olduğu için
   // yükümlülükler bu yoldan hiçbir zaman yazılamıyordu.
   it("insana çıkan alışverişte kabul edilen itiraz karta YAZILIR", async () => {
-    const card = await queue.add(newCard({ title: "iş", task: "undo ekle", topology: topo }));
+    const card = await queue.add(newCard({ title: "iş", task: "undo ekle", topology: topoSnapshot }));
     files.set(at("main", PLAN_YOLU(card.id)), "# Plan\nselector.ts sürüme bakıyor.\n");
     files.set(at("main", "src/var.ts"), "export const x = 1;\n");
     files.set(at("architect", "src/var.ts"), "export const x = 1;\n");
@@ -676,7 +676,7 @@ reject:
   // o soruyu bir daha hiç soramazsın.
   it("üreticiye yükümlülük listesi VERİLMEZ", async () => {
     const card = await kabulluAlisveris();
-    const text = buildTaskText(card, roleOf(topo, "coder")!);
+    const text = buildTaskText(card, roleOf(topoSnapshot, "coder")!);
     expect(text).toContain("## Plan");
     expect(text).not.toContain("## İtiraz üzerine değişen maddeler");
     expect(text).not.toContain("architect#1");
@@ -684,7 +684,7 @@ reject:
 
   it("denetçiye madde listesini ve biçimi verir", async () => {
     const card = await denetciyeKadar();
-    const text = buildTaskText(card, roleOf(topo, "reviewer")!);
+    const text = buildTaskText(card, roleOf(topoSnapshot, "reviewer")!);
     expect(text).toContain("## İtiraz üzerine değişen maddeler");
     expect(text).toContain("architect#1");
     expect(text).toContain("src/var.ts:3");
@@ -695,8 +695,8 @@ reject:
   });
 
   it("yükümlülük yoksa denetçiye bölüm basılmaz", async () => {
-    const card = await queue.add(newCard({ title: "iş", task: "x", topology: topo }));
-    const text = buildTaskText({ ...card, role: "reviewer" }, roleOf(topo, "reviewer")!);
+    const card = await queue.add(newCard({ title: "iş", task: "x", topology: topoSnapshot }));
+    const text = buildTaskText({ ...card, role: "reviewer" }, roleOf(topoSnapshot, "reviewer")!);
     expect(text).not.toContain("## İtiraz üzerine değişen maddeler");
   });
 
@@ -732,13 +732,13 @@ reject:
         yukumlulukler: { "architect#1": { durum: "karsilandi", not: "selector.ts sürümü artırıyor" } },
       }));
     };
-    const yol = join(root, "yukumluluk.jsonl");
-    const result = await tick("reviewer", { ...options, log: new EventLog(yol, "r1") });
+    const filePath = join(root, "yukumluluk.jsonl");
+    const result = await tick("reviewer", { ...options, log: new EventLog(filePath, "r1") });
     expect(result.status).toBe("accepted");
-    const { events } = await readEvents(yol);
-    const olaylar = events.filter((e) => e.type === "plan.obligation");
-    expect(olaylar).toHaveLength(1);
-    expect(olaylar[0]).toMatchObject({
+    const { events } = await readEvents(filePath);
+    const eventList = events.filter((e) => e.type === "plan.obligation");
+    expect(eventList).toHaveLength(1);
+    expect(eventList[0]).toMatchObject({
       role: "reviewer",
       id: "architect#1", objector: "architect", durum: "karsilandi",
     });
@@ -759,14 +759,14 @@ reject:
         yukumlulukler: { "architect#1": { durum: "karsilanmadi", not: "sürüm hâlâ geriye düşüyor" } },
       }));
     };
-    const yol = join(root, "karsilanmadi.jsonl");
-    const result = await tick("reviewer", { ...options, log: new EventLog(yol, "r1") });
+    const filePath = join(root, "karsilanmadi.jsonl");
+    const result = await tick("reviewer", { ...options, log: new EventLog(filePath, "r1") });
 
     expect(result.status).toBe("escalated");
-    const { events } = await readEvents(yol);
-    const olaylar = events.filter((e) => e.type === "plan.obligation");
-    expect(olaylar).toHaveLength(1);
-    expect(olaylar[0]).toMatchObject({ id: "architect#1", durum: "karsilanmadi" });
+    const { events } = await readEvents(filePath);
+    const eventList = events.filter((e) => e.type === "plan.obligation");
+    expect(eventList).toHaveLength(1);
+    expect(eventList[0]).toMatchObject({ id: "architect#1", durum: "karsilanmadi" });
   });
 
   // Cevapsız madde yazılmıyor: olmayan bir cevabı kaydetmek, cevap
@@ -774,11 +774,11 @@ reject:
   it("yanıtlanmayan madde günlüğe yazılmaz", async () => {
     await denetciyeKadar();
     claude.answer = kabulEt("denetledim");
-    const yol = join(root, "cevapsiz.jsonl");
-    const result = await tick("reviewer", { ...options, log: new EventLog(yol, "r1") });
+    const filePath = join(root, "cevapsiz.jsonl");
+    const result = await tick("reviewer", { ...options, log: new EventLog(filePath, "r1") });
 
     expect(result.status).toBe("escalated");
-    const { events } = await readEvents(yol);
+    const { events } = await readEvents(filePath);
     expect(events.filter((e) => e.type === "plan.obligation")).toHaveLength(0);
   });
 

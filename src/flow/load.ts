@@ -403,21 +403,21 @@ function parsePlan(
   if (typeof plan !== "string" || plan.trim() === "") {
     throw new FlowError(file, rule(20, "`planlama.plan` boş olmayan bir yol olmalı"));
   }
-  const yol = plan.trim();
-  if (yol.startsWith("/") || yol.includes("..")) {
-    throw new FlowError(file, rule(20, `\`planlama.plan\` depo içinde kalmalı: ${yol}`));
+  const filePath = plan.trim();
+  if (filePath.startsWith("/") || filePath.includes("..")) {
+    throw new FlowError(file, rule(20, `\`planlama.plan\` depo içinde kalmalı: ${filePath}`));
   }
-  if (yol.startsWith("src/")) {
+  if (filePath.startsWith("src/")) {
     throw new FlowError(
       file,
-      rule(20, `\`planlama.plan\` \`src/\` altında olamaz: ${yol}. Plan bir belge; ` +
+      rule(20, `\`planlama.plan\` \`src/\` altında olamaz: ${filePath}. Plan bir belge; ` +
         `kod taşıma yolu git, dosya değil.`),
     );
   }
-  if (!yol.includes("{kart}")) {
+  if (!filePath.includes("{kart}")) {
     throw new FlowError(
       file,
-      rule(20, `\`planlama.plan\` \`{kart}\` içermeli: ${yol}. İçermezse iki kart ` +
+      rule(20, `\`planlama.plan\` \`{kart}\` içermeli: ${filePath}. İçermezse iki kart ` +
         `aynı dosyayı ezer ve ikincisi birincisinin planını okur.`),
     );
   }
@@ -429,7 +429,7 @@ function parsePlan(
   // Sebep körlemenin taşıma tarafı — turun sonunda N ağaç yazarın ağacına
   // birleşiyor ve aynı yolu yazan iki ağaç her birleşmede çakışırdı.
   // Yan faydası, 6c'nin "ortak dosyayı ezme" tuzağının tamamen kalkması.
-  const itiraz = yol.replace(/\.md$/u, "") + ".itiraz.{rol}.md";
+  const itiraz = filePath.replace(/\.md$/u, "") + ".itiraz.{rol}.md";
 
   // --- kural 23: yükümlülük denetçisi ---
   //
@@ -471,7 +471,7 @@ function parsePlan(
   }
 
   return {
-    katilimcilar, plan: yol, tur: turRaw, itiraz, ilkTurKor: blindRaw,
+    katilimcilar, plan: filePath, tur: turRaw, itiraz, ilkTurKor: blindRaw,
     ...(denetci === undefined ? {} : { denetci }),
   };
 }

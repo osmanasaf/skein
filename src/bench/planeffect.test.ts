@@ -278,7 +278,7 @@ describe("downstream ret metriği", () => {
   // `kosu`'nun ret kayıtları `state: "queued"` yazıyor; gerçek koşuda ret
   // sonrası kart devam edip `done`'a varır. Son settle kaydı kazandığı
   // için fikstüre o da ekleniyor, yoksa koşu "teslim edilmedi" sayılır.
-  const kol = (runId: string, arm: "planli" | "plansiz", red: number, rejects: number) => [
+  const armName = (runId: string, arm: "planli" | "plansiz", red: number, rejects: number) => [
     ...kosu(runId, "g", arm, {
       red, rejects,
       ...(arm === "planli" ? { planning: { objections: 1, accepted: 1, invalid: 0 } } : {}),
@@ -290,8 +290,8 @@ describe("downstream ret metriği", () => {
   // metrik karar metninde görünmek zorunda.
   it("ret azalması karar metnine giriyor", () => {
     const r = planEffect([
-      ...[1, 2, 3].flatMap((k) => kol(`p${k}`, "planli", 1, 1)),
-      ...[1, 2, 3].flatMap((k) => kol(`s${k}`, "plansiz", 4, 4)),
+      ...[1, 2, 3].flatMap((k) => armName(`p${k}`, "planli", 1, 1)),
+      ...[1, 2, 3].flatMap((k) => armName(`s${k}`, "plansiz", 4, 4)),
     ]);
     expect(r.groups[0]?.verdict.code).toBe("olumlu");
     expect(r.groups[0]?.verdict.reason).toMatch(/Downstream ret azalması: %75/);
@@ -303,8 +303,8 @@ describe("downstream ret metriği", () => {
   it("iki metrik ayrışırsa karar tek yöne eritilmiyor", () => {
     const r = planEffect([
       // Kanca oranı KÖTÜLEŞİYOR (4 → 8), ret sayısı İYİLEŞİYOR (4 → 1).
-      ...[1, 2, 3].flatMap((k) => kol(`p${k}`, "planli", 8, 1)),
-      ...[1, 2, 3].flatMap((k) => kol(`s${k}`, "plansiz", 4, 4)),
+      ...[1, 2, 3].flatMap((k) => armName(`p${k}`, "planli", 8, 1)),
+      ...[1, 2, 3].flatMap((k) => armName(`s${k}`, "plansiz", 4, 4)),
     ]);
     expect(r.groups[0]?.verdict.code).toBe("belirsiz");
     expect(r.groups[0]?.verdict.reason).toMatch(/AYRIŞIYOR/);
@@ -312,8 +312,8 @@ describe("downstream ret metriği", () => {
 
   it("kontrol kolunda hiç ret yoksa metrik tanımsız kalıyor", () => {
     const r = planEffect([
-      ...[1, 2, 3].flatMap((k) => kol(`p${k}`, "planli", 1, 0)),
-      ...[1, 2, 3].flatMap((k) => kol(`s${k}`, "plansiz", 4, 0)),
+      ...[1, 2, 3].flatMap((k) => armName(`p${k}`, "planli", 1, 0)),
+      ...[1, 2, 3].flatMap((k) => armName(`s${k}`, "plansiz", 4, 0)),
     ]);
     expect(r.groups[0]?.verdict.reason).toMatch(/Downstream ret azalması: —/);
   });
@@ -744,11 +744,11 @@ describe("planEffect — yükümlülük sonuçları", () => {
       ...kosu("s1", "g", "plansiz", { red: 4 }),
       ...kosu("s2", "g", "plansiz", { red: 4 }),
     ]);
-    const kayitlar = singleGroup(r).obligations.records.filter((x) => x.id === "analyst#1");
-    expect(kayitlar).toHaveLength(2);
-    expect(kayitlar.map((x) => x.runId).sort()).toEqual(["p1", "p2"]);
-    expect(kayitlar.find((x) => x.runId === "p1")?.durum).toBe("karsilandi");
-    expect(kayitlar.find((x) => x.runId === "p2")?.durum).toBe("karsilanmadi");
+    const recordList = singleGroup(r).obligations.records.filter((x) => x.id === "analyst#1");
+    expect(recordList).toHaveLength(2);
+    expect(recordList.map((x) => x.runId).sort()).toEqual(["p1", "p2"]);
+    expect(recordList.find((x) => x.runId === "p1")?.durum).toBe("karsilandi");
+    expect(recordList.find((x) => x.runId === "p2")?.durum).toBe("karsilanmadi");
   });
 
   it("hiçbir koşuda yükümlülük olayı yoksa sıfır değerlerle döner", () => {
