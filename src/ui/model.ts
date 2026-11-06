@@ -4,7 +4,7 @@ import { gateKind, planGateEntry, type Card, type CardState, type PlanKabul } fr
 import { isOrphan, isStale } from "../card/orphan.js";
 import type { CardQueue } from "../card/queue.js";
 import { readEvents, type SkeinEvent } from "../events/log.js";
-import type { GateType } from "../flow/load.js";
+import type { GateType, Receive } from "../flow/load.js";
 import { DONE, roleOf, type TopologySnapshot } from "../flow/snapshot.js";
 import { pidAlive, readLock, type LockInfo } from "../watch/lock.js";
 
@@ -114,6 +114,19 @@ export interface UiRole {
   workspace: string;
   /** Kuyrukta bekleyen kart sayısı. */
   depth: number;
+  /**
+   * "Rol" panelinin meta satırı için — rol KÖK dizine göre relatif prompt
+   * yolu (`roles/coder.prompt`). `card c-20261105-d500f1` (sağ panel) bunu
+   * "Prompt · roles/x.md" düğmesinde kullanıyor; topolojiden zaten geliyor,
+   * ekran kendi yolunu türetmiyor.
+   */
+  prompt: string;
+  /**
+   * Tekil mi toplu mu alım yapıyor — DEVIR.md'nin "Rol" panelindeki "toplu
+   * alım" bilgisi. Akış düzenleyici (`rolCiz`) taslak üzerinden zaten
+   * okuyordu; sağ panel YAŞAYAN topolojiden okuyor, taslaktan değil.
+   */
+  receive: Receive;
 }
 
 /**
@@ -297,6 +310,8 @@ export async function buildModel(options: BuildOptions): Promise<UiModel> {
       provider: role.provider,
       workspace: role.workspace,
       depth: await queue.depth(role.id),
+      prompt: role.prompt,
+      receive: role.receive,
     });
   }
 

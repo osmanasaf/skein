@@ -854,3 +854,154 @@ describe("planlamaBandYolu — bandın tepeden dolanması", () => {
     expect(yol(ilk, son)).toBe("M 230 110 L 500 480");
   });
 });
+
+/**
+ * RAILGEÇİŞ — sağ panelin durum geçişleri (kart c-20261105-d500f1).
+ *
+ * SAF karar, DOM'suz: hangi moda/role/karta geçileceği burada sınanıyor.
+ * Gerçek çizim (sagPanelCiz ve modların kendisi) tarayici.test.ts'te.
+ */
+describe("railGecis — sağ panelin durum geçişleri", () => {
+  type Rail = { mode: string; roleId: string | null; cardId: string | null; cardFrom: string };
+  const gecis = (rail: Rail, eylem: Record<string, unknown>): Rail =>
+    fonksiyon<(r: Rail, e: Record<string, unknown>) => Rail>(renderPage("t"), "railGecis")(rail, eylem);
+
+  const GENEL_BAKIS: Rail = { mode: "overview", roleId: null, cardId: null, cardFrom: "overview" };
+
+  it("'genelBakis' her zaman Genel bakışa döner", () => {
+    const icindeyken = { mode: "card", roleId: "coder", cardId: "c-1", cardFrom: "role" };
+    expect(gecis(icindeyken, { tur: "genelBakis" })).toEqual(GENEL_BAKIS);
+  });
+
+  // TOGGLE: Rol modunda AYNI role tekrar tıklamak Genel bakışa döner —
+  // formasyon düğümünün eski davranışıyla (secimDegistir) AYNI.
+  it("Rol modunda AYNI role tıklamak Genel bakışa döner", () => {
+    const rolAcik: Rail = { mode: "role", roleId: "coder", cardId: null, cardFrom: "overview" };
+    expect(gecis(rolAcik, { tur: "rolSec", rolId: "coder" })).toEqual(GENEL_BAKIS);
+  });
+
+  it("Rol modunda BAŞKA role tıklamak o role GEÇER, kapatmaz", () => {
+    const rolAcik: Rail = { mode: "role", roleId: "coder", cardId: null, cardFrom: "overview" };
+    expect(gecis(rolAcik, { tur: "rolSec", rolId: "reviewer" })).toEqual({
+      mode: "role", roleId: "reviewer", cardId: null, cardFrom: "overview",
+    });
+  });
+
+  // "&&" sınaması: Kart modundayken (roleId AYNI role ait bile olsa) o
+  // role tıklamak KAPATMAZ, Rol moduna geçer — "&&" "||" olsaydı bu dal da
+  // GENEL_BAKIS'a düşerdi.
+  it("Kart modunda (roleId eşleşse de) role tıklamak Rol moduna geçer, KAPATMAZ", () => {
+    const kartAcik: Rail = { mode: "card", roleId: "coder", cardId: "c-1", cardFrom: "role" };
+    expect(gecis(kartAcik, { tur: "rolSec", rolId: "coder" })).toEqual({
+      mode: "role", roleId: "coder", cardId: null, cardFrom: "overview",
+    });
+  });
+
+  it("'kartAcGenel' roleId'yi TEMİZLER, cardFrom 'overview'dur", () => {
+    const rolAcik: Rail = { mode: "role", roleId: "coder", cardId: null, cardFrom: "overview" };
+    expect(gecis(rolAcik, { tur: "kartAcGenel", kartId: "c-9" })).toEqual({
+      mode: "card", roleId: null, cardId: "c-9", cardFrom: "overview",
+    });
+  });
+
+  it("'kartAcRol' roleId'yi KORUR, cardFrom 'role'dur", () => {
+    expect(gecis(GENEL_BAKIS, { tur: "kartAcRol", rolId: "reviewer", kartId: "c-9" })).toEqual({
+      mode: "card", roleId: "reviewer", cardId: "c-9", cardFrom: "role",
+    });
+  });
+
+  it("'geri' — Kart 'role'den açıldıysa Rol'e döner, roleId KORUNUR", () => {
+    const kartAcik: Rail = { mode: "card", roleId: "reviewer", cardId: "c-9", cardFrom: "role" };
+    expect(gecis(kartAcik, { tur: "geri" })).toEqual({
+      mode: "role", roleId: "reviewer", cardId: null, cardFrom: "overview",
+    });
+  });
+
+  it("'geri' — Kart 'overview'den açıldıysa Genel bakışa döner", () => {
+    const kartAcik: Rail = { mode: "card", roleId: null, cardId: "c-9", cardFrom: "overview" };
+    expect(gecis(kartAcik, { tur: "geri" })).toEqual(GENEL_BAKIS);
+  });
+
+  it("tanınmayan bir eylem rail'i DEĞİŞTİRMEDEN döner", () => {
+    const rolAcik: Rail = { mode: "role", roleId: "coder", cardId: null, cardFrom: "overview" };
+    expect(gecis(rolAcik, { tur: "bilinmeyen" })).toEqual(rolAcik);
+  });
+});
+
+/**
+ * RAILROLMETA — "Rol" modunun meta satırı (DEVIR.md: "sağlayıcı, çalışma
+ * alanı, sonraki rol, ret hedefi, toplu alım"). SAF, DOM yok.
+ */
+describe("railRolMeta — Rol modunun meta satırı", () => {
+  type Meta = {
+    no: string; oncu: boolean; id: string; provider: string; workspace: string;
+    sonrakiRol: string; retHedefi: string | null; receive: string; prompt: string;
+  };
+  const meta = (m: unknown, rolId: string): Meta | null =>
+    fonksiyonlar<(m: unknown, rolId: string) => Meta | null>(
+      renderPage("t"), ["sonrakiSutun", "railRolMeta"], "railRolMeta",
+    )(m, rolId);
+
+  const MODEL = {
+    roles: [
+      { id: "coder", provider: "claude", workspace: "main", prompt: "roles/coder.prompt", receive: "task" },
+      { id: "reviewer", provider: "codex", workspace: "reviewer", prompt: "roles/reviewer.prompt", receive: "batch" },
+    ],
+    edges: [
+      { from: "coder", to: "reviewer", kind: "next" },
+      { from: "reviewer", to: "coder", kind: "reject" },
+    ],
+  };
+
+  it("ilk rolü 'öncü' sayar, numarayı 1'den başlatıp dolgular", () => {
+    expect(meta(MODEL, "coder")).toMatchObject({ no: "01", oncu: true });
+  });
+
+  it("ilk olmayan rolü 'öncü' SAYMAZ", () => {
+    expect(meta(MODEL, "reviewer")).toMatchObject({ no: "02", oncu: false });
+  });
+
+  it("sonraki rolü ZİNCİR OKU'nun (sonrakiSutun) aynı kararıyla verir", () => {
+    expect(meta(MODEL, "coder")?.sonrakiRol).toBe("reviewer");
+    expect(meta(MODEL, "reviewer")?.sonrakiRol).toBe("bitti");
+  });
+
+  it("ret hedefi varsa onu, yoksa null döner", () => {
+    expect(meta(MODEL, "reviewer")?.retHedefi).toBe("coder");
+    expect(meta(MODEL, "coder")?.retHedefi).toBe(null);
+  });
+
+  it("alım türünü ve prompt yolunu rolden AYNEN taşır", () => {
+    expect(meta(MODEL, "reviewer")).toMatchObject({ receive: "batch", prompt: "roles/reviewer.prompt" });
+  });
+
+  it("bilinmeyen rol id'si için null döner", () => {
+    expect(meta(MODEL, "yok")).toBe(null);
+  });
+});
+
+/**
+ * RAILYENIDENYUKLENMELIMI — Kart modunun fetch kararı (kart
+ * c-20261105-d500f1). SAF: sagPanelCiz her saniyelik yoklamada (yokla/ciz)
+ * çağrılıyor, bu karar aynı kart için ikinci bir /kart/<id> isteğini
+ * ÖNLÜYOR — yoksa panel her saniye "yükleniyor…"ya dönerdi.
+ */
+describe("railYenidenYuklenmeliMi — Kart modunun fetch kararı", () => {
+  const karar = (g: unknown, h: unknown): boolean =>
+    fonksiyon<(g: unknown, h: unknown) => boolean>(renderPage("t"), "railYenidenYuklenmeliMi")(g, h);
+
+  it("gösterilen kart hedefle AYNIYSA yeniden yüklemez", () => {
+    expect(karar("c-1", "c-1")).toBe(false);
+  });
+
+  it("gösterilen kart hedeften FARKLIYSA yeniden yükler", () => {
+    expect(karar("c-1", "c-2")).toBe(true);
+  });
+
+  // İlk açılış: panel hiçbir kart taşımıyor (dataset undefined) — hedef
+  // her ne olursa olsun bu YÜKLEMELİ dönmek zorunda, aksi hâlde Kart modu
+  // İLK kez açıldığında hiç fetch ETMEZDİ.
+  it("panel hiçbir kart taşımıyorsa (ilk açılış) yeniden yükler", () => {
+    expect(karar(undefined, "c-1")).toBe(true);
+  });
+});

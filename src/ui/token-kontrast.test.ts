@@ -209,6 +209,39 @@ const CIFTLER: [string, string, string, Esik][] = [
     "color-neutral-200",
     NORMAL_METIN_ESIGI,
   ],
+
+  // --- Sağ panel (c-20261105-d500f1) ---
+  // Kapı kutusunun accent-100 zemini TEMA TARAFINDAN HİÇ DEĞİŞMİYOR (bkz.
+  // page.ts ".railKapiKutu" yorumu) — yani gerekçenin accent-800/accent-100
+  // çiftinin aksine ("Modernist kapı gerekçesi", yukarıda), bu üç çift de
+  // KASITLI OLARAK tema-değişmez token'lar arasında: açık ve koyu temada
+  // AYNI iki sayı ölçülür. Başlık düğmesi bu yüzden --color-text (koyu
+  // temada AÇIK renge döner) DEĞİL, --color-neutral-900 kullanıyor — o da
+  // hiçbir zaman ezilmiyor.
+  [
+    "Sağ panel kapı kutusu üst etiketi — accent-700, accent-100 zemin üstünde",
+    "color-accent-700",
+    "color-accent-100",
+    NORMAL_METIN_ESIGI,
+  ],
+  [
+    "Sağ panel kapı kutusu başlık düğmesi — neutral-900, accent-100 zemin üstünde",
+    "color-neutral-900",
+    "color-accent-100",
+    NORMAL_METIN_ESIGI,
+  ],
+  [
+    "Sağ panel Genel bakış — kapıda bekleyen sayısı, accent zemin üstünde (büyük metin)",
+    "color-accent",
+    "color-bg",
+    IKINCIL_ETIKET_ESIGI,
+  ],
+  [
+    "Bildirim — beyaz metin, neutral-900 zemin üstünde (DEVIR.md: 'koyu zemin', temadan bağımsız)",
+    "#FFFFFF",
+    "color-neutral-900",
+    NORMAL_METIN_ESIGI,
+  ],
 ];
 
 describe("token kontrastı — açık tema", () => {

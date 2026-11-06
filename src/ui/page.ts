@@ -107,6 +107,15 @@ const PAGE = `<!doctype html>
     --fs-40: 40px; --fs-36: 36px; --fs-30: 30px; --fs-26: 26px; --fs-22: 22px; --fs-20: 20px;
     --fs-17: 17px; --fs-15: 15px; --fs-14: 14px; --fs-13-5: 13.5px; --fs-13: 13px;
     --fs-12-5: 12.5px; --fs-12: 12px; --fs-11-5: 11.5px; --fs-11: 11px; --fs-10: 10px;
+    /*
+     * ÜÇÜ DE DEVIR.md'NİN KENDİ ÖLÇEĞİNDE YOK (kart c-20261105-d500f1) ama
+     * sağ panelin MOD1/MOD2 metinleri tam bu üç değeri istiyor ("44px/800"
+     * kapıda bekleyen sayısı, "15.5px/800" kapı kartı başlık düğmesi,
+     * "10.5px/600" üst etiket). Üstteki düz liste dışına TAŞMIYORUZ: yeni
+     * bir renk icat etmek SAPMALAR.md'nin yasakladığı şey, yeni bir ölçü
+     * tokenı aynı yasağın kapsamında değil.
+     */
+    --fs-44: 44px; --fs-15-5: 15.5px; --fs-10-5: 10.5px;
 
     /* boşluk ölçeği — 4px'in katları */
     --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 20px;
@@ -330,6 +339,23 @@ const PAGE = `<!doctype html>
    */
   .formasyonSarmal { width: min(100%, calc((100vh - 210px) * 1.5625)); margin: 0 auto; }
   .formasyonSarmal svg { width: 100%; height: auto; display: block; aspect-ratio: 1000 / 640; }
+  /*
+   * İKİ SÜTUN — kart c-20261105-d500f1, DEVIR.md "İki sütun, flex ve
+   * wrap". Ölçüler BİREBİR: formasyon alanı flex 1 1 620px, sağ panel
+   * flex 0 1 380px / min-width 300px / border-left 2px / kendi içinde
+   * kaydırılır. .panoGovde'ye açık bir --color-bg veriliyor: board ve
+   * sağ panel artık Modernist token'larla (accent-100 kutu dahil) çiziyor
+   * ve ALTLARINDAKİ zemin hâlâ ESKİ --bg olsaydı (bkz. body kuralı,
+   * yukarıda — bu kartın kapsamı DEĞİL, henüz göçmedi) iki palet üst üste
+   * binerdi. Bu satır yalnızca Pano'nun KENDİ gövdesini kapsıyor, body'yi
+   * DEĞİŞTİRMİYOR.
+   */
+  .panoGovde { display: flex; flex-wrap: wrap; align-items: flex-start; background: var(--color-bg); }
+  .formasyonAlan { flex: 1 1 620px; min-width: 0; padding: var(--space-6) 0; }
+  .sagPanel {
+    flex: 0 1 380px; min-width: 300px; border-left: var(--border-section) solid var(--color-text);
+    max-height: calc(100vh - 66px); overflow-y: auto; padding: var(--space-6) var(--space-5);
+  }
   .formasyonDugum { cursor: pointer; }
   .formasyonDugum rect.kutu { fill: transparent; stroke: var(--color-divider); stroke-width: 1; }
   .formasyonDugum.secili rect.kutu { fill: var(--color-accent-100); stroke: var(--color-accent); stroke-width: 2; }
@@ -384,6 +410,159 @@ const PAGE = `<!doctype html>
   .lejant .kare.kuyrukta { background: var(--queue-square-fill); border: 2px solid var(--queue-square-border); }
   .lejant .cizgi-ret { width: 16px; height: 0; border-top: 2px solid var(--color-accent); flex: 0 0 auto; }
   .lejant .lejantSag { margin-left: auto; }
+
+  /*
+   * SAĞ PANEL — kart c-20261105-d500f1, DEVIR.md "Sağ panel modları".
+   * Üç mod (Genel bakış/Rol/Kart) AYNI #sagPanel'i dolduruyor (bkz.
+   * sagPanelCiz) — sınıflar modlar arası PAYLAŞILIYOR (.railBtn, .railSatir,
+   * .railAraBaslik), DEVIR.md'nin kendisi de üçünde tekrar eden ögeler
+   * tanımlıyor (üst etiket, kart kareleri, çıkış düğmeleri).
+   */
+  .railSayiSatiri { display: flex; align-items: baseline; gap: var(--space-3); margin-bottom: var(--space-5); }
+  .railSayi { font-family: var(--font-heading); font-weight: 800; font-size: var(--fs-44); color: var(--color-accent); line-height: 1; }
+  .railSayiAciklama { font-size: var(--fs-13); color: var(--color-text); }
+
+  /*
+   * KAPI KUTUSU — Genel bakışın kapı kartı VE Kart modunun kapı kutusu
+   * AYNI yapıyı kullanıyor (DEVIR.md ikisinde de "accent-100 kutu, üstte
+   * 4px accent çizgi" diyor, bkz. railKapiKutu).
+   *
+   * .railBaslikBtn burada KASITLI OLARAK --color-text KULLANMIYOR:
+   * --color-text koyu temada AÇIK renge dönüyor (bkz. yukarıdaki
+   * "@media (prefers-color-scheme: dark)" bloğu, satır ~196), ama bu
+   * kutunun zemini (--color-accent-100) HİÇ dönmüyor — SAPMALAR.md'nin
+   * ÖNCEDEN ÖLÇÜP REZERVE ETTİĞİ çift tam olarak bu (accent-800/accent-100,
+   * token-kontrast.test.ts'teki "Modernist kapı gerekçesi" girdisi, iki
+   * temada da AYNI sayılarla ölçülüp geçiyor çünkü hiçbiri değişmiyor).
+   * --color-text'i buraya katmak koyu temada açık yazıyı açık zemine
+   * bindirirdi (metin kaybolur) — SAPMALAR.md §2.5'in tam uyardığı kusur.
+   * --color-neutral-900 de tema tarafından HİÇ EZİLMİYOR, yani bu kutunun
+   * içinde --color-text'in YERİNE güvenle kullanılabilir.
+   */
+  .railKapiKutu {
+    background: var(--color-accent-100); border-top: var(--border-accent) solid var(--color-accent);
+    padding: var(--space-4) var(--space-4) var(--space-5); margin-bottom: var(--space-5);
+  }
+  .railKapiEtiket {
+    font-size: var(--fs-10-5); font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--color-accent-700);
+  }
+  .railBaslikBtn {
+    display: block; width: 100%; text-align: left; font: inherit; font-family: var(--font-heading);
+    font-weight: 800; font-size: var(--fs-15-5); color: var(--color-neutral-900); background: none;
+    border: none; padding: var(--space-2) 0 0; cursor: pointer;
+  }
+  .railBaslikBtn:hover { text-decoration: underline; }
+  /*
+   * GEREKÇE — "en fazla 3 satır" DEVIR.md'nin kuralı, ama bu kuralın
+   * KIRPTIĞI şey yalnızca BU özetin GÖRÜNÜMÜ: gerekceKur (bkz. yukarıda)
+   * ajanın ham metnini HER ZAMAN TAM olarak bir details'a yazıyor ve
+   * webkit-line-clamp o details'ı DEĞİL, yalnızca .reason
+   * (çekirdeğin cümlesi) öğesini kırpıyor — kapalı bir details zaten DOM'da
+   * tam metni taşıyor (tarayıcının kendi davranışı, görünmez ≠ silinmiş).
+   * tasarim/SAPMALAR.md'nin taşınacak listesi tam bunu istiyor.
+   */
+  .railGerekce .reason {
+    margin: var(--space-2) 0 0; color: var(--color-accent-800); font-size: var(--fs-13);
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .railGerekce .ajanDetay summary { font-size: var(--fs-11); }
+  .railCikis { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-4); }
+  .railBtn {
+    font: inherit; font-family: var(--font-heading); font-weight: 700; font-size: var(--fs-13);
+    min-height: 40px; padding: 0 var(--space-4); cursor: pointer;
+    border: var(--border-row) solid var(--color-text); background: var(--color-surface); color: var(--color-text);
+  }
+  .railBtn:hover:not(:disabled) { background: var(--color-neutral-200); }
+  .railBtn.primary { background: var(--color-accent-700); border-color: var(--color-accent-700); color: #fff; }
+  .railBtn.primary:hover:not(:disabled) { background: var(--color-accent-800); }
+  .railBtn:disabled { opacity: .45; cursor: progress; }
+  .railBtn:focus-visible, .railSatir:focus-visible, .railBaslikBtn:focus-visible, .railGeri:focus-visible {
+    outline: var(--border-accent) solid var(--color-accent);
+  }
+
+  .railAraBaslik {
+    font-size: var(--fs-10-5); font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--label-ink); margin: var(--space-5) 0 var(--space-3);
+  }
+  .railBos { font-size: var(--fs-13); color: var(--label-ink); }
+  /*
+   * SATIR — "Uçuşta" listesi VE Rol modunun kart listesi AYNI satırı
+   * kullanıyor (bkz. railKartSatiri). Kare renkleri SAPMALAR.md §1'in
+   * düzelttiği hâliyle (kuyrukta: dolgu neutral-500, kenar --color-text) —
+   * .lejant .kare.* ile AYNI anlam, AYNI kural kümesi (DEVIR.md'nin üç
+   * karesi burada da geçerli), ama DOM bağlamı farklı olduğu için (lejant
+   * SVG değil ama ayrı bir satır yapısı) kural burada TEKRARLANIYOR —
+   * .formasyonDugum .kare-* / .lejant .kare.* çiftinin zaten izlediği
+   * emsal.
+   */
+  .railSatir {
+    display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-2) var(--space-1);
+    cursor: pointer;
+  }
+  .railSatir:hover { background: var(--color-neutral-200); }
+  .railSatir .kare { width: 10px; height: 10px; flex: 0 0 auto; margin-top: 4px; }
+  .railSatir .kare.calisiyor { background: var(--color-accent); }
+  .railSatir .kare.kapida { background: transparent; border: 2px solid var(--color-accent); }
+  .railSatir .kare.kuyrukta { background: var(--queue-square-fill); border: 2px solid var(--queue-square-border); }
+  .railSatirGovde { min-width: 0; }
+  .railSatirBaslik { font-size: var(--fs-13); font-weight: 700; color: var(--color-text); }
+  .railSatirAlt { font-size: var(--fs-11); color: var(--label-ink); }
+
+  .railGeri {
+    display: inline-block; font: inherit; font-family: var(--font-heading); font-weight: 700;
+    font-size: var(--fs-13); background: none; border: none; color: var(--color-text); cursor: pointer;
+    padding: 0; margin-bottom: var(--space-4);
+  }
+  .railGeri:hover { text-decoration: underline; }
+
+  .railUst {
+    font-size: var(--fs-10-5); font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--label-ink);
+  }
+  .railRolBaslik { font-family: var(--font-heading); font-weight: 800; font-size: var(--fs-30); margin: var(--space-1) 0; }
+  .railRolMeta {
+    display: flex; flex-wrap: wrap; gap: var(--space-3); font-size: var(--fs-12); color: var(--label-ink);
+    margin-bottom: var(--space-4);
+  }
+  .railRolDugmeler { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-5); }
+
+  .railKartUst { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-3); }
+  .railDurumEtiket {
+    font-size: var(--fs-10-5); font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--label-ink);
+  }
+  .railKartBaslik { font-family: var(--font-heading); font-weight: 800; font-size: var(--fs-22); margin: 0 0 var(--space-1); }
+  .railKartMeta2 { font-family: var(--mono); font-size: var(--fs-11); color: var(--label-ink); margin-bottom: var(--space-3); }
+  /* "Son ret gerekçesi" — DEVIR.md: "sol kenarı 2px accent blok". */
+  .railRetBlok {
+    border-left: 2px solid var(--color-accent); padding-left: var(--space-3); margin: var(--space-4) 0;
+    font-size: var(--fs-13); color: var(--color-text);
+  }
+
+  /*
+   * BİLDİRİM — DEVIR.md "Interactions & Behavior": "Her çıkış kartı
+   * ilgili kuyruğa bırakır ve kısa bir bildirim gösterir ... sol altta,
+   * koyu zemin, 4px accent sol kenar, 3.4 sn." karar() (yukarıda,
+   * SAPMALAR.md'nin BİREBİR aynı kalması gereken kapı çıkışı mantığı)
+   * bunu TÜKETİYOR, bkz. bildirimGoster.
+   *
+   * --color-neutral-900 KASITLI OLARAK tema tarafından EZİLMİYOR ("koyu
+   * zemin" DEVIR'in kendi ifadesiyle sabit, açık temada da koyu kalması
+   * gereken bir araç ipucu — toast'ların alışıldık davranışı, gövdenin
+   * kendi temasını İZLEMEZ) — tıpkı sağ panelin kapı kutusunun
+   * accent-100'ü gibi, bkz. yukarıdaki o yorum.
+   */
+  .bildirim {
+    position: fixed; left: var(--space-5); bottom: var(--space-5); z-index: 20;
+    max-width: 360px; background: var(--color-neutral-900); color: #fff;
+    border-left: var(--border-accent) solid var(--color-accent);
+    padding: var(--space-3) var(--space-5); font-size: var(--fs-13);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, .22);
+    display: none;
+  }
+  .bildirim.gorunur { display: block; }
+
   .band {
     border: 1px dashed var(--reject); border-radius: 4px; padding: var(--sp-6) var(--sp-7); margin-bottom: var(--sp-7);
   }
@@ -591,8 +770,13 @@ const PAGE = `<!doctype html>
     <div class="panoArac" id="panoArac"></div>
     <div id="hata"></div>
     <div id="uyari"></div>
-    <div class="formasyonSarmal" id="board"></div>
-    <div class="lejant" id="lejant"></div>
+    <div class="panoGovde">
+      <div class="formasyonAlan">
+        <div class="formasyonSarmal" id="board"></div>
+        <div class="lejant" id="lejant"></div>
+      </div>
+      <aside class="sagPanel" id="sagPanel" aria-label="Kart ve rol ayrıntıları"></aside>
+    </div>
   </div>
   <div id="icerikAkislar" class="yerTutucu" style="display:none">
     <h2>Akışlar</h2>
@@ -613,6 +797,7 @@ const PAGE = `<!doctype html>
   </div>
   </div>
 <div id="panel"></div>
+<div id="bildirim" class="bildirim" role="status" aria-live="polite"></div>
 <script>
 const JETON = "__JETON__";
 // Seçilebilecek akış adları — sayfa açılışında BİR KEZ okunuyor (bkz.
@@ -883,6 +1068,40 @@ function sonrakiSutun(m, rolId) {
   return kenar ? kenar.to : "bitti";
 }
 
+/**
+ * SAĞ PANEL — "Rol" modunun meta satırı: numara, öncü mü, sağlayıcı,
+ * çalışma alanı, sonraki rol, ret hedefi, toplu alım (DEVIR.md). SAF
+ * (DOM yok).
+ *
+ * "sonraki rol" sonrakiSutun'dan geliyor — ZİNCİR OKU'nun ve
+ * formasyon diyagramının insan onayı kapısının kullandığı AYNI karar
+ * (m.edges, role.next DEĞİL): bu panel diyagramdan AYRI bir "sonraki rol"
+ * yorumu üretseydi ikisi bir gün ayrışabilirdi (bu dosyanın AJAN_AYRAC
+ * yorumunun uyardığı kusur sınıfı). "ret hedefi" de aynı ilkeyle
+ * m.edges'teki "reject" kenarından okunuyor, kartın kendi geriHedef
+ * alanından DEĞİL (o kart bazlı, bu rol bazlı — ikisi aynı kaynaktan,
+ * topology.roles[].reject'ten türüyor ama rol burada bir kartı
+ * ÖRNEKLEMEDEN kendi hedefini bilmeli, boş bir rolün bile "Rol" paneli
+ * açılabiliyor).
+ */
+function railRolMeta(m, rolId) {
+  const i = m.roles.findIndex((r) => r.id === rolId);
+  if (i === -1) return null;
+  const rol = m.roles[i];
+  const retKenar = m.edges.find((e) => e.from === rolId && e.kind === "reject");
+  return {
+    no: String(i + 1).padStart(2, "0"),
+    oncu: i === 0,
+    id: rol.id,
+    provider: rol.provider,
+    workspace: rol.workspace,
+    sonrakiRol: sonrakiSutun(m, rolId),
+    retHedefi: retKenar ? retKenar.to : null,
+    receive: rol.receive,
+    prompt: rol.prompt,
+  };
+}
+
 function kapiCikislari(kind, planKilidi, geriHedef) {
   // ZİNCİRİN BAŞINDA "Geri gönder" YOK. back kararının hedefi rolün ret
   // hedefi; yoksa çekirdek kartı aynı role döndürüyor, yani olan şey bir
@@ -941,6 +1160,23 @@ async function kapatKart(id, kart) {
 }
 
 /**
+ * BİLDİRİM — DEVIR.md "Interactions & Behavior": "Her çıkış kartı ilgili
+ * kuyruğa bırakır ve kısa bir bildirim gösterir". 3.4 sn sonra kendiliğinden
+ * kapanır; ÜST ÜSTE gelen bir karar varsa (iki kapı art arda) eski
+ * zamanlayıcı İPTAL edilip yeniden kuruluyor — yoksa ikinci bildirim ilkinin
+ * kalan süresiyle erken kapanabilirdi.
+ */
+let BILDIRIM_ZAMANLAYICI = null;
+function bildirimGoster(mesaj) {
+  const kutu = document.getElementById("bildirim");
+  if (!kutu) return;
+  kutu.textContent = mesaj;
+  kutu.classList.add("gorunur");
+  if (BILDIRIM_ZAMANLAYICI !== null) clearTimeout(BILDIRIM_ZAMANLAYICI);
+  BILDIRIM_ZAMANLAYICI = setTimeout(() => { kutu.classList.remove("gorunur"); }, 3400);
+}
+
+/**
  * Kapıyı açar — KOMUT göndererek.
  *
  * Ekran kendi kopyasını güncellemiyor: çekirdek kararı uyguluyor, cevaptaki
@@ -959,6 +1195,10 @@ async function karar(id, secim, dugme, kart) {
     const veri = await cevap.json();
     if (!cevap.ok) throw new Error(veri.hata || cevap.status);
     ciz(veri.model);
+    // Düğmenin KENDİ etiketi ("Yeniden koş", "Geçir", "Üretici haklı" …) —
+    // kapiCikislari'nin ürettiği metin, burada İKİNCİ bir ifade İCAT
+    // EDİLMİYOR.
+    bildirimGoster((dugme.textContent || "Karar") + " — kuyruğa bırakıldı.");
   } catch (e) {
     kutular.forEach((b) => (b.disabled = false));
     const eski = kart.querySelector(".redd");
@@ -1262,9 +1502,26 @@ function detayCiz(d) {
   p.append(m);
 
   // "En son neden reddedildi" — gerekçeler kartın kendi geçmişinden.
+  p.append(izZamanCizelgesiKur(d.history));
+
+  // "Kodda ne değişti" — devredilen commit'in diff özeti.
+  p.append(kodDegisikligiKur(d.diff));
+
+  ust.append(p);
+  return ust;
+}
+
+/**
+ * "Kartın izi" zaman çizelgesi — DEVIR.md'nin sağ panel Kart modunda da
+ * istediği aynı blok (c-20261105-d500f1), bu yüzden eski üst üste gelen
+ * detay panelinden (detayCiz) ÇIKARILDI: iki yerde aynı anlamı taşıyan iki
+ * ayrı kopya, AJAN_AYRAC'ın kendi yorumunun uyardığı kusur sınıfı olurdu.
+ * Çıkarma davranışı DEĞİŞTİRMİYOR — detayCiz'in ürettiği DOM BİREBİR AYNI.
+ */
+function izZamanCizelgesiKur(history) {
   const iz = el("div", "kutu");
   iz.append(el("div", "eyebrow", "Kartın izi"));
-  d.history.forEach((h, i) => {
+  history.forEach((h, i) => {
     const satir = el("div", "iz");
     satir.style.marginTop = i === 0 ? "10px" : "0";
     satir.append(el("div", "t", h.at.slice(11, 19)));
@@ -1272,7 +1529,7 @@ function detayCiz(d) {
     const nokta = el("i");
     nokta.style.background = IZ_RENK[h.event] || "var(--accent)";
     rail.append(nokta);
-    if (i < d.history.length - 1) rail.append(el("s"));
+    if (i < history.length - 1) rail.append(el("s"));
     satir.append(rail);
     const gov = el("div", "gov");
     const bas = el("div");
@@ -1299,35 +1556,37 @@ function detayCiz(d) {
     satir.append(gov);
     iz.append(satir);
   });
-  p.append(iz);
+  return iz;
+}
 
-  // "Kodda ne değişti" — devredilen commit'in diff özeti.
+/**
+ * "Kodda ne değişti" — devredilen commit'in diff özeti. izZamanCizelgesiKur
+ * gibi detayCiz'den ÇIKARILDI, sağ panelin Kart modu AYNI bloğu kullanıyor.
+ */
+function kodDegisikligiKur(diff) {
   const kod = el("div", "kutu");
   kod.append(el("div", "eyebrow", "Kodda ne değişti"));
-  if (!d.diff) {
+  if (!diff) {
     kod.append(el("div", "empty", "Bu kart için commit kaydı yok."));
-  } else {
-    kod.append(el("div", "cid", d.diff.commit));
-    const enBuyuk = Math.max(1, ...d.diff.files.map((f) => f.add + f.del));
-    d.diff.files.forEach((f) => {
-      const satir = el("div", "dosya");
-      satir.append(el("div", "p", f.path));
-      satir.append(el("div", "a", "+" + f.add));
-      satir.append(el("div", "d", "-" + f.del));
-      const c = el("div", "cizgi");
-      const ekle = el("i");
-      ekle.style.cssText = "background:var(--accept);width:" + (90 * f.add / enBuyuk) + "px";
-      const sil = el("i");
-      sil.style.cssText = "background:var(--reject);opacity:.55;width:" + (90 * f.del / enBuyuk) + "px";
-      c.append(ekle, sil);
-      satir.append(c);
-      kod.append(satir);
-    });
+    return kod;
   }
-  p.append(kod);
-
-  ust.append(p);
-  return ust;
+  kod.append(el("div", "cid", diff.commit));
+  const enBuyuk = Math.max(1, ...diff.files.map((f) => f.add + f.del));
+  diff.files.forEach((f) => {
+    const satir = el("div", "dosya");
+    satir.append(el("div", "p", f.path));
+    satir.append(el("div", "a", "+" + f.add));
+    satir.append(el("div", "d", "-" + f.del));
+    const c = el("div", "cizgi");
+    const ekle = el("i");
+    ekle.style.cssText = "background:var(--accept);width:" + (90 * f.add / enBuyuk) + "px";
+    const sil = el("i");
+    sil.style.cssText = "background:var(--reject);opacity:.55;width:" + (90 * f.del / enBuyuk) + "px";
+    c.append(ekle, sil);
+    satir.append(c);
+    kod.append(satir);
+  });
+  return kod;
 }
 
 function kapat() {
@@ -1657,6 +1916,11 @@ function ciz(m) {
   board.replaceChildren(formasyonSvgKur(m));
 
   document.getElementById("lejant").replaceChildren(lejantKur(m));
+
+  // SAĞ PANEL — kart c-20261105-d500f1. formasyonSvgKur gibi HER
+  // ÇAĞRIDA RAIL'in o anki moduna göre yeniden doluyor (Kart modu
+  // kendi FETCH korumasını kendi taşıyor, bkz. sagPanelCiz).
+  sagPanelCiz(m);
 }
 
 /**
@@ -2064,9 +2328,58 @@ function formasyonEtiketKur(rol, i, konum) {
   return g;
 }
 
-// Seçili rol (yalnızca GÖRSEL — sağ panel henüz kurulmadı, bkz. DEVIR.md
-// "Rol düğümü ... seçilince accent-100 zemin + 2px accent kenar").
-let FORMASYON_SECILI = null;
+/**
+ * SAĞ PANEL — durum geçişleri (kart c-20261105-d500f1).
+ *
+ * SAF (DOM yok): hangi moda/role/karta geçileceği kararı burada, çizim
+ * ayrı (bkz. sagPanelCiz/railGenelBakisCiz/railRolCiz/railKartCiz). Adı ve
+ * alanları ("rail {mode, id, from}") DEVIR.md'nin State Management
+ * bölümünden — "id" burada rolId/cardId olarak ikiye ayrıldı, çünkü Kart
+ * modu RolId'yi de taşımak zorunda (geri dönüş "Rol"e mi "Genel bakış"a mı
+ * gidecek, bkz. "geri" dalı).
+ *
+ * Kararı DOM'dan ayırmak onu fonksiyon() ile DOĞRUDAN çağrılan, mutasyon
+ * sınamasına açık bir birim yapıyor (page.test.ts) — gerçek tarayıcı
+ * gerektirmeyen bir karar, bu dosyadaki kapiCikislari/rolKonumu ile
+ * AYNI ilke.
+ */
+function railGecis(rail, eylem) {
+  const GENEL_BAKIS = { mode: "overview", roleId: null, cardId: null, cardFrom: "overview" };
+  if (eylem.tur === "genelBakis") return GENEL_BAKIS;
+  if (eylem.tur === "rolSec") {
+    // Zaten TAM O ROLÜN KENDİSİ açıkken (Rol modu, AYNI id) tıklamak
+    // kapatır — formasyon düğümünün eski "toggle" davranışıyla AYNI. Kart
+    // modundayken (örn. o rolün bir kartına bakılırken) aynı role
+    // tıklamak KAPATMAZ, Rol moduna GEÇER: "&&" burada "||" olsaydı Kart
+    // modunda da (roleId eşleşiyor diye) tek tıkla Genel bakışa düşülürdü.
+    if (rail.mode === "role" && rail.roleId === eylem.rolId) return GENEL_BAKIS;
+    return { mode: "role", roleId: eylem.rolId, cardId: null, cardFrom: "overview" };
+  }
+  if (eylem.tur === "kartAcGenel") {
+    return { mode: "card", roleId: null, cardId: eylem.kartId, cardFrom: "overview" };
+  }
+  if (eylem.tur === "kartAcRol") {
+    return { mode: "card", roleId: eylem.rolId, cardId: eylem.kartId, cardFrom: "role" };
+  }
+  if (eylem.tur === "geri") {
+    // Kart "Rol" modundan açıldıysa geri dönüş "Rol"e, roleId KORUNARAK —
+    // aksi hâlde "← Genel bakış" ile aynı hedefe düşer, rol bağlamı
+    // (hangi role bakılıyordu) kaybolurdu.
+    if (rail.mode === "card" && rail.cardFrom === "role") {
+      return { mode: "role", roleId: rail.roleId, cardId: null, cardFrom: "overview" };
+    }
+    return GENEL_BAKIS;
+  }
+  return rail;
+}
+
+let RAIL = { mode: "overview", roleId: null, cardId: null, cardFrom: "overview" };
+
+/** ciz()'i SON_MODEL varsa çağırır — RAIL geçişlerinin tekrarlayan kuyruğu. */
+function railYenidenCiz() {
+  if (SON_MODEL) ciz(SON_MODEL);
+}
+
 // "showArcs" (DEVIR.md: "ret yayları ... 'showArcs' ile gizlenebilir").
 // skein-merkez-v3.html'de bu da "animate" gibi dışarıdan verilen bir
 // bayrak (this.props.showArcs ?? true), ekranın kendi panelinde bir
@@ -2210,7 +2523,11 @@ function formasyonSvgKur(m) {
   roller.forEach((rol, i) => {
     const p = konumlar[i];
     const rolKartlari = m.cards.filter((c) => c.role === rol.id && c.state !== "done" && !c.orphan);
-    const secili = FORMASYON_SECILI === rol.id;
+    // Düğüm "seçili" sayılır RAIL.roleId bu role eşitse — Rol modunda VE
+    // o rolün bir kartına (Kart modu, cardFrom "role") bakarken AYNI:
+    // rolden içeri girilince düğüm Genel bakışa dönülene kadar vurgulu
+    // kalır (bkz. railGecis).
+    const secili = RAIL.roleId === rol.id;
     const g = sv("g", {
       class: "formasyonDugum" + (secili ? " secili" : ""),
       "data-rol": rol.id,
@@ -2249,7 +2566,7 @@ function formasyonSvgKur(m) {
     g.append(formasyonEtiketKur(rol, i, p));
 
     const secimDegistir = () => {
-      FORMASYON_SECILI = FORMASYON_SECILI === rol.id ? null : rol.id;
+      RAIL = railGecis(RAIL, { tur: "rolSec", rolId: rol.id });
       ciz(m);
     };
     g.addEventListener("click", secimDegistir);
@@ -2281,6 +2598,308 @@ function lejantKur(m) {
     "okundu " + new Date(m.at).toLocaleTimeString("tr-TR") +
     " · durum .skein/ ve olaylar.jsonl'dan okunuyor · değişiklik yalnızca düğmelerle"));
   return kutu;
+}
+
+// --- Sağ panel (kart c-20261105-d500f1) ---
+//
+// DEVIR.md "Sağ panel modları": Genel bakış / Rol / Kart. Gözcü ve Rolleri
+// düzenle modları (4 ve 5) bu kartın KAPSAMINDA DEĞİL — onlar hâlâ #bar'daki
+// gözcü düğmesi ve "Akışı düzenle" (#akis hash'i) üzerinden, ESKİDEN
+// OLDUĞU GİBİ. RAIL/railGecis YUKARIDA (formasyonSvgKur'dan önce) tanımlı.
+
+/**
+ * SAĞ PANEL — "Uçuşta" listesi VE Rol modunun kart listesi için ortak
+ * satır: 10px kare + başlık + tek satırlık alt bilgi (DEVIR.md). Kare
+ * rengi kareDurumu'ndan (aynı karar formasyon düğümünün kart kareleriyle
+ * PAYLAŞILIYOR) — bu satırın rengi diyagramdakiyle AYRIŞAMAZ.
+ */
+function railKartSatiri(c, altBilgi, tiklaCb) {
+  const satir = el("div", "railSatir");
+  satir.tabIndex = 0;
+  satir.setAttribute("role", "button");
+  satir.setAttribute("aria-label", c.title + " — detay");
+  satir.append(el("span", "kare " + kareDurumu(c)));
+  const govde = el("div", "railSatirGovde");
+  govde.append(el("div", "railSatirBaslik", c.title));
+  govde.append(el("div", "railSatirAlt", altBilgi));
+  satir.append(govde);
+  satir.addEventListener("click", tiklaCb);
+  satir.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); tiklaCb(); } });
+  return satir;
+}
+
+/**
+ * SAĞ PANEL — kapı kartının gövdesi: üst etiket + (varsa) başlık düğmesi +
+ * gerekçe + çıkışlar. Genel bakışın kapı kartı VE Kart modunun kapı kutusu
+ * AYNI kutuyu kullanıyor (DEVIR.md ikisinde de "accent-100 kutu, üstte 4px
+ * accent çizgi" diyor); başlık düğmesi yalnızca Genel bakışta var — Kart
+ * modunda başlık zaten kartın kendi h2'si, ikinci bir başlık YİNELEMEZ.
+ *
+ * Çıkışlar MEVCUT kapiCikislari/karar/kapatKart mantığıyla BİREBİR AYNI —
+ * bu fonksiyon yeni bir karar kümesi İCAT ETMİYOR, var olanı yeni bir
+ * kutuya TAŞIYOR (kart c-20261105-d500f1'in şartı tam bu).
+ */
+function railKapiKutu(c, baslikTikla) {
+  const kapi = kapiCikislari(c.gate, c.planKilidi, c.geriHedef);
+  const kutu = el("div", "railKapiKutu");
+  kutu.append(el("div", "railKapiEtiket", kapi.etiket + " · " + c.role));
+
+  if (baslikTikla) {
+    const b = el("button", "railBaslikBtn", c.title);
+    b.type = "button";
+    b.addEventListener("click", (e) => { e.stopPropagation(); baslikTikla(); });
+    kutu.append(b);
+  }
+
+  // GEREKÇE — TAŞINACAK: ajanın ham metni gerekceKur ile katlanabilir bir
+  // details'a TAM olarak yazılıyor; ".railGerekce .reason" kuralı
+  // (yukarıda) yalnızca GÖRÜNÜMÜ 3 satıra kırpıyor, DOM'dan hiçbir şey
+  // SİLİNMİYOR.
+  const gerekceSarmal = el("div", "railGerekce");
+  if (c.gateReason) gerekceKur(gerekceSarmal, c.gateReason);
+  kutu.append(gerekceSarmal);
+
+  const cikis = el("div", "railCikis");
+  kapi.dugmeler.forEach(([ad, secim], i) => {
+    const b = el("button", "railBtn" + (i === 0 ? " primary" : ""), ad);
+    b.type = "button";
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      void karar(c.id, secim, b, kutu);
+    });
+    cikis.append(b);
+  });
+  kutu.append(cikis);
+  return kutu;
+}
+
+/**
+ * MOD 1 — Genel bakış: kapıda bekleyen kart sayısı + her kapı kartı,
+ * altında "Uçuşta" listesi (DEVIR.md).
+ */
+function railGenelBakisCiz(kutu, m) {
+  kutu.replaceChildren();
+
+  const kapidakiler = m.cards.filter((c) => Boolean(c.gate));
+  const sayiSatiri = el("div", "railSayiSatiri");
+  sayiSatiri.append(el("div", "railSayi", String(kapidakiler.length)));
+  sayiSatiri.append(el("div", "railSayiAciklama", "kart kararını bekliyor"));
+  kutu.append(sayiSatiri);
+
+  kapidakiler.forEach((c) => {
+    kutu.append(railKapiKutu(c, () => {
+      RAIL = railGecis(RAIL, { tur: "kartAcGenel", kartId: c.id });
+      railYenidenCiz();
+    }));
+  });
+
+  const ucustakiler = m.cards.filter((c) => c.state === "active");
+  kutu.append(el("div", "railAraBaslik", "Uçuşta · " + ucustakiler.length));
+  if (ucustakiler.length === 0) {
+    kutu.append(el("div", "railBos", "şu an çalışan kart yok"));
+  } else {
+    ucustakiler.forEach((c) => {
+      const adim = c.live ? (c.live.name || c.live.kind) : null;
+      kutu.append(railKartSatiri(c, c.role + (adim ? " · " + adim : ""), () => {
+        RAIL = railGecis(RAIL, { tur: "kartAcGenel", kartId: c.id });
+        railYenidenCiz();
+      }));
+    });
+  }
+}
+
+/**
+ * MOD 2 — Rol: "← Genel bakış" + üst bilgi + meta satırı + iki düğme +
+ * roldeki kartların listesi (DEVIR.md).
+ *
+ * "Prompt" düğmesi hash'i "prompt"a çevirip PROMPT_SEC'i o rolün dosyasına
+ * önceden set ediyor — promptAc() (hashOku'nun "prompt" dalı) PROMPT_SEC
+ * zaten geçerli bir yolsa onu AYNEN kullanıyor (bkz. promptAc: "PROMPTLAR.some
+ * (...)" kontrolü), yani bu buton promptSec'i AYRICA çağırıp bir YARIŞ
+ * (promptAc henüz /promptlar'ı okumadan promptSec'in boş listeyle
+ * çizmesi) açmıyor. Bu "Promptlar" SEKMESİNİ değil, ÇALIŞAN prompt
+ * düzenleyiciyi (#prompt overlay) açıyor — DEVIR.md'nin tarif ettiği
+ * "Promptlar sekmesi" bugün yer tutucu (bkz. #icerikPromptlar), o yüzden
+ * düğme var olan GERÇEK yeteneğe yönleniyor, olmayan bir sekmeye değil.
+ *
+ * "Ajanı izle →" düğmesi de aynı dürüstlük kuralına uyuyor: Ajanlar
+ * sekmesi bugün sabit bir yer tutucu, rol SEÇME yeteneği yok. Düğme yalnız
+ * sekmeyi açtığını vaat ediyor (gerçekten de açar) — rolü oradan
+ * "izleyeceğini" vaat ETMİYOR, çünkü o yetenek henüz YOK. Varsayım açık:
+ * bu düğmenin "o rolü seçili açması" ayrı bir karta kalıyor.
+ */
+function railRolCiz(kutu, m, rolId) {
+  kutu.replaceChildren();
+
+  // "← Genel bakış" ÖNCE kuruluyor, meta bulunamasa bile: akış rol
+  // silinecek şekilde değişirse (Rol modu açıkken) kullanıcı GERİ DÖNECEK
+  // bir yol olmadan kilitli kalmamalı — DEVIR.md'nin "yapamayacağı şeyi
+  // vaat eden düğme" sınıfının TERSİ bir kusur, düğmenin KENDİSİ hiç
+  // çıkmaması.
+  const geri = el("button", "railGeri", "← Genel bakış");
+  geri.type = "button";
+  geri.addEventListener("click", () => {
+    RAIL = railGecis(RAIL, { tur: "genelBakis" });
+    railYenidenCiz();
+  });
+  kutu.append(geri);
+
+  const meta = railRolMeta(m, rolId);
+  if (!meta) {
+    kutu.append(el("div", "railBos", "rol bulunamadı — akış değişmiş olabilir"));
+    return;
+  }
+
+  kutu.append(el("div", "railUst", "rol " + meta.no + (meta.oncu ? " · öncü" : "")));
+  kutu.append(el("h2", "railRolBaslik", meta.id));
+
+  const metaSatir = el("div", "railRolMeta");
+  metaSatir.append(el("span", null, meta.provider));
+  metaSatir.append(el("span", null, meta.workspace));
+  metaSatir.append(el("span", null, "sonraki: " + meta.sonrakiRol));
+  metaSatir.append(el("span", null, "ret: " + (meta.retHedefi || "yok")));
+  metaSatir.append(el("span", null, meta.receive === "batch" ? "toplu alım" : "tekil alım"));
+  kutu.append(metaSatir);
+
+  const dugmeler = el("div", "railRolDugmeler");
+  const promptBtn = el("button", "railBtn", "Prompt · " + meta.prompt);
+  promptBtn.type = "button";
+  promptBtn.addEventListener("click", () => {
+    PROMPT_SEC = meta.prompt;
+    location.hash = "prompt";
+  });
+  dugmeler.append(promptBtn);
+  const ajanBtn = el("button", "railBtn", "Ajanı izle →");
+  ajanBtn.type = "button";
+  ajanBtn.addEventListener("click", () => { location.hash = "ajanlar"; });
+  dugmeler.append(ajanBtn);
+  kutu.append(dugmeler);
+
+  const rolKartlari = m.cards.filter((c) => c.role === rolId && c.state !== "done" && !c.orphan);
+  kutu.append(el("div", "railAraBaslik", "kartlar · " + rolKartlari.length));
+  if (rolKartlari.length === 0) {
+    const rol = m.roles.find((r) => r.id === rolId);
+    kutu.append(el("div", "railBos", rol ? bosRolMetni(rol, rolKartlari) : "kuyrukta kart yok"));
+  } else {
+    rolKartlari.forEach((c) => {
+      const durum = c.gate ? kapiCikislari(c.gate, c.planKilidi, c.geriHedef).etiket
+        : c.state === "active" ? "çalışıyor" : "kuyrukta";
+      kutu.append(railKartSatiri(c, durum, () => {
+        RAIL = railGecis(RAIL, { tur: "kartAcRol", rolId, kartId: c.id });
+        railYenidenCiz();
+      }));
+    });
+  }
+}
+
+/**
+ * MOD 3 — Kart: geri düğmesi + durum etiketi, başlık, meta, (varsa) kapı
+ * kutusu ya da son ret gerekçesi, canlı adım, "Kartın izi" ve "Kodda ne
+ * değişti" (DEVIR.md). d, GET /kart/<id>'in döndürdüğü UiDetail.
+ *
+ * izZamanCizelgesiKur/kodDegisikligiKur eski detayCiz'den ÇIKARILDI
+ * (bkz. yukarıda) — bu iki blok BİREBİR AYNI, iki yerde yeniden
+ * YAZILMIYOR.
+ */
+function railKartCiz(kutu, d) {
+  kutu.replaceChildren();
+  const c = d.card;
+
+  const ustSatir = el("div", "railKartUst");
+  const geri = el("button", "railGeri", "←");
+  geri.type = "button";
+  geri.setAttribute("aria-label", "geri");
+  geri.addEventListener("click", () => {
+    RAIL = railGecis(RAIL, { tur: "geri" });
+    railYenidenCiz();
+  });
+  ustSatir.append(geri);
+  const durumMetni = c.gate ? kapiCikislari(c.gate, c.planKilidi, c.geriHedef).etiket
+    : c.state === "active" ? "çalışıyor" : c.state === "done" ? "bitti" : "kuyrukta";
+  ustSatir.append(el("span", "railDurumEtiket", durumMetni));
+  kutu.append(ustSatir);
+
+  kutu.append(el("h2", "railKartBaslik", c.title));
+  kutu.append(el("div", "railKartMeta2", c.id + " · " + c.role));
+
+  const meta = el("div", "meta");
+  if (c.rejects > 0) meta.append(el("span", "bad", c.rejects + " ret"));
+  meta.append(el("span", null, c.turns + " tur"));
+  if (c.durationMs) meta.append(el("span", null, sure(c.durationMs)));
+  if (c.costUsd || c.olculmeyen) {
+    meta.append(el("span", c.olculmeyen ? "bad" : null, maliyetMetni(c.costUsd, c.olculmeyen, c.tokens)));
+  }
+  kutu.append(meta);
+
+  if (c.gate) {
+    kutu.append(railKapiKutu(c, null));
+  } else if (c.lastReject && c.state !== "done") {
+    kutu.append(el("div", "railRetBlok", c.lastReject));
+  }
+
+  if (c.live) {
+    const s = el("div", "step");
+    s.append(el("b", "mono", c.live.name || c.live.kind));
+    s.append(el("span", "path", c.live.detail || ""));
+    s.append(el("span", "seq", "adım " + c.live.seq));
+    kutu.append(s);
+  }
+
+  kutu.append(izZamanCizelgesiKur(d.history));
+  kutu.append(kodDegisikligiKur(d.diff));
+}
+
+/**
+ * Kart modu bir FETCH gerektiriyor ("Kartın izi"/"Kodda ne değişti" UiCard
+ * üzerinde yok, yalnızca GET /kart/<id>'in UiDetail'inde). sagPanelCiz
+ * aynı id için bunu BİR KEZ çağırıyor (bkz. "data-rail-kart" koruması) —
+ * yoksa her saniyelik yoklama (yokla/ciz) kartı yeniden yükler, panel her
+ * saniye "yükleniyor…"ya döner ve kaydırma konumu kaybolurdu.
+ */
+async function railKartYukle(kutu, id) {
+  kutu.replaceChildren(el("div", "railBos", "yükleniyor…"));
+  try {
+    const cevap = await fetch("/kart/" + encodeURIComponent(id), { cache: "no-store" });
+    const d = await cevap.json();
+    if (!cevap.ok) throw new Error(d.hata || cevap.status);
+    // RAIL fetch sürerken BAŞKA bir karta/moda geçmiş olabilir — bayat
+    // cevabı eskimiş bir isteğin üstüne YAZMIYORUZ.
+    if (RAIL.mode !== "card" || RAIL.cardId !== id) return;
+    railKartCiz(kutu, d);
+  } catch (e) {
+    if (RAIL.mode !== "card" || RAIL.cardId !== id) return;
+    kutu.replaceChildren(el("div", "err", "Kart okunamadı: " + e.message));
+  }
+}
+
+/**
+ * Kart modunun FETCH kararı — SAF. "gösterilenId" panelin o an taşıdığı
+ * data-rail-kart değeri (henüz hiç yüklenmediyse undefined), "hedefId"
+ * RAIL.cardId. Eşitlerse YENİDEN YÜKLEME YOK — sagPanelCiz'in her saniye
+ * çağrılması Kart modunu "yükleniyor…"ya döndürmesin diye (bkz.
+ * railKartYukle yorumu).
+ */
+function railYenidenYuklenmeliMi(gosterilenId, hedefId) {
+  return gosterilenId !== hedefId;
+}
+
+/** Sağ paneli RAIL'in o anki moduna göre doldurur — ciz()'in her çağrısında. */
+function sagPanelCiz(m) {
+  const kutu = document.getElementById("sagPanel");
+  if (!kutu) return;
+  if (RAIL.mode !== "card") kutu.removeAttribute("data-rail-kart");
+  if (RAIL.mode === "role") {
+    railRolCiz(kutu, m, RAIL.roleId);
+    return;
+  }
+  if (RAIL.mode === "card") {
+    if (railYenidenYuklenmeliMi(kutu.dataset.railKart, RAIL.cardId)) {
+      kutu.dataset.railKart = RAIL.cardId;
+      void railKartYukle(kutu, RAIL.cardId);
+    }
+    return;
+  }
+  railGenelBakisCiz(kutu, m);
 }
 
 /**

@@ -72,10 +72,16 @@ type El = {
   /** Yalnızca akış düzenleyicisinin 'change' dinleyicisini elle tetiklemek
    * için — bkz. "Ham YAML" sınaması: 'fill' yalnızca 'input' yayıyor. */
   dispatchEvent: (e: unknown) => void;
+  /** Yalnızca `<details>` öğesinde var — bkz. sağ panelin kapı gerekçesi sınaması. */
+  open?: boolean;
+  /** Yalnızca `<textarea>` değerini okumak için — bkz. "Prompt" düğmesi sınaması. */
+  value?: string;
 };
 declare const document: {
   querySelector: (s: string) => El | null;
   querySelectorAll: (s: string) => ArrayLike<El>;
+  /** Yalnızca bildirim ve "Rol kaybolursa" sınamaları için. */
+  getElementById: (id: string) => El | null;
   body: unknown;
 };
 /** Yalnızca 'change' olayını elle kurup yaymak için — bkz. yukarıdaki not. */
@@ -98,6 +104,15 @@ declare function getComputedStyle(
    * altındaki test (kart c-20261105-6d7f66, reddin gerekçesi). */
   fontFamily: string;
 };
+/**
+ * page.ts'in gömülü betiği MODÜL DEĞİL (düz `<script>`) — üst düzey
+ * `function`/`let` bildirimleri aynı global ortamda görünür. Yalnızca
+ * "Rol modundaki rol kaybolursa" sınaması için: RAIL'i doğrudan kurup
+ * GERÇEK ciz() ile çizdiriyor (bkz. o sınamanın yorumu).
+ */
+declare let RAIL: { mode: string; roleId: string | null; cardId: string | null; cardFrom: string };
+declare let SON_MODEL: unknown;
+declare function ciz(m: unknown): void;
 
 type Tarayici = { newPage: (o?: unknown) => Promise<Sayfa>; close: () => Promise<void> };
 type Sayfa = {
@@ -590,12 +605,24 @@ roles:
    * viewport yüksekliği, iki farklı BEKLENEN genişlik üretiyor.
    */
   it("formasyon genişliği pencere yüksekliğine göre ölçekleniyor", async () => {
-    // Yükseklik 900 → min(1280-32, (900-210)*1.5625) = min(1248, 1078.125).
-    const uzun = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
-    // Yükseklik 500 → min(1280-32, (500-210)*1.5625) = min(1248, 453.125) —
+    // GENİŞLİK 1600 — kart c-20261105-d500f1 (sağ panel) formasyon
+    // alanını .panoGovde içinde sağ panelle (flex 0 1 380px) PAYLAŞTIRDI;
+    // eski 1280 genişlikte "100%" artık 868px'e düşüyor (1248 - 380) ve bu
+    // sınama HEP YÜKSEKLİĞE bağlı kaldığını göstermek isterken yanlışlıkla
+    // GENİŞLİĞE çarpmış olurdu. 1600, .wrap'ın kendi max-width'ini (1500)
+    // doldurur: .wrap 1500 - 32 (yatay dolgu) = 1468 panoGovde içeriği,
+    // formasyonAlan (620 taban + büyüme) = 620 + (1468-1000) = 1088 —
+    // aşağıdaki iki yükseklik formülünün HER İKİSİNDEN de (1078.125 ve
+    // 453.125) BÜYÜK, yani "100%" dalı hâlâ devre dışı ve asıl ölçülen şey
+    // GERÇEKTEN yükseklik formülü. Sayılar bu yüzden sağ panelden ÖNCEKİ
+    // hâliyle AYNEN kalıyor — değişen tek şey viewport genişliği.
+    //
+    // Yükseklik 900 → min(1088, (900-210)*1.5625) = min(1088, 1078.125).
+    const uzun = await (browser as Tarayici).newPage({ viewport: { width: 1600, height: 900 } });
+    // Yükseklik 500 → min(1088, (500-210)*1.5625) = min(1088, 453.125) —
     // burada YÜKSEKLİK sınırlayan taraf, "min(100%, ...)"ın "100%" dalı
     // DEĞİL; iki senaryo birlikte formülün HER İKİ tarafını da sınıyor.
-    const kisa = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 500 } });
+    const kisa = await (browser as Tarayici).newPage({ viewport: { width: 1600, height: 500 } });
     try {
       await uzun.goto(server.url, { waitUntil: "networkidle" });
       await uzun.waitForSelector(".formasyonSarmal svg", { timeout: 15_000 });
@@ -764,20 +791,251 @@ reject:
   });
 
   /**
-   * KAPI GEREKÇESİ OKUNUR SINAMASI BURADAN TAŞINDI (kart c-20261105-2a8dab).
+   * SAĞ PANEL — Genel bakış/Rol/Kart (kart c-20261105-d500f1).
    *
-   * V formasyonu Pano'nun sütun panosunu (.card tabanlı kart kutuları)
-   * kaldırıyor; kapı kartının gerekçesi/katlanabilir ajan mesajı artık
-   * HİÇBİR YERDE çizilmiyor — DEVIR.md'nin sağ paneli (henüz kurulmadı)
-   * bu içeriğin YENİ evi. Kuyruktaki "pano: sağ panel" kartı
-   * (c-20261105-d500f1) bunu AÇIKÇA "TAŞINACAK" olarak işaretliyor: aynı
-   * katlanabilir <details>/kırpmasız metin davranışı sağ panelin kapı
-   * kartında yeniden kurulacak ve bu iki sınama (ilk satır her zaman
-   * görünür + katlı özet metni kırpmıyor) O KARTTA, yeni seçicilerle
-   * geri gelmeli. Burada BIRAKILMADI çünkü artık hiçbir DOM düğümünü
-   * ölçmüyorlardı — yeşil kalan ama hiçbir şey sınamayan bir sınama,
-   * bu depoda kusurun kendisi sayılıyor.
+   * Aşağıdaki iki "kapı gerekçesi" sınaması TAM OLARAK buradan taşınan
+   * sınamalar (bkz. commit 88f68ad): o commit katlanabilir <details>'ı eski
+   * sütun panosunun `.card.gate`'inde kurmuştu; V formasyonu o panoyu
+   * kaldırınca sınamalar "yeşil ama ölçmüyor" hâline düştü ve geçici olarak
+   * buradan silindi (bkz. git tarihi). Burada GERİ GELİYORLAR, YENİ
+   * seçicilerle (`.railKapiKutu`) — davranış (çekirdek cümle hep görünür,
+   * ajan metni katlanır ama KIRPILMAZ) BİREBİR AYNI.
    */
+  describe("sağ panel — Genel bakış / Rol / Kart", () => {
+    it("formasyon düğümüne tıklamak Rol modunu açar; aynı role tekrar tıklamak Genel bakışa döner", async () => {
+      // NOT: tıklama hedefi "g.formasyonDugum"ın KENDİSİ DEĞİL, içindeki
+      // "rect.kutu" — ÖNCEDEN VAR OLAN bir ölçüm tuhaflığı yüzünden (gömülü
+      // kuş <svg>'si bazı tarayıcılarda getBoundingClientRect'te devasa bir
+      // kutu bildiriyor; bu kart ÖNCESİNDEKİ HEAD'de de aynı ölçüldü — bu
+      // kartın kapsamı DEĞİL), Playwright'ın "elementin ortasına tıkla"
+      // stratejisi g'nin TAMAMI için yanlış bir piksele gidip altındaki
+      // #lejant'ı buluyor. "rect.kutu" doğru/küçük bir sınır kutusu
+      // bildiriyor, tıklama orada GÜVENİLİR.
+      const kutu = '.formasyonDugum[data-rol="coder"] rect.kutu';
+      const { page, hatalar } = await ac();
+      try {
+        await page.waitForSelector(kutu, { timeout: 15_000 });
+
+        // BAŞLANGIÇ: Genel bakış — "Uçuşta" başlığı görünür, Rol içeriği yok.
+        await page.waitForSelector(".railSayiSatiri", { timeout: 10_000 });
+        expect(await page.evaluate(() => document.querySelector(".railRolBaslik"))).toBeNull();
+
+        await page.click(kutu);
+        await page.waitForSelector(".railRolBaslik", { timeout: 10_000 });
+        expect(await page.textContent(".railRolBaslik")).toBe("coder");
+        // Düğüm GERÇEKTEN "seçili" sayılıyor (DEVIR.md: accent-100 zemin).
+        expect(await page.evaluate(() =>
+          document.querySelector('.formasyonDugum[data-rol="coder"]')?.classList.contains("secili")))
+          .toBe(true);
+
+        // AYNI role tekrar tıklamak Genel bakışa döner — formasyon
+        // düğümünün eski "toggle" davranışıyla AYNI (bkz. railGecis).
+        await page.click(kutu);
+        await page.waitForSelector(".railSayiSatiri", { timeout: 10_000 });
+        expect(await page.evaluate(() => document.querySelector(".railRolBaslik"))).toBeNull();
+
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+      }
+    }, 60_000);
+
+    /**
+     * ROL MODU — "Prompt" düğmesi GERÇEKTEN çalışan prompt düzenleyiciyi
+     * (#prompt overlay) o rolün DOSYASI SEÇİLİ olarak açıyor. Yarış
+     * endişesi (PROMPT_SEC'in promptAc() /promptlar'ı okumadan önce
+     * ayarlanması) gerçek tarayıcıda yalnızca BURADA ölçülebilir — birim
+     * sınama fetch'i taklit etmez.
+     */
+    it("Rol modunda 'Prompt' düğmesi o rolün dosyasını seçili açar", async () => {
+      const kutu = '.formasyonDugum[data-rol="coder"] rect.kutu';
+      const { page, hatalar } = await ac();
+      try {
+        await page.waitForSelector(kutu, { timeout: 15_000 });
+        await page.click(kutu);
+        await page.waitForSelector(".railRolDugmeler button", { timeout: 10_000 });
+        await page.click('.railRolDugmeler button:has-text("Prompt ·")');
+        await page.waitForSelector(".promptListe button.secili", { timeout: 10_000 });
+        expect(await page.textContent(".promptListe button.secili")).toContain("coder");
+        await page.waitForTimeout(500);
+        const metin = await page.evaluate(() => document.querySelector("#promptMetin")?.value ?? null);
+        expect(metin).toBe("# coder\n");
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+      }
+    }, 60_000);
+
+    /**
+     * KAPI GEREKÇESİ OKUNUR — çekirdeğin cümlesi hep görünür; ajanın ham
+     * (ve burada JSON'a benzeyen) son mesajı KATLANIR ama METNİ KAYBETMEZ.
+     * bkz. commit 88f68ad'in AYNI adlı sınaması — yalnızca seçici değişti.
+     */
+    it("uzun ve JSON'lu gerekçe: ilk satır görünür, tamamı açılabiliyor, açınca metnin tamamı DOM'da", async () => {
+      const cekirdek = "Ajan zaman aşımına uğradı";
+      const ajanKuyruk =
+        '…"stop_reason":null,"stop_sequence":null,"stop_details":null,"usage":' +
+        '{"input_tokens":2,"cache_creation_input_tokens":337,' +
+        '"cache_read_input_tokens":219591,"cache_creation":' +
+        '{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":337},' +
+        '"output_tokens":9,"service_tier":"standard","inference_geo":"global",' +
+        '"speed":"standard"},"input_transformations":[],"diagnostics":null,' +
+        '"context_management":null},"parent_tool_use_id":null,"session_id":' +
+        '"4285ec03-c118-4613-b7a5-c74ca34de154","uuid":' +
+        '"5c473ca0-34b2-451d-a387-9d0b10cbd941","timestamp":' +
+        '"2026-11-03T15:41:29.839Z","request_id":"req_011CggFNLdfTgJLC5gY89p4f"}';
+      const gerekce = `${cekirdek}\n\nAjan şunu söyledi:\n${ajanKuyruk}`;
+
+      await queue.add(newCard({ title: "zaman asimi", task: "iş", topology }));
+      const taken = await al(queue, "coder");
+      await queue.escalate(taken, gerekce);
+
+      const { page, hatalar } = await ac();
+      try {
+        await page.waitForSelector(".railKapiKutu", { timeout: 15_000 });
+
+        // İLK SATIR HER ZAMAN TAM GÖRÜNÜR — ham JSON'un İÇİNDE DEĞİL.
+        expect(await page.textContent(".railKapiKutu .reason")).toBe(cekirdek);
+
+        // KATLANABİLİR, varsayılan KAPALI.
+        expect(await page.evaluate(() => document.querySelector(".railKapiKutu .ajanDetay")?.open))
+          .toBe(false);
+
+        // TIKLAYINCA AÇILIYOR ve metnin TAMAMI DOM'da — KIRPMA YOK: "en
+        // fazla 3 satır" kuralı (DEVIR.md) yalnızca GÖRÜNÜMÜ kırpar.
+        await page.click(".railKapiKutu .ajanDetay summary");
+        expect(await page.textContent(".railKapiKutu .ajanTam")).toBe(ajanKuyruk);
+
+        // JSON'A BENZEYEN kuyruk mono/kaydırmalı blokta.
+        expect(await page.evaluate(() =>
+          document.querySelector(".railKapiKutu .ajanTam")?.classList.contains("mono"))).toBe(true);
+
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+      }
+    }, 60_000);
+
+    it("ajan mesajı taşımayan kapı gerekçesinde katlanabilir blok çıkmıyor", async () => {
+      await queue.add(newCard({ title: "basit kapı", task: "iş", topology }));
+      const taken = await al(queue, "coder");
+      await queue.escalate(taken, "ağaçta işlenmemiş değişiklik var: README.md");
+
+      const { page, hatalar } = await ac();
+      try {
+        await page.waitForSelector(".railKapiKutu", { timeout: 15_000 });
+        expect(await page.textContent(".railKapiKutu .reason"))
+          .toBe("ağaçta işlenmemiş değişiklik var: README.md");
+        expect(await page.evaluate(() => document.querySelector(".railKapiKutu .ajanDetay"))).toBeNull();
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+      }
+    }, 60_000);
+
+    /**
+     * KAPI ÇIKIŞLARI — MEVCUT kapiCikislari/karar mantığıyla BİREBİR AYNI
+     * (kart c-20261105-d500f1'in şartı). Kaçış kapısında geri hedefi
+     * yoksa tek düğme "Yeniden koş" çıkar (bkz. page.test.ts
+     * "kapiCikislari — geri hedefi"); tıklayınca kart kapıdan çıkıyor ve
+     * Genel bakışın sayısı 1'den 0'a düşüyor.
+     */
+    it("kapı kartının çıkış düğmesi karar veriyor; Genel bakışın sayısı güncelleniyor", async () => {
+      await queue.add(newCard({ title: "yeniden denenecek", task: "iş", topology }));
+      const taken = await al(queue, "coder");
+      await queue.escalate(taken, "geçici bir hata");
+
+      const { page, hatalar } = await ac();
+      try {
+        await page.waitForSelector(".railKapiKutu", { timeout: 15_000 });
+        expect(await page.textContent(".railSayi")).toBe("1");
+
+        await page.click('.railKapiKutu .railCikis button:has-text("Yeniden koş")');
+        await page.waitForSelector(".railKapiKutu", { state: "detached", timeout: 10_000 });
+        expect(await page.textContent(".railSayi")).toBe("0");
+
+        // BİLDİRİM — DEVIR.md "Interactions & Behavior": her çıkış kısa bir
+        // bildirim gösterir; düğmenin kendi etiketini taşır, 3.4 sn sonra
+        // kendiliğinden kapanır.
+        expect(await page.evaluate(() => document.getElementById("bildirim")?.classList.contains("gorunur")))
+          .toBe(true);
+        expect(await page.textContent("#bildirim")).toBe("Yeniden koş — kuyruğa bırakıldı.");
+        await page.waitForTimeout(3700);
+        expect(await page.evaluate(() => document.getElementById("bildirim")?.classList.contains("gorunur")))
+          .toBe(false);
+
+        const guncel = await queue.get(taken.id);
+        expect(guncel?.state).not.toBe("gate");
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+      }
+    }, 60_000);
+
+    /**
+     * KART MODU — başlık düğmesine tıklamak Kart moduna geçer, "←"
+     * Genel bakışa döner. "Kartın izi"/"Kodda ne değişti" blokları eski
+     * detay panelinden (detayCiz) ÇIKARILAN AYNI fonksiyonlar (bkz.
+     * izZamanCizelgesiKur/kodDegisikligiKur), o yüzden burada yalnızca
+     * VARLIKLARI sınanıyor — içerikleri model.test.ts/eski detay
+     * sınamalarında zaten doğrulanmıştı.
+     */
+    it("kapı kartının başlığına tıklamak Kart moduna geçer; '←' Genel bakışa döner", async () => {
+      await queue.add(newCard({ title: "detaya bakılacak kart", task: "iş", topology }));
+      const taken = await al(queue, "coder");
+      await queue.escalate(taken, "elle bakılmalı");
+
+      const { page, hatalar } = await ac();
+      try {
+        await page.waitForSelector(".railBaslikBtn", { timeout: 15_000 });
+        await page.click(".railBaslikBtn");
+        await page.waitForSelector(".railKartBaslik", { timeout: 10_000 });
+        expect(await page.textContent(".railKartBaslik")).toBe("detaya bakılacak kart");
+        await page.waitForSelector(".kutu .eyebrow", { timeout: 10_000 });
+        // Kart modunun kapı kutusunda başlık düğmesi YOK — başlık zaten
+        // kartın kendi h2'si, railKapiKutu'ya baslikTikla=null geçiyor
+        // (bkz. railKartCiz). İkinci bir başlık YİNELEMEMELİ.
+        expect(await page.evaluate(() => document.querySelectorAll(".railBaslikBtn").length)).toBe(0);
+
+        await page.click(".railGeri");
+        await page.waitForSelector(".railSayiSatiri", { timeout: 10_000 });
+        expect(await page.evaluate(() => document.querySelector(".railKartBaslik"))).toBeNull();
+
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+      }
+    }, 60_000);
+
+    /**
+     * KİLİTLENME KORUMASI — Rol modu açıkken AKIŞ DEĞİŞİP o rol
+     * kaybolursa (akış dosyası elle düzenlenir, gözcü/ekran yeniden
+     * taramadan önce RAIL hâlâ eski role işaret eder) "← Genel bakış"
+     * yine de ÇIKMALI. Gerçekte bu durumu BİREBİR tetiklemek bir dosya
+     * düzenlemesi + yoklama zamanlaması gerektirir ve kırılgan olurdu; bu
+     * sınama RAIL'i doğrudan kurup SAME GERÇEK ciz() ile çiziyor — modül
+     * tip betik olduğu için üst düzey `function`/`let` bildirimleri aynı
+     * global ortamda GÖRÜNÜR, `page.evaluate` onlara çıplak adla erişebilir.
+     */
+    it("Rol modundaki rol kaybolursa 'rol bulunamadı' ile BİRLİKTE 'Genel bakış' düğmesi kalır", async () => {
+      const { page, hatalar } = await ac();
+      try {
+        await page.waitForSelector(".railSayiSatiri", { timeout: 15_000 });
+        await page.evaluate(() => {
+          RAIL = { mode: "role", roleId: "hayalet-rol", cardId: null, cardFrom: "overview" };
+          ciz(SON_MODEL);
+        });
+        await page.waitForSelector(".railBos", { timeout: 10_000 });
+        expect(await page.textContent(".railBos")).toContain("rol bulunamadı");
+        // Kilit YOK: düğme hâlâ orada ve tıklanınca Genel bakışa döner.
+        await page.click(".railGeri");
+        await page.waitForSelector(".railSayiSatiri", { timeout: 10_000 });
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+      }
+    }, 60_000);
+  });
 
   /**
    * KUŞ İŞARETİ — bardaki marka SVG'si GERÇEKTEN görünür ve her iki temada

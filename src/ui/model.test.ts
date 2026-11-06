@@ -137,6 +137,18 @@ describe("buildModel — pano", () => {
     expect(model.roles[1]?.depth).toBe(0);
   });
 
+  /**
+   * SAĞ PANEL — "Rol" modu meta satırı (DEVIR.md: "sağlayıcı, çalışma
+   * alanı, ... toplu alım") buradan okuyor. `receive` belirtilmemiş rol
+   * `"task"`'a düşer (load.ts'in kendi varsayılanı) — ekran YENİ bir
+   * varsayılan icat ETMİYOR, topolojinin verdiğini aynen taşıyor.
+   */
+  it("rolün prompt yolunu ve alım türünü taşır", async () => {
+    const model = await buildModel(base);
+    expect(model.roles[0]).toMatchObject({ id: "coder", prompt: "roles/coder.prompt", receive: "task" });
+    expect(model.roles[1]).toMatchObject({ id: "reviewer", prompt: "roles/reviewer.prompt", receive: "batch" });
+  });
+
   it("kartın yeri DİZİNDEN okunur", async () => {
     const card = await put();
     await al(queue, "coder");
