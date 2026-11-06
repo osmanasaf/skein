@@ -15,7 +15,7 @@ import { LAYER_MARK } from "../prompt/assemble.js";
 import { spawnPortable } from "../proc/process.js";
 import { liveLock } from "../watch/lock.js";
 import { snapshot, type TopologySnapshot } from "../flow/snapshot.js";
-import { buildDetail, buildModel, type DetailOptions, type UiModel } from "./model.js";
+import { buildDetail, buildModel, buildSteps, type DetailOptions, type UiModel } from "./model.js";
 import { renderPage } from "./page.js";
 
 /** Ekranın baktığı akışın yaşayan hâli. */
@@ -466,6 +466,9 @@ function yetkili(
  *   GET  /prompt?yol=...      bir prompt dosyasının metni
  *   POST /prompt/yaz          prompt dosyasını YENİDEN YAZAR
  *   POST /rol/yeni            YENİ bir rolü promptuyla BİRLİKTE, ATOMİK ekler
+ *   GET  /adimlar?kart=...    kartın güncel aktivasyonunun TAM adım izi
+ *                             (DEVIR.md §6, Ajanlar sekmesi — GERÇEKTEN
+ *                             yeni uç, bkz. tasarim/SAPMALAR.md §3)
  *
  * Yazan uç noktalar KOMUT gönderiyor: yüzey kendi kopyasını
  * güncellemiyor, `queue.release()` çağırıyor ve cevabı çekirdeğin ürettiği
@@ -1269,6 +1272,51 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
         res.writeHead(500, { "content-type": "application/json; charset=utf-8" });
         res.end(JSON.stringify({ hata: (error as Error).message }));
       });
+      return;
+    }
+
+    /**
+     * AJANLAR SEKMESİNİN GERÇEKTEN YENİ UCU — DEVIR.md §6, tasarim/
+     * SAPMALAR.md §3 ("ajan adım akışı": tasarımın istediği üç uçtan
+     * ikisi zaten vardı, bu üçüncüsü yoktu).
+     *
+     * `/kart/<id>`'den BİLEREK AYRI: o `buildDetail` üstünden `git show
+     * --numstat` çalıştırıyor (diff özeti için) — SANİYELİK bir yoklamada
+     * bunu tekrarlamak pahalı olurdu. Bu uç yalnızca olay günlüğünü okuyor
+     * (`buildSteps`, model.ts), Ajanlar panelinin "canlı" görünümü bunu
+     * her saniye isteyebilir.
+     *
+     * OKUMA UCU — ama diğer okuma uçları gibi (yukarıdaki `if (req.method
+     * !== "GET")` bloğunun İÇİNDE) hâlâ `bizeMiGeldi`'nin DNS rebinding
+     * kapısından geçiyor: bu fonksiyonun EN BAŞINDA, her istekte koşan o
+     * denetim buradan da ATLANAMAZ — yeni bir uç eklemek onu AYRICA
+     * çağırmayı GEREKTİRMİYOR, zaten her yolun üstünde duruyor.
+     */
+    if (path === "/adimlar") {
+      const id = queryParam(req, "kart");
+      if (id === "") {
+        res.writeHead(400, { "content-type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ hata: "`kart` parametresi gerekli." }));
+        return;
+      }
+      guncel().then((o) => buildSteps(o, id)).then(
+        (adimlar) => {
+          if (adimlar === null) {
+            res.writeHead(404, { "content-type": "application/json; charset=utf-8" });
+            res.end(JSON.stringify({ hata: `Kart yok: ${id}` }));
+            return;
+          }
+          res.writeHead(200, {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "no-store",
+          });
+          res.end(JSON.stringify({ adimlar }));
+        },
+        (error: unknown) => {
+          res.writeHead(500, { "content-type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ hata: (error as Error).message }));
+        },
+      );
       return;
     }
 

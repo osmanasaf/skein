@@ -8,6 +8,7 @@ import { readFile } from "node:fs/promises";
 import { acquireLock } from "../watch/lock.js";
 import { newCard, type Card } from "../card/card.js";
 import { CardQueue } from "../card/queue.js";
+import { EventLog } from "../events/log.js";
 import { loadFlow, type Flow } from "../flow/load.js";
 import { LiveFlow } from "../flow/live.js";
 import type { FlowDraft } from "../flow/draft.js";
@@ -108,6 +109,63 @@ describe("serveUi", () => {
 
   it("bilinmeyen yol 404", async () => {
     expect((await fetch(`${server.url}yok`)).status).toBe(404);
+  });
+
+  /**
+   * `GET /adimlar` — Ajanlar sekmesinin GERÇEKTEN yeni ucu (DEVIR.md §6,
+   * tasarim/SAPMALAR.md §3). `/kart/<id>`in UzunDetail'inden BİLEREK
+   * AYRI: bu uç `git show` çalıştırmıyor, yalnızca olay günlüğünü okuyor —
+   * Ajanlar panelinin saniyelik yoklaması pahalı bir diff hesabı taşımamalı.
+   */
+  describe("GET /adimlar", () => {
+    it("`kart` parametresi yoksa 400", async () => {
+      expect((await fetch(`${server.url}adimlar`)).status).toBe(400);
+    });
+
+    it("olmayan kart 404", async () => {
+      expect((await fetch(`${server.url}adimlar?kart=c-yok`)).status).toBe(404);
+    });
+
+    it("kartın güncel aktivasyonunun adımlarını ARTAN sırada verir", async () => {
+      const card = await queue.add(newCard({ title: "jitter", task: "iş", topology }));
+      await al(queue, "coder");
+      const log = new EventLog(join(root, ".skein", "olaylar.jsonl"), "kosu-1");
+      await log.append({
+        type: "agent.started", cell: `${card.id}:coder`, role: "coder",
+        provider: "claude", model: "m", promptHash: "h",
+      });
+      await log.append({
+        type: "agent.step", cell: `${card.id}:coder`, role: "coder",
+        seq: 1, kind: "tool", name: "Read", detail: "src/retry.ts",
+      });
+      await log.append({
+        type: "agent.step", cell: `${card.id}:coder`, role: "coder",
+        seq: 2, kind: "tool", name: "Bash", detail: "npx vitest run",
+      });
+
+      const res = await fetch(`${server.url}adimlar?kart=${card.id}`);
+      const veri = (await res.json()) as { adimlar: { seq: number; name: string | null }[] };
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get("cache-control")).toContain("no-store");
+      expect(veri.adimlar.map((a) => a.name)).toEqual(["Read", "Bash"]);
+    });
+
+    it("bitmiş aktivasyonda boş liste verir — bitmiş bir turun adımı 'şu an' değildir", async () => {
+      const card = await queue.add(newCard({ title: "jitter", task: "iş", topology }));
+      await al(queue, "coder");
+      const log = new EventLog(join(root, ".skein", "olaylar.jsonl"), "kosu-1");
+      await log.append({
+        type: "agent.started", cell: `${card.id}:coder`, role: "coder",
+        provider: "claude", model: "m", promptHash: "h",
+      });
+      await log.append({ type: "agent.step", cell: `${card.id}:coder`, role: "coder", seq: 1, kind: "tool", name: "Read" });
+      await log.append({ type: "agent.finished", cell: `${card.id}:coder`, exitCode: 0, durationMs: 1 });
+
+      const res = await fetch(`${server.url}adimlar?kart=${card.id}`);
+      const veri = (await res.json()) as { adimlar: unknown[] };
+      expect(veri.adimlar).toEqual([]);
+    });
   });
 
   // Bozuk bir kart dosyası ekranı çökertmemeli.
@@ -1547,7 +1605,10 @@ describe("adres kapıları", () => {
   // yeniden bağlanırsa onun sayfası bizimle aynı kaynak sayılır. Jeton
   // yalnızca YAZMAYI koruyordu — ve `GET /` jetonu veriyordu.
   it("yabancı Host ile okuma uçları kapalı", async () => {
-    for (const yol of ["/", "/durum"]) {
+    // "/adimlar" (Ajanlar sekmesinin GERÇEKTEN yeni ucu, DEVIR.md §6)
+    // BURADA: okuma ucu olması bu denetimden MUAF tutmuyor —
+    // tasarim/SAPMALAR.md §3'ün "taşınacak" notu tam bunu söylüyor.
+    for (const yol of ["/", "/durum", "/adimlar?kart=x"]) {
       const res = await hamIstek(yol, `kotu.example:${server.port}`);
       expect(res.status).toBe(403);
     }

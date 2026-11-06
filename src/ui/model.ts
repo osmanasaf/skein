@@ -500,30 +500,76 @@ function lastGateReason(card: Card): string | null {
 }
 
 /**
- * Koşan ajanın son adımı.
+ * Son aktivasyonun (en son `agent.started`'dan bu yana) TAM adım izi —
+ * Ajanlar sekmesinin "Adımlar" listesi (DEVIR.md §6, kart c-20261105-d304ed)
+ * bunu istiyor: `lastStep` SADECE sonuncuyu veriyordu, pano kartının tek
+ * satırlık "canlı adım" bilgisi için yeterliydi ama bu liste TÜM izi
+ * gösteriyor.
  *
- * Bitmiş bir hücrenin adımı "şu an" değildir: `agent.finished` gördükten
- * sonraki adımlar yalnızca YENİ bir turun adımları olabilir, o yüzden son
- * `agent.started`'dan sonrasına bakılır.
+ * Pencere `lastStep` ile AYNI ilkeyi taşıyor — ve KASITLI OLARAK aynı
+ * "bitince boşalır" kuralını da: `agent.finished` görülürse bu aktivasyon
+ * artık "şu an" değildir, boş dizi dönüyor. İki ayrı kural yazmak (biri
+ * burada biri `lastStep`'te) ileride birbirinden SESSİZCE AYRIŞABİLİRDİ —
+ * bu depodaki en sık tekrar eden kusur sınıfı; `lastStep` bu yüzden bu
+ * fonksiyonun ÜZERİNE kuruluyor, aşağıda.
+ *
+ * Sıra ARTAN (seq 1'den, günlüğe yazılış sırasıyla) — Ajanlar ekranı
+ * "en yenisi en üstte" göstermek istiyorsa bunu TERSİNE çeviren taraf
+ * istemci (bkz. page.ts ajanAdimlariCiz), burada İKİNCİ bir sıralama
+ * kuralı İCAT EDİLMİYOR.
  */
-function lastStep(events: SkeinEvent[]): UiStep | null {
+export function activationSteps(events: SkeinEvent[]): UiStep[] {
   let from = 0;
   for (const [i, event] of events.entries()) {
     if (event.type === "agent.started") from = i;
   }
-  let step: UiStep | null = null;
+  const steps: UiStep[] = [];
   for (const event of events.slice(from)) {
-    if (event.type === "agent.finished") return null;
+    if (event.type === "agent.finished") return [];
     if (event.type !== "agent.step") continue;
-    step = {
+    steps.push({
       seq: event.seq,
       kind: event.kind,
       name: event.name ?? null,
       detail: event.detail ?? null,
       at: event.at,
-    };
+    });
   }
-  return step;
+  return steps;
+}
+
+/**
+ * Koşan ajanın son adımı — `activationSteps`in SONUNCUSU. Boş aktivasyon
+ * (hiç bitmemiş ya da bitmiş) `null`e eşit: bu iki fonksiyonun "canlı"
+ * tanımı AYNI kaynaktan geliyor, pano kartının tek satırı ile Ajanlar
+ * sekmesinin tam listesi birbirinden SAPAMAZ.
+ */
+function lastStep(events: SkeinEvent[]): UiStep | null {
+  const steps = activationSteps(events);
+  return steps.length === 0 ? null : (steps[steps.length - 1] ?? null);
+}
+
+/**
+ * Bir kartın GÜNCEL aktivasyonunun tam adım izi — Ajanlar sekmesinin
+ * GERÇEKTEN yeni uç noktası (`GET /adimlar?kart=`, bkz. server.ts).
+ *
+ * `buildDetail`'den BİLEREK ayrı: o `git show --numstat` çalıştırıyor
+ * (diff özeti için) ve bunu SANİYELİK bir yoklamada tekrarlamak pahalı
+ * olurdu. Bu fonksiyon yalnızca olay günlüğünü okuyor — Ajanlar panelinin
+ * "canlı" görünümü bunu her saniye isteyebilir.
+ *
+ * Kart yoksa `null` — `buildDetail`'in "kart yok" ayrımıyla AYNI, çağıran
+ * (server.ts) bunu 404'e çeviriyor.
+ */
+export async function buildSteps(options: BuildOptions, id: string): Promise<UiStep[] | null> {
+  const card = await options.queue.get(id);
+  if (card === null) return null;
+  const { events } = await readEvents(options.logPath ?? join(options.root, ".skein", "olaylar.jsonl"));
+  const mine = events.filter((event) => {
+    const cell = (event as { cell?: unknown }).cell;
+    return typeof cell === "string" && cardOf(cell) === id;
+  });
+  return activationSteps(mine);
 }
 
 /** Kartın detay görünümü: tam iz + devredilen commit'in diff özeti. */

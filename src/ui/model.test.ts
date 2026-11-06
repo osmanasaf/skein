@@ -11,7 +11,7 @@ import { loadFlow } from "../flow/load.js";
 import { snapshot, type TopologySnapshot } from "../flow/snapshot.js";
 import { acquireLock } from "../watch/lock.js";
 import { tick } from "../watch/tick.js";
-import { buildDetail, buildModel, type BuildOptions } from "./model.js";
+import { activationSteps, buildDetail, buildModel, buildSteps, type BuildOptions } from "./model.js";
 
 const FLOW = `
 name: test
@@ -929,5 +929,143 @@ describe("tick → model — engel sözleşmesi", () => {
     expect(m.engeller[0]?.code).not.toBe("?");
     expect(m.engeller[0]?.code).not.toBe("ENOENT");
     expect(m.engeller[0]?.message).not.toBe("");
+  });
+});
+
+/**
+ * `activationSteps` — Ajanlar sekmesinin "Adımlar" listesi (DEVIR.md §6,
+ * kart c-20261105-d304ed). SAF: olay dizisi veriliyor, DOM/disk yok.
+ *
+ * `lastStep`in ("buildModel — canlı adım" takımı, yukarıda) AYNI pencere
+ * kuralını paylaştığı için burada o takımı TEKRARLAMIYORUZ — yalnızca
+ * `lastStep`in GÖREMEDİĞİ şeyi sınıyoruz: TAM listeyi ve pencereleme
+ * mantığının (önceki aktivasyonun adımlarının sızmaması) kendisini.
+ */
+/** `bench/ab.test.ts`'in `ev()` yardımcısıyla AYNI desen: zorunlu zarf alanları (v/at/runId) tek yerde. */
+const ev = (e: Record<string, unknown>, at = "2026-01-01T00:00:00.000Z") =>
+  ({ v: 1, at, runId: "r1", ...e }) as never;
+
+describe("activationSteps", () => {
+  it("boş günlükte boş dizi döner", () => {
+    expect(activationSteps([])).toEqual([]);
+  });
+
+  it("son agent.started'dan sonraki adımları ARTAN sırayla verir", () => {
+    const olaylar = [
+      ev({ type: "agent.started", cell: "c-1:coder", role: "coder" }),
+      ev({ type: "agent.step", cell: "c-1:coder", role: "coder", seq: 1, kind: "tool", name: "Read", detail: "a.ts" }, "10:00"),
+      ev({ type: "agent.step", cell: "c-1:coder", role: "coder", seq: 2, kind: "tool", name: "Edit", detail: "a.ts" }, "10:01"),
+    ];
+    expect(activationSteps(olaylar)).toEqual([
+      { seq: 1, kind: "tool", name: "Read", detail: "a.ts", at: "10:00" },
+      { seq: 2, kind: "tool", name: "Edit", detail: "a.ts", at: "10:01" },
+    ]);
+  });
+
+  it("bitmiş aktivasyon boş dizi döner — bitmiş bir turun adımı 'şu an' değildir", () => {
+    const olaylar = [
+      ev({ type: "agent.started", cell: "c-1:coder", role: "coder" }),
+      ev({ type: "agent.step", cell: "c-1:coder", role: "coder", seq: 1, kind: "tool", name: "Read" }),
+      ev({ type: "agent.finished", cell: "c-1:coder", exitCode: 0, durationMs: 1 }),
+    ];
+    expect(activationSteps(olaylar)).toEqual([]);
+  });
+
+  /**
+   * PENCERELEME — en kritik karar noktası: `from` yanlış hesaplansa önceki
+   * (BİTMİŞ) aktivasyonun adımları YENİ aktivasyonun listesine sızar ve
+   * operatör eski bir Bash komutunu "şu an koşuyor" sanır.
+   */
+  it("önceki (bitmiş) aktivasyonun adımları yeni aktivasyona sızmaz", () => {
+    const olaylar = [
+      ev({ type: "agent.started", cell: "c-1:coder", role: "coder" }),
+      ev({ type: "agent.step", cell: "c-1:coder", role: "coder", seq: 1, kind: "tool", name: "ESKİ" }),
+      ev({ type: "agent.finished", cell: "c-1:coder", exitCode: 1, durationMs: 1 }),
+      ev({ type: "agent.started", cell: "c-1:coder", role: "coder" }),
+      ev({ type: "agent.step", cell: "c-1:coder", role: "coder", seq: 1, kind: "tool", name: "YENİ" }),
+    ];
+    const adimlar = activationSteps(olaylar);
+    expect(adimlar).toHaveLength(1);
+    expect(adimlar[0]?.name).toBe("YENİ");
+  });
+
+  it("'text' türündeki adımları da (araç adı olmadan) taşır", () => {
+    const olaylar = [
+      ev({ type: "agent.started", cell: "c-1:coder", role: "coder" }),
+      ev({ type: "agent.step", cell: "c-1:coder", role: "coder", seq: 1, kind: "text" }, "10:05"),
+    ];
+    expect(activationSteps(olaylar)).toEqual([{ seq: 1, kind: "text", name: null, detail: null, at: "10:05" }]);
+  });
+});
+
+/**
+ * `buildSteps` — `GET /adimlar?kart=`in model tarafı (server.ts). Kart
+ * `buildDetail` gibi `queue.get` ile aranıyor, ama `git show` çalıştıran
+ * diff okuması YOK — bu uç SANİYELİK yoklamaya açık, pahalı bir yan iş
+ * taşımamalı.
+ */
+describe("buildSteps", () => {
+  it("kart yoksa null döner", async () => {
+    expect(await buildSteps(base, "c-yok")).toBeNull();
+  });
+
+  it("kartın güncel aktivasyonunun adımlarını artan sırada döner", async () => {
+    const card = await put();
+    await al(queue, "coder");
+    const log = new EventLog(logPath, "kosu-1");
+    await log.append({
+      type: "agent.started", cell: `${card.id}:coder`, role: "coder",
+      provider: "claude", model: "m", promptHash: "h",
+    });
+    await log.append({
+      type: "agent.step", cell: `${card.id}:coder`, role: "coder",
+      seq: 1, kind: "tool", name: "Read", detail: "src/retry.ts",
+    });
+    await log.append({
+      type: "agent.step", cell: `${card.id}:coder`, role: "coder",
+      seq: 2, kind: "tool", name: "Bash", detail: "npx vitest run",
+    });
+
+    const adimlar = await buildSteps(base, card.id);
+
+    expect(adimlar).toHaveLength(2);
+    expect(adimlar?.[0]).toMatchObject({ seq: 1, name: "Read" });
+    expect(adimlar?.[1]).toMatchObject({ seq: 2, name: "Bash", detail: "npx vitest run" });
+  });
+
+  it("bitmiş aktivasyonda boş dizi döner", async () => {
+    const card = await put();
+    await al(queue, "coder");
+    const log = new EventLog(logPath, "kosu-1");
+    await log.append({
+      type: "agent.started", cell: `${card.id}:coder`, role: "coder",
+      provider: "claude", model: "m", promptHash: "h",
+    });
+    await log.append({ type: "agent.step", cell: `${card.id}:coder`, role: "coder", seq: 1, kind: "tool", name: "Read" });
+    await log.append({ type: "agent.finished", cell: `${card.id}:coder`, exitCode: 0, durationMs: 1 });
+
+    expect(await buildSteps(base, card.id)).toEqual([]);
+  });
+
+  it("başka kartın adımlarını SIZDIRMAZ — olaylar hücreden kart kimliğine ayrıştırılır", async () => {
+    const birinci = await put("bir");
+    const ikinci = await put("iki");
+    await al(queue, "coder");
+    await al(queue, "coder");
+    const log = new EventLog(logPath, "kosu-1");
+    await log.append({
+      type: "agent.started", cell: `${birinci.id}:coder`, role: "coder",
+      provider: "claude", model: "m", promptHash: "h",
+    });
+    await log.append({ type: "agent.step", cell: `${birinci.id}:coder`, role: "coder", seq: 1, kind: "tool", name: "BİRİNCİ" });
+    await log.append({
+      type: "agent.started", cell: `${ikinci.id}:coder`, role: "coder",
+      provider: "claude", model: "m", promptHash: "h",
+    });
+    await log.append({ type: "agent.step", cell: `${ikinci.id}:coder`, role: "coder", seq: 1, kind: "tool", name: "İKİNCİ" });
+
+    const birininAdimlari = await buildSteps(base, birinci.id);
+    expect(birininAdimlari).toHaveLength(1);
+    expect(birininAdimlari?.[0]?.name).toBe("BİRİNCİ");
   });
 });
