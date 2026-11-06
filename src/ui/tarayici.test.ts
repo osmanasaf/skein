@@ -803,12 +803,14 @@ roles:
       await page.goto(s.url, { waitUntil: "networkidle" });
       await page.waitForSelector("#bar .pill", { timeout: 15_000 });
       await page.click('button:has-text("Promptları düzenle")');
-      await page.waitForSelector(".promptListe button", { timeout: 10_000 });
-      // İki dosya listelenir (anayasa:1, rol:coder); rol dosyasını seçiyoruz.
-      await page.click('.promptListe button:has-text("rol:coder")');
+      await page.waitForSelector(".promptlarOge", { timeout: 10_000 });
+      // İki dosya listelenir (anayasa dosyası, coder'ın rol promptu); rol
+      // dosyasını seçiyoruz — liste artık etiketi değil, uzantısız dosya
+      // adını gösteriyor (bkz. dosyaAdiKisa, page.ts).
+      await page.click('.promptlarOge:has-text("coder")');
       await page.waitForTimeout(500);
-      await page.fill("#promptMetin", "# coder\ntarayıcıdan değişti\n");
-      await page.click("#promptKaydet");
+      await page.fill("#promptlarMetin", "# coder\ntarayıcıdan değişti\n");
+      await page.click("#promptlarKaydet");
       await page.waitForTimeout(500);
 
       // İDDİA sunucunun söylediği değil, DİSKTE GERÇEKTEN ne olduğu.
@@ -848,8 +850,8 @@ roles:
       await page.goto(s.url, { waitUntil: "networkidle" });
       await page.waitForSelector("#bar .pill", { timeout: 15_000 });
       await page.click('button:has-text("Promptları düzenle")');
-      await page.waitForSelector('button:has-text("Yeni rol")', { timeout: 10_000 });
-      await page.click('button:has-text("Yeni rol")');
+      await page.waitForSelector('button:has-text("Yeni rol promptu")', { timeout: 10_000 });
+      await page.click('button:has-text("Yeni rol promptu")');
       await page.waitForSelector("#yeniRolId", { timeout: 10_000 });
 
       await page.fill("#yeniRolId", "reviewer");
@@ -871,6 +873,114 @@ roles:
       expect(yaml).toContain("id: reviewer");
       const promptMetni = await readFile(join(root, "roles", "reviewer.md"), "utf8");
       expect(promptMetni).toContain("Rolün: reviewer");
+      expect(hatalar).toEqual([]);
+    } finally {
+      await page.close();
+      await s.close();
+    }
+  }, 60_000);
+
+  /**
+   * BİRDEN FAZLA DOSYA AYNI ANDA KİRLİ KALABİLİYOR — gerçek tarayıcıda.
+   *
+   * `promptlarMetniGetir` (page.ts) bir dosyanın metnini ZATEN YÜKLÜYSE
+   * YENİDEN OKUMUYOR — bu YARIŞ/EZME riski (disk'ten tekrar okumak
+   * operatörün elle yazdığını SESSİZCE EZER) yalnızca GERÇEK tarayıcıda,
+   * GERÇEK seçim değişimiyle ölçülebilir; birim sınama fetch'i taklit
+   * etmez. Aynı turda nav rozetinin (kaç dosya kirli) ve "Geri al"ın da
+   * doğru çalıştığı doğrulanıyor.
+   */
+  it("bir dosyayı düzenleyip BAŞKA dosyaya geçmek ilk dosyanın taslağını KAYBETMEZ", async () => {
+    const live = await LiveFlow.open(join(root, "hub", "flows", "test.yaml"), {
+      root, providers: knownProviderSet(),
+    });
+    const s = await serveUi({
+      root, queue, topology, flowName: "test", flowHash: live.flow.hash, live,
+      flowPath: live.flow.path,
+      loadOptions: { root, providers: knownProviderSet() },
+    });
+
+    const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+    const hatalar: string[] = [];
+    page.on("pageerror", (e) => hatalar.push(String(e)));
+    try {
+      await page.goto(s.url, { waitUntil: "networkidle" });
+      await page.waitForSelector("#bar .pill", { timeout: 15_000 });
+      await page.click('button:has-text("Promptları düzenle")');
+      await page.waitForSelector(".promptlarOge", { timeout: 10_000 });
+
+      // "coder" dosyasını seç, DEĞİŞTİR — ama KAYDETME.
+      await page.click('.promptlarOge:has-text("coder")');
+      await page.waitForTimeout(300);
+      await page.fill("#promptlarMetin", "# coder\nkaydedilmemiş taslak\n");
+
+      // Rozet ("promptlar" nav sekmesi) 1 kirli dosya göstermeli.
+      expect(await page.textContent('.navSekme[data-sekme="promptlar"] .navRozet')).toBe("1");
+
+      // ŞİMDİ "base" (anayasa) dosyasına geç ve ONU DA değiştir.
+      await page.click('.promptlarOge:has-text("base")');
+      await page.waitForTimeout(300);
+      await page.fill("#promptlarMetin", "# Anayasa\nbu da değişti\n");
+      expect(await page.textContent('.navSekme[data-sekme="promptlar"] .navRozet')).toBe("2");
+
+      // GERİ "coder"a dön — İLK taslak SESSİZCE EZİLMEMİŞ olmalı.
+      await page.click('.promptlarOge:has-text("coder")');
+      await page.waitForTimeout(300);
+      const coderMetni = await page.evaluate(() => document.querySelector("#promptlarMetin")?.value ?? null);
+      expect(coderMetni).toBe("# coder\nkaydedilmemiş taslak\n");
+
+      // "Geri al" SADECE o an seçili (coder) dosyayı eski hâline döndürür;
+      // "base" taslağı ETKİLENMEMELİ — rozet 2'den 1'e düşer, SIFIRA değil.
+      await page.click("#promptlarGeriAl");
+      await page.waitForTimeout(300);
+      const geriAlinmisMetin = await page.evaluate(() =>
+        document.querySelector("#promptlarMetin")?.value ?? null);
+      expect(geriAlinmisMetin).toBe("# coder\n");
+      expect(await page.textContent('.navSekme[data-sekme="promptlar"] .navRozet')).toBe("1");
+
+      // DİSKTE HİÇBİR ŞEY DEĞİŞMEDİ — bu tur hiç "Kaydet"e basmadı.
+      expect(await readFile(join(root, "roles", "coder.prompt"), "utf8")).toBe("# coder\n");
+      expect(await readFile(join(root, "hub", "prompts", "base.md"), "utf8")).toBe("# Anayasa\n");
+      expect(hatalar).toEqual([]);
+    } finally {
+      await page.close();
+      await s.close();
+    }
+  }, 60_000);
+
+  /**
+   * "KULLANAN" ETİKETİNE TIKLAMAK O ROLÜ PANODA AÇAR — DEVIR.md §5.
+   * RAIL geçişi (railGecis "rolSec") GERÇEK bir tarayıcıda, GERÇEK bir
+   * tıklamayla ölçülüyor — promptlarKullananTikla'nın hash'i boşaltıp
+   * Rol modunu açtığını birim sınama kanıtlayamaz (hash değişimi ve
+   * sagPanelCiz'in yeniden çizimi gerçek DOM'a bağlı).
+   */
+  it("'Kullanan' etiketine tıklamak o rolü Pano'da Rol modunda açar", async () => {
+    const live = await LiveFlow.open(join(root, "hub", "flows", "test.yaml"), {
+      root, providers: knownProviderSet(),
+    });
+    const s = await serveUi({
+      root, queue, topology, flowName: "test", flowHash: live.flow.hash, live,
+      flowPath: live.flow.path,
+      loadOptions: { root, providers: knownProviderSet() },
+    });
+
+    const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+    const hatalar: string[] = [];
+    page.on("pageerror", (e) => hatalar.push(String(e)));
+    try {
+      await page.goto(s.url, { waitUntil: "networkidle" });
+      await page.waitForSelector("#bar .pill", { timeout: 15_000 });
+      await page.click('button:has-text("Promptları düzenle")');
+      await page.waitForSelector(".promptlarOge", { timeout: 10_000 });
+      await page.click('.promptlarOge:has-text("coder")');
+      await page.waitForSelector('.promptlarKullananEtiket:has-text("coder")', { timeout: 10_000 });
+
+      await page.click('.promptlarKullananEtiket:has-text("coder")');
+
+      // Hash boşalmış (Pano'ya dönülmüş) ve Rol modu AÇIK olmalı.
+      await page.waitForSelector(".railRolBaslik", { timeout: 10_000 });
+      expect(await page.textContent(".railRolBaslik")).toBe("coder");
       expect(hatalar).toEqual([]);
     } finally {
       await page.close();
@@ -1125,11 +1235,11 @@ reject:
     }, 60_000);
 
     /**
-     * ROL MODU — "Prompt" düğmesi GERÇEKTEN çalışan prompt düzenleyiciyi
-     * (#prompt overlay) o rolün DOSYASI SEÇİLİ olarak açıyor. Yarış
-     * endişesi (PROMPT_SEC'in promptAc() /promptlar'ı okumadan önce
-     * ayarlanması) gerçek tarayıcıda yalnızca BURADA ölçülebilir — birim
-     * sınama fetch'i taklit etmez.
+     * ROL MODU — "Prompt" düğmesi GERÇEKTEN çalışan Promptlar sekmesini
+     * (bkz. promptlarEkraniCiz, page.ts) o rolün DOSYASI SEÇİLİ olarak
+     * açıyor. Yarış endişesi (PROMPT_SEC'in promptlarEkraniCiz()
+     * /promptlar'ı okumadan önce ayarlanması) gerçek tarayıcıda yalnızca
+     * BURADA ölçülebilir — birim sınama fetch'i taklit etmez.
      */
     it("Rol modunda 'Prompt' düğmesi o rolün dosyasını seçili açar", async () => {
       const kutu = '.formasyonDugum[data-rol="coder"] rect.kutu';
@@ -1139,10 +1249,10 @@ reject:
         await page.click(kutu);
         await page.waitForSelector(".railRolDugmeler button", { timeout: 10_000 });
         await page.click('.railRolDugmeler button:has-text("Prompt ·")');
-        await page.waitForSelector(".promptListe button.secili", { timeout: 10_000 });
-        expect(await page.textContent(".promptListe button.secili")).toContain("coder");
+        await page.waitForSelector(".promptlarOge-secili", { timeout: 10_000 });
+        expect(await page.textContent(".promptlarOge-secili")).toContain("coder");
         await page.waitForTimeout(500);
-        const metin = await page.evaluate(() => document.querySelector("#promptMetin")?.value ?? null);
+        const metin = await page.evaluate(() => document.querySelector("#promptlarMetin")?.value ?? null);
         expect(metin).toBe("# coder\n");
         expect(hatalar).toEqual([]);
       } finally {

@@ -242,6 +242,20 @@ const CIFTLER: [string, string, string, Esik][] = [
     "color-neutral-900",
     NORMAL_METIN_ESIGI,
   ],
+
+  // --- Promptlar sekmesi (DEVIR.md §5) ---
+  // "Kaydedilmemiş değişiklik" işareti accent dolgulu 8px bir kare,
+  // SEÇİLİ (accent-100 zemin) bir öğenin üstünde de görünür olmak
+  // zorunda. İkisi de hiçbir temada EZİLMEDİĞİ için (color-accent ve
+  // color-accent-100'ün dark-mode ezmesi YOK, bkz. page.ts) oran
+  // tema-değişmez: 3.84:1, IKINCIL_ETIKET_ESIGI'yi (3, küçük grafik
+  // işaret) geçiyor.
+  [
+    "Promptlar sekmesi — kaydedilmemiş taslak işareti, seçili öğenin accent-100 zemini üstünde",
+    "color-accent",
+    "color-accent-100",
+    IKINCIL_ETIKET_ESIGI,
+  ],
 ];
 
 describe("token kontrastı — açık tema", () => {

@@ -1708,3 +1708,288 @@ describe("yeniAkisGecerliMi — 'Oluştur ve düzenle' düğmesinin etkinlik kar
     expect(gecerli("Yeni Akis", ["test"])).toBe(false);
   });
 });
+
+// --- Promptlar sekmesi (DEVIR.md §5) ---
+
+type Prompt = { etiket: string; yol: string };
+type OzetDraft = { constitution: string[]; roles: { id: string; prompt: string }[] };
+type Ozet = { ad: string; draft: OzetDraft | null };
+
+/**
+ * FLOWGORELIYOLKOKECEVIR — AKISLAR_OZET'in draft'ları FLOW DOSYASININ
+ * KENDİ DİZİNİNE göre relatif (bkz. flow/draft.ts fromFlow 'goreli'),
+ * /promptlar'ın listesi KÖK-RELATİF. Bu fonksiyon ikisini AYNI tabana
+ * getiriyor — yanlış çevrilirse promptKullananListesi AYNI dosyayı
+ * "kullanılmıyor" sayar (bkz. onun kendi sınamaları, altta).
+ */
+describe("flowGoreliYolKokeCevir — flow-relatif yolu KÖK-relatife çevirir", () => {
+  const cevir = (goreli: string): string =>
+    fonksiyon<(g: string) => string>(renderPage("t"), "flowGoreliYolKokeCevir")(goreli);
+
+  it("'../' ile dizin yukarı çıkan yolu doğru çözer", () => {
+    expect(cevir("../prompts/constitution/base.md")).toBe("hub/prompts/constitution/base.md");
+  });
+
+  it("'./' önekli (flow dizininin kendi içindeki) yolu doğru çözer", () => {
+    expect(cevir("./coder.md")).toBe("hub/flows/coder.md");
+  });
+
+  // ÖNEK YOKSA (fromFlow'un 'goreli'si "." ile başlamayan her yola "./"
+  // ekler, ama bu fonksiyon öneksiz bir girdiyi de ÇÖKMEDEN çözmeli) —
+  // "pop yerine push" ya da ayraç hatası burada YAKALANIR.
+  it("önek olmadan da (iki üst dizine çıkma) doğru çözer", () => {
+    expect(cevir("../../roles/coder.prompt")).toBe("roles/coder.prompt");
+  });
+});
+
+describe("dosyaAdiKisa — uzantısız kısa dosya adı", () => {
+  const ad = (yol: string): string => fonksiyon<(y: string) => string>(renderPage("t"), "dosyaAdiKisa")(yol);
+
+  it("yolun son parçasından uzantıyı KALDIRIR", () => {
+    expect(ad("hub/prompts/roles/coder.md")).toBe("coder");
+  });
+
+  it("tireli dosya adında SON noktadan keser, ortadaki tireyi KORUR", () => {
+    expect(ad("hub/prompts/constitution/engineering-ts.md")).toBe("engineering-ts");
+  });
+
+  it("uzantısı yoksa yolun son parçasını AYNEN döner", () => {
+    expect(ad("coder")).toBe("coder");
+  });
+});
+
+/**
+ * PROMPTKULLANANLISTESI — "Kullanan" satırı + kullanım sayısının
+ * KAYNAĞI (DEVIR.md §5). flowGoreliYolKokeCevir'e bağlı,
+ * 'fonksiyonlar' ile BİRLİKTE çıkarılıyor.
+ */
+describe("promptKullananListesi — bir prompt dosyasının kullanıcıları", () => {
+  const kullananlar = (p: Prompt[], o: Ozet[], aktifAd: string, yol: string) =>
+    fonksiyonlar<(p: Prompt[], o: Ozet[], a: string, y: string) => { akis: string; rol: string | null }[]>(
+      renderPage("t"), ["flowGoreliYolKokeCevir", "promptKullananListesi"], "promptKullananListesi",
+    )(p, o, aktifAd, yol);
+
+  const promptlar: Prompt[] = [
+    { etiket: "anayasa:1", yol: "hub/prompts/constitution/base.md" },
+    { etiket: "rol:coder", yol: "hub/prompts/roles/coder.md" },
+  ];
+
+  it("AKTİF akışta rol promptu kullanılıyorsa {akis, rol} döner", () => {
+    expect(kullananlar(promptlar, [], "ab-planli", "hub/prompts/roles/coder.md"))
+      .toEqual([{ akis: "ab-planli", rol: "coder" }]);
+  });
+
+  it("AKTİF akışta anayasa dosyası kullanılıyorsa rol NULL döner (tüm rollere veriliyor)", () => {
+    expect(kullananlar(promptlar, [], "ab-planli", "hub/prompts/constitution/base.md"))
+      .toEqual([{ akis: "ab-planli", rol: null }]);
+  });
+
+  // AKISLAR_OZET'TEKİ AKTİF AKIŞ GİRDİSİ ATLANIYOR: 'promptlar'dan ZATEN
+  // sayıldı. Bu dal YANLIŞ olsaydı sonuç [coder, coder] (iki kez) olurdu.
+  it("AKISLAR_OZET'te AKTİF akış da varsa İKİ KEZ saymaz", () => {
+    const ozet: Ozet[] = [
+      {
+        ad: "ab-planli",
+        draft: { constitution: [], roles: [{ id: "coder", prompt: "../prompts/roles/coder.md" }] },
+      },
+    ];
+    expect(kullananlar(promptlar, ozet, "ab-planli", "hub/prompts/roles/coder.md"))
+      .toEqual([{ akis: "ab-planli", rol: "coder" }]);
+  });
+
+  // flow-relatif yol (AKISLAR_OZET'in draft'ı) KÖK-relatife ÇEVRİLEREK
+  // karşılaştırılıyor — çevrilmeseydi bu DİĞER akış hiç bulunamazdı.
+  it("DİĞER bir akış AYNI dosyayı (flow-relatif yazılmış) kullanıyorsa da bulur", () => {
+    const ozet: Ozet[] = [
+      { ad: "baska-akis", draft: { constitution: [], roles: [{ id: "reviewer", prompt: "../prompts/roles/coder.md" }] } },
+    ];
+    expect(kullananlar(promptlar, ozet, "ab-planli", "hub/prompts/roles/coder.md"))
+      .toEqual([{ akis: "ab-planli", rol: "coder" }, { akis: "baska-akis", rol: "reviewer" }]);
+  });
+
+  it("DİĞER bir akış AYNI anayasa dosyasını kullanıyorsa rol NULL olarak eklenir", () => {
+    const ozet: Ozet[] = [
+      { ad: "baska-akis", draft: { constitution: ["../prompts/constitution/base.md"], roles: [] } },
+    ];
+    expect(kullananlar(promptlar, ozet, "ab-planli", "hub/prompts/constitution/base.md"))
+      .toEqual([{ akis: "ab-planli", rol: null }, { akis: "baska-akis", rol: null }]);
+  });
+
+  // BOZUK AKIŞ (draft: null, bkz. akisOzetiYukle, server.ts) ÇÖKMEDEN
+  // atlanıyor — "bir akışın bozulması listenin GERİ KALANINI göstermeyi
+  // engellememeli" ilkesinin bu ekrandaki karşılığı.
+  it("draft'ı null olan (bozuk) bir akış çökmeden atlanır", () => {
+    const ozet: Ozet[] = [{ ad: "bozuk", draft: null }];
+    expect(kullananlar(promptlar, ozet, "ab-planli", "hub/prompts/roles/coder.md"))
+      .toEqual([{ akis: "ab-planli", rol: "coder" }]);
+  });
+
+  it("hiçbir akış kullanmıyorsa boş dizi döner", () => {
+    expect(kullananlar(promptlar, [], "ab-planli", "hub/prompts/roles/baska.md")).toEqual([]);
+  });
+});
+
+describe("promptKullanimSayisi — 'N rol · M akış' sayımı", () => {
+  const sayi = (liste: { akis: string; rol: string | null }[]) =>
+    fonksiyon<(l: { akis: string; rol: string | null }[]) => { rol: number; akis: number }>(
+      renderPage("t"), "promptKullanimSayisi",
+    )(liste);
+
+  it("rol SAYISINI rolü null OLMAYANLARDAN sayar", () => {
+    expect(sayi([{ akis: "a", rol: "coder" }, { akis: "a", rol: null }])).toEqual({ rol: 1, akis: 1 });
+  });
+
+  // AYNI akış İKİ KEZ geçse de (iki rol aynı dosyayı kullanıyor) akış
+  // sayısı BİR kalmalı — Set burada YANLIŞ bir diziye (push) dönseydi bu
+  // sınama YAKALARDI.
+  it("akış sayısını TEKİL akış adlarından sayar (aynı akışta iki rol → 1 akış)", () => {
+    expect(sayi([{ akis: "a", rol: "coder" }, { akis: "a", rol: "reviewer" }])).toEqual({ rol: 2, akis: 1 });
+  });
+
+  it("boş listede ikisi de sıfır", () => {
+    expect(sayi([])).toEqual({ rol: 0, akis: 0 });
+  });
+});
+
+/**
+ * PROMPTKULLANIMETIKETI — "N rol · M akış" ya da "kullanılmıyor"
+ * (DEVIR.md §5).
+ */
+describe("promptKullanimEtiketi — kullanım metni", () => {
+  const etiket = (rol: number, akis: number): string =>
+    fonksiyon<(r: number, a: number) => string>(renderPage("t"), "promptKullanimEtiketi")(rol, akis);
+
+  it("ikisi de sıfırsa 'kullanılmıyor' der", () => {
+    expect(etiket(0, 0)).toBe("kullanılmıyor");
+  });
+
+  it("rol ve akış sayısını BİRLİKTE yazar", () => {
+    expect(etiket(2, 1)).toBe("2 rol · 1 akış");
+  });
+
+  // "&&" YERİNE "||" YAZILSAYDI: rol=0 ama akis>0 olan (anayasa dosyası,
+  // hiçbir role doğrudan BAĞLI değil ama bir akış tarafından kullanılıyor)
+  // bir dosya YANLIŞLIKLA "kullanılmıyor" derdi. Bu iki sınama TAM O
+  // mutasyonu öldürür.
+  it("rol sıfır ama akış sıfır DEĞİLSE (anayasa dosyası) 'kullanılmıyor' DEMEZ", () => {
+    expect(etiket(0, 2)).toBe("0 rol · 2 akış");
+  });
+
+  it("akış sıfır ama rol sıfır DEĞİLSE de 'kullanılmıyor' DEMEZ", () => {
+    expect(etiket(3, 0)).toBe("3 rol · 0 akış");
+  });
+});
+
+/**
+ * AJANOKUMASIRASI — "base → engineering-ts → rol promptu → kart metni"
+ * şeridi (DEVIR.md §5). dosyaAdiKisa'ya bağlı, BİRLİKTE çıkarılıyor.
+ */
+describe("ajanOkumaSirasi — 'Ajanın okuduğu sıra' şeridi", () => {
+  type Adim = { etiket: string; vurgulu: boolean };
+  const sira = (p: Prompt[], secili: string | null): Adim[] =>
+    fonksiyonlar<(p: Prompt[], s: string | null) => Adim[]>(
+      renderPage("t"), ["dosyaAdiKisa", "ajanOkumaSirasi"], "ajanOkumaSirasi",
+    )(p, secili);
+
+  const promptlar: Prompt[] = [
+    { etiket: "anayasa:1", yol: "hub/prompts/constitution/base.md" },
+    { etiket: "anayasa:2", yol: "hub/prompts/constitution/engineering-ts.md" },
+    { etiket: "rol:coder", yol: "hub/prompts/roles/coder.md" },
+    { etiket: "rol:reviewer", yol: "hub/prompts/roles/reviewer.md" },
+  ];
+
+  it("anayasa sırası + seçili ROL + 'kart metni' ile biter", () => {
+    const adimlar = sira(promptlar, "hub/prompts/roles/coder.md");
+    expect(adimlar.map((a) => a.etiket)).toEqual(["base", "engineering-ts", "coder", "kart metni"]);
+  });
+
+  it("seçili dosya rol promptuysa SADECE o adım 'vurgulu'", () => {
+    const adimlar = sira(promptlar, "hub/prompts/roles/coder.md");
+    expect(adimlar.map((a) => a.vurgulu)).toEqual([false, false, true, false]);
+  });
+
+  // ANAYASA dosyası seçiliyken ÖRNEK rol İLK rol — anayasa akıştaki HER
+  // role AYNI sırada verildiği için hangisi gösterildiği şeridin ANLAMINI
+  // değiştirmiyor; "vurgulu" yine de doğru anayasa adımına düşmeli.
+  it("anayasa dosyası seçiliyken İLK rol örnek gösterilir, O vurgulu DEĞİL", () => {
+    const adimlar = sira(promptlar, "hub/prompts/constitution/engineering-ts.md");
+    expect(adimlar.map((a) => a.etiket)).toEqual(["base", "engineering-ts", "coder", "kart metni"]);
+    expect(adimlar.map((a) => a.vurgulu)).toEqual([false, true, false, false]);
+  });
+
+  it("'kart metni' adımı HİÇBİR seçimde vurgulu olamaz (yol: null)", () => {
+    const adimlar = sira(promptlar, "hub/prompts/roles/reviewer.md");
+    expect(adimlar[adimlar.length - 1]).toEqual({ etiket: "kart metni", vurgulu: false });
+  });
+
+  it("akışta hiç rol yoksa ÇÖKMEZ, rol adımı eklenmeden 'kart metni' ile biter", () => {
+    const anayasaSadece = promptlar.filter((p) => p.etiket.startsWith("anayasa:"));
+    const adimlar = sira(anayasaSadece, null);
+    expect(adimlar.map((a) => a.etiket)).toEqual(["base", "engineering-ts", "kart metni"]);
+  });
+
+  // 'yol: null' TAŞIYAN TEK adım "kart metni"; seçili yol da null OLABİLİR
+  // (örn. hiç rol yok). "a.yol !== null" korumasını KALDIRIP sade
+  // "a.yol === seciliYol" yazılsaydı bu durumda null === null olup "kart
+  // metni" YANLIŞLIKLA vurgulu görünürdü.
+  it("seçili yol null İKEN 'kart metni' (yol: null) YİNE DE vurgulu OLMAZ", () => {
+    const anayasaSadece = promptlar.filter((p) => p.etiket.startsWith("anayasa:"));
+    const adimlar = sira(anayasaSadece, null);
+    expect(adimlar.map((a) => a.vurgulu)).toEqual([false, false, false]);
+  });
+});
+
+describe("promptKirliMi — editördeki metin disktekinden FARKLI mı", () => {
+  const kirli = (orijinal: Record<string, string>, metin: Record<string, string>, yol: string): boolean =>
+    fonksiyon<(o: Record<string, string>, m: Record<string, string>, y: string) => boolean>(
+      renderPage("t"), "promptKirliMi",
+    )(orijinal, metin, yol);
+
+  it("henüz YÜKLENMEMİŞ bir dosya (metin[yol] undefined) kirli SAYILMAZ", () => {
+    expect(kirli({}, {}, "x")).toBe(false);
+  });
+
+  it("editör metni disktekiyle AYNIYSA temiz", () => {
+    expect(kirli({ x: "a" }, { x: "a" }, "x")).toBe(false);
+  });
+
+  it("editör metni disktekinden FARKLIYSA kirli", () => {
+    expect(kirli({ x: "a" }, { x: "a-degisti" }, "x")).toBe(true);
+  });
+});
+
+describe("promptKaydedilmemisSayisi — Promptlar nav rozetinin sayısı", () => {
+  const sayi = (orijinal: Record<string, string>, metin: Record<string, string>): number =>
+    fonksiyonlar<(o: Record<string, string>, m: Record<string, string>) => number>(
+      renderPage("t"), ["promptKirliMi", "promptKaydedilmemisSayisi"], "promptKaydedilmemisSayisi",
+    )(orijinal, metin);
+
+  it("hiçbir dosya düzenlenmemişse 0", () => {
+    expect(sayi({}, {})).toBe(0);
+  });
+
+  it("yalnızca DEĞİŞTİRİLMİŞ dosyaları sayar, temiz olanları saymaz", () => {
+    const orijinal = { a: "1", b: "2" };
+    const metin = { a: "1-degisti", b: "2" };
+    expect(sayi(orijinal, metin)).toBe(1);
+  });
+
+  it("birden fazla dosya aynı anda kirli olabilir", () => {
+    const orijinal = { a: "1", b: "2" };
+    const metin = { a: "1-degisti", b: "2-degisti" };
+    expect(sayi(orijinal, metin)).toBe(2);
+  });
+});
+
+describe("promptDurumMetni — sabit alt çubuğun durum metni", () => {
+  const metin = (kirli: boolean): string =>
+    fonksiyon<(k: boolean) => string>(renderPage("t"), "promptDurumMetni")(kirli);
+
+  it("kirliyse 'kaydedilmemiş değişiklik' der", () => {
+    expect(metin(true)).toBe("kaydedilmemiş değişiklik");
+  });
+
+  it("temizse 'kaydedildi' der", () => {
+    expect(metin(false)).toBe("kaydedildi");
+  });
+});

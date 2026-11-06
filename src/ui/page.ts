@@ -919,22 +919,6 @@ const PAGE = `<!doctype html>
   }
   .kaydet:disabled { opacity: .5; cursor: not-allowed; }
 
-  /* prompt düzenleyici — soldan dosya seç, sağda metin alanı */
-  .promptEd { display: flex; gap: var(--sp-5); align-items: flex-start; }
-  .promptListe {
-    flex: 0 0 150px; display: flex; flex-direction: column; gap: var(--sp-1);
-    max-height: 64vh; overflow-y: auto;
-  }
-  .promptListe button { text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .promptListe button.secili { border-color: var(--accent); color: var(--accent-ink); background: var(--accent-soft); }
-  .promptAlan { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: var(--sp-4); }
-  .promptAlan textarea {
-    font: inherit; font-family: var(--mono); font-size: var(--fs-body); line-height: 1.5;
-    min-height: 44vh; padding: var(--sp-4) var(--sp-5); border: 1px solid var(--line); border-radius: 3px;
-    background: var(--surface-2); color: var(--ink); resize: vertical;
-  }
-  .promptAlan textarea:disabled { opacity: .6; }
-
   /*
    * AKIŞLAR SEKMESİ — DEVIR.md §4, kart c-20261105-d36e37. Modernist:
    * sıfır köşe yarıçapı, tek vurgu rengi. Kart ızgarası bir TABLO gibi
@@ -1049,6 +1033,87 @@ const PAGE = `<!doctype html>
     border: var(--border-row) solid var(--color-text); background: var(--color-bg); color: var(--color-text);
   }
   .dialog textarea { min-height: 72px; padding: var(--space-2) var(--space-3); resize: vertical; }
+
+  /*
+   * PROMPTLAR SEKMESİ — DEVIR.md §5. Solda 320px liste (iki grup: Anayasa/
+   * Rol promptları), sağda dosya adı + "Kullanan" + "Ajanın okuduğu sıra"
+   * şeridi + tam yükseklikte metin alanı + sabit alt çubuk. Alt çubuk
+   * MOD 5'in ".duzenleAlt"/".duzenleDurumMetni"sini PAYLAŞIYOR — DEVIR
+   * ikisinde de AYNI "durum metni, geri al/vazgeç, kaydet" düzenini
+   * istiyor, iki ayrı CSS kopyası YOK. "#icerikAkislar" ile AYNI
+   * gerekçeyle açık --color-bg: altındaki zemin hâlâ ESKİ --bg (body
+   * kuralı, henüz göçmedi).
+   */
+  #icerikPromptlar { background: var(--color-bg); padding: var(--space-6) 0; }
+  .promptlarGovde { display: flex; align-items: flex-start; gap: var(--space-7); }
+  .promptlarListe {
+    flex: 0 0 320px; width: 320px; display: flex; flex-direction: column;
+    border-right: var(--border-section) solid var(--color-text); padding-right: var(--space-5);
+    max-height: calc(100vh - 140px); overflow-y: auto;
+  }
+  .promptlarGrupBaslik {
+    font-size: var(--fs-10-5); font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--label-ink); margin: var(--space-5) 0 var(--space-2);
+  }
+  .promptlarOge {
+    display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left;
+    font: inherit; font-size: var(--fs-13); color: var(--color-text); background: none;
+    border: none; border-left: var(--border-accent) solid transparent; cursor: pointer;
+    padding: var(--space-2) var(--space-3);
+  }
+  .promptlarOge:hover { background: var(--color-neutral-200); }
+  /*
+   * SEÇİLİ ÖGE — "4px accent sol kenar + accent-100 zemin" (DEVIR.md §5).
+   * Metin rengi düz --color-text DEĞİL: accent-100 zemini hiçbir zaman
+   * koyu temada EZİLMİYOR (Akışlar sekmesinin ".akisKart-panoda" emsaliyle
+   * AYNI gerekçe), yani color-text koyu temada AÇIK bir renge dönünce açık
+   * zemin üstüne biner. --color-neutral-900/--color-accent-800 (zaten
+   * token-kontrast.test.ts'te ölçülü, ".railKapiKutu" ile AYNI çift)
+   * tema-değişmez kalıyor.
+   */
+  .promptlarOge-secili {
+    border-left-color: var(--color-accent); background: var(--color-accent-100);
+    color: var(--color-neutral-900);
+  }
+  .promptlarOgeAd { font-weight: 700; display: flex; align-items: center; gap: var(--space-2); }
+  .promptlarOgeKullanim { font-size: var(--fs-11); color: var(--label-ink); }
+  .promptlarOge-secili .promptlarOgeKullanim { color: var(--color-accent-800); }
+  /*
+   * "Kaydedilmemiş değişiklik 8px accent kare" (DEVIR.md §5). accent/
+   * accent-100 çifti bu kartta YENİ pinlendi (token-kontrast.test.ts):
+   * 3.84:1, IKINCIL_ETIKET_ESIGI'yi (3, küçük grafik işaret) geçiyor —
+   * ikisi de hiçbir temada EZİLMEDİĞİ için oran tema-değişmez.
+   */
+  .promptlarTaslakIsareti { width: 8px; height: 8px; flex: 0 0 auto; background: var(--color-accent); display: inline-block; }
+  .promptlarYeniRol { align-self: flex-start; margin-top: var(--space-5); }
+
+  .promptlarPanel { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+  .promptlarBaslik {
+    font-family: var(--font-heading); font-weight: 800; font-size: var(--fs-26);
+    margin: 0 0 var(--space-1); color: var(--color-text);
+  }
+  .promptlarYol { font-size: var(--fs-13); color: var(--label-ink); margin: 0 0 var(--space-5); overflow-wrap: anywhere; }
+  .promptlarKullanan, .promptlarSira {
+    display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: var(--space-2) 0 var(--space-4);
+  }
+  .promptlarIpucu { font-size: var(--fs-12); color: var(--label-ink); }
+  .promptlarKullananEtiket, .promptlarSiraAdim {
+    font: inherit; font-size: var(--fs-12); border: var(--border-row) solid var(--color-text);
+    padding: var(--space-1) var(--space-2); background: var(--color-surface); color: var(--color-text);
+  }
+  .promptlarKullananEtiket { cursor: pointer; }
+  .promptlarKullananEtiket:hover { background: var(--color-neutral-200); }
+  .promptlarSiraAdim { cursor: default; }
+  .promptlarSiraAdim-vurgulu {
+    border-color: var(--color-accent); background: var(--color-accent-100); color: var(--color-accent-800);
+  }
+  .promptlarMetin {
+    flex: 1 1 auto; min-height: 320px; width: 100%; font-family: var(--mono);
+    font-size: var(--fs-13-5); line-height: 1.6; padding: var(--space-4);
+    border: var(--border-row) solid var(--color-text); background: var(--color-surface);
+    color: var(--color-text); resize: vertical; margin-bottom: var(--space-4);
+  }
+  .promptlarMetin:disabled { opacity: .6; }
 </style>
 </head>
 <body>
@@ -1068,12 +1133,7 @@ const PAGE = `<!doctype html>
     </div>
   </div>
   <div id="icerikAkislar" style="display:none"></div>
-  <div id="icerikPromptlar" class="yerTutucu" style="display:none">
-    <h2>Promptlar</h2>
-    <p>Bu sekme henüz kurulmadı — anayasa ve rol promptları burada
-    düzenlenecek. Şimdilik Pano'nun üst araç satırındaki "Promptları
-    düzenle" düğmesini kullan.</p>
-  </div>
+  <div id="icerikPromptlar" style="display:none"></div>
   <div id="icerikAjanlar" class="yerTutucu" style="display:none">
     <h2>Ajanlar</h2>
     <p>Bu sekme henüz kurulmadı — çalışan ajanların adım adım izi burada
@@ -1987,14 +2047,15 @@ function hashOku() {
   const h = decodeURIComponent(location.hash.replace(/^#/, ""));
   if (h.startsWith("kart/")) detayAc(h.slice("kart/".length));
   else if (h === "akis") void akisAc();
-  else if (h === "prompt") void promptAc();
   else if (h === "prompt/yeni") void yeniRolAc();
   else if (h === "yeni") yeniKartAc();
   else document.getElementById("panel").replaceChildren();
-  // Akışlar sekmesi Pano'nun bir sub-paneli DEĞİL (bkz. sekmeAdi) — kendi
-  // içeriğini YUKARIDAKİ dallardan BAĞIMSIZ kuruyor, #panel'i de aynen
-  // boşaltan dal (üstteki son 'else') zaten çalıştı.
+  // Akışlar/Promptlar sekmeleri Pano'nun bir sub-paneli DEĞİL (bkz.
+  // sekmeAdi) — kendi içeriklerini YUKARIDAKİ dallardan BAĞIMSIZ
+  // kuruyorlar, #panel'i de aynen boşaltan dal (üstteki son 'else') zaten
+  // çalıştı.
   if (h === "akislar") akislarEkraniCiz();
+  if (h === "promptlar") void promptlarEkraniCiz();
 }
 window.addEventListener("hashchange", hashOku);
 
@@ -2148,17 +2209,17 @@ function ciz(m) {
   // bkz. sekmeAdi/hashOku). Rozetler MEVCUT modelden: Pano "kapıda
   // bekleyen kart", Ajanlar "şu an çalışan kart" — ikisi de gerçekten
   // bilinen sayılar. Akışlar AKISLAR.length (açılışta bir kez okunan
-  // gerçek liste). Promptlar DÜZ SIFIR: ekran henüz hiçbir dosyanın
-  // kaydedilmemiş olduğunu İZLEMİYOR (Promptlar sekmesi bu kartta yer
-  // tutucu) — "0" burada UYDURULMUŞ bir rahatlık değil, sistemin bugün
-  // gerçekten bildiği şey: hiçbir taslak hiçbir yerde izlenmiyor.
+  // gerçek liste). Promptlar PROMPT_ORIJINAL/PROMPT_METIN'in KARŞILAŞTIRMASI
+  // (bkz. promptKaydedilmemisSayisi, Promptlar sekmesi) — "kaç dosyanın
+  // editördeki metni disktekinden farklı", gerçekten izlenen bir sayı,
+  // sekme hiç açılmamışsa (iki harita da boş) doğal olarak 0.
   const aktifSekme = sekmeAdi(decodeURIComponent(location.hash.replace(/^#/, "")));
   const nav = el("div", "anaNav");
   nav.setAttribute("aria-label", "Ana sekmeler");
   [
     ["pano", "Pano", kapidaBekleyenSayisi(m.cards), "accent"],
     ["akislar", "Akışlar", AKISLAR.length, "notr"],
-    ["promptlar", "Promptlar", 0, "notr"],
+    ["promptlar", "Promptlar", promptKaydedilmemisSayisi(PROMPT_ORIJINAL, PROMPT_METIN), "notr"],
     ["ajanlar", "Ajanlar", calisanAjanSayisi(m.cards), "accent"],
   ].forEach(([ad, etiket, sayi, renk]) => {
     const b = el("button", "navSekme" + (ad === aktifSekme ? " navSekme-aktif" : ""));
@@ -2179,8 +2240,11 @@ function ciz(m) {
   // "Promptları düzenle" düğmeleri. Yeni tasarımın üst çubuğunda bunlar
   // YOK (Akışlar/Promptlar sekmeleri yerini alıyor, bkz. yukarıdaki nav
   // yorumu) — bu kart o sekmeleri KURMUYOR, yani yetenek burada, Pano'nun
-  // kendi araç satırında kalıyor. İçerik ve davranış ESKİSİYLE AYNEN: bu
-  // Pano'nun "MEVCUT içeriği" sayılıyor, yalnızca taşındı.
+  // kendi araç satırında kalıyor. "Akışı düzenle" ESKİ overlay'i açıyor
+  // (henüz sökülmedi); "Promptları düzenle" ARTIK gerçek Promptlar
+  // sekmesini açıyor (bkz. promptlarDugme, altta) — ekranın tek prompt
+  // düzenleme yüzeyi o, eski "#prompt" çekmecesi Promptlar sekmesi
+  // kurulunca SÖKÜLDÜ.
   const panoArac = document.getElementById("panoArac");
   panoArac.replaceChildren();
   const akis = el("div");
@@ -2221,7 +2285,7 @@ function ciz(m) {
   panoArac.append(rolleriDuzenleDugme);
   const promptlarDugme = el("button", "mini", "Promptları düzenle");
   promptlarDugme.type = "button";
-  promptlarDugme.addEventListener("click", () => { location.hash = "prompt"; });
+  promptlarDugme.addEventListener("click", () => { location.hash = "promptlar"; });
   panoArac.append(promptlarDugme);
 
   // Akış dosyası bozulduysa ekran eski topolojiyle çizmeye devam ediyor;
@@ -3534,17 +3598,17 @@ function railGenelBakisCiz(kutu, m) {
  * MOD 2 — Rol: "← Genel bakış" + üst bilgi + meta satırı + iki düğme +
  * roldeki kartların listesi (DEVIR.md).
  *
- * "Prompt" düğmesi hash'i "prompt"a çevirip PROMPT_SEC'i o rolün dosyasına
- * önceden set ediyor — promptAc() (hashOku'nun "prompt" dalı) PROMPT_SEC
- * zaten geçerli bir yolsa onu AYNEN kullanıyor (bkz. promptAc: "PROMPTLAR.some
- * (...)" kontrolü), yani bu buton promptSec'i AYRICA çağırıp bir YARIŞ
- * (promptAc henüz /promptlar'ı okumadan promptSec'in boş listeyle
- * çizmesi) açmıyor. Bu "Promptlar" SEKMESİNİ değil, ÇALIŞAN prompt
- * düzenleyiciyi (#prompt overlay) açıyor — DEVIR.md'nin tarif ettiği
- * "Promptlar sekmesi" bugün yer tutucu (bkz. #icerikPromptlar), o yüzden
- * düğme var olan GERÇEK yeteneğe yönleniyor, olmayan bir sekmeye değil.
+ * "Prompt" düğmesi hash'i "promptlar"a çevirip PROMPT_SEC'i o rolün
+ * dosyasına önceden set ediyor — promptlarEkraniCiz() (hashOku'nun
+ * "promptlar" dalı) PROMPT_SEC zaten geçerli bir yolsa onu AYNEN
+ * kullanıyor (bkz. promptlarEkraniCiz: "PROMPTLAR.some(...)" kontrolü),
+ * yani bu buton promptlarSec'i AYRICA çağırıp bir YARIŞ (promptlarEkraniCiz
+ * henüz /promptlar'ı okumadan promptlarSec'in boş listeyle çizmesi)
+ * açmıyor. DEVIR.md'nin tarif ettiği GERÇEK "Promptlar" SEKMESİNİ açıyor
+ * (bkz. #icerikPromptlar/promptlarEkraniCiz) — eski "#prompt" çekmecesi bu
+ * sekme kurulunca söküldü.
  *
- * "Ajanı izle →" düğmesi de aynı dürüstlük kuralına uyuyor: Ajanlar
+ * "Ajanı izle →" düğmesi hâlâ aynı dürüstlük kuralına uyuyor: Ajanlar
  * sekmesi bugün sabit bir yer tutucu, rol SEÇME yeteneği yok. Düğme yalnız
  * sekmeyi açtığını vaat ediyor (gerçekten de açar) — rolü oradan
  * "izleyeceğini" vaat ETMİYOR, çünkü o yetenek henüz YOK. Varsayım açık:
@@ -3588,7 +3652,7 @@ function railRolCiz(kutu, m, rolId) {
   promptBtn.type = "button";
   promptBtn.addEventListener("click", () => {
     PROMPT_SEC = meta.prompt;
-    location.hash = "prompt";
+    location.hash = "promptlar";
   });
   dugmeler.append(promptBtn);
   const ajanBtn = el("button", "railBtn", "Ajanı izle →");
@@ -4089,7 +4153,7 @@ function duzenlePromptAlani(rol) {
   ac.type = "button";
   ac.addEventListener("click", () => {
     PROMPT_SEC = rol.prompt;
-    location.hash = "prompt";
+    location.hash = "promptlar";
   });
   sarmal.append(ac);
   return sarmal;
@@ -5301,118 +5365,381 @@ async function yaz() {
   }
 }
 
-// --- Rol promptları düzenleyici ---
+// --- Promptlar sekmesi (DEVIR.md §5) ---
 //
 // Akış YAML'ı ekrandan düzenlenebiliyordu, ajanın gördüğü METİN (anayasa +
-// rol promptu) düzenlenemiyordu. Liste sunucudaki /promptlar ucundan geliyor
-// ve TOPOLOJİDEN türüyor — depodaki her dosya değil, yalnızca akışın
-// bildirdikleri. Seçilen dosyanın yolu burada, istemcide, uydurulmuyor:
-// sunucu her okuma ve yazmada aynı listeye karşı üyelik soruyor.
+// rol promptu) için yalnızca GEÇİCİ bir çekmece (eski "#prompt" overlay'i)
+// vardı. Bu kart DEVIR.md'nin tarif ettiği GERÇEK sekmeyi kuruyor ve eski
+// çekmeceyi SÖKÜYOR — üç çağrı yeri de (Pano araç satırının "Promptları
+// düzenle"si, Rol modunun "Prompt · …" düğmesi, Rolleri düzenle'nin "Aç"
+// düğmesi) artık bu sekmeye yönleniyor (bkz. ilgili yorumlar).
+//
+// Liste sunucudaki /promptlar ucundan geliyor ve TOPOLOJİDEN türüyor —
+// depodaki her dosya değil, yalnızca AKTİF akışın bildirdikleri. Seçilen
+// dosyanın yolu burada, istemcide, uydurulmuyor: sunucu her okuma ve
+// yazmada aynı listeye karşı üyelik soruyor (server.ts promptListesi).
 let PROMPTLAR = [];
 let PROMPT_SEC = null;
+// DİSKTEN son okunan (ya da son kaydedilen) metin, yol başına — "temiz"
+// referans. "Geri al" buraya döner, başarılı bir "Kaydet" bunu GÜNCELLER.
+let PROMPT_ORIJINAL = {};
+// Editördeki GÜNCEL metin, yol başına. PROMPT_ORIJINAL'den FARKLIYSA dosya
+// "kirli" sayılır (bkz. promptKirliMi). Seçim değişse de (başka bir dosyaya
+// geçilse de) BURADA KALIR: birden fazla dosya aynı anda düzenlenmiş
+// durabilir — "Kaydet" yalnızca O AN seçili olanı yazar, ötekiler etkilenmez.
+let PROMPT_METIN = {};
+// Dosya başına OKUMA hatası (örn. /prompt isteği başarısız oldu) — panelde
+// gösterilir, o dosya başarıyla yüklenince temizlenir.
+let PROMPT_HATA = {};
 
-async function promptAc() {
-  const kap = document.getElementById("panel");
+/**
+ * Bir prompt dosyasının (kök-relatif 'yol') yolu, AKISLAR_OZET'in
+ * draft'larındaki (flow/draft.ts fromFlow 'goreli') FLOW DOSYASININ KENDİ
+ * DİZİNİNE göre relatif yoldan KÖK-RELATİFE çevrilir. SAF, DOM yok.
+ *
+ * NİYE GEREKİYOR: /promptlar'ın ürettiği yol (server.ts promptListesi)
+ * KÖK-RELATİF, ama AKISLAR_OZET'teki 'draft.roles[].prompt'/
+ * 'draft.constitution' flow DOSYASININ KENDİ dizinine göre relatif (bkz.
+ * draft.ts). İkisi aynı tabana getirilmeden karşılaştırılırsa AYNI dosya
+ * farklı yazılmış iki yol gibi görünür ve promptKullananListesi onu
+ * YANLIŞLIKLA "kullanılmıyor" sayar. Taban HER ZAMAN 'hub/flows':
+ * akisOzetiYukle (server.ts) her akışı HER ZAMAN 'hub/flows/<ad>.yaml'dan
+ * yüklüyor.
+ */
+function flowGoreliYolKokeCevir(goreli) {
+  const parcalar = ("hub/flows/" + goreli).split("/");
+  const yigin = [];
+  parcalar.forEach((p) => {
+    if (p === "" || p === ".") return;
+    if (p === "..") yigin.pop();
+    else yigin.push(p);
+  });
+  return yigin.join("/");
+}
+
+/**
+ * Bir prompt dosyasının (kök-relatif 'yol') HANGİ akış/rol tarafından
+ * kullanıldığı — DEVIR.md §5 "Kullanan satırı (akış · rol etiketleri)".
+ * SAF, DOM yok. 'rol: null' anayasa dosyaları için: belirli bir role değil,
+ * o akıştaki TÜM rollere veriliyor.
+ *
+ * 'promptlar' (AKTİF akış, /promptlar'ın KÖK-RELATİF listesi) ve
+ * 'ozetListesi' (AKISLAR_OZET, DİĞER akışlar, flowGoreliYolKokeCevir ile
+ * köke çevrilen) birleştiriliyor. 'aktifAd' AKISLAR_OZET'te de olabilir
+ * (akisSecimi verilmişse) — o girdi BİLEREK ATLANIYOR: 'promptlar'
+ * listesinden ZATEN sayıldı, aksi hâlde aynı akış İKİ KEZ sayılırdı.
+ */
+function promptKullananListesi(promptlar, ozetListesi, aktifAd, yol) {
+  const sonuc = [];
+  promptlar.forEach((p) => {
+    if (p.yol !== yol) return;
+    sonuc.push({ akis: aktifAd, rol: p.etiket.indexOf("rol:") === 0 ? p.etiket.slice("rol:".length) : null });
+  });
+  ozetListesi.forEach((o) => {
+    if (o.ad === aktifAd || !o.draft) return;
+    if (o.draft.constitution.some((c) => flowGoreliYolKokeCevir(c) === yol)) {
+      sonuc.push({ akis: o.ad, rol: null });
+    }
+    o.draft.roles.forEach((r) => {
+      if (flowGoreliYolKokeCevir(r.prompt) === yol) sonuc.push({ akis: o.ad, rol: r.id });
+    });
+  });
+  return sonuc;
+}
+
+/** 'promptKullananListesi'nin SAYIMI — "N rol · M akış" (DEVIR.md §5). SAF. */
+function promptKullanimSayisi(liste) {
+  const akislar = new Set();
+  let rol = 0;
+  liste.forEach((k) => {
+    akislar.add(k.akis);
+    if (k.rol !== null) rol++;
+  });
+  return { rol, akis: akislar.size };
+}
+
+/**
+ * "N rol · M akış" ya da "kullanılmıyor" (DEVIR.md §5). SAF.
+ *
+ * Bu ekranda 'kullanılmıyor' dalı pratikte ÜRETİLMEZ: liste HER ZAMAN
+ * AKTİF akıştan türediği için (promptlar'ın KENDİSİ, bkz.
+ * promptKullananListesi), oradaki her dosya en az KENDİ akışınca
+ * kullanılıyor — (0,0) burada hiç oluşmaz. Dal YİNE DE yazılı: biçimleyici
+ * GENEL bir kural ("hiç kullanım yoksa böyle söyle") ve doğrudan
+ * sınanabilir olmalı, DEVIR.md'nin kendi sözcüğü de bu ("ya da
+ * kullanılmıyor").
+ */
+function promptKullanimEtiketi(rol, akis) {
+  if (rol === 0 && akis === 0) return "kullanılmıyor";
+  return rol + " rol · " + akis + " akış";
+}
+
+/**
+ * "Ajanın okuduğu sıra" şeridi — base → engineering-ts → rol promptu →
+ * kart metni (DEVIR.md §5). SAF, DOM yok.
+ *
+ * Anayasa sırası 'promptlar'ın KENDİ sırası (server.ts promptListesi:
+ * topology.constitution SIRAYLA) — burada yeniden sıralanmıyor. Hangi ROL
+ * örnek gösterilsin: seçili dosya bir rol promptuysa O rol; değilse
+ * (anayasa seçili ya da akışta hiç rol yok) İLK rol — anayasa akıştaki
+ * HER role AYNI sırada verildiği için hangisinin örnek seçildiği şeridin
+ * ANLAMINI değiştirmiyor.
+ */
+function ajanOkumaSirasi(promptlar, seciliYol) {
+  const adimlar = [];
+  promptlar.forEach((p) => {
+    if (p.etiket.indexOf("anayasa:") === 0) adimlar.push({ etiket: dosyaAdiKisa(p.yol), yol: p.yol });
+  });
+  const roller = promptlar.filter((p) => p.etiket.indexOf("rol:") === 0);
+  const seciliRol = roller.find((p) => p.yol === seciliYol) || roller[0] || null;
+  if (seciliRol !== null) adimlar.push({ etiket: seciliRol.etiket.slice("rol:".length), yol: seciliRol.yol });
+  adimlar.push({ etiket: "kart metni", yol: null });
+  return adimlar.map((a) => ({ etiket: a.etiket, vurgulu: a.yol !== null && a.yol === seciliYol }));
+}
+
+/** Dosya yolundan uzantısız kısa ad — "hub/prompts/roles/coder.md" -> "coder". SAF. */
+function dosyaAdiKisa(yol) {
+  const parcalar = yol.split("/");
+  const son = parcalar[parcalar.length - 1] || yol;
+  const nokta = son.lastIndexOf(".");
+  return nokta > 0 ? son.slice(0, nokta) : son;
+}
+
+/** Bir dosyanın editördeki metni DİSKTEKİ (son yüklenen/kaydedilen) metinden FARKLI mı. SAF. */
+function promptKirliMi(orijinal, metin, yol) {
+  return metin[yol] !== undefined && metin[yol] !== orijinal[yol];
+}
+
+/** Kaç dosyanın editördeki metni disktekinden farklı — Promptlar rozeti (DEVIR.md §5). SAF. */
+function promptKaydedilmemisSayisi(orijinal, metin) {
+  return Object.keys(metin).filter((yol) => promptKirliMi(orijinal, metin, yol)).length;
+}
+
+/** Sabit alt çubuğun durum metni — seçili dosya kirliyse/temizse (DEVIR.md §5). SAF. */
+function promptDurumMetni(kirli) {
+  return kirli ? "kaydedilmemiş değişiklik" : "kaydedildi";
+}
+
+/**
+ * Üst çubuğun bir nav rozetini TEK BAŞINA günceller — tam 'ciz()' çağırmak
+ * (board/sağ panel/sayaçlar dahil HER ŞEYİ yeniden kurar) her tuş
+ * vuruşunda gereksiz bir maliyet olurdu (bkz. promptlarDurumGuncelle).
+ * 'sekmeUygula'nın "data-sekme" ile nav düğmelerini DOĞRUDAN yamaladığı
+ * desenin AYNISI.
+ */
+function navRozetGuncelle(ad, sayi) {
+  document.querySelectorAll(".navSekme").forEach((b) => {
+    if (b.dataset.sekme !== ad) return;
+    const rozet = b.querySelector(".navRozet");
+    if (rozet) rozet.textContent = String(sayi);
+  });
+}
+
+/**
+ * Promptlar sekmesinin GİRİŞ noktası — hash "#promptlar" olduğunda
+ * (hashOku) çağrılır. Akışlar sekmesinin tersine liste HER AÇILIŞTA
+ * yeniden istenir: bu liste AKTİF akışın topolojisinden türüyor ve akış
+ * hem değiştirilebiliyor hem düzenlenebiliyor (eski promptAc'ın AYNI
+ * davranışı).
+ */
+async function promptlarEkraniCiz() {
+  const kok = document.getElementById("icerikPromptlar");
   try {
     const cevap = await fetch("/promptlar", { cache: "no-store" });
     const veri = await cevap.json();
     if (!cevap.ok) throw new Error(veri.hata || cevap.status);
     PROMPTLAR = veri.promptlar || [];
-    if (!PROMPTLAR.length) throw new Error("Bu akışta düzenlenebilir prompt yok.");
+    if (!PROMPTLAR.length) {
+      kok.replaceChildren(el("div", "ipucu", "Bu akışta düzenlenebilir prompt yok."));
+      return;
+    }
     if (!PROMPTLAR.some((p) => p.yol === PROMPT_SEC)) PROMPT_SEC = PROMPTLAR[0].yol;
-    kap.replaceChildren(promptEditorCiz());
-    await promptYukle(PROMPT_SEC);
+    await promptlarSec(PROMPT_SEC);
   } catch (e) {
-    kap.replaceChildren(el("div", "err", "Prompt listesi okunamadı: " + e.message));
+    kok.replaceChildren(el("div", "err", "Prompt listesi okunamadı: " + e.message));
   }
 }
 
-function promptEditorCiz() {
-  const ust = el("div", "ust");
-  ust.addEventListener("click", (e) => { if (e.target === ust) kapat(); });
-  const p = el("div", "panel");
-
-  const kapatDugme = el("button", "kapat", "Kapat");
-  kapatDugme.type = "button";
-  kapatDugme.addEventListener("click", kapat);
-  p.append(kapatDugme);
-
-  p.append(el("h2", null, "Rol promptları"));
-  p.append(el("div", "cid", "akışın bildirdiği dosyalar — kaydetmek dosyayı YENİDEN YAZAR"));
-
-  // YENİ ROL yolu bu panelde: zincire bir rol eklemek demek, promptunu da
-  // BİRLİKTE yaratmak demek (bkz. /rol/yeni yorumu, server.ts) — iki ayrı
-  // ekrana bölmek yarı yaratılmış bir rolü vaat ederdi.
-  const yeniRolDugme = el("button", "mini", "Yeni rol");
-  yeniRolDugme.type = "button";
-  yeniRolDugme.addEventListener("click", () => { location.hash = "prompt/yeni"; });
-  p.append(yeniRolDugme);
-
-  const ed = el("div", "promptEd");
-
-  const liste = el("div", "promptListe");
-  PROMPTLAR.forEach((pr) => {
-    const b = el("button", "mini" + (pr.yol === PROMPT_SEC ? " secili" : ""), pr.etiket);
-    b.type = "button";
-    b.title = pr.yol;
-    b.addEventListener("click", () => { void promptSec(pr.yol); });
-    liste.append(b);
-  });
-  ed.append(liste);
-
-  const alan = el("div", "promptAlan");
-  alan.append(el("div", "cid", PROMPT_SEC || ""));
-  const metinKutusu = el("textarea");
-  metinKutusu.id = "promptMetin";
-  metinKutusu.rows = 20;
-  alan.append(metinKutusu);
-
-  const altSatir = el("div", "exits");
-  const kaydet = el("button", "kaydet", "Dosyaya yaz");
-  kaydet.type = "button";
-  kaydet.id = "promptKaydet";
-  kaydet.addEventListener("click", () => { void promptYaz(); });
-  altSatir.append(kaydet);
-  alan.append(altSatir);
-
-  const hataKutu = el("div", "err");
-  hataKutu.id = "promptHata";
-  hataKutu.style.cssText = "display:none";
-  alan.append(hataKutu);
-
-  ed.append(alan);
-  p.append(ed);
-
-  ust.append(p);
-  return ust;
-}
-
-/** Seçilen dosyayı değiştirir ve panoyu yeniden çizer — eski seçimi kaybetmeden. */
-async function promptSec(yol) {
+/** Seçilen dosyayı DEĞİŞTİRİR, gerekirse metnini yükler, sekmeyi YENİDEN ÇİZER. */
+async function promptlarSec(yol) {
   PROMPT_SEC = yol;
-  document.getElementById("panel").replaceChildren(promptEditorCiz());
-  await promptYukle(yol);
+  await promptlarMetniGetir(yol);
+  promptlarCiz();
 }
 
-async function promptYukle(yol) {
-  const alan = document.getElementById("promptMetin");
-  if (!alan) return;
-  alan.disabled = true;
+/**
+ * 'yol'ün metnini garanti eder — ZATEN YÜKLÜYSE (düzenlenmiş olabilir)
+ * TEKRAR OKUMUYOR: disk'ten yeniden okumak operatörün elle yazdığını
+ * SESSİZCE EZERDİ.
+ */
+async function promptlarMetniGetir(yol) {
+  if (PROMPT_METIN[yol] !== undefined) return;
   try {
     const cevap = await fetch("/prompt?yol=" + encodeURIComponent(yol), { cache: "no-store" });
     const veri = await cevap.json();
     if (!cevap.ok) throw new Error(veri.hata || cevap.status);
-    alan.value = veri.metin;
+    PROMPT_ORIJINAL[yol] = veri.metin;
+    PROMPT_METIN[yol] = veri.metin;
+    delete PROMPT_HATA[yol];
   } catch (e) {
-    alan.value = "";
-    const hataKutu = document.getElementById("promptHata");
-    if (hataKutu) {
-      hataKutu.textContent = "Okunamadı: " + e.message;
-      hataKutu.style.cssText = "display:block;white-space:pre-wrap";
-    }
-  } finally {
-    alan.disabled = false;
+    PROMPT_HATA[yol] = e.message;
   }
+}
+
+/** Bir liste grubunu (Anayasa / Rol promptları) kurar — DEVIR.md §5. */
+function promptlarGrupKur(baslik, ogeler) {
+  const grup = el("div", "promptlarGrup");
+  grup.append(el("h3", "promptlarGrupBaslik", baslik));
+  ogeler.forEach((p) => {
+    const kullanim = promptKullanimSayisi(promptKullananListesi(PROMPTLAR, AKISLAR_OZET, AKTIF_AD, p.yol));
+    const oge = el("button", "promptlarOge" + (p.yol === PROMPT_SEC ? " promptlarOge-secili" : ""));
+    oge.type = "button";
+    oge.title = p.yol;
+    oge.dataset.yol = p.yol;
+    const adSatiri = el("span", "promptlarOgeAd");
+    adSatiri.append(document.createTextNode(dosyaAdiKisa(p.yol)));
+    if (promptKirliMi(PROMPT_ORIJINAL, PROMPT_METIN, p.yol)) {
+      adSatiri.append(el("span", "promptlarTaslakIsareti"));
+    }
+    oge.append(adSatiri);
+    oge.append(el("span", "promptlarOgeKullanim", promptKullanimEtiketi(kullanim.rol, kullanim.akis)));
+    oge.addEventListener("click", () => { void promptlarSec(p.yol); });
+    grup.append(oge);
+  });
+  return grup;
+}
+
+/**
+ * Sağ taraf — dosya adı/yolu, "Kullanan", "Ajanın okuduğu sıra", metin
+ * alanı, sabit alt çubuk (DEVIR.md §5).
+ */
+function promptlarPanelKur() {
+  const panel = el("div", "promptlarPanel");
+  panel.append(el("h1", "promptlarBaslik", dosyaAdiKisa(PROMPT_SEC)));
+  panel.append(el("div", "promptlarYol mono", PROMPT_SEC));
+
+  const kullananBlok = el("div");
+  kullananBlok.append(el("span", "eyebrow", "Kullanan"));
+  const kullananSatir = el("div", "promptlarKullanan");
+  const kullanan = promptKullananListesi(PROMPTLAR, AKISLAR_OZET, AKTIF_AD, PROMPT_SEC);
+  if (!kullanan.length) {
+    kullananSatir.append(el("span", "promptlarIpucu", "hiçbir akış kullanmıyor"));
+  } else {
+    kullanan.forEach((k) => {
+      const etiket = el("button", "promptlarKullananEtiket",
+        k.rol === null ? k.akis + " · (tüm roller)" : k.akis + " · " + k.rol);
+      etiket.type = "button";
+      etiket.addEventListener("click", () => { void promptlarKullananTikla(k.akis, k.rol); });
+      kullananSatir.append(etiket);
+    });
+  }
+  kullananBlok.append(kullananSatir);
+  panel.append(kullananBlok);
+
+  const siraBlok = el("div");
+  siraBlok.append(el("span", "eyebrow", "Ajanın okuduğu sıra"));
+  const siraSatir = el("div", "promptlarSira");
+  ajanOkumaSirasi(PROMPTLAR, PROMPT_SEC).forEach((a) => {
+    siraSatir.append(el("span", "promptlarSiraAdim" + (a.vurgulu ? " promptlarSiraAdim-vurgulu" : ""), a.etiket));
+  });
+  siraBlok.append(siraSatir);
+  panel.append(siraBlok);
+
+  if (PROMPT_HATA[PROMPT_SEC]) {
+    panel.append(el("div", "err", "Okunamadı: " + PROMPT_HATA[PROMPT_SEC]));
+  }
+
+  const metinKutusu = el("textarea", "promptlarMetin mono");
+  metinKutusu.id = "promptlarMetin";
+  const metin = PROMPT_METIN[PROMPT_SEC];
+  metinKutusu.value = metin === undefined ? "" : metin;
+  metinKutusu.disabled = metin === undefined;
+  metinKutusu.addEventListener("input", () => {
+    PROMPT_METIN[PROMPT_SEC] = metinKutusu.value;
+    promptlarDurumGuncelle();
+  });
+  panel.append(metinKutusu);
+
+  const kirli = promptKirliMi(PROMPT_ORIJINAL, PROMPT_METIN, PROMPT_SEC);
+  const altCubuk = el("div", "duzenleAlt");
+  altCubuk.append(el("span", "duzenleDurumMetni promptlarDurum", promptDurumMetni(kirli)));
+  const geriAl = el("button", "railBtn", "Geri al");
+  geriAl.type = "button";
+  geriAl.id = "promptlarGeriAl";
+  geriAl.disabled = !kirli;
+  geriAl.addEventListener("click", promptlarGeriAl);
+  altCubuk.append(geriAl);
+  const kaydet = el("button", "railBtn primary", "Kaydet");
+  kaydet.type = "button";
+  kaydet.id = "promptlarKaydet";
+  kaydet.disabled = !kirli;
+  kaydet.addEventListener("click", () => { void promptlarKaydet(); });
+  altCubuk.append(kaydet);
+  panel.append(altCubuk);
+
+  const hataKutu = el("div", "err");
+  hataKutu.id = "promptlarKaydetHata";
+  hataKutu.style.cssText = "display:none";
+  panel.append(hataKutu);
+
+  return panel;
+}
+
+/** Sekmenin TAM içeriği — seçim değişince / "Kaydet"-"Geri al"'dan SONRA baştan kuruluyor. */
+function promptlarCiz() {
+  const kok = document.getElementById("icerikPromptlar");
+  const govde = el("div", "promptlarGovde");
+
+  const liste = el("div", "promptlarListe");
+  liste.append(promptlarGrupKur("Anayasa", PROMPTLAR.filter((p) => p.etiket.indexOf("anayasa:") === 0)));
+  liste.append(promptlarGrupKur("Rol promptları", PROMPTLAR.filter((p) => p.etiket.indexOf("rol:") === 0)));
+  // YENİ ROL PROMPTU yolu bu listenin altında: zincire bir rol eklemek
+  // demek, promptunu da BİRLİKTE yaratmak demek (bkz. /rol/yeni yorumu,
+  // server.ts) — iki ayrı ekrana bölmek yarı yaratılmış bir rolü vaat
+  // ederdi. "Sahiplendiğin/Sahiplenmediğin" şablonu BOŞ bırakılırsa
+  // sunucu zaten ondan yazıyor (bkz. rolPromptSablonu, server.ts).
+  const yeniRolDugme = el("button", "railBtn promptlarYeniRol", "Yeni rol promptu");
+  yeniRolDugme.type = "button";
+  yeniRolDugme.addEventListener("click", () => { location.hash = "prompt/yeni"; });
+  liste.append(yeniRolDugme);
+  govde.append(liste);
+
+  govde.append(promptlarPanelKur());
+  kok.replaceChildren(govde);
+  navRozetGuncelle("promptlar", promptKaydedilmemisSayisi(PROMPT_ORIJINAL, PROMPT_METIN));
+}
+
+/**
+ * Metin kutusuna her TUŞ VURUŞUNDA tam yeniden çizim YAPMIYOR —
+ * 'promptlarCiz' textarea'yı YENİDEN KURAR, bu da imleç konumunu/odağı
+ * kaybettirirdi. Burada yalnızca etkilenen DOM parçaları yama gibi
+ * güncelleniyor: seçili ögenin taslak işareti, alt çubuğun düğmeleri/durum
+ * metni, nav rozeti.
+ */
+function promptlarDurumGuncelle() {
+  const kirli = promptKirliMi(PROMPT_ORIJINAL, PROMPT_METIN, PROMPT_SEC);
+  document.querySelectorAll(".promptlarOge").forEach((oge) => {
+    if (oge.dataset.yol !== PROMPT_SEC) return;
+    const ad = oge.querySelector(".promptlarOgeAd");
+    if (!ad) return;
+    const mevcut = ad.querySelector(".promptlarTaslakIsareti");
+    if (kirli && !mevcut) ad.append(el("span", "promptlarTaslakIsareti"));
+    if (!kirli && mevcut) mevcut.remove();
+  });
+  const durumEl = document.querySelector(".promptlarDurum");
+  if (durumEl) durumEl.textContent = promptDurumMetni(kirli);
+  const geriAl = document.getElementById("promptlarGeriAl");
+  if (geriAl) geriAl.disabled = !kirli;
+  const kaydet = document.getElementById("promptlarKaydet");
+  if (kaydet) kaydet.disabled = !kirli;
+  navRozetGuncelle("promptlar", promptKaydedilmemisSayisi(PROMPT_ORIJINAL, PROMPT_METIN));
+}
+
+/** "Geri al" — editördeki metni DİSKTEKİ (son yüklenen/kaydedilen) hâline döndürür. */
+function promptlarGeriAl() {
+  if (PROMPT_ORIJINAL[PROMPT_SEC] === undefined) return;
+  PROMPT_METIN[PROMPT_SEC] = PROMPT_ORIJINAL[PROMPT_SEC];
+  promptlarCiz();
 }
 
 /**
@@ -5422,28 +5749,50 @@ async function promptYukle(yol) {
  * model çiziliyor. Çekirdek reddederse (bilinmeyen yol, boş metin, yetki
  * yok) mesaj kullanıcıya aynen gider — akış düzenleyicideki "yaz"ın aynısı.
  */
-async function promptYaz() {
-  const alan = document.getElementById("promptMetin");
-  const kaydet = document.getElementById("promptKaydet");
-  const hataKutu = document.getElementById("promptHata");
-  if (!alan || !PROMPT_SEC) return;
-  kaydet.disabled = true;
-  hataKutu.style.cssText = "display:none";
+async function promptlarKaydet() {
+  const kaydet = document.getElementById("promptlarKaydet");
+  const hataKutu = document.getElementById("promptlarKaydetHata");
+  const yol = PROMPT_SEC;
+  const metin = PROMPT_METIN[yol];
+  if (metin === undefined) return;
+  if (kaydet) kaydet.disabled = true;
+  if (hataKutu) hataKutu.style.cssText = "display:none";
   try {
     const cevap = await fetch("/prompt/yaz", {
       method: "POST",
       headers: { "content-type": "application/json", "x-skein-token": JETON },
-      body: JSON.stringify({ yol: PROMPT_SEC, metin: alan.value }),
+      body: JSON.stringify({ yol, metin }),
     });
     const veri = await cevap.json();
     if (!cevap.ok) throw new Error(veri.hata || cevap.status);
+    PROMPT_ORIJINAL[yol] = metin;
     ciz(veri.model);
+    promptlarCiz();
   } catch (e) {
-    hataKutu.textContent = e.message;
-    hataKutu.style.cssText = "display:block;white-space:pre-wrap";
-  } finally {
-    kaydet.disabled = false;
+    if (hataKutu) {
+      hataKutu.textContent = e.message;
+      hataKutu.style.cssText = "display:block;white-space:pre-wrap";
+    }
+    if (kaydet) kaydet.disabled = false;
   }
+}
+
+/**
+ * "Kullanan" etiketine tıklamak o rolü/akışı PANODA açar (DEVIR.md §5:
+ * "tıklanınca o rol panoda açılır"). Akış farklıysa ÖNCE ona geçiliyor
+ * (akisKartSec, Akışlar sekmesiyle AYNI yol) — başarısız olursa (bozuk
+ * akış) DEVAM EDİLMİYOR, akisKartSec kendi bildirimini zaten gösterdi.
+ * 'rol' null ise (anayasa dosyası kullanımı) yalnızca akışa geçilir, RAIL
+ * değişmez — o kullanım belirli bir role değil TÜM rollere ait.
+ */
+async function promptlarKullananTikla(akis, rol) {
+  if (akis !== AKTIF_AD) {
+    const basarili = await akisKartSec(akis);
+    if (!basarili) return;
+  }
+  if (rol !== null) RAIL = railGecis(RAIL, { tur: "rolSec", rolId: rol });
+  location.hash = "";
+  railYenidenCiz();
 }
 
 // --- Yeni rol ---
@@ -5458,9 +5807,9 @@ let YENI_ROL_ROLLER = [];
 /**
  * Diyagramdan tıklanan "+" işaretinin önceden söylediği yer — bkz.
  * diyagramRolArasiEkleAc. yeniRolAc bunu OKUYUP SIFIRLIYOR: panel
- * "Promptları düzenle" yolundan da açılabiliyor ve o yolda bu ön seçim
- * olmamalı (eski bir diyagram tıklaması bir sonraki, İLİŞKİSİZ açılışı
- * etkilemesin).
+ * Promptlar sekmesinin "Yeni rol promptu" düğmesinden de açılabiliyor ve
+ * o yolda bu ön seçim olmamalı (eski bir diyagram tıklaması bir sonraki,
+ * İLİŞKİSİZ açılışı etkilemesin).
  */
 let YENI_ROL_ONCEDEN_SONRA = null;
 /** Seçili "sonra" rolünün tam kaydı — başlıkta "X ile Y arasına" yazmak için. */
