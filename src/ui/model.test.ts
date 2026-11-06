@@ -723,6 +723,99 @@ reject:
 });
 
 /**
+ * PLANLAMA ALANI — V formasyonu diyagramının "planlama bandı" ve
+ * "en çok N tur" etiketinin kaynağı (kart c-20261105-2a8dab, DEVIR.md
+ * "Planlama bandı").
+ *
+ * `topology.plan` zaten `flow/load.ts`te doğrulanmış (katılımcılar var
+ * olan rollere işaret ediyor, zincir sırasında, vb.) — burada SINANAN,
+ * modelin bu alanı OLDUĞU GİBİ taşıdığı, ne bir rolü atladığı ne de tur
+ * sayısını yeniden yorumladığı.
+ */
+describe("buildModel — planlama alanı", () => {
+  it("akış planlama tanımlamadıysa null döner", async () => {
+    const m = await buildModel(base);
+    expect(m.plan).toBeNull();
+  });
+
+  it("planlama varsa katılımcıları ve en çok tur sayısını taşır", async () => {
+    const flowText = `
+name: test
+constitution:
+  - ../prompts/base.md
+roles:
+  - id: planner
+    provider: claude
+    workspace: main
+    prompt: ../../roles/coder.prompt
+    next: coder
+  - id: coder
+    provider: claude
+    workspace: coder
+    prompt: ../../roles/coder.prompt
+    next: reviewer
+  - id: reviewer
+    provider: codex
+    workspace: reviewer
+    prompt: ../../roles/reviewer.prompt
+    receive: batch
+    reject: coder
+    next: done
+planlama:
+  katilimcilar: [planner, coder]
+  tur: 3
+  plan: docs/plan/{kart}.md
+reject:
+  limit: 2
+  onExhausted: gate
+`;
+    await writeFile(join(root, "hub", "flows", "test.yaml"), flowText);
+    const flow = await loadFlow(join(root, "hub", "flows", "test.yaml"), {
+      root, providers: knownProviderSet(),
+    });
+    const topo = snapshot(flow, root);
+
+    const m = await buildModel({ ...base, topology: topo, flowHash: flow.hash });
+
+    expect(m.plan).toEqual({ katilimcilar: ["planner", "coder"], tur: 3 });
+  });
+
+  // KOPYA, REFERANS DEĞİL: ekran bu diziyi mutasyona uğratırsa (örn. sıralama
+  // için) canlı topolojinin kendisini bozmamalı — `snapshot()`'un kendi
+  // savunmasıyla aynı ilke.
+  it("katılımcı dizisi topolojiden BAĞIMSIZ bir kopya", async () => {
+    const flowText = `
+name: test
+constitution:
+  - ../prompts/base.md
+roles:
+  - id: planner
+    provider: claude
+    workspace: main
+    prompt: ../../roles/coder.prompt
+    next: done
+planlama:
+  katilimcilar: [planner]
+  tur: 1
+  plan: docs/plan/{kart}.md
+reject:
+  limit: 2
+  onExhausted: gate
+`;
+    await writeFile(join(root, "hub", "flows", "test.yaml"), flowText);
+    const flow = await loadFlow(join(root, "hub", "flows", "test.yaml"), {
+      root, providers: knownProviderSet(),
+    });
+    const topo = snapshot(flow, root);
+
+    const m = await buildModel({ ...base, topology: topo, flowHash: flow.hash });
+    m.plan?.katilimcilar.push("uydurma");
+
+    expect(topo.plan?.katilimcilar).toEqual(["planner"]);
+  });
+});
+
+/**
  * Kuyruk engeli EKRANDA görünmeli.
  *
  * `take` yarışı kaybetmeyi gerçek engelden ayırıyor ve engeli

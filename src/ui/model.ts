@@ -42,6 +42,17 @@ export interface UiModel {
   edges: UiEdge[];
   /** İnsan kapıları — diyagramda zincirin üstünde durağan bir işaret. */
   gates: UiGate[];
+  /**
+   * Planlama politikası — akış tanımlamadıysa `null`.
+   *
+   * V formasyonu diyagramı (kart c-20261105-2a8dab) katılımcıların
+   * üzerinden geçen bir "planlama bandı" çiziyor ve "en çok N tur"
+   * etiketi basıyor; ikisi de bu alandan geliyor. `topology.plan` zaten
+   * SUNUCUDA doğrulanmış (bkz. `flow/load.ts` kural 17-23) — ekran
+   * burada yalnızca okuyor, katılımcı listesini ya da tur sayısını
+   * YENİDEN YORUMLAMIYOR, `edges`/`gates` ile aynı ilke.
+   */
+  plan: { katilimcilar: string[]; tur: number } | null;
   cards: UiCard[];
   totals: {
     open: number;
@@ -301,6 +312,14 @@ export async function buildModel(options: BuildOptions): Promise<UiModel> {
     for (const target of role.syncBack) edges.push({ from: role.id, to: target, kind: "syncBack" });
   }
   const gates: UiGate[] = topology.gates.map((gate) => ({ after: gate.after, type: gate.type }));
+  // Katılımcı listesi KOPYALANIYOR (topology.plan.katilimcilar DEĞİL):
+  // ekran bu diziyi kendi tarafında mutasyona uğratmıyor ama paylaşılan
+  // bir referans taşımak, çağıranın topolojiyi yanlışlıkla değiştirdiği
+  // bir kusuru burada da üretebilirdi — `snapshot()`'un kendi [...spread]
+  // kuralıyla AYNI savunma.
+  const plan: UiModel["plan"] = topology.plan === undefined
+    ? null
+    : { katilimcilar: [...topology.plan.katilimcilar], tur: topology.plan.tur };
 
   const byCard = groupEvents(events);
   const bizimMi = (card: Card): boolean => card.topology.flow === topology.flow;
@@ -326,6 +345,7 @@ export async function buildModel(options: BuildOptions): Promise<UiModel> {
     roles,
     edges,
     gates,
+    plan,
     cards: ui,
     totals: {
       orphans: ui.filter((c) => c.orphan).length,

@@ -28,6 +28,39 @@ function fonksiyon<T>(html: string, ad: string): T {
   return new Function(`${metin}; return ${ad};`)() as T;
 }
 
+/** `fonksiyon`'un TEK bir bildirimi (fonksiyon ya da üst düzey `const`) için kullandığı çıkarma mantığı. */
+function bildirim(src: string, ad: string): string {
+  const fBas = src.indexOf(`function ${ad}(`);
+  if (fBas >= 0) {
+    const son = src.indexOf("\n}\n", fBas);
+    if (son < 0) throw new Error(`${ad} kapanışı bulunamadı`);
+    return src.slice(fBas, son + 3);
+  }
+  const cBas = src.indexOf(`const ${ad} = `);
+  if (cBas >= 0) {
+    const son = src.indexOf(";\n", cBas);
+    if (son < 0) throw new Error(`${ad} (const) kapanışı bulunamadı`);
+    return src.slice(cBas, son + 2);
+  }
+  throw new Error(`betikte ${ad} yok`);
+}
+
+/**
+ * BİRDEN ÇOK adlandırılmış bildirimi (fonksiyon ya da `const`) BİRLİKTE
+ * çıkarıp çalıştırır.
+ *
+ * `rolKonumu` gibi fonksiyonlar `FORMASYON_GOVDE` sabitine bağlı; `fonksiyon`
+ * gibi TEK bildirimi izole etmek burada `ReferenceError` verirdi. Sabiti
+ * fonksiyonun İÇİNE KOPYALAMAK yerine (iki kopyanın AYNI kalacağının
+ * garantisi yok — tam da bu dosyadaki AJAN_AYRAC'ın kendi yorumunun
+ * uyardığı kusur) ikisi BİRLİKTE, gerçek kaynaktan çıkarılıyor.
+ */
+function fonksiyonlar<T>(html: string, adlar: string[], donus: string): T {
+  const src = betik(html);
+  const metin = adlar.map((ad) => bildirim(src, ad)).join("\n");
+  return new Function(`${metin}; return ${donus};`)() as T;
+}
+
 type Cikis = { etiket: string; not: string; dugmeler: [string, string][] };
 
 /**
@@ -538,5 +571,286 @@ describe("calisanAjanSayisi — Ajanlar rozeti", () => {
 
   it("hiç çalışan yoksa sıfır döner", () => {
     expect(say([{ state: "gate" }, { state: "done" }])).toBe(0);
+  });
+});
+
+/**
+ * ROLKONUMU — V formasyonundaki rol yerleşimi (kart c-20261105-2a8dab,
+ * DEVIR.md "Formasyon diyagramı"). SAF (DOM yok), ama `FORMASYON_GOVDE`
+ * sabitine bağlı olduğu için `fonksiyonlar` ile BİRLİKTE çıkarılıyor.
+ */
+describe("rolKonumu — V üzerindeki rol yerleşimi", () => {
+  type Konum = { x: number; y: number; kol: string };
+  const konum = (i: number, n: number): Konum =>
+    fonksiyonlar<(i: number, n: number) => Konum>(
+      renderPage("t"), ["FORMASYON_GOVDE", "rolKonumu"], "rolKonumu",
+    )(i, n);
+
+  // TEK ROL VARSA TEPEDE — n===1 bir özel durum, f hesabına hiç girmez
+  // (n-1===0 olurdu, bölme hatası).
+  it("tek rol varsa tepede durur", () => {
+    expect(konum(0, 1)).toEqual({ x: 500, y: 480, kol: "tepe" });
+  });
+
+  // İLK ROL GİRİŞTE DEĞİL, SOL UÇTA (230,110) durur — giriş (40,110) "+"
+  // düğmesi İÇİN ayrılmış, role ait DEĞİL. İlk denemede ilk rol tam
+  // girişe denk geliyordu ve "+" düğmesiyle AYNI merkeze biniyordu (iki
+  // tıklanabilir öğe üst üste); skein-merkez-v3.html'in gerçek formülü
+  // (posAt/place) bu çakışmayı YAŞAMIYOR çünkü sol/sağ uçtan başlıyor.
+  it("ilk rol (öncü) sol UÇTA durur, girişin kendisinde DEĞİL", () => {
+    const k = konum(0, 2);
+    expect(k.kol).toBe("sol");
+    expect(k.x).toBeCloseTo(230);
+    expect(k.y).toBeCloseTo(110);
+  });
+
+  it("son rol sağ uçta durur, çıkışın kendisinde DEĞİL", () => {
+    const k = konum(1, 2);
+    expect(k.kol).toBe("sag");
+    expect(k.x).toBeCloseTo(770);
+    expect(k.y).toBeCloseTo(110);
+  });
+
+  // SINIR: f === 0.5 — ister n===1'den ZORLANMIŞ olsun ister tek sayıda
+  // rolün ORTANCASI olsun, HER İKİ durumda da "tepe" dalına düşer: kol
+  // KOORDİNATA göre (apex'le çakışıyor mu), "n===1 mi" sorusuna göre
+  // DEĞİL — skein-merkez-v3.html'in `place` fonksiyonundaki
+  // side==="apex" ayrımıyla AYNI ilke.
+  it("f===0.5 (üç rolde ortanca) tepeye düşer, 'sol' ya da 'sag' SAYILMAZ", () => {
+    const k = konum(1, 3);
+    expect(k.kol).toBe("tepe");
+    expect(k.x).toBeCloseTo(500);
+    expect(k.y).toBeCloseTo(480);
+  });
+
+  // DÜZ ORAN (lerp), ARC-LENGTH DEĞİL: sol-uç(230,110)→tepe(500,480)
+  // arasında f*2 oranıyla DOĞRUSAL ilerliyor — skein-merkez-v3.html'in
+  // posAt'ı bunu "TL.x + (AP.x-TL.x)*f*2" olarak yazıyor, çizginin
+  // gerçek (arc-length) uzunluğuna hiç bakmıyor.
+  it("konum sol-uç/tepe arasında DÜZ ORANLA (lerp) hesaplanır", () => {
+    const k = konum(1, 5); // f = 0.25 → sol kolda yerel oran f*2 = 0.5
+    expect(k.x).toBeCloseTo(230 + (500 - 230) * 0.5);
+    expect(k.y).toBeCloseTo(110 + (480 - 110) * 0.5);
+  });
+
+  // GİRİŞ/ÇIKIŞ konuma HİÇ GİRMİYOR: iki rollü akışta roller sol-uç ve
+  // sağ-uç noktalarında durur, giriş (40,110) ve çıkış (950,110) ile
+  // ÇAKIŞMAZ — bu olmasaydı "+" düğmesi ve biten-kart kutusu ilk/son rol
+  // düğümüyle aynı merkezde üst üste binerdi.
+  it("roller giriş/çıkış noktalarıyla ÇAKIŞMAZ", () => {
+    const ilk = konum(0, 2);
+    const son = konum(1, 2);
+    expect(ilk).not.toEqual(expect.objectContaining({ x: 40, y: 110 }));
+    expect(son).not.toEqual(expect.objectContaining({ x: 950, y: 110 }));
+  });
+});
+
+/**
+ * KUŞRENGİ — rol düğümündeki kuşun rengi (SAPMALAR.md §1'in "boş rol
+ * kuşu" düzeltmesi burada: neutral-600, tasarımın neutral-400'ü DEĞİL).
+ */
+describe("kusRengi — rol düğümünün kuş rengi", () => {
+  const renk = (kartlar: { state: string; gate: string | null }[]): string =>
+    fonksiyon<(k: { state: string; gate: string | null }[]) => string>(renderPage("t"), "kusRengi")(kartlar);
+
+  it("çalışan kart varsa accent", () => {
+    expect(renk([{ state: "active", gate: null }])).toBe("var(--color-accent)");
+  });
+
+  it("kapıda bekleyen kart varsa (çalışmasa da) accent", () => {
+    expect(renk([{ state: "gate", gate: "approval" }])).toBe("var(--color-accent)");
+  });
+
+  it("kart var ama çalışmıyor/kapıda değilse (kuyrukta) text", () => {
+    expect(renk([{ state: "queued", gate: null }])).toBe("var(--color-text)");
+  });
+
+  // SAPMA: tasarım neutral-400 diyor (1.80:1) — burada neutral-600.
+  it("hiç kart yoksa SAPMA'nın düzelttiği empty-bird-ink", () => {
+    expect(renk([])).toBe("var(--empty-bird-ink)");
+  });
+});
+
+/** KAREDURUMU — kart karesinin üç durumu (çizim ".kare-<ad>" sınıfıyla paylaşılıyor). */
+describe("kareDurumu — kart karesinin durumu", () => {
+  const durum = (c: { state: string; gate: string | null }): string =>
+    fonksiyon<(c: { state: string; gate: string | null }) => string>(renderPage("t"), "kareDurumu")(c);
+
+  it("çalışıyor", () => {
+    expect(durum({ state: "active", gate: null })).toBe("calisiyor");
+  });
+
+  it("kapıda", () => {
+    expect(durum({ state: "gate", gate: "approval" })).toBe("kapida");
+  });
+
+  it("kuyrukta (ne çalışıyor ne kapıda)", () => {
+    expect(durum({ state: "queued", gate: null })).toBe("kuyrukta");
+  });
+
+  // SINIR: state active İSE kapı alanı dolu olsa bile "calisiyor" kazanır
+  // (sıra bu — aktif bir kartın kapıda sayılması modelin kendi iç
+  // tutarlılığına aykırı olurdu, ama karar noktası burada PİNLENİYOR).
+  it("state active ise gate alanı dolu olsa bile 'calisiyor' kazanır", () => {
+    expect(durum({ state: "active", gate: "approval" })).toBe("calisiyor");
+  });
+});
+
+/**
+ * RETYAYKONTROL — ret yayının kontrol noktası (DEVIR.md: "iki rolün orta
+ * noktasından (500,170)'e doğru %60 kaydırılır").
+ */
+describe("retYayKontrol — ret yayının kontrol noktası", () => {
+  type Nokta = { x: number; y: number };
+  const kontrol = (a: Nokta, b: Nokta): Nokta =>
+    fonksiyon<(a: Nokta, b: Nokta) => Nokta>(renderPage("t"), "retYayKontrol")(a, b);
+
+  it("orta nokta hedefe (500,170) doğru %60 kaydırılır, hedefin KENDİSİNE eşitlenmez", () => {
+    const k = kontrol({ x: 40, y: 110 }, { x: 230, y: 110 });
+    // orta = (135, 110); hedef = (500, 170); fark = (365, 60); *.6 = (219, 36)
+    expect(k.x).toBeCloseTo(135 + 219);
+    expect(k.y).toBeCloseTo(110 + 36);
+    // %100 OLSAYDI her yay (500,170)'e eşit olurdu — burada DEĞİL.
+    expect(k.x).not.toBeCloseTo(500);
+    expect(k.y).not.toBeCloseTo(170);
+  });
+
+  it("kaynak ve hedef aynı noktaysa kontrol noktası da aynı lerp'i uygular", () => {
+    const k = kontrol({ x: 0, y: 0 }, { x: 0, y: 0 });
+    expect(k.x).toBeCloseTo(500 * 0.6);
+    expect(k.y).toBeCloseTo(170 * 0.6);
+  });
+});
+
+/** KAPICIZGISI — insan onayı kapısının dik çizgi segmenti. */
+describe("kapiCizgisi — iki nokta arasındaki çizgiye dik segment", () => {
+  type Nokta = { x: number; y: number };
+  type Segment = { x1: number; y1: number; x2: number; y2: number };
+  const cizgi = (a: Nokta, b: Nokta, uzunluk: number): Segment =>
+    fonksiyon<(a: Nokta, b: Nokta, u: number) => Segment>(renderPage("t"), "kapiCizgisi")(a, b, uzunluk);
+
+  it("yatay bir çizginin ortasına DİK (düşey) bir segment üretir", () => {
+    const s = cizgi({ x: 0, y: 0 }, { x: 10, y: 0 }, 16);
+    expect(s).toEqual({ x1: 5, y1: -8, x2: 5, y2: 8 });
+  });
+
+  // DÜŞEY bir çizgide dik yön YATAY olur — yatay örnek "dy===0" olduğu
+  // için dik vektörün İŞARETİNİ (-dy/boy) sınayamıyordu (sonuç hep 0).
+  // Bu örnek dy !== 0, yani işaret ters çevrilse (örn. "-dy" yerine "dy")
+  // bu sınama DÜŞER.
+  it("düşey bir çizginin ortasına DİK (yatay) bir segment üretir, İŞARETİ sabit", () => {
+    const s = cizgi({ x: 0, y: 0 }, { x: 0, y: 10 }, 16);
+    expect(s).toEqual({ x1: 8, y1: 5, x2: -8, y2: 5 });
+  });
+
+  it("segment UZUNLUĞU parametreyle ölçeklenir", () => {
+    const s = cizgi({ x: 0, y: 0 }, { x: 10, y: 0 }, 4);
+    expect(Math.hypot(s.x2 - s.x1, s.y2 - s.y1)).toBeCloseTo(4);
+  });
+});
+
+/**
+ * KANATCIRPIYORMU — kanat çırpmanın koşulu (DEVIR.md: "yalnızca rolde
+ * çalışan kart varsa VE gözcü açıkken"; SAPMALAR.md §2.2'nin sınanması
+ * istediği karar). "çalışan" burada "kapıda bekleyen"i KAPSAMAZ —
+ * `kusRengi`'nin accent koşulundan daha DAR.
+ */
+describe("kanatCirpiyorMu — kanat çırpmanın koşulu", () => {
+  type Daemon = { alive: boolean } | null;
+  const cirpiyor = (kartlar: { state: string }[], daemon: Daemon): boolean =>
+    fonksiyon<(k: { state: string }[], d: Daemon) => boolean>(renderPage("t"), "kanatCirpiyorMu")(kartlar, daemon);
+
+  it("çalışan kart VE canlı gözcü varsa true", () => {
+    expect(cirpiyor([{ state: "active" }], { alive: true })).toBe(true);
+  });
+
+  it("çalışan kart var ama gözcü YOKSA (null) false", () => {
+    expect(cirpiyor([{ state: "active" }], null)).toBe(false);
+  });
+
+  it("çalışan kart var ama gözcü ÖLÜYSE (alive: false) false", () => {
+    expect(cirpiyor([{ state: "active" }], { alive: false })).toBe(false);
+  });
+
+  // SINIR: kapıda bekleyen bir kart "çalışan" SAYILMAZ — insan kararını
+  // bekleyen bir kart için kanat çırpmak yanlış bir sinyal olurdu.
+  it("kart kapıda bekliyor ama çalışmıyor ise, gözcü canlı olsa da false", () => {
+    expect(cirpiyor([{ state: "gate" }], { alive: true })).toBe(false);
+  });
+
+  it("hiç kart yoksa false", () => {
+    expect(cirpiyor([], { alive: true })).toBe(false);
+  });
+});
+
+/**
+ * PLANLAMAKATILIMCIKONUMLARI — planlama bandının geçtiği noktalar
+ * (DEVIR.md: "planlama katılımcılarının üzerinden geçen ... şerit").
+ * `rolKonumu`ya bağlı, `fonksiyonlar` ile BİRLİKTE çıkarılıyor.
+ */
+describe("planlamaKatilimciKonumlari — planlama bandının noktaları", () => {
+  type Konum = { x: number; y: number; kol: string };
+  type Rol = { id: string };
+  const konumlar = (roller: Rol[], katilimcilar: string[]): Konum[] =>
+    fonksiyonlar<(r: Rol[], k: string[]) => Konum[]>(
+      renderPage("t"),
+      ["FORMASYON_GOVDE", "rolKonumu", "planlamaKatilimciKonumlari"],
+      "planlamaKatilimciKonumlari",
+    )(roller, katilimcilar);
+
+  it("katılımcıların konumlarını ZİNCİR SIRASIYLA döner", () => {
+    const roller = [{ id: "planner" }, { id: "coder" }, { id: "reviewer" }];
+    const sonuc = konumlar(roller, ["planner", "coder"]);
+    expect(sonuc).toHaveLength(2);
+    expect(sonuc[0]).toEqual({ x: 230, y: 110, kol: "sol" });
+  });
+
+  // BİLİNMEYEN KATILIMCI sessizce elenir — olmayan bir rolü varmış gibi
+  // göstermek (örn. (0,0) gibi bir uydurma nokta) daha KÖTÜ bir hata
+  // modu olurdu.
+  it("bilinmeyen bir katılımcı (akışta olmayan rol) sessizce elenir", () => {
+    const roller = [{ id: "planner" }];
+    const sonuc = konumlar(roller, ["planner", "uydurma-rol"]);
+    expect(sonuc).toHaveLength(1);
+  });
+
+  it("katılımcı listesi boşsa boş dizi döner", () => {
+    expect(konumlar([{ id: "planner" }], [])).toEqual([]);
+  });
+});
+
+/**
+ * PLANLAMABANDYOLU — planlama bandının çizdiği SVG yolu. İlk/son
+ * katılımcının "kol"una göre TEPE'den dolanıp dolanmayacağına karar
+ * veriyor (kart c-20261105-2a8dab).
+ */
+describe("planlamaBandYolu — bandın tepeden dolanması", () => {
+  type Konum = { x: number; y: number; kol: string };
+  const yol = (ilk: Konum, son: Konum): string =>
+    fonksiyonlar<(a: Konum, b: Konum) => string>(
+      renderPage("t"), ["FORMASYON_GOVDE", "planlamaBandYolu"], "planlamaBandYolu",
+    )(ilk, son);
+
+  // İKİ KOLA YAYILAN bant (ilk solda, son sağda) TEPE'den (500,480)
+  // GEÇMEK ZORUNDA — yoksa düz çizgi iki kolun arasından kestirmeden
+  // geçer, V'nin kendi hattını İZLEMEZ.
+  it("ilk sol kolda, son sağ koldaysa TEPEDEN dolanır", () => {
+    const ilk = { x: 230, y: 110, kol: "sol" };
+    const son = { x: 770, y: 110, kol: "sag" };
+    expect(yol(ilk, son)).toBe("M 230 110 L 500 480 L 770 110");
+  });
+
+  // AYNI KOLDAKİ (ya da biri tepedeki) iki nokta ZATEN aynı doğru
+  // üzerinde — detur GEREKMİYOR, düz çizgi yeterli.
+  it("ikisi de sol koldaysa düz çizgi çizer, tepeden dolanmaz", () => {
+    const ilk = { x: 230, y: 110, kol: "sol" };
+    const son = { x: 365, y: 295, kol: "sol" };
+    expect(yol(ilk, son)).toBe("M 230 110 L 365 295");
+  });
+
+  it("son tepedeyse (örn. tek katılımcı tepeye denk gelmiş) dolanmaz", () => {
+    const ilk = { x: 230, y: 110, kol: "sol" };
+    const son = { x: 500, y: 480, kol: "tepe" };
+    expect(yol(ilk, son)).toBe("M 230 110 L 500 480");
   });
 });

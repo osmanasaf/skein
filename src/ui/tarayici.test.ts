@@ -57,22 +57,18 @@ roles:
  */
 /**
  * Tek bir DOM düğümü için gereken kadarı — recursive: `.querySelector` kendi
- * tipini döndürüyor, "sütun içinde boş kutuyu bul" gibi İÇ İÇE aramalar için
- * (bkz. boş durum sınamaları).
+ * tipini döndürüyor, iç içe aramalar için (bkz. formasyon düğümü/kare
+ * sınamaları).
  */
 type El = {
   textContent: string | null;
   style: { display: string };
   classList: { contains: (c: string) => boolean };
-  /** Yalnızca `<details>` öğesinde var — bkz. kapı gerekçesi sınaması. */
-  open?: boolean;
-  /** Kuş işaretinin `d`/`stroke` özniteliklerini ve kimlik sınamasının
-   * işaretleyici özniteliğini okumak/yazmak için. */
+  /** Rol düğümünün "data-rol"u, kart karesinin sınıfı vb. okumak için. */
   getAttribute: (ad: string) => string | null;
-  setAttribute: (ad: string, deger: string) => void;
   querySelector: (s: string) => El | null;
-  /** Yalnızca zincir okunun sütunları GERÇEKTEN alt alta mı sınaması için. */
-  getBoundingClientRect: () => { top: number; left: number };
+  /** Yalnızca formasyon genişliği sınaması için. */
+  getBoundingClientRect: () => { top: number; left: number; width: number };
   /** Yalnızca akış düzenleyicisinin 'change' dinleyicisini elle tetiklemek
    * için — bkz. "Ham YAML" sınaması: 'fill' yalnızca 'input' yayıyor. */
   dispatchEvent: (e: unknown) => void;
@@ -87,14 +83,14 @@ declare class Event {
   constructor(type: string, init?: { bubbles?: boolean });
 }
 /**
- * Zemin rengi, dönüş, kuş işaretinin GERÇEK rengi (currentColor'ın çözüldüğü
- * `color`) ve devir animasyonunun adı için — gökyüzü paleti, zincir okunun
- * yönü, kuş işareti ve devir hareketi sınamalarının ihtiyacı kadar.
+ * Zemin rengi, kuş işaretinin GERÇEK rengi (currentColor'ın çözüldüğü
+ * `color`) ve kanat çırpma animasyonunun adı için — gökyüzü paleti, marka
+ * kuşu ve kanat çırpma sınamalarının ihtiyacı kadar.
  */
 declare function getComputedStyle(
   el: unknown,
 ): {
-  backgroundColor: string; transform: string; color: string; animationName: string;
+  backgroundColor: string; color: string; animationName: string;
   /** Yalnızca diyagramın dar/geniş ekranda hangi kopyasının göründüğü
    * sınaması için — bkz. akış diyagramı describe'ı. */
   display: string;
@@ -257,18 +253,14 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
     const { page, hatalar } = await ac();
     try {
       await page.waitForSelector("#bar .pill", { timeout: 15_000 });
-      // İddia "bir sütun var" DEĞİL, "pano ZİNCİRİ gösteriyor".
-      //
-      // İlk yazımda `.col` sayısının sıfırdan büyük olmasına bakıyordum ve
-      // "sütunları hiç çizme" mutasyonu hayatta kaldı: `.col` başka bir
-      // yerde de üretiliyor, yani sayı hep pozitifti. Isırmayan bir iddia,
-      // bu depoda kusurun kendisi sayılıyor.
-      const basliklar = await page.evaluate(() =>
-        Array.from(document.querySelectorAll(".col .colhead")).map((e) => e.textContent ?? ""));
-      // Akışta tek rol var (`coder`), zincirin sonu `bitti`.
-      expect(basliklar).toHaveLength(2);
-      expect(basliklar[0]).toContain("coder");
-      expect(basliklar[1]).toContain("bitti");
+      // İddia "bir düğüm var" DEĞİL, "pano FORMASYONU gösteriyor" — tek
+      // rolli akışta (`coder`) o rol tek başına TEPEDE durmalı (DEVIR.md:
+      // "tek rol varsa tepede") ve çıkış kutusu (biten kart sayısı) orada.
+      const dugumler = await page.evaluate(() =>
+        Array.from(document.querySelectorAll(".formasyonDugum")).map((e) => e.getAttribute("data-rol")));
+      expect(dugumler).toEqual(["coder"]);
+      const cikisSayisi = await page.textContent(".formasyonCikis text");
+      expect(cikisSayisi).toBe("0");
       expect(hatalar).toEqual([]);
     } finally {
       await page.close();
@@ -360,7 +352,10 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
       await page.fill('.ust input[type=text]', "tarayıcıdan");
       await page.fill(".ust textarea", "gerçek tarayıcıdan açılan kart");
       await page.click('.ust button:has-text("Kartı aç")');
-      await page.waitForSelector(".card", { timeout: 10_000 });
+      // Kart panoda bir "kart karesi" olarak görünür — DOM'da ayrı bir
+      // `.card` kutusu değil, V formasyonundaki `coder` düğümünün altında
+      // küçük bir kare (bkz. page.ts formasyonSvgKur/kareDurumu).
+      await page.waitForSelector('.formasyonDugum[data-rol="coder"] .kare-kuyrukta', { timeout: 10_000 });
 
       // Çekirdek GERÇEKTEN yazdı mı — sayfanın iddiasına değil kuyruğa bak.
       const kartlar = await queue.list();
@@ -463,20 +458,20 @@ roles:
       await page.goto(s.url, { waitUntil: "networkidle" });
       await page.waitForSelector("#akisSecici", { timeout: 15_000 });
 
-      // Başlangıçta ilk akışın sütunu duruyor.
-      let basliklar = await page.evaluate(() =>
-        Array.from(document.querySelectorAll(".col .colhead")).map((e) => e.textContent ?? ""));
-      expect(basliklar.some((b) => b.includes("coder"))).toBe(true);
+      // Başlangıçta ilk akışın düğümü duruyor.
+      let dugumler = await page.evaluate(() =>
+        Array.from(document.querySelectorAll(".formasyonDugum")).map((e) => e.getAttribute("data-rol")));
+      expect(dugumler).toContain("coder");
 
       await page.selectOption("#akisSecici", "ikinci");
-      await page.waitForSelector('.colhead:has-text("digerrol")', { timeout: 10_000 });
+      await page.waitForSelector('.formasyonDugum[data-rol="digerrol"]', { timeout: 10_000 });
 
-      // İDDİA "yeni sütun EKLENDİ" değil, "pano DEĞİŞTİ": eski akışın rolü
+      // İDDİA "yeni düğüm EKLENDİ" değil, "pano DEĞİŞTİ": eski akışın rolü
       // artık hiç görünmemeli — sayfa iki akışı birden çizseydi bu kaçardı.
-      basliklar = await page.evaluate(() =>
-        Array.from(document.querySelectorAll(".col .colhead")).map((e) => e.textContent ?? ""));
-      expect(basliklar.some((b) => b.includes("digerrol"))).toBe(true);
-      expect(basliklar.some((b) => b.includes("coder"))).toBe(false);
+      dugumler = await page.evaluate(() =>
+        Array.from(document.querySelectorAll(".formasyonDugum")).map((e) => e.getAttribute("data-rol")));
+      expect(dugumler).toContain("digerrol");
+      expect(dugumler).not.toContain("coder");
       expect(hatalar).toEqual([]);
     } finally {
       await page.close();
@@ -564,14 +559,14 @@ roles:
       await page.selectOption("#yeniRolSonra", "coder");
       // Prompt BOŞ bırakılıyor — sunucu şablondan yazmalı (kural 9).
       await page.click('button:has-text("Rolü ekle")');
-      await page.waitForSelector('.colhead:has-text("reviewer")', { timeout: 10_000 });
+      await page.waitForSelector('.formasyonDugum[data-rol="reviewer"]', { timeout: 10_000 });
 
       // İDDİA panonun SÖYLEDİĞİ değil, DİSKTE GERÇEKTEN ne olduğu: hem
       // YAML hem de yeni promptu dosyası.
-      const basliklar = await page.evaluate(() =>
-        Array.from(document.querySelectorAll(".col .colhead")).map((e) => e.textContent ?? ""));
-      expect(basliklar.some((b) => b.includes("coder"))).toBe(true);
-      expect(basliklar.some((b) => b.includes("reviewer"))).toBe(true);
+      const dugumler = await page.evaluate(() =>
+        Array.from(document.querySelectorAll(".formasyonDugum")).map((e) => e.getAttribute("data-rol")));
+      expect(dugumler).toContain("coder");
+      expect(dugumler).toContain("reviewer");
 
       const yaml = await readFile(join(root, "hub", "flows", "test.yaml"), "utf8");
       expect(yaml).toContain("id: reviewer");
@@ -585,135 +580,204 @@ roles:
   }, 60_000);
 
   /**
-   * ZİNCİR OKU — dar ekranda yön AŞAĞI döner, geniş ekranda SAĞ kalır.
+   * FORMASYON GENİŞLİĞİ — DEVIR.md'nin formülü GERÇEKTEN tutuyor mu.
    *
-   * Yön page.ts'teki bir CSS medya sorgusuyla çözülüyor
-   * (".colhead .zincir .ok" kuralı), JS'le ÖLÇÜLEREK değil — ama bir
-   * medya sorgusunun tarayıcıda GERÇEKTEN tuttuğu, kaynak metni okuyan
-   * page.test.ts'ten GÖRÜNMEZ: sorgu yanlış yazılsa ya da hiç
-   * UYGULANMASA bile o dosyadaki sınamalar yine geçerdi. Burada viewport
-   * GERÇEKTEN daraltılıyor ve HESAPLANAN dönüş okunuyor.
+   * "genislik min(100%, calc((100vh - 210px) * 1.5625))" kaynak metinde
+   * durabilir ama bir CSS formülünün tarayıcıda GERÇEKTEN o değere
+   * çözüldüğü yalnızca HESAPLANAN genişliği ölçünce görünür — sayı
+   * yanlış yazılsa (örn. 1.5625 yerine 1000/640'ın kendisi değil başka
+   * bir oran) kaynak metin sınaması bunu YAKALAYAMAZDI. İki GERÇEK
+   * viewport yüksekliği, iki farklı BEKLENEN genişlik üretiyor.
    */
-  it("zincir oku geniş ekranda düz kalır, dar ekranda aşağı döner", async () => {
-    const genis = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
-    const dar = await (browser as Tarayici).newPage({ viewport: { width: 400, height: 900 } });
+  it("formasyon genişliği pencere yüksekliğine göre ölçekleniyor", async () => {
+    // Yükseklik 900 → min(1280-32, (900-210)*1.5625) = min(1248, 1078.125).
+    const uzun = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+    // Yükseklik 500 → min(1280-32, (500-210)*1.5625) = min(1248, 453.125) —
+    // burada YÜKSEKLİK sınırlayan taraf, "min(100%, ...)"ın "100%" dalı
+    // DEĞİL; iki senaryo birlikte formülün HER İKİ tarafını da sınıyor.
+    const kisa = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 500 } });
     try {
-      await genis.goto(server.url, { waitUntil: "networkidle" });
-      await genis.waitForSelector(".colhead .zincir .ok", { timeout: 15_000 });
-      const genisDonus = await genis.evaluate(() =>
-        getComputedStyle(document.querySelector(".colhead .zincir .ok")).transform);
-      // İDDİA sadece "ok döndü" değil, okun GERÇEK diziliş yönüyle eşleştiği:
-      // iki sütunun üst kenarı burada AYNI hizada olmalı (yan yana).
-      const genisTepeler = await genis.evaluate(() =>
-        Array.from(document.querySelectorAll(".col")).slice(0, 2)
-          .map((c) => c.getBoundingClientRect().top));
+      await uzun.goto(server.url, { waitUntil: "networkidle" });
+      await uzun.waitForSelector(".formasyonSarmal svg", { timeout: 15_000 });
+      const uzunGenislik = await uzun.evaluate(() =>
+        document.querySelector(".formasyonSarmal")?.getBoundingClientRect().width ?? 0);
 
-      await dar.goto(server.url, { waitUntil: "networkidle" });
-      await dar.waitForSelector(".colhead .zincir .ok", { timeout: 15_000 });
-      const darDonus = await dar.evaluate(() =>
-        getComputedStyle(document.querySelector(".colhead .zincir .ok")).transform);
-      // Burada ise ikinci sütun BİRİNCİNİN altına düşmüş olmalı — grid'in
-      // kendi kuralı (bkz. page.ts ".board" yorumu) bu genişlikte artık
-      // tek sütuna sarıyor.
-      const darTepeler = await dar.evaluate(() =>
-        Array.from(document.querySelectorAll(".col")).slice(0, 2)
-          .map((c) => c.getBoundingClientRect().top));
+      await kisa.goto(server.url, { waitUntil: "networkidle" });
+      await kisa.waitForSelector(".formasyonSarmal svg", { timeout: 15_000 });
+      const kisaGenislik = await kisa.evaluate(() =>
+        document.querySelector(".formasyonSarmal")?.getBoundingClientRect().width ?? 0);
 
-      expect(genisDonus).toBe("none");
-      expect(genisTepeler[0]).toBe(genisTepeler[1]);
-      expect(darDonus).not.toBe("none");
-      expect(darTepeler[1]).toBeGreaterThan(darTepeler[0] ?? 0);
+      expect(uzunGenislik).toBeGreaterThan(1050);
+      expect(uzunGenislik).toBeLessThan(1110);
+      expect(kisaGenislik).toBeGreaterThan(425);
+      expect(kisaGenislik).toBeLessThan(480);
+      // DAHA KISA PENCERE → DAHA DAR DİYAGRAM: formül yüksekliğe BAĞLI,
+      // sabit bir genişlik DEĞİL.
+      expect(kisaGenislik).toBeLessThan(uzunGenislik);
     } finally {
-      await genis.close();
-      await dar.close();
+      await uzun.close();
+      await kisa.close();
     }
   }, 60_000);
 
   /**
-   * KAPI GEREKÇESİ OKUNUR — çekirdeğin cümlesi hep görünür; ajanın ham
-   * (ve burada JSON'a benzeyen) son mesajı KATLANIR ama METNİ KAYBETMEZ.
+   * FORMASYONUN ÜÇ İŞARETİ BİR ARADA — planlama bandı, insan onayı kapısı
+   * ve ret yayı — GERÇEK tarayıcıda (kart c-20261105-2a8dab).
    *
-   * Ölçülen kusur TAM BUYDU: bir kapı kartında gerekçe olarak ham API
-   * JSON'u gerekçenin GÖVDESİNE dökülmüş hâlde duruyordu — operatörün
-   * karar vermesi gereken ilk cümle, o JSON'un içinde kayboluyordu. Kart
-   * burada GERÇEK örnekle (tick.ts'teki agentSaid'in ürettiği kesilmiş
-   * kuyruğun aynı biçimi — '…' ile başlayan, '{' ile başlamayan bir JSON
-   * parçası) kuruluyor; heuristiğin '{' kontrolünden değil "anahtar":
-   * kalıbından geçtiğini de dolaylı doğruluyor.
+   * Bu üçü `formasyonSvgKur`'un DOM'a dokunan tarafı; `fonksiyon()` ile
+   * izole edilemezler (document.createElementNS gerektiriyor), o yüzden
+   * TEK yerde, gerçek bir akışla sınanıyorlar. Akış kasıtlı ZENGİN: iki
+   * ret kenarı (coder→planner, reviewer→coder), bir onay kapısı (coder
+   * sonrası) ve İKİ katılımcılı bir planlama — üçü de aynı koşuda.
    */
-  it("uzun ve JSON'lu gerekçe: ilk satır görünür, tamamı açılabiliyor, açınca metnin tamamı DOM'da", async () => {
-    const cekirdek = "Ajan zaman aşımına uğradı";
-    // ÖZELLİKLE 200 KARAKTERDEN UZUN: "ilk 200 karakter, gerisi yok" türü
-    // bir kırpma mutasyonunun bu sınamayı GERÇEKTEN düşürdüğü (bkz. bu
-    // kartın commit'i) ancak kuyruk bu eşiği aşınca görülebiliyordu —
-    // ölçülen gerçek bug raporunda da kuyruk ~600 karakterdi (agentSaid).
-    const ajanKuyruk =
-      '…"stop_reason":null,"stop_sequence":null,"stop_details":null,"usage":' +
-      '{"input_tokens":2,"cache_creation_input_tokens":337,' +
-      '"cache_read_input_tokens":219591,"cache_creation":' +
-      '{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":337},' +
-      '"output_tokens":9,"service_tier":"standard","inference_geo":"global",' +
-      '"speed":"standard"},"input_transformations":[],"diagnostics":null,' +
-      '"context_management":null},"parent_tool_use_id":null,"session_id":' +
-      '"4285ec03-c118-4613-b7a5-c74ca34de154","uuid":' +
-      '"5c473ca0-34b2-451d-a387-9d0b10cbd941","timestamp":' +
-      '"2026-11-03T15:41:29.839Z","request_id":"req_011CggFNLdfTgJLC5gY89p4f"}';
-    const gerekce = `${cekirdek}\n\nAjan şunu söyledi:\n${ajanKuyruk}`;
+  describe("formasyon işaretleri — planlama bandı, kapı çizgisi, ret yayı", () => {
+    // planner/architect PLANLAMA katılımcısı (coder/reviewer DEĞİL — kural
+    // 22: bir katılımcı "reject" taşıyamaz, itirazın yolu itiraz dosyası).
+    const ZENGIN_FLOW = `
+name: zengin
+constitution:
+  - ../prompts/base.md
+roles:
+  - id: planner
+    provider: claude
+    workspace: main
+    prompt: ../../roles/coder.prompt
+    next: architect
 
-    await queue.add(newCard({ title: "zaman asimi", task: "iş", topology }));
-    const taken = await al(queue, "coder");
-    await queue.escalate(taken, gerekce);
+  - id: architect
+    provider: claude
+    workspace: architect
+    prompt: ../../roles/coder.prompt
+    next: coder
 
-    const { page, hatalar } = await ac();
-    try {
-      await page.waitForSelector(".card.gate", { timeout: 15_000 });
+  - id: coder
+    provider: claude
+    workspace: coder
+    prompt: ../../roles/coder.prompt
+    reject: planner
+    next: reviewer
 
-      // İLK SATIR HER ZAMAN TAM GÖRÜNÜR — ham JSON'un İÇİNDE DEĞİL.
-      expect(await page.textContent(".card.gate .reason")).toBe(cekirdek);
+  - id: reviewer
+    provider: claude
+    workspace: reviewer
+    prompt: ../../roles/coder.prompt
+    receive: batch
+    reject: coder
+    next: done
 
-      // KATLANABİLİR, varsayılan KAPALI.
-      expect(await page.evaluate(() => document.querySelector(".card.gate .ajanDetay")?.open))
-        .toBe(false);
+gates:
+  - after: coder
+    type: approval
 
-      // TIKLAYINCA AÇILIYOR ve metnin TAMAMI DOM'da — KIRPMA YOK: "ilk 200
-      // karakter, gerisi yok" burada aranan tam kusur.
-      await page.click(".card.gate .ajanDetay summary");
-      expect(await page.textContent(".card.gate .ajanTam")).toBe(ajanKuyruk);
+planlama:
+  katilimcilar: [planner, architect]
+  tur: 2
+  plan: docs/plan/{kart}.md
 
-      // JSON'A BENZEYEN kuyruk mono/kaydırmalı blokta — paragraf gibi
-      // sarılıp okutulmuyor.
-      expect(await page.evaluate(() =>
-        document.querySelector(".card.gate .ajanTam")?.classList.contains("mono"))).toBe(true);
+reject:
+  limit: 2
+  onExhausted: gate
+`;
 
-      expect(hatalar).toEqual([]);
-    } finally {
-      await page.close();
+    async function zenginSunucusuAc() {
+      await writeFile(join(root, "hub", "flows", "zengin.yaml"), ZENGIN_FLOW);
+      const flow = await loadFlow(join(root, "hub", "flows", "zengin.yaml"), {
+        root, providers: knownProviderSet(),
+      });
+      const topo = snapshot(flow, root);
+      return serveUi({ root, queue, topology: topo, flowName: flow.name, flowHash: flow.hash });
     }
-  }, 60_000);
+
+    it("planlama bandı 2 katılımcıda 'en çok N tur' etiketiyle çiziliyor", async () => {
+      const s = await zenginSunucusuAc();
+      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const hatalar: string[] = [];
+      page.on("pageerror", (e) => hatalar.push(String(e)));
+      try {
+        await page.goto(s.url, { waitUntil: "networkidle" });
+        await page.waitForSelector(".formasyonPlanEtiket", { timeout: 15_000 });
+        expect(await page.textContent(".formasyonPlanEtiket")).toBe("planlama · en çok 2 tur");
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+        await s.close();
+      }
+    }, 60_000);
+
+    it("onay kapısı dik çizgi + 'insan onayı' etiketiyle çiziliyor", async () => {
+      const s = await zenginSunucusuAc();
+      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const hatalar: string[] = [];
+      page.on("pageerror", (e) => hatalar.push(String(e)));
+      try {
+        await page.goto(s.url, { waitUntil: "networkidle" });
+        await page.waitForSelector(".formasyonKapiEtiket", { timeout: 15_000 });
+        expect(await page.textContent(".formasyonKapiEtiket")).toBe("insan onayı");
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+        await s.close();
+      }
+    }, 60_000);
+
+    it("her ret kenarı için 'ret → hedef' etiketli bir yay çiziliyor", async () => {
+      const s = await zenginSunucusuAc();
+      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const hatalar: string[] = [];
+      page.on("pageerror", (e) => hatalar.push(String(e)));
+      try {
+        await page.goto(s.url, { waitUntil: "networkidle" });
+        await page.waitForSelector(".formasyonRetEtiket", { timeout: 15_000 });
+        const etiketler = await page.evaluate(() =>
+          Array.from(document.querySelectorAll(".formasyonRetEtiket")).map((e) => e.textContent ?? ""));
+        expect(etiketler.sort()).toEqual(["ret → coder", "ret → planner"]);
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+        await s.close();
+      }
+    }, 60_000);
+
+    // TEK KATILIMCIDA BANT YOK: "ilk ile son arasında geçen bir şerit" tek
+    // noktada anlamsız (skein-merkez-v3.html'in kendi kuralı, plan.length>1).
+    it("tek katılımcılı planlamada bant/etiket HİÇ çizilmiyor", async () => {
+      const TEK_KATILIMCI_FLOW = ZENGIN_FLOW.replace("katilimcilar: [planner, architect]", "katilimcilar: [planner]");
+      await writeFile(join(root, "hub", "flows", "zengin.yaml"), TEK_KATILIMCI_FLOW);
+      const flow = await loadFlow(join(root, "hub", "flows", "zengin.yaml"), {
+        root, providers: knownProviderSet(),
+      });
+      const topo = snapshot(flow, root);
+      const s = await serveUi({ root, queue, topology: topo, flowName: flow.name, flowHash: flow.hash });
+      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const hatalar: string[] = [];
+      page.on("pageerror", (e) => hatalar.push(String(e)));
+      try {
+        await page.goto(s.url, { waitUntil: "networkidle" });
+        await page.waitForSelector(".formasyonDugum", { timeout: 15_000 });
+        expect(await page.evaluate(() => document.querySelectorAll(".formasyonPlanEtiket").length)).toBe(0);
+        expect(hatalar).toEqual([]);
+      } finally {
+        await page.close();
+        await s.close();
+      }
+    }, 60_000);
+  });
 
   /**
-   * KAPI GEREKÇESİ OLMAYAN KARTIN GÖRÜNÜMÜ DEĞİŞMİYOR.
+   * KAPI GEREKÇESİ OKUNUR SINAMASI BURADAN TAŞINDI (kart c-20261105-2a8dab).
    *
-   * Yeni katlanabilir blok yalnızca ayraç ("Ajan şunu söyledi:") gerçekten
-   * bulunduğunda çıkmalı — kısa, ajan mesajı taşımayan bir kapı
-   * gerekçesinde eski görünüm (tek `.reason` paragrafı) AYNEN kalmalı.
+   * V formasyonu Pano'nun sütun panosunu (.card tabanlı kart kutuları)
+   * kaldırıyor; kapı kartının gerekçesi/katlanabilir ajan mesajı artık
+   * HİÇBİR YERDE çizilmiyor — DEVIR.md'nin sağ paneli (henüz kurulmadı)
+   * bu içeriğin YENİ evi. Kuyruktaki "pano: sağ panel" kartı
+   * (c-20261105-d500f1) bunu AÇIKÇA "TAŞINACAK" olarak işaretliyor: aynı
+   * katlanabilir <details>/kırpmasız metin davranışı sağ panelin kapı
+   * kartında yeniden kurulacak ve bu iki sınama (ilk satır her zaman
+   * görünür + katlı özet metni kırpmıyor) O KARTTA, yeni seçicilerle
+   * geri gelmeli. Burada BIRAKILMADI çünkü artık hiçbir DOM düğümünü
+   * ölçmüyorlardı — yeşil kalan ama hiçbir şey sınamayan bir sınama,
+   * bu depoda kusurun kendisi sayılıyor.
    */
-  it("ajan mesajı taşımayan kapı gerekçesinde katlanabilir blok çıkmıyor", async () => {
-    await queue.add(newCard({ title: "basit kapı", task: "iş", topology }));
-    const taken = await al(queue, "coder");
-    await queue.escalate(taken, "ağaçta işlenmemiş değişiklik var: README.md");
-
-    const { page, hatalar } = await ac();
-    try {
-      await page.waitForSelector(".card.gate", { timeout: 15_000 });
-      expect(await page.textContent(".card.gate .reason"))
-        .toBe("ağaçta işlenmemiş değişiklik var: README.md");
-      expect(await page.evaluate(() => document.querySelector(".card.gate .ajanDetay"))).toBeNull();
-      expect(hatalar).toEqual([]);
-    } finally {
-      await page.close();
-    }
-  }, 60_000);
 
   /**
    * KUŞ İŞARETİ — bardaki marka SVG'si GERÇEKTEN görünür ve her iki temada
@@ -830,23 +894,32 @@ roles:
   }, 60_000);
 
   /**
-   * DEVİR HAREKETİ — `prefers-reduced-motion: reduce` HAREKETİ TAMAMEN
-   * SIFIRLAR.
+   * KANAT ÇIRPMA — `prefers-reduced-motion: reduce` ANİMASYONU TAMAMEN
+   * SIFIRLAR (kart c-20261105-2a8dab, SAPMALAR.md §2.2'nin "sınanmalı"
+   * dediği yer; eski "devir hareketi" sınamasının YERİNİ alıyor —
+   * `.card.gelis` sütun panosuyla birlikte kalktı, DEVIR.md'nin V
+   * formasyonunda "iş sürüyor" sinyali artık kanat çırpmanın kendisi).
    *
    * Bu bir süs tercihi değil, erişilebilirlik koşulu: `page.test.ts`
    * medya sorgusunun KAYNAK METİNDE durduğunu görebilir ama tarayıcının
-   * onu GERÇEKTEN uyguladığını göremez. Aynı senaryo iki hareket
+   * onu GERÇEKTEN uyguladığını göremez. Aynı senaryo (bir rol ÇALIŞIYOR
+   * VE gözcü AÇIK — `kanatCirpiyorMu`'nun iki koşulu) iki hareket
    * tercihiyle AÇILIYOR: reduce'da hesaplanan animasyon 'none', aksi
-   * hâlde kartın GERÇEKTEN animasyonu var — ikisi karşılaştırılmadan
-   * "animasyon yok" iddiası "hiç animasyon TANIMLI değil" kusuruyla
-   * karıştırılabilirdi.
+   * hâlde kuşun GERÇEKTEN animasyonu var.
    */
-  it("yeni kart: prefers-reduced-motion'da animasyon YOK, aksi hâlde VAR", async () => {
+  it("kanat çırpma: prefers-reduced-motion'da animasyon YOK, aksi hâlde VAR", async () => {
+    await acquireLock(join(root, ".skein", "daemon.json"), {
+      pid: process.pid, startedAt: new Date().toISOString(),
+      flow: "test", hash: "abc", mode: "serve",
+    });
+    await queue.add(newCard({ title: "kanat-azalt", task: "iş", topology }));
+    await al(queue, "coder");
+
     const { page: azalt, hatalar: hatalarAzalt } = await acHareket("reduce");
     try {
-      await queue.add(newCard({ title: "hareket-azalt", task: "iş", topology }));
-      await azalt.waitForSelector(".card", { timeout: 15_000 });
-      const animAzalt = await azalt.evaluate(() => getComputedStyle(document.querySelector(".card")).animationName);
+      await azalt.waitForSelector(".formasyonKus.kanatCirpiyor", { timeout: 15_000 });
+      const animAzalt = await azalt.evaluate(() =>
+        getComputedStyle(document.querySelector(".formasyonKus.kanatCirpiyor")).animationName);
       expect(animAzalt).toBe("none");
       expect(hatalarAzalt).toEqual([]);
     } finally {
@@ -854,12 +927,19 @@ roles:
     }
   }, 60_000);
 
-  it("yeni kart: hareket tercihi 'no-preference' ise GERÇEKTEN animasyon oynuyor", async () => {
+  it("kanat çırpma: hareket tercihi 'no-preference' ise GERÇEKTEN animasyon oynuyor", async () => {
+    await acquireLock(join(root, ".skein", "daemon.json"), {
+      pid: process.pid, startedAt: new Date().toISOString(),
+      flow: "test", hash: "abc", mode: "serve",
+    });
+    await queue.add(newCard({ title: "kanat-normal", task: "iş", topology }));
+    await al(queue, "coder");
+
     const { page: normal, hatalar: hatalarNormal } = await acHareket("no-preference");
     try {
-      await queue.add(newCard({ title: "hareket-normal", task: "iş", topology }));
-      await normal.waitForSelector(".card", { timeout: 15_000 });
-      const animNormal = await normal.evaluate(() => getComputedStyle(document.querySelector(".card")).animationName);
+      await normal.waitForSelector(".formasyonKus.kanatCirpiyor", { timeout: 15_000 });
+      const animNormal = await normal.evaluate(() =>
+        getComputedStyle(document.querySelector(".formasyonKus.kanatCirpiyor")).animationName);
       expect(animNormal).not.toBe("none");
       expect(hatalarNormal).toEqual([]);
     } finally {
@@ -868,37 +948,19 @@ roles:
   }, 60_000);
 
   /**
-   * KARTIN KİMLİĞİ İKİ YOKLAMA ARASINDA KORUNUYOR.
-   *
-   * Pano her yoklamada baştan çiziliyor (bkz. page.ts `ciz`), ama devrin
-   * hareketi ANLAMLI olması için aynı kartın aynı DOM düğümü kalması
-   * gerekiyor — yoksa her yoklamada her kart "yeni gelmiş" gibi oynardı.
-   *
-   * Düğüm NASIL sınanır: kartın kendi düğümüne bir öznitelik İŞARETLENİR
-   * (`setAttribute`) ve bir yoklama döngüsünden (1000ms) SONRA o işaretin
-   * HÂLÂ ORADA olduğu ölçülür. `kartIcerik` her yoklamada `replaceChildren`
-   * ve `className` ile içeriği baştan kuruyor ama düğümün KENDİSİNİ yok
-   * etmiyor — eğer `kartYerlestir` yeni bir düğüm YARATSAYDI (kimliği
-   * korumayan bir uygulama), bu işaret taze düğümde HİÇ BULUNMAZDI.
+   * KANAT ÇIRPMANIN KOŞULU GERÇEK TARAYICIDA DA TUTUYOR: gözcü KAPALIYKEN
+   * çalışan bir kart kanat çırptırmaz (DEVIR.md: "yalnızca ... VE gözcü
+   * açıkken"). `kanatCirpiyorMu`'nun kendi birim sınaması bu kararı SAF
+   * fonksiyon olarak doğruluyor (page.test.ts); burada iddia GERÇEKTEN
+   * sınıfın DOM'a hiç eklenmediği.
    */
-  it("aynı kart, hiçbir şey değişmeden geçen bir yoklamadan sonra AYNI DOM düğümü", async () => {
-    await queue.add(newCard({ title: "kimlik-sinama", task: "iş", topology }));
+  it("gözcü kapalıyken çalışan kart bile kanat çırptırmaz", async () => {
+    await queue.add(newCard({ title: "gozcu-kapali", task: "iş", topology }));
+    await al(queue, "coder");
     const { page, hatalar } = await ac();
     try {
-      await page.waitForSelector(".card", { timeout: 15_000 });
-      await page.evaluate(() => {
-        document.querySelector(".card")?.setAttribute("data-kimlik-sinama", "aynen-burada");
-      });
-      // En az bir yoklama döngüsünü (1000ms) GEÇİRİYORUZ — sunucu /durum'u
-      // tekrar yoklayıp panoyu yeniden çizecek kadar.
-      await page.waitForTimeout(1500);
-      const isaretHalaDuruyor = await page.evaluate(() =>
-        document.querySelector(".card")?.getAttribute("data-kimlik-sinama") ?? null);
-      expect(isaretHalaDuruyor).toBe("aynen-burada");
-      // İKİ KEZ ÇİZİLMEDİ: işaretli düğüm TEK, yoklama kartı ne kaybetti
-      // ne de yanına bir ikincisini ekledi.
-      const kartSayisi = await page.evaluate(() => document.querySelectorAll(".card").length);
-      expect(kartSayisi).toBe(1);
+      await page.waitForSelector(".formasyonDugum .kare-calisiyor", { timeout: 15_000 });
+      expect(await page.evaluate(() => document.querySelectorAll(".formasyonKus.kanatCirpiyor").length)).toBe(0);
       expect(hatalar).toEqual([]);
     } finally {
       await page.close();
@@ -906,71 +968,16 @@ roles:
   }, 60_000);
 
   /**
-   * BOŞ DURUMLAR — sütun neden boş olduğunu GERÇEKTEN söylüyor, "—"
-   * demiyor; "bitti" boşken ile rol sütunu boşken AYNI cümleyi kurmuyor.
-   *
-   * Üç GERÇEK senaryo, üçü de gerçek tarayıcıda ERİŞİLEBİLİR (yarış
-   * durumunun ayrı sınaması page.test.ts'te — bkz. `bosRolMetni` orada,
-   * burada tekrarlanmıyor çünkü gerçek uygulamada güvenilir tetiklenemez):
-   *   - hiç kart yokken,
-   *   - bir kart koşarken (biten yok ama iş sürüyor),
-   *   - bir kart kuyrukta/kapıda beklerken (koşan yok, biten de yok).
+   * BOŞ DURUMLAR / KARTIN KİMLİĞİ sınamaları BURADAN KALKTI
+   * (kart c-20261105-2a8dab). Sütun panosunun (.col/.colhead/.empty) ve
+   * devir hareketinin (kartYerlestir/KART_DUGUM) kimlik koruması V
+   * formasyonunda karşılığı YOK — diyagram diyagramSvgKur gibi her
+   * yoklamada baştan kuruluyor, "boş sütun" metni bugün hiçbir yerde
+   * ÇİZİLMİYOR. `bosRolMetni`/`bosBittiMetni`'nin SAF sınamaları
+   * page.test.ts'te hâlâ duruyor (fonksiyonlar kasıtlı olarak silinmedi,
+   * bir sonraki kart onları tüketebilir) ama burada ölçtükleri hiçbir DOM
+   * düğümü kalmadı.
    */
-  it("boş 'bitti' sütunu: hiç kart açılmadıysa bunu söyler, rol sütunuyla AYNI cümleyi kurmaz", async () => {
-    const { page, hatalar } = await ac();
-    try {
-      await page.waitForSelector("#bar .pill", { timeout: 15_000 });
-      const metinler = await page.evaluate(() => {
-        const sutunlar = Array.from(document.querySelectorAll(".col"));
-        return sutunlar.map((s) => s.querySelector(".empty")?.textContent ?? null);
-      });
-      const rolBos = metinler[0] ?? null;
-      const bittiBos = metinler[metinler.length - 1] ?? null;
-      expect(rolBos).toBe("kuyrukta kart yok");
-      expect(bittiBos).toBe("henuz kart acilmadi");
-      expect(rolBos).not.toBe(bittiBos);
-      expect(hatalar).toEqual([]);
-    } finally {
-      await page.close();
-    }
-  }, 60_000);
-
-  it("boş 'bitti' sütunu: bir kart koşarken 'iş sürüyor' der, 'hiç açılmadı' demez", async () => {
-    await queue.add(newCard({ title: "kosan-kart", task: "iş", topology }));
-    await al(queue, "coder");
-    const { page, hatalar } = await ac();
-    try {
-      await page.waitForSelector(".card.live", { timeout: 15_000 });
-      const bittiBos = await page.evaluate(() => {
-        const sutunlar = Array.from(document.querySelectorAll(".col"));
-        const son = sutunlar[sutunlar.length - 1];
-        return son?.querySelector(".empty")?.textContent ?? null;
-      });
-      expect(bittiBos).toBe("bir rol su an kosuyor, henuz biten kart yok");
-      expect(hatalar).toEqual([]);
-    } finally {
-      await page.close();
-    }
-  }, 60_000);
-
-  it("boş 'bitti' sütunu: kart kapıda beklerken 'biten yok' der, koşan yokken 'hiç açılmadı' demez", async () => {
-    await queue.add(newCard({ title: "kapida-bekleyen", task: "iş", topology }));
-    const taken = await al(queue, "coder");
-    await queue.escalate(taken, "insan kararı bekleniyor");
-    const { page, hatalar } = await ac();
-    try {
-      await page.waitForSelector(".card.gate", { timeout: 15_000 });
-      const bittiBos = await page.evaluate(() => {
-        const sutunlar = Array.from(document.querySelectorAll(".col"));
-        const son = sutunlar[sutunlar.length - 1];
-        return son?.querySelector(".empty")?.textContent ?? null;
-      });
-      expect(bittiBos).toBe("kart kuyrukta ya da kapida bekliyor, henuz biten yok");
-      expect(hatalar).toEqual([]);
-    } finally {
-      await page.close();
-    }
-  }, 60_000);
 
   /**
    * AKIŞ DİYAGRAMI — gerçek tarayıcıda.
@@ -1133,10 +1140,11 @@ gates:
     }, 60_000);
 
     /**
-     * DAR EKRANDA YÖN DEĞİŞİR — zincir okunun aynı ilkesi (bkz.
-     * ".colhead .zincir .ok" sınaması). Yön bir CSS medya sorgusuyla
-     * çözülüyor, JS pencereyi ÖLÇEREK değil: bu yüzden iddia KAYNAK
-     * METİNDEN değil, iki GERÇEK viewport'ta HESAPLANAN 'display'dan.
+     * DAR EKRANDA YÖN DEĞİŞİR — Pano'nun formasyon genişliği sınamasıyla
+     * AYNI ilke (bkz. "formasyon genişliği pencere yüksekliğine göre
+     * ölçekleniyor"). Yön bir CSS medya sorgusuyla çözülüyor, JS
+     * pencereyi ÖLÇEREK değil: bu yüzden iddia KAYNAK METİNDEN değil, iki
+     * GERÇEK viewport'ta HESAPLANAN 'display'dan.
      */
     it("geniş ekranda yatay diyagram görünür/dikey gizli, dar ekranda tersi", async () => {
       const s = await akisSunucusuAc("gunluk-tek", GUNLUK_TEK_FLOW);
@@ -1453,7 +1461,7 @@ gates:
         // BAŞARILI EKLEME paneli KAPATIYOR (bkz. yeniRolGonder: ciz(model)
         // + location.hash = "") — iddia panoda, panelin içinde değil;
         // "prompt panelinden yeni rol ekleniyor" sınamasıyla AYNI kalıp.
-        await page.waitForSelector('.colhead:has-text("ortadaki")', { timeout: 10_000 });
+        await page.waitForSelector('.formasyonDugum[data-rol="ortadaki"]', { timeout: 10_000 });
 
         const yaml = await readFile(join(root, "hub", "flows", "gunluk-tek.yaml"), "utf8");
         expect(yaml).toMatch(/id: coder[\s\S]*next: ortadaki/);
@@ -1674,10 +1682,10 @@ planlama:
    *
    * Yalnızca kaynak metin (page.test.ts'teki sekmeAdi sınaması) "hangi
    * sekme aktif sayılır" kararını ölçebilir; "tıklanınca board GERÇEKTEN
-   * gizleniyor mu, Pano'ya dönünce sütunlar hâlâ duruyor mu" sorusu
+   * gizleniyor mu, Pano'ya dönünce formasyon hâlâ duruyor mu" sorusu
    * yalnızca gerçek DOM'da görünür.
    */
-  it("sekmeler arasında geçiş board'u gizleyip yer tutucuyu gösteriyor, Pano'ya dönünce sütunlar aynen duruyor", async () => {
+  it("sekmeler arasında geçiş board'u gizleyip yer tutucuyu gösteriyor, Pano'ya dönünce formasyon aynen duruyor", async () => {
     const { page, hatalar } = await ac();
     try {
       await page.waitForSelector("#bar .pill", { timeout: 15_000 });
@@ -1694,13 +1702,13 @@ planlama:
       expect(await page.evaluate(() =>
         document.querySelector(".navSekme-aktif")?.textContent ?? "")).toContain("Akışlar");
 
-      // GERİ DÖNÜŞ: Pano'nun kendi board'u (sütunlar) hâlâ DOM'da —
-      // sekme değişimi onu YOK ETMEDİ, yalnızca gizledi.
+      // GERİ DÖNÜŞ: Pano'nun kendi board'u (formasyon düğümleri) hâlâ
+      // DOM'da — sekme değişimi onu YOK ETMEDİ, yalnızca gizledi.
       await page.click('.navSekme:has-text("Pano")');
       await page.waitForSelector("#icerikPano", { state: "visible", timeout: 10_000 });
       expect(await page.evaluate(() =>
         getComputedStyle(document.querySelector("#icerikAkislar")).display)).toBe("none");
-      expect(await page.evaluate(() => document.querySelectorAll(".col").length)).toBeGreaterThan(0);
+      expect(await page.evaluate(() => document.querySelectorAll(".formasyonDugum").length)).toBeGreaterThan(0);
       expect(hatalar).toEqual([]);
     } finally {
       await page.close();

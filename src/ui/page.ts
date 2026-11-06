@@ -307,38 +307,6 @@ const PAGE = `<!doctype html>
   .yerTutucu h2 { margin: 0 0 var(--sp-3); font-size: var(--fs-panel-title); }
 
   /* pano */
-  .board { display: grid; grid-template-columns: repeat(auto-fit, minmax(252px, 1fr)); gap: var(--sp-6) var(--sp-5); align-items: start; }
-  .col { min-width: 0; display: flex; flex-direction: column; gap: var(--sp-4); }
-  .colhead {
-    display: flex; align-items: baseline; gap: var(--sp-3);
-    padding-bottom: var(--sp-2); border-bottom: 2px solid var(--ink);
-  }
-  .colhead.muted { border-bottom-color: var(--line); color: var(--ink-2); }
-  .colhead h2 { margin: 0; font-size: var(--fs-heading); font-weight: 700; }
-  /*
-   * ZİNCİR OKU. 'skein' bir kaz sürüsünün V dizilişi ve sütunlar bugüne
-   * kadar yan yana duran BAĞIMSIZ kutular gibi görünüyordu, oysa her
-   * sütun zincirde ÖNCEKİNİN ardında duruyor. Başlık artık sıradaki
-   * sütunu da söylüyor; yön ipucu salt tipografi, ağır bir çizim değil.
-   */
-  .colhead .zincir {
-    display: inline-flex; align-items: center; gap: 3px;
-    font-family: var(--mono); font-size: var(--fs-label); color: var(--ink-3);
-  }
-  .colhead .zincir .ok { display: inline-block; }
-  /*
-   * DAR EKRANDA YÖN DEĞİŞİR. '.board' grid-template-columns:
-   * repeat(auto-fit, minmax(252px, 1fr)) kullanıyor, yani sütun sayısı
-   * JS'siz, konteyner genişliğine göre kendiliğinden düşüyor — iki sütun
-   * en az 2*252 + aralarındaki boşluk (12px) + kenar dolgusu (2*16px)
-   * = 548px istiyor. Bu eşiğin altında sütunlar ALT ALTA dizilir ve ok
-   * SAĞI göstermeyi sürdürürse sıradaki sütun artık altta dururken ok
-   * yanlış yönü söyler. 600px'lik bir pay bırakılıyor; JS'le ÖLÇÜLEN bir
-   * eşik değil, grid'in KENDİ kuralıyla aynı yönde kaba bir yaklaşıklık.
-   */
-  @media (max-width: 600px) {
-    .colhead .zincir .ok { display: inline-block; transform: rotate(90deg); }
-  }
   .card {
     background: var(--surface); border: 1px solid var(--line);
     border-radius: 4px; padding: var(--sp-6) var(--sp-6);
@@ -346,19 +314,76 @@ const PAGE = `<!doctype html>
   .card.live { border: 2px solid var(--accent); padding: var(--sp-5) var(--sp-6); }
   .card.gate { background: var(--gate-bg); border-color: var(--gate-line); }
   .card.orphan { border-color: var(--reject); border-style: dashed; }
+
   /*
-   * DEVIR HAREKETI. Kart yeni bir sutuna gectiginde ya da panoya ilk
-   * dustugunde bu sinif bir yoklama boyunca uzerinde durur (bkz. JS
-   * tarafinda kartYerlestir). Hareket EN ONEMLI kisitla geliyor: hareket
-   * duyarliligi olan biri icin prefers-reduced-motion: reduce bunu
-   * tamamen SIFIRLIYOR - bir suslemeyi kapatmiyoruz, bir erisilebilirlik
-   * kosulunu yerine getiriyoruz.
+   * FORMASYON DİYAGRAMI — kart c-20261105-2a8dab, DEVIR.md "Formasyon
+   * diyagramı (V formasyonu)". Sütun panosunun (.board/.col/.colhead,
+   * eski "zincir oku" dahil) YERİNİ alıyor — DEVIR.md ve bu kartın görevi
+   * "sütun düzenini bırak" diyor, eski sütun CSS'i bu yüzden kaldırıldı.
+   * ".card"/".card.live"/".card.gate"/".card.orphan" KALDI: başka akışın
+   * ve yetim kartların uyarı bantları hâlâ bunları kullanıyor (bkz. JS
+   * tarafında "digerler"/"yetimler" bantları, kartCiz).
+   *
+   * Genişlik formülü DEVIR.md'den BİREBİR: aspect-ratio koordinat
+   * kutusunun (1000x640) kendi oranı, genişlik de ekran yüksekliğine
+   * göre ölçekleniyor ki dar ama UZUN bir pencerede diyagram taşmasın.
    */
-  @keyframes kartGelis { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
-  .card.gelis { animation: kartGelis .3s ease-out; }
+  .formasyonSarmal { width: min(100%, calc((100vh - 210px) * 1.5625)); margin: 0 auto; }
+  .formasyonSarmal svg { width: 100%; height: auto; display: block; aspect-ratio: 1000 / 640; }
+  .formasyonDugum { cursor: pointer; }
+  .formasyonDugum rect.kutu { fill: transparent; stroke: var(--color-divider); stroke-width: 1; }
+  .formasyonDugum.secili rect.kutu { fill: var(--color-accent-100); stroke: var(--color-accent); stroke-width: 2; }
+  .formasyonDugum:focus-visible rect.kutu { stroke: var(--color-accent); stroke-width: 2; }
+  .formasyonNumara { font-size: var(--fs-11); font-weight: 600; fill: var(--label-ink); }
+  .formasyonRolAdi { font-family: var(--font-heading); font-size: var(--fs-17); font-weight: 800; fill: var(--color-text); }
+  .formasyonMeta { font-size: var(--fs-11); fill: var(--label-ink); }
+  /*
+   * KART KARELERİ — düğümün altındaki küçük sıra. Üç sınıf ".lejant
+   * .kare"nin üç değiştiricisiyle AYNI anlamı taşıyor (SAPMALAR.md §1'in
+   * kuyruk karesi düzeltmesi burada da geçerli: dolgu neutral-500, kenar
+   * dolguyla AYNI DEĞİL — --color-text).
+   */
+  .formasyonDugum .kare-calisiyor { fill: var(--color-accent); }
+  .formasyonDugum .kare-kapida { fill: none; stroke: var(--color-accent); stroke-width: 2; }
+  .formasyonDugum .kare-kuyrukta { fill: var(--queue-square-fill); stroke: var(--queue-square-border); stroke-width: 2; }
+  /*
+   * KANAT ÇIRPMA — SAPMALAR.md §2.2. Tasarımda "prefers-reduced-motion"
+   * hiç yok; burada (a) donanım/işletim sistemi tercihine DOĞRUDAN CSS'in
+   * kendisiyle uyuluyor (JS'in unutabileceği bir kontrol değil, @media KENDİSİ
+   * animasyonu sıfırlıyor) ve (b) bunun YANINA, uygulama içi bir "animate"
+   * kancası var ("kanatCirpiyorMu" fonksiyonu + document.documentElement
+   * üstündeki "data-animate" özniteliği — bkz. JS tarafı): tasarımın
+   * bahsettiği ayarı bugün hiçbir panel sürmüyor, ama kancası ekli,
+   * yoksa (a)'yı (b) ile DEĞİŞTİRMEK gibi bir hataya açık kapı bırakırdı.
+   */
+  @keyframes formasyonKanat { from { transform: scaleY(1); } to { transform: scaleY(.4) translateY(3px); } }
+  .formasyonKus.kanatCirpiyor { transform-origin: 50% 75%; animation: formasyonKanat .55s ease-in-out infinite alternate; }
   @media (prefers-reduced-motion: reduce) {
-    .card.gelis { animation: none; }
+    .formasyonKus.kanatCirpiyor { animation: none; }
   }
+  .formasyonGiris, .formasyonCikis { cursor: default; }
+  .formasyonGiris { cursor: pointer; }
+  .formasyonGiris text, .formasyonCikis text { font-family: var(--font-heading); font-weight: 700; fill: #fff; }
+  .formasyonCikis text { fill: var(--color-text); }
+  .formasyonCikis rect { fill: var(--color-surface); stroke: var(--color-text); stroke-width: 2; }
+  .formasyonGiris:focus-visible circle { stroke: var(--color-text); stroke-width: 2; }
+  .formasyonRetEtiket { font-size: var(--fs-12); font-weight: 600; fill: var(--color-accent-700); }
+  /* Boyut skein-merkez-v3.html'den: insan onayı etiketi 13px (ret
+     etiketinin 12px'inden farklı — ikisi de DEVIR.md'de açıkça verilmemiş,
+     TEK kaynak asıl prototip). */
+  .formasyonKapiEtiket { font-size: var(--fs-13); font-weight: 600; fill: var(--color-accent-700); }
+  .formasyonPlanEtiket { font-size: var(--fs-13); font-weight: 600; fill: var(--color-accent-800); }
+  .lejant {
+    display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4) var(--space-6);
+    font-size: var(--fs-11-5); color: var(--label-ink); padding: var(--space-3) 0;
+  }
+  .lejant .oge { display: inline-flex; align-items: center; gap: var(--space-1); }
+  .lejant .kare { width: 10px; height: 10px; flex: 0 0 auto; }
+  .lejant .kare.calisiyor { background: var(--color-accent); }
+  .lejant .kare.kapida { background: transparent; border: 2px solid var(--color-accent); }
+  .lejant .kare.kuyrukta { background: var(--queue-square-fill); border: 2px solid var(--queue-square-border); }
+  .lejant .cizgi-ret { width: 16px; height: 0; border-top: 2px solid var(--color-accent); flex: 0 0 auto; }
+  .lejant .lejantSag { margin-left: auto; }
   .band {
     border: 1px dashed var(--reject); border-radius: 4px; padding: var(--sp-6) var(--sp-7); margin-bottom: var(--sp-7);
   }
@@ -556,7 +581,6 @@ const PAGE = `<!doctype html>
   }
   .promptAlan textarea:disabled { opacity: .6; }
 
-  footer { margin-top: var(--sp-8); font-family: var(--mono); font-size: var(--fs-label); color: var(--ink-3); }
 </style>
 </head>
 <body>
@@ -567,7 +591,8 @@ const PAGE = `<!doctype html>
     <div class="panoArac" id="panoArac"></div>
     <div id="hata"></div>
     <div id="uyari"></div>
-    <div class="board" id="board"></div>
+    <div class="formasyonSarmal" id="board"></div>
+    <div class="lejant" id="lejant"></div>
   </div>
   <div id="icerikAkislar" class="yerTutucu" style="display:none">
     <h2>Akışlar</h2>
@@ -586,8 +611,7 @@ const PAGE = `<!doctype html>
     <p>Bu sekme henüz kurulmadı — çalışan ajanların adım adım izi burada
     görünecek.</p>
   </div>
-  <footer id="foot"></footer>
-</div>
+  </div>
 <div id="panel"></div>
 <script>
 const JETON = "__JETON__";
@@ -1177,56 +1201,6 @@ function kartDugumBaslat(kutu, id) {
   kutu.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); ac(); } });
 }
 
-// Kartın panoda hangi sütunda durduğunu ve DOM düğümünü hatırlar — devir
-// hareketinin ÖN KOŞULU. Modül kapsamında yaşıyor, yani bir yoklamadan
-// (ciz çağrısı) ötekine HAYATTA kalıyor; ciz() içinde yeniden
-// yaratılsaydı her çağrı "ilk kez görülen kart" sanırdı.
-const KART_DUGUM = new Map();
-const KART_SUTUN = new Map();
-
-/**
- * Panodaki bir kartın düğümünü verir — VARSA AYNI düğümü, YOKSA yenisini.
- *
- * Bu, "kartın KİMLİĞİ korunsun" kısıtının tam karşılığı: tarayıcı aynı
- * nesneyi görürse (çağıran taraf bunu col.append(kutu) ile başka bir
- * ebeveyne TAŞIR, yok edip yeniden yaratmaz) CSS geçişi/animasyonu o
- * düğüm üzerinde anlamlı kalır. "kolonAnahtari" değiştiyse (ya da düğüm
- * hiç yoktuysa) "gelis" sınıfı eklenir — devrin görünür hareketi bu.
- */
-function kartYerlestir(kolonAnahtari, c) {
-  let kutu = KART_DUGUM.get(c.id);
-  const yeniDugum = kutu === undefined;
-  if (yeniDugum) {
-    kutu = el("div");
-    KART_DUGUM.set(c.id, kutu);
-    kartDugumBaslat(kutu, c.id);
-  }
-  const sutunDegisti = !yeniDugum && KART_SUTUN.get(c.id) !== kolonAnahtari;
-  // İçerik ÖNCE kuruluyor: kartIcerik className'i baştan yazıyor, yani
-  // ".gelis" sınıfı buradan SONRA eklenmezse bir önceki yoklamanın
-  // kalıntısı yeni içerik tarafından zaten silinmiş olurdu.
-  kartIcerik(kutu, c);
-  KART_SUTUN.set(c.id, kolonAnahtari);
-  if (yeniDugum || sutunDegisti) kutu.classList.add("gelis");
-  return kutu;
-}
-
-/**
- * Artık panoda GÖRÜNMEYEN kartların hafızasını siler.
- *
- * KART_DUGUM/KART_SUTUN hiç küçülmezse (kart bitip yetim/başka-akış
- * bandına düşse ya da kapansa) her ikisi de sonsuza kadar büyür —
- * düğümler DOM'dan çoktan ayrılmış olsa da referans burada yaşar.
- * Sızıntı bir performans sorunudan önce bir DOĞRULUK sorunu: silinmeyen
- * bir KART_SUTUN girdisi, aynı kimlikte bambaşka bir kart geri
- * geldiğinde "sütun değişmedi" sanıp devir animasyonunu YUTARDI.
- */
-function kartHafizasiniBudat(canliIdler) {
-  for (const id of KART_DUGUM.keys()) {
-    if (!canliIdler.has(id)) { KART_DUGUM.delete(id); KART_SUTUN.delete(id); }
-  }
-}
-
 const OLAY = {
   created: "açıldı", taken: "alındı", handoff: "devredildi", reject: "REDDEDİLDİ",
   gate: "KAPI", released: "bırakıldı", requeued: "kuyruğa döndü", done: "bitti",
@@ -1673,66 +1647,16 @@ function ciz(m) {
   }
   uyari.replaceChildren(...bantlar);
 
+  // FORMASYON DİYAGRAMI — sütun panosunun yerini alıyor (bkz. yukarıdaki
+  // ".formasyonSarmal" CSS yorumu). Akışlar sekmesindeki diyagram
+  // (diyagramSvgKur) gibi HER YOKLAMADA baştan kuruluyor; kimlik koruma
+  // (eski kartYerlestir/KART_DUGUM) burada YOK — DEVIR.md'nin V
+  // formasyonu bir devir hareketi istemiyor, "canlı" sinyali artık kanat
+  // çırpmanın kendisi.
   const board = document.getElementById("board");
-  board.replaceChildren();
-  // DEVİR HAREKETİNİN KİMLİK KOŞULU: bu yoklamada panoda kalan her kart
-  // kimliğini KORUYOR (bkz. kartYerlestir) — hangi kartların kaldığını
-  // biliyoruz ki döngü bitince düşenleri KART_DUGUM/KART_SUTUN'dan silelim
-  // (kartHafizasiniBudat), yoksa hafıza sonsuza dek büyür.
-  const canliIdler = new Set();
-  m.roles.forEach((rol) => {
-    const col = el("div", "col");
-    const head = el("div", "colhead");
-    head.append(el("h2", null, rol.id));
-    // ZİNCİR OKU: bu sütunun kartı kabul edilince hangi sütuna gidiyor —
-    // yön dar ekranda CSS medya sorgusuyla aşağı döner (bkz. .colhead
-    // .zincir .ok kuralı), ölçerek değil.
-    const zincir = el("span", "zincir");
-    zincir.append(el("span", "ok", "→"));
-    zincir.append(document.createTextNode(" " + sonrakiSutun(m, rol.id)));
-    head.append(zincir);
-    head.append(el("span", "mono", rol.provider + " · " + rol.workspace));
-    head.append(el("div", "spacer"));
-    const kartlar = m.cards.filter((c) => c.role === rol.id && c.state !== "done" && !c.orphan);
-    // Sayı SÜTUNDAKİ kart sayısı, kuyruk derinliği değil: kapıda bekleyen
-    // kart kuyrukta durmuyor ve "0" yazan bir başlık yalan söylüyordu.
-    head.append(el("span", "mono", String(kartlar.length)));
-    if (rol.depth !== kartlar.length) {
-      const k = el("span", "mono", rol.depth + " kuyrukta");
-      k.style.cssText = "font-size:var(--fs-micro);color:var(--ink-3)";
-      head.append(k);
-    }
-    col.append(head);
-    if (!kartlar.length) col.append(el("div", "empty", bosRolMetni(rol, kartlar)));
-    kartlar.forEach((c) => {
-      canliIdler.add(c.id);
-      col.append(kartYerlestir(rol.id, c));
-    });
-    board.append(col);
-  });
+  board.replaceChildren(formasyonSvgKur(m));
 
-  const bitti = m.cards.filter((c) => c.state === "done");
-  const col = el("div", "col");
-  const head = el("div", "colhead muted");
-  head.append(el("h2", null, "bitti"));
-  head.append(el("div", "spacer"));
-  head.append(el("span", "mono", String(bitti.length)));
-  col.append(head);
-  if (!bitti.length) col.append(el("div", "empty", bosBittiMetni(m)));
-  bitti.forEach((c) => {
-    canliIdler.add(c.id);
-    col.append(kartYerlestir("bitti", c));
-  });
-  board.append(col);
-  kartHafizasiniBudat(canliIdler);
-
-  // "bu yuzey yalnizca okur" ARTIK DOGRU DEGILDI ve en gorunur yerde
-  // duruyordu: ekran kapi karari veriyor, kart aciyor, akis ve prompt
-  // yaziyor, gozcuyu baslatiyor. Ozellikler eklendikce bayatlayan bir
-  // guvence, hic verilmemis bir guvenceden kotudur.
-  document.getElementById("foot").textContent =
-    "okundu " + new Date(m.at).toLocaleTimeString("tr-TR") +
-    " · durum .skein/ ve olaylar.jsonl'dan okunuyor · değişiklik yalnızca düğmelerle";
+  document.getElementById("lejant").replaceChildren(lejantKur(m));
 }
 
 /**
@@ -1948,6 +1872,415 @@ function ekleIsaretiKur(x, y, sonraId) {
     diyagramRolArasiEkleAc(sonraId);
   });
   return g;
+}
+
+// --- Formasyon diyagramı (Pano) ---
+//
+// DEVIR.md "Formasyon diyagramı (V formasyonu)" — eski sütun panosunun
+// (.board/.col/.colhead) yerini alıyor. "akış diyagramı"ndan (yukarıdaki
+// diyagramSvgKur) FARKLI bir bölüm: o Akışlar sekmesinin kendi editör
+// önizlemesi (zincir sırasıyla düz bir çizgi), bu BÖLÜM Pano'nun GÖRÜNÜR
+// yüzeyi — V biçiminde sabit bir gövde çizgisi ve roller onun üzerinde.
+// sv()/okUcu()/DIYAGRAM_NS YUKARIDA tanımlı, burada TEKRAR EDİLMİYOR.
+
+/**
+ * Gövde çizgisinin beş sabit noktası — DEVIR.md'den BİREBİR. TEK kaynak:
+ * hem çizgiyi çizen kod (formasyonSvgKur) hem rol konumunu hesaplayan
+ * rolKonumu BUNU okuyor; iki ayrı kopya olsaydı biri güncellenip öteki
+ * unutulabilirdi (ölçülmüş bir kusur sınıfı, bu dosyada AJAN_AYRAC'ın
+ * kendi yorumunda da aynı uyarı var).
+ */
+const FORMASYON_GOVDE = [[40, 110], [230, 110], [500, 480], [770, 110], [950, 110]];
+
+/**
+ * Bir rolün V üzerindeki konumu — SAF, DOM yok.
+ *
+ * f = i/(n-1): roller zincir sırasında EŞİT ARALIKLA diziliyor (DEVIR.md).
+ * Konum sol-uç/tepe/sağ-uç (FORMASYON_GOVDE[1..3]) arasında DÜZ ORANLA
+ * (lerp, "* f * 2") hesaplanıyor — GİRİŞ VE ÇIKIŞ noktaları (GOVDE[0] ve
+ * GOVDE[4]) bu hesaba HİÇ GİRMİYOR. Bu, tasarım belgesinin DEĞİL, asıl
+ * referans prototipin (skein-merkez-v3.html, posAt/place
+ * fonksiyonları) birebir kopyası — DEVIR.md konumun TAM formülünü
+ * (arc-length mi, düz oran mı, giriş/çıkış dahil mi) hiç söylemiyor,
+ * yani prototip buradaki TEK kaynak.
+ *
+ * Bu seçim rastgele değil, ÖLÇÜLMÜŞ bir kusuru önlüyor: ilk denemede
+ * sol/sağ kolu giriş→sol-uç→tepe (üç nokta, arc-length ağırlıklı) olarak
+ * kurmuştum. Sonuç: iki rollü bir akışta (örn. coder/reviewer) ilk rol
+ * TAM giriş noktasına (40,110), son rol TAM çıkış noktasına (950,110)
+ * düşüyordu — "Yeni kart" "+" düğmesiyle ilk rol düğümü, "biten kart"
+ * kutusuyla son rol düğümü AYNI merkezde üst üste biniyordu (iki
+ * tıklanabilir öğe aynı yerde — biri her zaman erişilmez kalırdı).
+ * Prototipin gerçek formülü sol-uç/sağ-uçtan BAŞLIYOR, giriş/çıkış
+ * noktaları yalnızca "+" düğmesi ve biten-kart kutusu için ayrı duruyor.
+ *
+ * f===0.5 (tek rol İÇİN ZORLANMIŞ ya da TEK SAYIDA rolün ORTANCASI)
+ * HER İKİ daldan da AYNI noktaya (tepe) düşüyor — bu yüzden "tepe" AYRI
+ * bir dal: kol etiketi KOORDİNATA göre (apex noktasıyla çakışıyor mu),
+ * "n===1 mi" sorusuna göre DEĞİL. Prototip de aynı ayrımı yapıyor
+ * (place fonksiyonunun side==="apex" dalı).
+ */
+function rolKonumu(i, n) {
+  const SOL_UC = { x: FORMASYON_GOVDE[1][0], y: FORMASYON_GOVDE[1][1] };
+  const TEPE = { x: FORMASYON_GOVDE[2][0], y: FORMASYON_GOVDE[2][1] };
+  const SAG_UC = { x: FORMASYON_GOVDE[3][0], y: FORMASYON_GOVDE[3][1] };
+  const f = n <= 1 ? 0.5 : i / (n - 1);
+  if (f === 0.5) return { x: TEPE.x, y: TEPE.y, kol: "tepe" };
+  if (f < 0.5) {
+    return { x: SOL_UC.x + (TEPE.x - SOL_UC.x) * f * 2, y: SOL_UC.y + (TEPE.y - SOL_UC.y) * f * 2, kol: "sol" };
+  }
+  const t = (f - 0.5) * 2;
+  return { x: TEPE.x + (SAG_UC.x - TEPE.x) * t, y: TEPE.y + (SAG_UC.y - TEPE.y) * t, kol: "sag" };
+}
+
+/**
+ * Rol düğümündeki kuşun rengi — SAF, DOM yok.
+ *
+ * Öncelik DEVIR.md'nin sırasıyla AYNI: çalışan ya da kapıdaki kart varsa
+ * accent (iş GÖRÜNÜR durumda), yoksa herhangi bir kart varsa text (iş
+ * var ama sakin bekliyor), hiç kart yoksa SAPMA'nın düzelttiği
+ * neutral-600 (tasarım neutral-400 diyordu, ölçülen oran 1.80:1 — bkz.
+ * tasarim/SAPMALAR.md §1, "boş rol kuşu").
+ */
+function kusRengi(kartlar) {
+  if (kartlar.some((c) => c.state === "active" || c.gate)) return "var(--color-accent)";
+  if (kartlar.length) return "var(--color-text)";
+  return "var(--empty-bird-ink)";
+}
+
+/**
+ * Bir kartın "kart karesi" durumu — SAF, DOM yok. Dönen üç ad
+ * (".formasyonDugum .kare-<ad>" ve ".lejant .kare.<ad>") çizimle
+ * PAYLAŞILIYOR: "kuyrukta" SAPMALAR.md §1'in düzelttiği hâli taşıyor
+ * (neutral-500 dolgu + --color-text kenar — tasarımın kenarsız/dolguyla
+ * AYNI renkteki karesi DEĞİL).
+ */
+function kareDurumu(c) {
+  if (c.state === "active") return "calisiyor";
+  if (c.gate) return "kapida";
+  return "kuyrukta";
+}
+
+/**
+ * Ret yayının kontrol noktası — SAF, DOM yok.
+ *
+ * DEVIR.md: "kontrol noktası iki rolün orta noktasından (500,170)'e
+ * doğru %60 kaydırılır" — orta nokta hedefe %60 YAKLAŞTIRILIYOR (lerp),
+ * hedefin KENDİSİNE eşitlenmiyor: %100 olsaydı HER yay aynı noktadan
+ * geçerdi ve eğrinin biçimi kaynağı/hedefi unuturdu.
+ */
+function retYayKontrol(a, b) {
+  const ortaX = (a.x + b.x) / 2;
+  const ortaY = (a.y + b.y) / 2;
+  const hedefX = 500;
+  const hedefY = 170;
+  return { x: ortaX + (hedefX - ortaX) * 0.6, y: ortaY + (hedefY - ortaY) * 0.6 };
+}
+
+/**
+ * İki noktayı birleştiren çizgiye DİK, ortasından geçen kısa bir
+ * segment — insan onayı kapısının işareti. SAF, DOM yok.
+ */
+function kapiCizgisi(a, b, uzunluk) {
+  const mx = (a.x + b.x) / 2;
+  const my = (a.y + b.y) / 2;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const boy = Math.sqrt(dx * dx + dy * dy) || 1;
+  const px = -dy / boy;
+  const py = dx / boy;
+  const yari = uzunluk / 2;
+  return { x1: mx - px * yari, y1: my - py * yari, x2: mx + px * yari, y2: my + py * yari };
+}
+
+/**
+ * Kanat çırpmanın KOŞULU — SAF, DOM yok. DEVIR.md: "yalnızca rolde
+ * çalışan kart varsa VE gözcü açıkken". "çalışan" burada "kapıda
+ * bekleyen" DEĞİL — kusRengi'nin accent koşulundan daha DAR: kapıda
+ * bekleyen bir kart insan kararını bekliyor, kanat çırpıp "iş sürüyor"
+ * demek yanlış bir sinyal olurdu.
+ */
+function kanatCirpiyorMu(rolKartlari, daemon) {
+  return rolKartlari.some((c) => c.state === "active") && Boolean(daemon && daemon.alive);
+}
+
+/**
+ * Planlama katılımcılarının V üzerindeki konumları, zincir sırasıyla —
+ * SAF, DOM yok. Bilinmeyen bir katılımcı (akış doğrulamasından geçmiş
+ * olduğu için teoride OLMAMALI, bkz. flow/load.ts kural 17) sessizce
+ * ELENİYOR: bandın yarısını çizmek, olmayan bir rolü varmış gibi
+ * göstermekten daha güvenli bir hata modu.
+ */
+function planlamaKatilimciKonumlari(roller, katilimcilar) {
+  const n = roller.length;
+  const sonuc = [];
+  katilimcilar.forEach((id) => {
+    const i = roller.findIndex((r) => r.id === id);
+    if (i !== -1) sonuc.push(rolKonumu(i, n));
+  });
+  return sonuc;
+}
+
+/**
+ * Planlama bandının SVG yolu — SAF, DOM yok.
+ *
+ * İlk ve SON katılımcının konumu arasında çiziliyor (skein-merkez-v3.html:
+ * "plan[0]" ve "plan[plan.length-1]" — aradaki katılımcılar KULLANILMIYOR,
+ * çünkü aynı kolda zaten AYNI doğru üzerindeler, bkz. rolKonumu'nun lerp
+ * formülü). İki ARM'a yayılan bir bant (ilk sol kolda, son sağ kolda)
+ * TEPE'den geçmeli — yoksa düz çizgi iki kolun ARASINDAN kesip geçer,
+ * V'nin kendi hattını izlemez. Aynı koldaysa (ya da biri tepedeyse) ilk
+ * ile son zaten aynı doğru üzerinde, detur GEREKMİYOR.
+ */
+function planlamaBandYolu(ilk, son) {
+  const tepe = { x: FORMASYON_GOVDE[2][0], y: FORMASYON_GOVDE[2][1] };
+  const tepedenGecsin = ilk.kol === "sol" && son.kol === "sag";
+  return "M " + ilk.x + " " + ilk.y +
+    (tepedenGecsin ? " L " + tepe.x + " " + tepe.y : "") +
+    " L " + son.x + " " + son.y;
+}
+
+/**
+ * Rol düğümünün etiketi — numara, ad, "sağlayıcı · çalışma alanı" satırı.
+ * Konum DEVIR.md'ye göre: sol kolda düğümün SOLUNA (sağa yaslı), sağ
+ * kolda SAĞINA (sola yaslı), tepedekinde ALTINA (ortalı).
+ */
+function formasyonEtiketKur(rol, i, konum) {
+  const g = sv("g", { class: "formasyonEtiket" });
+  let x, hiza;
+  if (konum.kol === "sol") { x = -40; hiza = "end"; }
+  else if (konum.kol === "sag") { x = 40; hiza = "start"; }
+  else { x = 0; hiza = "middle"; }
+  const y0 = konum.kol === "tepe" ? 32 : -14;
+  const numara = sv("text", { x: x, y: y0, "text-anchor": hiza, class: "formasyonNumara" });
+  numara.textContent = String(i + 1).padStart(2, "0");
+  g.append(numara);
+  const ad = sv("text", { x: x, y: y0 + 16, "text-anchor": hiza, class: "formasyonRolAdi" });
+  ad.textContent = rol.id;
+  g.append(ad);
+  const meta = sv("text", { x: x, y: y0 + 32, "text-anchor": hiza, class: "formasyonMeta" });
+  meta.textContent = rol.provider + " · " + rol.workspace + (i === 0 ? " · öncü" : "");
+  g.append(meta);
+  return g;
+}
+
+// Seçili rol (yalnızca GÖRSEL — sağ panel henüz kurulmadı, bkz. DEVIR.md
+// "Rol düğümü ... seçilince accent-100 zemin + 2px accent kenar").
+let FORMASYON_SECILI = null;
+// "showArcs" (DEVIR.md: "ret yayları ... 'showArcs' ile gizlenebilir").
+// skein-merkez-v3.html'de bu da "animate" gibi dışarıdan verilen bir
+// bayrak (this.props.showArcs ?? true), ekranın kendi panelinde bir
+// düğmesi YOK — bugün burada da öyle: değer hep true, HİÇBİR kod onu
+// değiştirmiyor. İkisi AYNI kategoride bırakıldı (bkz. kanatCirpiyorMu
+// çağrısındaki "data-animate" notu): gelecekteki bir ayar paneli bu
+// değişkeni DOĞRUDAN atayabilir, o yüzden burada bir sabit (const) değil
+// bir değişken (let) olarak duruyor.
+let FORMASYON_RET_GOSTER = true;
+
+/**
+ * Pano'nun V formasyonu. Akışlar sekmesindeki diyagramSvgKur gibi HER
+ * ÇAĞRIDA baştan kuruluyor — kimlik koruma (eski kartYerlestir/
+ * KART_DUGUM) burada YOK: DEVIR.md'nin V formasyonu bir "devir hareketi"
+ * istemiyor, "iş sürüyor" sinyali artık kanat çırpmanın kendisi.
+ */
+function formasyonSvgKur(m) {
+  const roller = m.roles;
+  const n = roller.length;
+  const konumlar = roller.map((_, i) => rolKonumu(i, n));
+  const konumHaritasi = new Map(roller.map((r, i) => [r.id, konumlar[i]]));
+  const girisNokta = { x: FORMASYON_GOVDE[0][0], y: FORMASYON_GOVDE[0][1] };
+  const cikisNokta = { x: FORMASYON_GOVDE[4][0], y: FORMASYON_GOVDE[4][1] };
+
+  const svg = sv("svg", { viewBox: "0 0 1000 640", role: "img", "aria-label": "Rol formasyonu" });
+  svg.classList.add("formasyon");
+
+  // PLANLAMA BANDI — gövde çizgisinden ÖNCE ekleniyor ki altında kalsın
+  // (SVG'de sonraki öğe öncekinin ÜSTÜNE çizilir). TEK katılımcıda bant
+  // ÇİZİLMİYOR: "ilk ile son arasında geçen bir şerit" tek noktada
+  // anlamsız — skein-merkez-v3.html'in kendi kuralı (plan.length > 1).
+  const planNoktalari = m.plan ? planlamaKatilimciKonumlari(roller, m.plan.katilimcilar) : [];
+  if (planNoktalari.length > 1) {
+    const ilk = planNoktalari[0];
+    const son = planNoktalari[planNoktalari.length - 1];
+    const bant = sv("path", { d: planlamaBandYolu(ilk, son), fill: "none" });
+    bant.style.stroke = "var(--color-accent-200)";
+    bant.style.strokeWidth = "22";
+    bant.style.strokeLinecap = "butt";
+    svg.append(bant);
+    const etiket = sv("text", {
+      x: (ilk.x + son.x) / 2 + 40, y: (ilk.y + son.y) / 2 - 22, class: "formasyonPlanEtiket",
+    });
+    etiket.textContent = "planlama · en çok " + (m.plan ? m.plan.tur : 0) + " tur";
+    svg.append(etiket);
+  }
+
+  // GÖVDE ÇİZGİSİ — beş sabit noktadan geçen kırık çizgi. "vector-effect:
+  // non-scaling-stroke" SVG'nin viewBox ölçeklemesine KARŞI: sarmalın CSS
+  // genişliği 1000px'in altına ya da üstüne düşse de 2px çizgi 2px
+  // KALIYOR — skein-merkez-v3.html'deki "ns" (non-scaling-stroke) kuralı.
+  const govde = sv("polyline", {
+    points: FORMASYON_GOVDE.map((p) => p.join(",")).join(" "), fill: "none", "vector-effect": "non-scaling-stroke",
+  });
+  govde.style.stroke = "var(--color-text)";
+  govde.style.strokeWidth = "2";
+  svg.append(govde);
+
+  // RET YAYLARI — "showArcs" (DEVIR.md) burada FORMASYON_RET_GOSTER.
+  if (FORMASYON_RET_GOSTER) {
+    m.edges.filter((e) => e.kind === "reject").forEach((kenar) => {
+      const a = konumHaritasi.get(kenar.from);
+      const b = konumHaritasi.get(kenar.to);
+      if (!a || !b) return;
+      const kontrol = retYayKontrol(a, b);
+      const yol = sv("path", {
+        d: "M " + a.x + " " + a.y + " Q " + kontrol.x + " " + kontrol.y + " " + b.x + " " + b.y,
+        fill: "none", "vector-effect": "non-scaling-stroke",
+      });
+      yol.style.stroke = "var(--color-accent)";
+      yol.style.strokeWidth = "2";
+      svg.append(yol);
+      svg.append(okUcu(b.x, b.y, b.x - kontrol.x, b.y - kontrol.y, "var(--color-accent)"));
+      // ETİKET yayın ÜZERİNDE: quadratic Bézier'in t=0.5 noktası
+      // (0.25·a + 0.5·kontrol + 0.25·b) — kontrol noktasının KENDİSİ
+      // DEĞİL, eğri kontrol noktasından GEÇMİYOR, yalnızca ona doğru
+      // kıvrılıyor (bkz. skein-merkez-v3.html "lab" hesabı).
+      const egriOrta = {
+        x: 0.25 * a.x + 0.5 * kontrol.x + 0.25 * b.x,
+        y: 0.25 * a.y + 0.5 * kontrol.y + 0.25 * b.y,
+      };
+      const etiket = sv("text", { x: egriOrta.x + 6, y: egriOrta.y - 6, class: "formasyonRetEtiket" });
+      etiket.textContent = "ret → " + kenar.to;
+      svg.append(etiket);
+    });
+  }
+
+  // İNSAN ONAYI KAPISI — gateAfter rolü ile ZİNCİRDEKİ sonraki rol (ya da
+  // çıkış) arasındaki çizgiye dik 6px'lik bir çizgi + "insan onayı"
+  // etiketi. Hedef sonrakiSutun'dan (m.edges'ten türetilmiş) geliyor —
+  // dizideki bir sonraki İNDEKSİ varsaymıyor: bu modelin TEK gerçek
+  // kaynağı zaten edges (bkz. model.ts), diziye bitişiklik rastlantı.
+  m.gates.filter((g) => g.type === "approval").forEach((kapi) => {
+    const a = konumHaritasi.get(kapi.after);
+    if (!a) return;
+    const sonrakiId = sonrakiSutun(m, kapi.after);
+    const b = sonrakiId === "bitti" ? cikisNokta : konumHaritasi.get(sonrakiId);
+    if (!b) return;
+    const cizgi = kapiCizgisi(a, b, 36);
+    const hat = sv("line", { x1: cizgi.x1, y1: cizgi.y1, x2: cizgi.x2, y2: cizgi.y2 });
+    hat.style.stroke = "var(--color-accent)";
+    hat.style.strokeWidth = "6";
+    svg.append(hat);
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    const etiket = sv("text", { x: mx + 22, y: my + 4, class: "formasyonKapiEtiket" });
+    etiket.textContent = "insan onayı";
+    svg.append(etiket);
+  });
+
+  // GİRİŞ — 44px accent "+" (Yeni kart).
+  const girisG = sv("g", { class: "formasyonGiris" });
+  girisG.setAttribute("role", "button");
+  girisG.setAttribute("tabindex", "0");
+  girisG.setAttribute("aria-label", "Yeni kart");
+  const girisDaire = sv("circle", { cx: girisNokta.x, cy: girisNokta.y, r: 22 });
+  girisDaire.style.fill = "var(--color-accent-700)";
+  girisG.append(girisDaire);
+  const girisArti = sv("text", { x: girisNokta.x, y: girisNokta.y + 8, "text-anchor": "middle" });
+  girisArti.style.fontSize = "26px";
+  girisArti.textContent = "+";
+  girisG.append(girisArti);
+  const girisAc = () => { location.hash = "yeni"; };
+  girisG.addEventListener("click", girisAc);
+  girisG.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); girisAc(); } });
+  svg.append(girisG);
+
+  // ÇIKIŞ — 44x44 kutu, biten kart sayısı.
+  const bittiSayisi = m.cards.filter((c) => c.state === "done").length;
+  const cikisG = sv("g", { class: "formasyonCikis" });
+  cikisG.setAttribute("aria-label", bittiSayisi + " kart bitti");
+  const cikisKutu = sv("rect", { x: cikisNokta.x - 22, y: cikisNokta.y - 22, width: 44, height: 44 });
+  cikisG.append(cikisKutu);
+  const cikisMetin = sv("text", { x: cikisNokta.x, y: cikisNokta.y + 6, "text-anchor": "middle" });
+  cikisMetin.style.fontSize = "17px";
+  cikisMetin.style.fontWeight = "800";
+  cikisMetin.textContent = String(bittiSayisi);
+  cikisG.append(cikisMetin);
+  svg.append(cikisG);
+
+  // ROL DÜĞÜMLERİ — en üstte çiziliyor (her şeyin üzerinde tıklanabilir).
+  roller.forEach((rol, i) => {
+    const p = konumlar[i];
+    const rolKartlari = m.cards.filter((c) => c.role === rol.id && c.state !== "done" && !c.orphan);
+    const secili = FORMASYON_SECILI === rol.id;
+    const g = sv("g", {
+      class: "formasyonDugum" + (secili ? " secili" : ""),
+      "data-rol": rol.id,
+      transform: "translate(" + p.x + " " + p.y + ")",
+    });
+    g.setAttribute("role", "button");
+    g.setAttribute("tabindex", "0");
+    g.setAttribute("aria-pressed", String(secili));
+    g.setAttribute("aria-label", rol.id + " rolü");
+    const kutu = sv("rect", { class: "kutu", x: -32, y: -22, width: 64, height: 44 });
+    g.append(kutu);
+
+    // KUŞ — 46x23, kendi iç görüş alanıyla gömülü bir <svg>: dönüşüm
+    // (kanat çırpma) bu kutunun kendi kutusuna göre hesaplanır.
+    const animasyonAcik = document.documentElement.dataset.animate !== "off";
+    const kus = sv("svg", { x: -23, y: -11.5, width: 46, height: 23, viewBox: "0 0 46 23" });
+    kus.classList.add("formasyonKus");
+    if (kanatCirpiyorMu(rolKartlari, m.daemon) && animasyonAcik) kus.classList.add("kanatCirpiyor");
+    const kusCizgi = sv("polyline", { points: "2,5 13,9 24,19 35,9 46,5", fill: "none" });
+    kusCizgi.style.stroke = kusRengi(rolKartlari);
+    kusCizgi.style.strokeWidth = "4";
+    kusCizgi.style.strokeLinejoin = "miter";
+    kus.append(kusCizgi);
+    g.append(kus);
+
+    // KART KARELERİ — düğümün altında küçük bir sıra, ortalı.
+    const kareAraligi = 12;
+    const kareBasi = -((rolKartlari.length - 1) * kareAraligi) / 2 - 5;
+    rolKartlari.forEach((c, idx) => {
+      const kare = sv("rect", {
+        class: "kare-" + kareDurumu(c), x: kareBasi + idx * kareAraligi, y: 26, width: 10, height: 10,
+      });
+      g.append(kare);
+    });
+
+    g.append(formasyonEtiketKur(rol, i, p));
+
+    const secimDegistir = () => {
+      FORMASYON_SECILI = FORMASYON_SECILI === rol.id ? null : rol.id;
+      ciz(m);
+    };
+    g.addEventListener("click", secimDegistir);
+    g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); secimDegistir(); } });
+    svg.append(g);
+  });
+
+  return svg;
+}
+
+/** Lejant — diyagramın altındaki açıklama şeridi (DEVIR.md + SAPMALAR.md §2.4). */
+function lejantKur(m) {
+  const kutu = el("div");
+  [["calisiyor", "çalışıyor"], ["kapida", "kapıda"], ["kuyrukta", "kuyrukta"]].forEach(([sinif, etiket]) => {
+    const oge = el("span", "oge");
+    oge.append(el("span", "kare " + sinif));
+    oge.append(document.createTextNode(etiket));
+    kutu.append(oge);
+  });
+  const retOge = el("span", "oge");
+  retOge.append(el("span", "cizgi-ret"));
+  retOge.append(document.createTextNode("ret yolu"));
+  kutu.append(retOge);
+
+  // SAPMALAR.md §2.4: tasarımın "bu yüzey yalnızca okur" iddiası YANLIŞ —
+  // ekran kapı kararı veriyor, kart açıyor, akış/prompt yazıyor, gözcüyü
+  // başlatıp durduruyor. Doğrusu burada, geri GETİRİLMİYOR.
+  kutu.append(el("span", "lejantSag",
+    "okundu " + new Date(m.at).toLocaleTimeString("tr-TR") +
+    " · durum .skein/ ve olaylar.jsonl'dan okunuyor · değişiklik yalnızca düğmelerle"));
+  return kutu;
 }
 
 /**
