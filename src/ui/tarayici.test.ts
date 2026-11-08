@@ -62,13 +62,13 @@ roles:
  * tipini döndürüyor, iç içe aramalar için (bkz. formasyon düğümü/kare
  * sınamaları).
  */
-type El = {
+type Elem = {
   textContent: string | null;
   style: { display: string };
   classList: { contains: (c: string) => boolean };
   /** Rol düğümünün "data-rol"u, kart karesinin sınıfı vb. okumak için. */
   getAttribute: (ad: string) => string | null;
-  querySelector: (s: string) => El | null;
+  querySelector: (s: string) => Elem | null;
   /**
    * Formasyon genişliği sınaması `width` ister; uçuş sınamaları (düğüm
    * MERKEZİNİ bulmak için) `height` de ister — ikisi AYNI alanın parçası,
@@ -86,10 +86,10 @@ type El = {
   blur?: () => void;
 };
 declare const document: {
-  querySelector: (s: string) => El | null;
-  querySelectorAll: (s: string) => ArrayLike<El>;
+  querySelector: (s: string) => Elem | null;
+  querySelectorAll: (s: string) => ArrayLike<Elem>;
   /** Yalnızca bildirim ve "Rol kaybolursa" sınamaları için. */
-  getElementById: (id: string) => El | null;
+  getElementById: (id: string) => Elem | null;
   body: unknown;
   /** Yalnızca "Akışlar sekmesi" describe'ındaki Escape sınaması için. */
   dispatchEvent: (e: unknown) => void;
@@ -145,8 +145,8 @@ declare let RAIL: { mode: string; roleId: string | null; cardId: string | null; 
 declare let LAST_MODEL: unknown;
 declare function ciz(m: unknown): void;
 
-type Tarayici = { newPage: (o?: unknown) => Promise<Sayfa>; close: () => Promise<void> };
-type Sayfa = {
+type Browser = { newPage: (o?: unknown) => Promise<PageHandle>; close: () => Promise<void> };
+type PageHandle = {
   goto: (url: string, o?: unknown) => Promise<unknown>;
   /** Yalnızca "tema anahtarı" describe'ı için — seçimin GERÇEK bir sayfa yenilemesinde korunduğunu ölçer. */
   reload: (o?: unknown) => Promise<unknown>;
@@ -170,7 +170,7 @@ type Sayfa = {
  * bağımlılık DEĞİL, ortamda varsa kullanılıyor — sabit bir `import`
  * yazarsak `tsc` çözümleyemez.
  */
-type Chromium = { launch: (o?: unknown) => Promise<Tarayici> };
+type Chromium = { launch: (o?: unknown) => Promise<Browser> };
 
 /**
  * `createRequire` kullanılıyor, düz `import` değil.
@@ -200,7 +200,7 @@ if (pwChromium === null) {
   );
 }
 
-let browser: Tarayici | null = null;
+let browser: Browser | null = null;
 
 beforeAll(async () => {
   if (pwChromium !== null) browser = await pwChromium.launch({ args: ["--no-sandbox"] });
@@ -241,8 +241,8 @@ afterEach(async () => {
 });
 
 /** Sayfayı açar ve sayfa hatalarını toplar. */
-async function ac(): Promise<{ page: Sayfa; errors: string[] }> {
-  const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+async function ac(): Promise<{ page: PageHandle; errors: string[] }> {
+  const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(String(e)));
   await page.goto(server.url, { waitUntil: "networkidle" });
@@ -257,8 +257,8 @@ async function ac(): Promise<{ page: Sayfa; errors: string[] }> {
  * hangi temanın koştuğu BELİRSİZ olur. Playwright'a şemayı açıkça
  * vererek bu belirsizliği kaldırıyoruz.
  */
-async function acTema(sema: "light" | "dark"): Promise<{ page: Sayfa; errors: string[] }> {
-  const page = await (browser as Tarayici).newPage({
+async function acTema(sema: "light" | "dark"): Promise<{ page: PageHandle; errors: string[] }> {
+  const page = await (browser as Browser).newPage({
     viewport: { width: 1280, height: 900 },
     colorScheme: sema,
   });
@@ -285,8 +285,8 @@ async function acTema(sema: "light" | "dark"): Promise<{ page: Sayfa; errors: st
  * CSS'i KAYNAK METİNDEN değil tarayıcının GERÇEKTEN uyguladığı hesaplanmış
  * stilden okuyoruz.
  */
-async function acHareket(hareket: "reduce" | "no-preference"): Promise<{ page: Sayfa; errors: string[] }> {
-  const page = await (browser as Tarayici).newPage({
+async function acHareket(hareket: "reduce" | "no-preference"): Promise<{ page: PageHandle; errors: string[] }> {
+  const page = await (browser as Browser).newPage({
     viewport: { width: 1280, height: 900 },
     reducedMotion: hareket,
   });
@@ -307,8 +307,8 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
       const nodes = await page.evaluate(() =>
         Array.from(document.querySelectorAll(".formasyonDugum")).map((e) => e.getAttribute("data-rol")));
       expect(nodes).toEqual(["coder"]);
-      const cikisSayisi = await page.textContent(".formasyonCikis text");
-      expect(cikisSayisi).toBe("0");
+      const exitCount = await page.textContent(".formasyonCikis text");
+      expect(exitCount).toBe("0");
       expect(errors).toEqual([]);
     } finally {
       await page.close();
@@ -378,17 +378,17 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
     const { page, errors } = await acTema("dark");
     try {
       await page.waitForSelector("#bar .pill", { timeout: 15_000 });
-      const barZemin = await page.evaluate(() =>
+      const barBackground = await page.evaluate(() =>
         getComputedStyle(document.querySelector("#bar")).backgroundColor);
       const govdeZemin = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
       const sekmeMetni = await page.evaluate(() =>
         getComputedStyle(document.querySelector(".navSekme")).color);
       // --color-bg'nin koyu ezmesi: #1A1817 → rgb(26, 24, 23).
-      expect(barZemin).toBe("rgb(26, 24, 23)");
+      expect(barBackground).toBe("rgb(26, 24, 23)");
       // KARŞIT İDDİA: açık temanın --color-bg'si (#f3f2f2 → rgb(243, 242,
       // 242)) DEĞİL — reddedilen halde #bar tam olarak bu değerde donup
       // kalıyordu.
-      expect(barZemin).not.toBe("rgb(243, 242, 242)");
+      expect(barBackground).not.toBe("rgb(243, 242, 242)");
       // --bg'nin (eski aile) koyu ezmesi: #0B1118 → rgb(11, 17, 24).
       expect(govdeZemin).toBe("rgb(11, 17, 24)");
       // --color-text'in koyu ezmesi: #F2EFEE → rgb(242, 239, 238).
@@ -698,8 +698,8 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
     const { page, errors } = await ac();
     try {
       await page.waitForSelector("#bar .sayac", { timeout: 15_000 });
-      const barMetni = await page.textContent("#bar");
-      expect(barMetni).toContain("toplam maliyet ≥$0.50");
+      const barText = await page.textContent("#bar");
+      expect(barText).toContain("toplam maliyet ≥$0.50");
       expect(errors).toEqual([]);
     } finally {
       await page.close();
@@ -724,11 +724,11 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
       await page.waitForSelector("#bar .pill", { timeout: 15_000 });
       const hap = (await page.textContent("#bar .pill")) ?? "";
       expect(hap).toContain("bayat kilit");
-      const dugmeler = await page.evaluate(() =>
+      const buttons = await page.evaluate(() =>
         Array.from(document.querySelectorAll("#bar button")).map((b) => b.textContent ?? ""));
       // Gözcü bayrağı verilmediği için düğme HİÇ çıkmamalı ya da çıkarsa
       // "başlat" demeli — "durdur" demesi yapamayacağı şeyi vaat etmektir.
-      expect(dugmeler.some((d) => d.includes("Gözcüyü durdur"))).toBe(false);
+      expect(buttons.some((d) => d.includes("Gözcüyü durdur"))).toBe(false);
     } finally {
       await page.close();
     }
@@ -758,8 +758,8 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
       expect(komutlar.length).toBe(2);
       expect(komutlar[0]).toContain("src/watch/cli.ts");
       expect(komutlar[1]).toContain("src/ui/cli.ts");
-      const dugmeVar = await page.evaluate(() => Boolean(document.querySelector(".railGozcuEylemler button")));
-      expect(dugmeVar).toBe(false);
+      const hasButton = await page.evaluate(() => Boolean(document.querySelector(".railGozcuEylemler button")));
+      expect(hasButton).toBe(false);
     } finally {
       await page.close();
     }
@@ -842,7 +842,7 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
         return { pid: 777, kill: () => {}, onExit: () => {} };
       },
     });
-    const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+    const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
     try {
       await page.goto(s.url, { waitUntil: "networkidle" });
       await page.waitForSelector("#bar .pill", { timeout: 15_000 });
@@ -874,7 +874,7 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
         return { pid: 777, kill: () => {}, onExit: () => {} };
       },
     });
-    const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+    const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
     try {
       await page.goto(s.url, { waitUntil: "networkidle" });
       await page.waitForSelector("#bar .pill", { timeout: 15_000 });
@@ -919,16 +919,16 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
     await acquireLock(join(root, ".skein", "daemon.json"), {
       pid: 4_194_305, startedAt: new Date().toISOString(), flow: flow.name, hash: flow.hash, mode: "serve",
     });
-    const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+    const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
     try {
       await page.goto(s.url, { waitUntil: "networkidle" });
       await page.waitForSelector("#bar .pill", { timeout: 15_000 });
       await page.click("#bar .pill");
       await page.waitForSelector(".railGozcuEylemler .railBtn", { timeout: 10_000 });
       expect(await page.textContent(".railGozcuEylemler .railBtn")).toBe("Kilidi devral ve başlat");
-      const digerDugmeler = await page.evaluate(() =>
+      const otherButtons = await page.evaluate(() =>
         Array.from(document.querySelectorAll(".railGozcuEylemler button")).map((b) => b.textContent ?? ""));
-      expect(digerDugmeler.some((d) => d.includes("Gözcüyü durdur"))).toBe(false);
+      expect(otherButtons.some((d) => d.includes("Gözcüyü durdur"))).toBe(false);
     } finally {
       await page.close();
       await s.close();
@@ -940,7 +940,7 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
     writeFileSync(join(root, ".skein", "daemon.json"), JSON.stringify({
       pid: 777, startedAt: new Date().toISOString(), flow: flow.name, hash: "ESKI-HASH-abc", mode: "serve",
     }));
-    const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+    const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
     try {
       await page.goto(s.url, { waitUntil: "networkidle" });
       await page.waitForSelector("#bar .pill", { timeout: 15_000 });
@@ -1009,7 +1009,7 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
         return { pid, kill: () => {}, onExit: () => {} };
       },
     });
-    const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+    const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
     try {
       await page.goto(s.url, { waitUntil: "networkidle" });
       await page.waitForSelector("#bar .pill", { timeout: 15_000 });
@@ -1080,7 +1080,7 @@ roles:
       },
     });
 
-    const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+    const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(String(e)));
     try {
@@ -1126,7 +1126,7 @@ roles:
       loadOptions: { root, providers: knownProviderSet() },
     });
 
-    const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+    const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(String(e)));
     try {
@@ -1173,7 +1173,7 @@ roles:
       providerIds: knownProviderSet().ids(),
     });
 
-    const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+    const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(String(e)));
     try {
@@ -1230,7 +1230,7 @@ roles:
       loadOptions: { root, providers: knownProviderSet() },
     });
 
-    const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+    const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(String(e)));
     try {
@@ -1256,8 +1256,8 @@ roles:
       // GERİ "coder"a dön — İLK taslak SESSİZCE EZİLMEMİŞ olmalı.
       await page.click('.promptlarOge:has-text("coder")');
       await page.waitForTimeout(300);
-      const coderMetni = await page.evaluate(() => document.querySelector("#promptlarMetin")?.value ?? null);
-      expect(coderMetni).toBe("# coder\nkaydedilmemiş taslak\n");
+      const coderText = await page.evaluate(() => document.querySelector("#promptlarMetin")?.value ?? null);
+      expect(coderText).toBe("# coder\nkaydedilmemiş taslak\n");
 
       // "Geri al" SADECE o an seçili (coder) dosyayı eski hâline döndürür;
       // "base" taslağı ETKİLENMEMELİ — rozet 2'den 1'e düşer, SIFIRA değil.
@@ -1295,7 +1295,7 @@ roles:
       loadOptions: { root, providers: knownProviderSet() },
     });
 
-    const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+    const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(String(e)));
     try {
@@ -1342,11 +1342,11 @@ roles:
     // hâliyle AYNEN kalıyor — değişen tek şey viewport genişliği.
     //
     // Yükseklik 900 → min(1088, (900-210)*1.5625) = min(1088, 1078.125).
-    const uzun = await (browser as Tarayici).newPage({ viewport: { width: 1600, height: 900 } });
+    const uzun = await (browser as Browser).newPage({ viewport: { width: 1600, height: 900 } });
     // Yükseklik 500 → min(1088, (500-210)*1.5625) = min(1088, 453.125) —
     // burada YÜKSEKLİK sınırlayan taraf, "min(100%, ...)"ın "100%" dalı
     // DEĞİL; iki senaryo birlikte formülün HER İKİ tarafını da sınıyor.
-    const kisa = await (browser as Tarayici).newPage({ viewport: { width: 1600, height: 500 } });
+    const kisa = await (browser as Browser).newPage({ viewport: { width: 1600, height: 500 } });
     try {
       await uzun.goto(server.url, { waitUntil: "networkidle" });
       await uzun.waitForSelector(".formasyonSarmal svg", { timeout: 15_000 });
@@ -1441,7 +1441,7 @@ reject:
 
     it("planlama bandı 2 katılımcıda 'en çok N tur' etiketiyle çiziliyor", async () => {
       const s = await zenginSunucusuAc();
-      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
       try {
@@ -1457,7 +1457,7 @@ reject:
 
     it("onay kapısı dik çizgi + 'insan onayı' etiketiyle çiziliyor", async () => {
       const s = await zenginSunucusuAc();
-      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
       try {
@@ -1473,7 +1473,7 @@ reject:
 
     it("her ret kenarı için 'ret → hedef' etiketli bir yay çiziliyor", async () => {
       const s = await zenginSunucusuAc();
-      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
       try {
@@ -1499,7 +1499,7 @@ reject:
       });
       const topo = snapshot(flow, root);
       const s = await serveUi({ root, queue, topology: topo, flowName: flow.name, flowHash: flow.hash });
-      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
       try {
@@ -1602,8 +1602,8 @@ reject:
      * bkz. commit 88f68ad'in AYNI adlı sınaması — yalnızca seçici değişti.
      */
     it("uzun ve JSON'lu gerekçe: ilk satır görünür, tamamı açılabiliyor, açınca metnin tamamı DOM'da", async () => {
-      const cekirdek = "Ajan zaman aşımına uğradı";
-      const ajanKuyruk =
+      const core = "Ajan zaman aşımına uğradı";
+      const agentQueue =
         '…"stop_reason":null,"stop_sequence":null,"stop_details":null,"usage":' +
         '{"input_tokens":2,"cache_creation_input_tokens":337,' +
         '"cache_read_input_tokens":219591,"cache_creation":' +
@@ -1614,7 +1614,7 @@ reject:
         '"4285ec03-c118-4613-b7a5-c74ca34de154","uuid":' +
         '"5c473ca0-34b2-451d-a387-9d0b10cbd941","timestamp":' +
         '"2026-11-03T15:41:29.839Z","request_id":"req_011CggFNLdfTgJLC5gY89p4f"}';
-      const rationale = `${cekirdek}\n\nAjan şunu söyledi:\n${ajanKuyruk}`;
+      const rationale = `${core}\n\nAjan şunu söyledi:\n${agentQueue}`;
 
       await queue.add(newCard({ title: "zaman asimi", task: "iş", topology }));
       const taken = await al(queue, "coder");
@@ -1625,7 +1625,7 @@ reject:
         await page.waitForSelector(".railKapiKutu", { timeout: 15_000 });
 
         // İLK SATIR HER ZAMAN TAM GÖRÜNÜR — ham JSON'un İÇİNDE DEĞİL.
-        expect(await page.textContent(".railKapiKutu .reason")).toBe(cekirdek);
+        expect(await page.textContent(".railKapiKutu .reason")).toBe(core);
 
         // KATLANABİLİR, varsayılan KAPALI.
         expect(await page.evaluate(() => document.querySelector(".railKapiKutu .ajanDetay")?.open))
@@ -1634,7 +1634,7 @@ reject:
         // TIKLAYINCA AÇILIYOR ve metnin TAMAMI DOM'da — KIRPMA YOK: "en
         // fazla 3 satır" kuralı (DEVIR.md) yalnızca GÖRÜNÜMÜ kırpar.
         await page.click(".railKapiKutu .ajanDetay summary");
-        expect(await page.textContent(".railKapiKutu .ajanTam")).toBe(ajanKuyruk);
+        expect(await page.textContent(".railKapiKutu .ajanTam")).toBe(agentQueue);
 
         // JSON'A BENZEYEN kuyruk mono/kaydırmalı blokta.
         expect(await page.evaluate(() =>
@@ -1917,10 +1917,10 @@ reject:
       expect(stroke).toBe("currentColor");
       // currentColor'ın ÇÖZÜLMÜŞ hâli: path'in computed 'color'ı,
       // --color-accent'in gerçek değeri.
-      const ciziliRenkAcik = await isOpen.evaluate(() =>
+      const strokeColourLight = await isOpen.evaluate(() =>
         getComputedStyle(document.querySelector(".marka svg path")).color);
       // --color-accent: #ec3013 → rgb(236, 48, 19)
-      expect(ciziliRenkAcik).toBe("rgb(236, 48, 19)");
+      expect(strokeColourLight).toBe("rgb(236, 48, 19)");
       expect(hatalarAcik).toEqual([]);
     } finally {
       await isOpen.close();
@@ -1929,11 +1929,11 @@ reject:
     const { page: koyu, errors: hatalarKoyu } = await acTema("dark");
     try {
       await koyu.waitForSelector(".marka svg path", { timeout: 15_000 });
-      const ciziliRenkKoyu = await koyu.evaluate(() =>
+      const strokeColourDark = await koyu.evaluate(() =>
         getComputedStyle(document.querySelector(".marka svg path")).color);
       // --color-accent'in koyu tema EZMESİ yok (Modernist katmanı koyu
       // tanımlamıyor) — iki temada da AYNI kırmızı çözülmeli.
-      expect(ciziliRenkKoyu).toBe("rgb(236, 48, 19)");
+      expect(strokeColourDark).toBe("rgb(236, 48, 19)");
       expect(hatalarKoyu).toEqual([]);
     } finally {
       await koyu.close();
@@ -1961,16 +1961,16 @@ reject:
         getComputedStyle(document.querySelector(".marka .markaAd")).fontFamily);
       const sekmeFontu = await page.evaluate(() =>
         getComputedStyle(document.querySelector(".navSekme")).fontFamily);
-      const dugmeFontu = await page.evaluate(() =>
+      const buttonFont = await page.evaluate(() =>
         getComputedStyle(document.querySelector(".yeniKart")).fontFamily);
       expect(markaFontu).toContain("Archivo");
       expect(sekmeFontu).toContain("Archivo");
-      expect(dugmeFontu).toContain("Archivo");
+      expect(buttonFont).toContain("Archivo");
       // KARŞIT İDDİA: gövdenin system-ui yığınına EŞİT KALMADIKLARI —
       // tanımsız var() tam olarak bu değere sessizce düşerdi.
       expect(markaFontu).not.toBe(govdeFontu);
       expect(sekmeFontu).not.toBe(govdeFontu);
-      expect(dugmeFontu).not.toBe(govdeFontu);
+      expect(buttonFont).not.toBe(govdeFontu);
       expect(errors).toEqual([]);
     } finally {
       await page.close();
@@ -2029,9 +2029,9 @@ reject:
     const { page: azalt, errors: hatalarAzalt } = await acHareket("reduce");
     try {
       await azalt.waitForSelector(".formasyonKus.kanatCirpiyor", { timeout: 15_000 });
-      const animAzalt = await azalt.evaluate(() =>
+      const animReduce = await azalt.evaluate(() =>
         getComputedStyle(document.querySelector(".formasyonKus.kanatCirpiyor")).animationName);
-      expect(animAzalt).toBe("none");
+      expect(animReduce).toBe("none");
       expect(hatalarAzalt).toEqual([]);
     } finally {
       await azalt.close();
@@ -2166,7 +2166,7 @@ gates:
 `;
 
     /** Verilen akış metnini yükler, sunucuyu o akışla açar. */
-    async function akisSunucusuAc(ad: string, metin: string) {
+    async function openFlowServer(ad: string, metin: string) {
       await writeFile(join(root, "hub", "flows", `${ad}.yaml`), metin);
       const flow = await loadFlow(join(root, "hub", "flows", `${ad}.yaml`), {
         root, providers: knownProviderSet(),
@@ -2183,7 +2183,7 @@ gates:
      * ihtiyaç duyuyor — "Ham YAML" sekmesinin kendi sınamasıyla (bkz.
      * yukarıdaki describe dışı test) AYNI kalıp.
      */
-    async function akisSunucusuDuzenlenebilirAc(ad: string, metin: string) {
+    async function openEditableFlowServer(ad: string, metin: string) {
       const path = join(root, "hub", "flows", `${ad}.yaml`);
       await writeFile(path, metin);
       const live = await LiveFlow.open(path, { root, providers: knownProviderSet() });
@@ -2196,8 +2196,8 @@ gates:
     }
 
     it("gunluk-tek: iki düğüm, next ileri, reject ve syncBack GERİ ve GÖRSEL OLARAK AYRI", async () => {
-      const s = await akisSunucusuAc("gunluk-tek", DAILY_SINGLE_FLOW);
-      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const s = await openFlowServer("gunluk-tek", DAILY_SINGLE_FLOW);
+      const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
       try {
@@ -2221,9 +2221,9 @@ gates:
 
         // AYNI ÇİFTE giden syncBack de var ve reject'ten AYRI bir kenar —
         // biri biri EZMEMELİ (model katmanında da aynı iddia, model.test.ts).
-        const ayniCift = await page.evaluate(() =>
+        const samePair = await page.evaluate(() =>
           document.querySelectorAll('.diyagram-yatay .kenar[data-from="reviewer"][data-to="coder"]').length);
-        expect(ayniCift).toBe(2);
+        expect(samePair).toBe(2);
 
         // ÇİZGİ BİÇİMİ TEK TAŞIYICI (erişilebilirlik): next, reject,
         // syncBack ÜÇÜNÜN de stroke-dasharray'i FARKLI — renk körü bir göz
@@ -2258,9 +2258,9 @@ gates:
      * GERÇEK viewport'ta HESAPLANAN 'display'dan.
      */
     it("geniş ekranda yatay diyagram görünür/dikey gizli, dar ekranda tersi", async () => {
-      const s = await akisSunucusuAc("gunluk-tek", DAILY_SINGLE_FLOW);
-      const genis = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
-      const dar = await (browser as Tarayici).newPage({ viewport: { width: 400, height: 900 } });
+      const s = await openFlowServer("gunluk-tek", DAILY_SINGLE_FLOW);
+      const genis = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
+      const dar = await (browser as Browser).newPage({ viewport: { width: 400, height: 900 } });
       try {
         await genis.goto(s.url, { waitUntil: "networkidle" });
         await genis.waitForSelector("#bar .pill", { timeout: 15_000 });
@@ -2275,15 +2275,15 @@ gates:
         await dar.waitForSelector("#bar .pill", { timeout: 15_000 });
         await dar.click('button:has-text("Akışı düzenle")');
         await dar.waitForSelector(".diyagram-dikey", { timeout: 10_000 });
-        const darGorunum = await dar.evaluate(() => ({
+        const narrowView = await dar.evaluate(() => ({
           yatay: getComputedStyle(document.querySelector(".diyagram-yatay")).display,
           dikey: getComputedStyle(document.querySelector(".diyagram-dikey")).display,
         }));
 
         expect(genisGorunum.yatay).not.toBe("none");
         expect(genisGorunum.dikey).toBe("none");
-        expect(darGorunum.yatay).toBe("none");
-        expect(darGorunum.dikey).not.toBe("none");
+        expect(narrowView.yatay).toBe("none");
+        expect(narrowView.dikey).not.toBe("none");
       } finally {
         await genis.close();
         await dar.close();
@@ -2292,8 +2292,8 @@ gates:
     }, 60_000);
 
     it("ab-planli: dört rol, zincirdeki her next/reject kenarı ve yalnızca onay kapısı işaretli", async () => {
-      const s = await akisSunucusuAc("ab-planli", AB_PLANNED_FLOW);
-      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const s = await openFlowServer("ab-planli", AB_PLANNED_FLOW);
+      const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
       try {
@@ -2363,7 +2363,7 @@ gates:
       const s = await serveUi({
         root, queue, topology, flowName: "test", flowHash: live.flow.hash, live,
       });
-      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
       page.on("console", (m) => {
@@ -2415,7 +2415,7 @@ gates:
         flowPath: live.flow.path,
         loadOptions: { root, providers: knownProviderSet() },
       });
-      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
       try {
@@ -2460,7 +2460,7 @@ gates:
         flowPath: live.flow.path,
         loadOptions: { root, providers: knownProviderSet() },
       });
-      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
       try {
@@ -2502,8 +2502,8 @@ gates:
      * TEMİZLENEREK sınanıyor).
      */
     it("diyagramdan düğüme tıklayınca düzenleme alanları açılıyor, provider değiştirip kaydetmek dosyayı değiştiriyor", async () => {
-      const s = await akisSunucusuDuzenlenebilirAc("gunluk-tek", DAILY_SINGLE_FLOW);
-      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const s = await openEditableFlowServer("gunluk-tek", DAILY_SINGLE_FLOW);
+      const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
       try {
@@ -2544,8 +2544,8 @@ gates:
      * seçiminde) önceden söylüyor, sonra /rol/yeni'yi ATOMİK çağırıyor.
      */
     it("diyagramdaki '+' ile iki düğüm arasına rol ekleniyor, zincire doğru yere giriyor", async () => {
-      const s = await akisSunucusuDuzenlenebilirAc("gunluk-tek", DAILY_SINGLE_FLOW);
-      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const s = await openEditableFlowServer("gunluk-tek", DAILY_SINGLE_FLOW);
+      const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
       try {
@@ -2622,8 +2622,8 @@ roles:
 `;
 
     it("diyagramdan rol silinince zincir KOPMUYOR, çıkarılan role işaret eden kenarlar TEMİZLENİYOR", async () => {
-      const s = await akisSunucusuDuzenlenebilirAc("uclu", TRIPLE_FLOW);
-      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const s = await openEditableFlowServer("uclu", TRIPLE_FLOW);
+      const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
       try {
@@ -2667,8 +2667,8 @@ roles:
      * geçmeden.
      */
     it("diyagramdan geçersiz bir değişiklik yapınca kural mesajı EKRANDA (diyagram sekmesinde) görünüyor", async () => {
-      const s = await akisSunucusuDuzenlenebilirAc("gunluk-tek", DAILY_SINGLE_FLOW);
-      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const s = await openEditableFlowServer("gunluk-tek", DAILY_SINGLE_FLOW);
+      const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
       try {
@@ -2749,8 +2749,8 @@ planlama:
   denetci: reviewer
 `;
       const path = join(root, "hub", "flows", "planli.yaml");
-      const s = await akisSunucusuDuzenlenebilirAc("planli", PLANNED_FLOW);
-      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const s = await openEditableFlowServer("planli", PLANNED_FLOW);
+      const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
       try {
@@ -2905,7 +2905,7 @@ roles:
 
     it("panel açılınca roller listelenir; başlıkta akış dosya yolu görünür, Kaydet değişiklik yokken devre dışıdır", async () => {
       const s = await duzenleSunucusuAc("duzenle-test1", duzenleFlowYaml("duzenle-test1"));
-      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
       try {
@@ -2926,7 +2926,7 @@ roles:
 
     it("aynı adı taşıyan iki rol HATA verir (accent-700), Kaydet devre dışı kalır", async () => {
       const s = await duzenleSunucusuAc("duzenle-test2", duzenleFlowYaml("duzenle-test2"));
-      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
       try {
@@ -2973,7 +2973,7 @@ roles:
         loadOptions: { root, providers: knownProviderSet() },
         providerIds: knownProviderSet().ids(),
       });
-      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
       try {
@@ -2999,7 +2999,7 @@ roles:
     it("sağlayıcı değiştirip Kaydet'e basmak dosyayı GERÇEKTEN değiştiriyor", async () => {
       const ad = "duzenle-test4";
       const s = await duzenleSunucusuAc(ad, duzenleFlowYaml(ad));
-      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
       try {
@@ -3034,7 +3034,7 @@ roles:
     it("↑ ile rolü yukarı taşımak sırayı GERÇEKTEN değiştirir, next yeniden kurulup kaydedilir", async () => {
       const ad = "duzenle-test5";
       const s = await duzenleSunucusuAc(ad, duzenleFlowYaml(ad));
-      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
       try {
@@ -3067,7 +3067,7 @@ roles:
     it("diyagramda bir düğüme tıklamak panelde o rolün bloğunu vurgular, panel AÇIK KALIR", async () => {
       const ad = "duzenle-test6";
       const s = await duzenleSunucusuAc(ad, duzenleFlowYaml(ad));
-      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
       try {
@@ -3116,7 +3116,7 @@ roles:
 `;
 
     /** Akış seçimine VE düzenlemeye açık bir ekran — "ikinci" adlı ikinci akışla. */
-    async function akislarSunucusuAc() {
+    async function openFlowsServer() {
       await writeFile(join(root, "hub", "flows", "ikinci.yaml"), ikinciFlowYaml);
       const live = await LiveFlow.open(join(root, "hub", "flows", "test.yaml"), {
         root, providers: knownProviderSet(),
@@ -3145,8 +3145,8 @@ roles:
     }
 
     it("kart ızgarası her akışı gösterir: panoda etiketi, rol sayısı ve zincir gerçek veriden", async () => {
-      const s = await akislarSunucusuAc();
-      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const s = await openFlowsServer();
+      const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
       try {
@@ -3178,8 +3178,8 @@ roles:
     }, 60_000);
 
     it("'Panoda aç' başka bir akışın kartından panoyu o akışa geçirir", async () => {
-      const s = await akislarSunucusuAc();
-      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const s = await openFlowsServer();
+      const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
       try {
@@ -3202,8 +3202,8 @@ roles:
     }, 60_000);
 
     it("'Yeni akış' kutusu şablondan YENİ bir dosya yazar ve onu rol düzenleyicisinde, PANO'DA açar", async () => {
-      const s = await akislarSunucusuAc();
-      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const s = await openFlowsServer();
+      const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
       try {
@@ -3229,9 +3229,9 @@ roles:
         await page.waitForSelector(".duzenleRol", { timeout: 10_000 });
         expect(await page.evaluate(() =>
           document.querySelector(".navSekme-aktif")?.textContent ?? "")).toContain("Pano");
-        const akisMono = await page.evaluate(() =>
+        const flowMono = await page.evaluate(() =>
           document.querySelector("#panoArac .mono")?.textContent ?? "");
-        expect(akisMono).toContain("ucuncu");
+        expect(flowMono).toContain("ucuncu");
 
         const newPath = join(root, "hub", "flows", "ucuncu.yaml");
         expect(await readFile(newPath, "utf8")).toContain("id: coder");
@@ -3252,8 +3252,8 @@ roles:
      */
     it("'Yeni akış' kutusunun hata kutusu köşesiz ve tek-vurgu (accent) paletinde", async () => {
       await writeFile(join(root, "hub", "flows", "bozuk.yaml"), "name: bozuk\nroles: []\n");
-      const s = await akislarSunucusuAc();
-      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const s = await openFlowsServer();
+      const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
       try {
@@ -3286,8 +3286,8 @@ roles:
     // ESKİ davranış (hash'i boşalt) burada Pano'ya SIÇRARDI, çünkü bu
     // sekmede hash SEKMENİN KENDİSİ.
     it("Akışlar sekmesinde 'Yeni akış' kutusu Escape'le kapanır, sekme DEĞİŞMEZ", async () => {
-      const s = await akislarSunucusuAc();
-      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const s = await openFlowsServer();
+      const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
       try {
@@ -3358,7 +3358,7 @@ roles:
 
     it("solda her rol için bir satır; tıklamak sağ paneli o role çevirir", async () => {
       const s = await ikiRolSunucusuAc();
-      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
       try {
@@ -3409,7 +3409,7 @@ roles:
 
     it("'Ajanı izle →' Rol modundan Ajanlar sekmesini O ROLÜ SEÇİLİ açar", async () => {
       const s = await ikiRolSunucusuAc();
-      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
       try {
@@ -3648,13 +3648,13 @@ roles:
      * `El`/`Sayfa` bildirimleri); o türü BURADA genişletmek bu kartın
      * kapsamı dışında bir altyapı değişikliği olurdu.
      */
-    async function dugumMerkeziCoder(page: Sayfa): Promise<{ x: number; y: number }> {
+    async function coderNodeCentre(page: PageHandle): Promise<{ x: number; y: number }> {
       return page.evaluate(() => {
         const r = document.querySelector('.formasyonDugum[data-rol="coder"]')!.getBoundingClientRect();
         return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
       });
     }
-    async function dugumMerkeziReviewer(page: Sayfa): Promise<{ x: number; y: number }> {
+    async function reviewerNodeCentre(page: PageHandle): Promise<{ x: number; y: number }> {
       return page.evaluate(() => {
         const r = document.querySelector('.formasyonDugum[data-rol="reviewer"]')!.getBoundingClientRect();
         return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
@@ -3667,15 +3667,15 @@ roles:
       await queue.add(card);
       const taken = await al(queue, "coder");
 
-      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
       try {
         await page.goto(s.url, { waitUntil: "networkidle" });
         await page.waitForSelector('.formasyonDugum[data-rol="coder"] .kare-calisiyor', { timeout: 15_000 });
 
-        const coderMerkez = await dugumMerkeziCoder(page);
-        const reviewerMerkez = await dugumMerkeziReviewer(page);
+        const coderCentre = await coderNodeCentre(page);
+        const reviewerMerkez = await reviewerNodeCentre(page);
 
         /*
          * ÖRNEKLEYİCİ DEVİRDEN ÖNCE başlar ve TÜM uçuş boyunca kare
@@ -3725,29 +3725,29 @@ roles:
         expect(iz.length).toBeGreaterThan(2);
 
         // V'nin DİBİ: ekranda en AŞAĞIDAKİ (en büyük y) kare.
-        const araKonum = iz.reduce((a, b) => (b.y > a.y ? b : a));
+        const midPosition = iz.reduce((a, b) => (b.y > a.y ? b : a));
 
         // SAPMALAR.md §2.7'nin asıl iddiası: KONUM ölçülüyor, nitelik/
         // sınıf değil. x KAYNAK İLE HEDEF ARASINDA, İKİSİNE DE eşit DEĞİL.
-        const solX = Math.min(coderMerkez.x, reviewerMerkez.x);
-        const sagX = Math.max(coderMerkez.x, reviewerMerkez.x);
-        expect(araKonum.x).toBeGreaterThan(solX + 5);
-        expect(araKonum.x).toBeLessThan(sagX - 5);
+        const solX = Math.min(coderCentre.x, reviewerMerkez.x);
+        const sagX = Math.max(coderCentre.x, reviewerMerkez.x);
+        expect(midPosition.x).toBeGreaterThan(solX + 5);
+        expect(midPosition.x).toBeLessThan(sagX - 5);
 
         // DÜZ ÇİZGİ DEĞİL: coder ve reviewer AYNI satırda (ekranda aynı Y),
         // düz bir çizgi ara karede de O satırda kalırdı. Gerçek yol
         // tepeden (daha AŞAĞIDA, SVG'de y=480) dolandığı için ara karenin
         // Y'si ikisininkinden GÖZLE GÖRÜLÜR ölçüde BÜYÜK (ekranda AŞAĞIDA)
         // olmalı.
-        expect(Math.abs(coderMerkez.y - reviewerMerkez.y)).toBeLessThan(15);
-        expect(araKonum.y).toBeGreaterThan(coderMerkez.y + 20);
-        expect(araKonum.y).toBeGreaterThan(reviewerMerkez.y + 20);
+        expect(Math.abs(coderCentre.y - reviewerMerkez.y)).toBeLessThan(15);
+        expect(midPosition.y).toBeGreaterThan(coderCentre.y + 20);
+        expect(midPosition.y).toBeGreaterThan(reviewerMerkez.y + 20);
 
         // SAPMALAR.md §2.7'nin ikinci dersi (21 kat büyüme kusuru): bu YENİ
         // öğe de kendi nominal (46x23) ölçüsünde kalmalı, diyagramı
         // kaplamamalı.
-        expect(araKonum.w).toBeLessThan(120);
-        expect(araKonum.w).toBeGreaterThan(10);
+        expect(midPosition.w).toBeLessThan(120);
+        expect(midPosition.w).toBeGreaterThan(10);
 
         expect(errors).toEqual([]);
       } finally {
@@ -3765,7 +3765,7 @@ roles:
       await queue.add(card);
       const taken = await al(queue, "coder");
 
-      const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
+      const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
       try {
@@ -3804,7 +3804,7 @@ roles:
       await queue.add(card);
       const taken = await al(queue, "coder");
 
-      const page = await (browser as Tarayici).newPage({
+      const page = await (browser as Browser).newPage({
         viewport: { width: 1280, height: 900 }, reducedMotion: "reduce",
       });
       const errors: string[] = [];
