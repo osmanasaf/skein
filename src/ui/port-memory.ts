@@ -112,8 +112,8 @@ export async function readLastTheme(root: string): Promise<Theme | undefined> {
 async function writeRawRecord(root: string, field: string, fieldValue: unknown): Promise<void> {
   const dir = join(root, ".skein");
   await mkdir(dir, { recursive: true });
-  const mevcut = await readRawRecord(root);
-  const fresh = { ...mevcut, [field]: fieldValue };
+  const existingOne = await readRawRecord(root);
+  const fresh = { ...existingOne, [field]: fieldValue };
   const tmp = join(dir, `.tmp-${randomBytes(6).toString("hex")}`);
   await writeFile(tmp, JSON.stringify(fresh), "utf8");
   await rename(tmp, join(dir, FILE_NAME));

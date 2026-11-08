@@ -368,9 +368,9 @@ function parsePlan(
     throw new FlowError(file, rule(18, "`planlama.ilk-tur-kor` mantıksal değer olmalı"));
   }
 
-  const turRaw = raw["tur"] ?? 1;
-  if (typeof turRaw !== "number" || !Number.isInteger(turRaw) || turRaw < 1 || turRaw > 5) {
-    throw new FlowError(file, rule(18, `\`planlama.tur\` 1 ile 5 arasında bir tamsayı olmalı: ${String(turRaw)}`));
+  const roundRaw = raw["tur"] ?? 1;
+  if (typeof roundRaw !== "number" || !Number.isInteger(roundRaw) || roundRaw < 1 || roundRaw > 5) {
+    throw new FlowError(file, rule(18, `\`planlama.tur\` 1 ile 5 arasında bir tamsayı olmalı: ${String(roundRaw)}`));
   }
 
   const katilimcilar = optionalStringList(raw["katilimcilar"], "planlama.katilimcilar", file);
@@ -471,7 +471,7 @@ function parsePlan(
   }
 
   return {
-    katilimcilar, plan: filePath, tur: turRaw, itiraz, ilkTurKor: blindRaw,
+    katilimcilar, plan: filePath, tur: roundRaw, itiraz, ilkTurKor: blindRaw,
     ...(denetci === undefined ? {} : { denetci }),
   };
 }

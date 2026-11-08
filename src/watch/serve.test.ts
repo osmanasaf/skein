@@ -254,7 +254,7 @@ describe("serve — durum süreçte tutulmaz", () => {
 
 describe("serve — yetim kart", () => {
   /** `topology` iki rol tanıyor; bu kart üçüncü bir rolde bekliyor. */
-  async function yetimKoy(): Promise<void> {
+  async function placeOrphan(): Promise<void> {
     const foreign: TopologySnapshot = {
       ...topology,
       roles: [{ ...(topology.roles[0] as TopologySnapshot["roles"][number]), id: "tester" }],
@@ -265,7 +265,7 @@ describe("serve — yetim kart", () => {
   // `sweep()` yalnızca kendi topolojisindeki rolleri geziyor; bu kart hiçbir
   // turda alınmıyor ve hiçbir hata üretmiyordu.
   it("süpürülmeyen kartı duyurur", async () => {
-    await yetimKoy();
+    await placeOrphan();
     const stop = new AbortController();
     const seen: { id: string; role: string }[] = [];
 
@@ -284,7 +284,7 @@ describe("serve — yetim kart", () => {
 
   // Her geçişte tekrarlanan uyarı, asıl çıktıyı okunmaz hâle getirirdi.
   it("aynı kartı bir kez duyurur", async () => {
-    await yetimKoy();
+    await placeOrphan();
     const stop = new AbortController();
     let counter = 0;
 

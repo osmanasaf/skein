@@ -393,7 +393,7 @@ function obligationStats(runs: ArmRun[]): ObligationStats {
  *
  * Kontrol kolunda hiç ret yoksa azalma tanımsız — sıfırdan azalma yok.
  */
-function retReduction(plansiz: ArmSide | null, planli: ArmSide | null): number | null {
+function rejectReduction(plansiz: ArmSide | null, planli: ArmSide | null): number | null {
   if (plansiz === null || planli === null) return null;
   if (plansiz.runs === 0 || planli.runs === 0) return null;
   if (plansiz.rejects === 0) return null;
@@ -472,7 +472,7 @@ export function planEffect(events: SkeinEvent[]): PlanEffectReport {
       hooks: hookSets(unplannedRuns, plannedRuns),
       obligations: obligationStats(plannedRuns),
       verdict: decide(relativeReduction, repeats, perRun, plansiz, planli, ceremony,
-        retReduction(plansiz, planli)),
+        rejectReduction(plansiz, planli)),
     };
   });
 

@@ -102,7 +102,7 @@ export interface ServeUiOptions extends DetailOptions {
      * yalnızca bu listede ve onu terminal kuruyor. Akış ise zaten ekranın
      * seçebildiği, deponun kendi dosyalarından biri.
      */
-    bayraklar: string[];
+    watcherFlagList: string[];
     /** Test edilebilirlik için; varsayılan gerçek süreç başlatma. */
     spawn?: (argv: string[]) => WatcherProcess;
   };
@@ -178,7 +178,7 @@ function promptList(topology: TopologySnapshot): { label: string; path: string }
  * etmeseydik, boş bırakılan bir prompt ancak parası ödenmiş bir
  * aktivasyon çökünce fark edilirdi.
  */
-function promptIcerigiSorunu(text: string): string | null {
+function promptContentProblem(text: string): string | null {
   if (text.trim() === "") {
     return "Prompt dosyası boş olamaz. Sessizce etkisiz kalan bir katman, olmayandan kötüdür.";
   }
@@ -227,9 +227,9 @@ function rolePromptTemplate(id: string): string {
 async function loadFlowSummary(
   root: string, itemName: string, loadOptions: LoadOptions | undefined,
 ): Promise<{ name: string; draft: FlowDraft | null; error?: string }> {
-  const secenekler = loadOptions ?? { root, providers: knownProviderSet() };
+  const choices = loadOptions ?? { root, providers: knownProviderSet() };
   try {
-    const flow = await loadFlow(join(root, "hub", "flows", `${itemName}.yaml`), secenekler);
+    const flow = await loadFlow(join(root, "hub", "flows", `${itemName}.yaml`), choices);
     return { name: itemName, draft: fromFlow(flow) };
   } catch (error) {
     return { name: itemName, draft: null, error: (error as Error).message };
@@ -597,10 +597,10 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
     const kapat = path === undefined ? null : /^\/kart\/([^/]+)\/kapat$/.exec(path);
 
     if (req.method === "POST" && (path === "/gozcu/baslat" || path === "/gozcu/durdur")) {
-      const hata = yetkili(req, token, names, portu());
-      if (hata !== null) {
+      const authError = yetkili(req, token, names, portu());
+      if (authError !== null) {
         res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({ error: hata }));
+        res.end(JSON.stringify({ error: authError }));
         return;
       }
       const setting = options.watcher;
@@ -630,7 +630,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
           const spawn = setting.spawn ?? realSpawn(o.root);
           // Akış adı EKRANIN o an baktığı akıştan geliyor; bayraklar
           // terminalden. Akış değiştirince düğme doğru akışı koşturuyor.
-          const baslayan = spawn([...setting.command, o.flowName, "--serve", ...setting.bayraklar]);
+          const baslayan = spawn([...setting.command, o.flowName, "--serve", ...setting.watcherFlagList]);
           cocuk = baslayan;
           // Referans, süreç GERÇEKTEN bitince bırakılıyor — "durdur"
           // dediğimizde değil. İkisi aynı an değil.
@@ -680,10 +680,10 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
     }
 
     if (req.method === "POST" && path === "/kart/yeni") {
-      const hata = yetkili(req, token, names, portu());
-      if (hata !== null) {
+      const authError = yetkili(req, token, names, portu());
+      if (authError !== null) {
         res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({ error: hata }));
+        res.end(JSON.stringify({ error: authError }));
         return;
       }
       readBody(req)
@@ -742,10 +742,10 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
     }
 
     if (req.method === "POST" && (path === "/akis/onizleme" || path === "/akis/yaz")) {
-      const hata = yetkili(req, token, names, portu());
-      if (hata !== null) {
+      const authError = yetkili(req, token, names, portu());
+      if (authError !== null) {
         res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({ error: hata }));
+        res.end(JSON.stringify({ error: authError }));
         return;
       }
       const flowPath = active.flowPath;
@@ -803,10 +803,10 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
     }
 
     if (req.method === "POST" && path === "/akis/sec") {
-      const hata = yetkili(req, token, names, portu());
-      if (hata !== null) {
+      const authError = yetkili(req, token, names, portu());
+      if (authError !== null) {
         res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({ error: hata }));
+        res.end(JSON.stringify({ error: authError }));
         return;
       }
       const setting = options.flowChoice;
@@ -848,10 +848,10 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
     }
 
     if (req.method === "POST" && path === "/prompt/yaz") {
-      const hata = yetkili(req, token, names, portu());
-      if (hata !== null) {
+      const authError = yetkili(req, token, names, portu());
+      if (authError !== null) {
         res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({ error: hata }));
+        res.end(JSON.stringify({ error: authError }));
         return;
       }
       // Aynı kapı akış düzenlemeyle: `flowPath`/`loadOptions` verilmediyse
@@ -878,7 +878,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
           if (!items.some((p) => p.path === filePath)) {
             throw new Error(`Bilinmeyen prompt yolu: ${filePath}`);
           }
-          const issue = promptIcerigiSorunu(text);
+          const issue = promptContentProblem(text);
           if (issue !== null) throw new Error(issue);
 
           await writeFile(join(o.root, filePath), text, "utf8");
@@ -920,10 +920,10 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
      * operatörün elle temizlemesi gereken bir hâle sokardı.
      */
     if (req.method === "POST" && path === "/rol/yeni") {
-      const hata = yetkili(req, token, names, portu());
-      if (hata !== null) {
+      const authError = yetkili(req, token, names, portu());
+      if (authError !== null) {
         res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({ error: hata }));
+        res.end(JSON.stringify({ error: authError }));
         return;
       }
       // Aynı kapı akış/prompt düzenlemeyle: "ekranın yetkisi, onu açan
@@ -946,7 +946,11 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
           // GÖRE TAHMİN ETMİYOR. `sonra`, yeni rolün hangi rolün ARDINA
           // gireceği: o rolün `next`i yeni role, yeni rolünki eskisine
           // bağlanıyor (yeniden kablolama).
-          const after = typeof request["sonra"] === "string" ? request["sonra"] : "";
+          // Tel adı istemciyle AYNI olmalı: istemci `afterRole` gönderiyor.
+          // `sonra` kalmıştı ve alan hiç okunmuyordu — hata mesajı "boş
+          // olamaz" diyordu, oysa istemci DOLU gönderiyordu. Bkz.
+          // tel-sozlesmesi.test.ts.
+          const after = typeof request["afterRole"] === "string" ? request["afterRole"] : "";
           const receiveRaw = request["receive"];
           const receive = typeof receiveRaw === "string" && receiveRaw !== "" ? receiveRaw : undefined;
           const rejectRaw = request["reject"];
@@ -988,7 +992,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
           const promptAbs = join(dirname(afterRoleFull.promptPath), `${id}.md`);
           const promptRelative = relativePath(dirname(flowPath), promptAbs);
 
-          const issue = promptIcerigiSorunu(promptText);
+          const issue = promptContentProblem(promptText);
           if (issue !== null) throw new Error(issue);
 
           // ATOMİKLİK, adım 1: prompt dosyasını YAZ. Eski içerik (varsa)
@@ -1034,10 +1038,10 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
     }
 
     if (req.method === "POST" && kapat !== null) {
-      const hata = yetkili(req, token, names, portu());
-      if (hata !== null) {
+      const authError = yetkili(req, token, names, portu());
+      if (authError !== null) {
         res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({ error: hata }));
+        res.end(JSON.stringify({ error: authError }));
         return;
       }
       const id = decodeURIComponent(kapat[1] as string);
@@ -1047,10 +1051,10 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
           // açıldığı akıştan değil. `card -- kapat` bunu zaten böyle
           // yapıyordu; ekran kendi tek akışını geçiriyor ve başka akışın
           // SAĞLAM kartını "akışta rolü yok" diye kapatabiliyordu.
-          const mevcut = await o.queue.get(id);
-          const ownFlow = mevcut === null
+          const existingOne = await o.queue.get(id);
+          const ownFlow = existingOne === null
             ? o.topology
-            : await loadFlow(join(o.root, "hub", "flows", `${mevcut.topology.flow}.yaml`), {
+            : await loadFlow(join(o.root, "hub", "flows", `${existingOne.topology.flow}.yaml`), {
               root: o.root, providers: knownProviderSet(),
             }).then((flow) => snapshot(flow, o.root)).catch(() => null);
           const { card, reason } = await closeOrphan(o.root, o.queue, ownFlow, id, o.logPath);
@@ -1069,10 +1073,10 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
     }
 
     if (req.method === "POST" && release !== null) {
-      const hata = yetkili(req, token, names, portu());
-      if (hata !== null) {
+      const authError = yetkili(req, token, names, portu());
+      if (authError !== null) {
         res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({ error: hata }));
+        res.end(JSON.stringify({ error: authError }));
         return;
       }
       const id = decodeURIComponent(release[1] as string);
@@ -1106,10 +1110,10 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
     }
 
     if (req.method === "POST" && path === "/tema") {
-      const hata = yetkili(req, token, names, portu());
-      if (hata !== null) {
+      const authError = yetkili(req, token, names, portu());
+      if (authError !== null) {
         res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({ error: hata }));
+        res.end(JSON.stringify({ error: authError }));
         return;
       }
       readBody(req)
@@ -1307,7 +1311,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
         // kart c-20261105-92d731) — AKISLAR'ın "bir kez oku" ilkesiyle AYNI.
         res.end(renderPage(
           token,
-          options.watcher ? { bayraklar: [...options.watcher.bayraklar] } : null,
+          options.watcher ? { watcherFlagList: [...options.watcher.watcherFlagList] } : null,
           tema ?? "sistem",
         ));
       });

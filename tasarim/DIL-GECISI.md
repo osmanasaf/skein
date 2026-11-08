@@ -390,6 +390,28 @@ kırmızı; istemci gövdesine `metin` kısayolu konunca 2. sınama
 `expected [ 'metin' ] to deeply equal []` diyor. İkisi geri alınınca
 yeşil.
 
+**15. EN AĞIR KUSUR: YENİ ROL EKLEMEK TAMAMEN KIRIKTI.**
+
+Sunucu `request["sonra"]` okuyordu; istemci `afterRole` gönderiyordu.
+Alan HİÇ okunmuyordu ve sunucu *"`sonra` boş olamaz"* diyordu — oysa
+istemci DOLU gönderiyordu. `tsc` temizdi.
+
+**Kendi yazdığım tel sözleşmesi sınaması bile kaçırdı:** istemci gövdeyi
+satır içi nesne yerine bir DEĞİŞKENDE kuruyor
+(`body: JSON.stringify(bodyPart)`) ve regex onu görmüyordu.
+
+**DÜZELTME + ÜÇÜNCÜ SINAMA (ters yön):** sunucunun `request["x"]` ile
+okuduğu her ad SABİT bir dize; o adın istemcide bir nesne alanı olarak
+geçmesi aranıyor. Mutasyonla doğrulandı: sunucu tekrar
+`request["sonra"]` okuyunca `expected [ 'sonra' ] to deeply equal []`.
+
+**16. JSON ANAHTARI İÇ İÇE DİZEDE.** Beklenti
+`const WATCHER_CONFIG = {"bayraklar":[...]}` idi. O `"bayraklar"`,
+`JSON.stringify`ın ÇEVRİLMİŞ bir özellikten ürettiği anahtar — yani
+değişmesi gerekiyordu. Araç iç içe dizeleri korur (betik DEĞERLERİ için
+doğru), bu yüzden elle güncellendi. Ayrım: iç içe dize betiğin kendi
+değeri mi, yoksa çevrilmiş bir özellikten üretilen anahtar mı.
+
 **Kanıt (her iki aşama için):** Türkçe metne bakan sınamaların hepsi
 DEĞİŞMEDEN geçmeli. Değişen varsa sınır çiğnenmiştir.
 

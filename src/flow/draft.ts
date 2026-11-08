@@ -157,11 +157,11 @@ export type DraftCheck =
  * dokunulmayan blokların (örn. henüz modellenmeyen gelecek alanlar)
  * içindeki yorumlar korunuyor.
  */
-export function toYaml(draft: FlowDraft, mevcut?: string): string {
+export function toYaml(draft: FlowDraft, existingOne?: string): string {
   const fields = draftAlanlari(draft);
-  if (mevcut !== undefined && mevcut.trim() !== "") {
+  if (existingOne !== undefined && existingOne.trim() !== "") {
     try {
-      const document = parseDocument(mevcut);
+      const document = parseDocument(existingOne);
       // Bozuk bir dosyadan düzenleme taşımak, bozukluğu yeni dosyaya
       // taşımak olurdu: o hâlde sıfırdan kuruluyor.
       if (document.errors.length === 0 && document.contents !== null) {
@@ -229,8 +229,8 @@ export async function checkDraft(
   draft: FlowDraft,
   options: LoadOptions,
 ): Promise<DraftCheck> {
-  const mevcut = await readFile(path, "utf8").catch(() => undefined);
-  const yaml = toYaml(draft, mevcut);
+  const existingOne = await readFile(path, "utf8").catch(() => undefined);
+  const yaml = toYaml(draft, existingOne);
   try {
     const flow = await loadFlow(path, { ...options, text: yaml });
     return { ok: true, yaml, hash: flow.hash, cost: estimateCost(flow) };

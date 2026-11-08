@@ -1030,9 +1030,9 @@ describe("tick — tur başında temiz ağaç", () => {
     expect(blockages.every((e) => e.code === "KIRLI")).toBe(true);
 
     // Kart KAPIDA değil KUYRUKTA: ortam sorunu kartın kusuru değil.
-    const geri = (await queue.list()).find((c) => c.id === card.id) as Card;
-    expect(geri.state).toBe("queued");
-    expect(geri.role).toBe("coder");
+    const backRef = (await queue.list()).find((c) => c.id === card.id) as Card;
+    expect(backRef.state).toBe("queued");
+    expect(backRef.role).toBe("coder");
   });
 
   // Ağaç temizlenince kart kendiliğinden koşmalı — insan müdahalesi

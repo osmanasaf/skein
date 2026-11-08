@@ -208,8 +208,8 @@ describe("serveUi", () => {
  * aranıyor, KAPANIŞ `>`'si ONDAN SONRA bulunuyor.
  */
 function htmlEtiketi(html: string): string {
-  const bas = html.indexOf("<html");
-  return html.slice(bas, html.indexOf(">", bas) + 1);
+  const press = html.indexOf("<html");
+  return html.slice(press, html.indexOf(">", press) + 1);
 }
 
 describe("serveUi — tema anahtarı", () => {
@@ -466,8 +466,8 @@ describe("serveUi — yaşayan akış", () => {
       expect(once.roles).toHaveLength(0);
 
       live.topology = topology; // dosya değişti
-      const sonra = (await (await fetch(`${s.url}durum`)).json()) as { roles: { id: string }[] };
-      expect(sonra.roles.map((r) => r.id)).toEqual(["coder"]);
+      const afterRole = (await (await fetch(`${s.url}durum`)).json()) as { roles: { id: string }[] };
+      expect(afterRole.roles.map((r) => r.id)).toEqual(["coder"]);
     } finally {
       await s.close();
     }
@@ -1016,7 +1016,7 @@ describe("serveUi — yeni rol", () => {
 
   it("rol VE promptu BİRLİKTE yaratılır, zincire 'sonra'nın ARDINA bağlanır", async () => {
     const res = await send({
-      id: "reviewer", provider: "claude", workspace: "reviewer", sonra: "coder",
+      id: "reviewer", provider: "claude", workspace: "reviewer", afterRole: "coder",
     });
     const v = (await res.json()) as { model: { roles: { id: string }[] } };
 
@@ -1036,7 +1036,7 @@ describe("serveUi — yeni rol", () => {
 
   it("gövdede verilen prompt metni ŞABLON YERİNE yazılır", async () => {
     const res = await send({
-      id: "reviewer", provider: "claude", workspace: "reviewer", sonra: "coder",
+      id: "reviewer", provider: "claude", workspace: "reviewer", afterRole: "coder",
       prompt: "# özel prompt\nbaştan yazıldı\n",
     });
     expect(res.status).toBe(200);
@@ -1053,7 +1053,7 @@ describe("serveUi — yeni rol", () => {
     const beforeYaml = await readFile(realFlow.path, "utf8");
 
     const res = await send({
-      id: "reviewer", provider: "claude", workspace: "main", sonra: "coder",
+      id: "reviewer", provider: "claude", workspace: "main", afterRole: "coder",
     });
     const v = (await res.json()) as { error: string };
 
@@ -1067,7 +1067,7 @@ describe("serveUi — yeni rol", () => {
   });
 
   it("AYNI ID reddedilir, dosya YAZILMADAN", async () => {
-    const res = await send({ id: "coder", provider: "claude", workspace: "x", sonra: "coder" });
+    const res = await send({ id: "coder", provider: "claude", workspace: "x", afterRole: "coder" });
     const v = (await res.json()) as { error: string };
 
     expect(res.status).toBe(400);
@@ -1079,7 +1079,7 @@ describe("serveUi — yeni rol", () => {
   it("bilinmeyen 'sonra' reddedilir, hiçbir şey değişmez", async () => {
     const beforeYaml = await readFile(realFlow.path, "utf8");
     const res = await send({
-      id: "reviewer", provider: "claude", workspace: "reviewer", sonra: "boyle-bir-rol-yok",
+      id: "reviewer", provider: "claude", workspace: "reviewer", afterRole: "boyle-bir-rol-yok",
     });
     const v = (await res.json()) as { error: string };
 
@@ -1093,7 +1093,7 @@ describe("serveUi — yeni rol", () => {
     const beforeYaml = await readFile(realFlow.path, "utf8");
     const res = await fetch(`${s.url}rol/yeni`, {
       method: "POST",
-      body: JSON.stringify({ id: "reviewer", provider: "claude", workspace: "reviewer", sonra: "coder" }),
+      body: JSON.stringify({ id: "reviewer", provider: "claude", workspace: "reviewer", afterRole: "coder" }),
     });
     expect(res.status).toBe(403);
     expect(await readFile(realFlow.path, "utf8")).toBe(beforeYaml);
@@ -1108,7 +1108,7 @@ describe("serveUi — yeni rol", () => {
         "content-type": "application/json", "x-skein-token": s.token,
         origin: "https://kotu-site.example",
       },
-      body: JSON.stringify({ id: "reviewer", provider: "claude", workspace: "reviewer", sonra: "coder" }),
+      body: JSON.stringify({ id: "reviewer", provider: "claude", workspace: "reviewer", afterRole: "coder" }),
     });
     expect(res.status).toBe(403);
     expect(await readFile(realFlow.path, "utf8")).toBe(beforeYaml);
@@ -1122,7 +1122,7 @@ describe("serveUi — yeni rol, salt okunur ekran", () => {
     const res = await fetch(`${server.url}rol/yeni`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-skein-token": server.token },
-      body: JSON.stringify({ id: "reviewer", provider: "claude", workspace: "reviewer", sonra: "coder" }),
+      body: JSON.stringify({ id: "reviewer", provider: "claude", workspace: "reviewer", afterRole: "coder" }),
     });
     expect(res.status).toBe(404);
     expect(await readFile(join(root, "hub", "flows", "test.yaml"), "utf8")).toBe(beforeYaml);
@@ -1870,7 +1870,7 @@ describe("serveUi — ekrandan gözcü", () => {
     const s = stubbed();
     const srv = await serveUi({
       root, queue, topology, flowName: "test", flowHash: realFlow.hash,
-      watcher: { command: COMMAND, bayraklar: FLAGS, spawn: s.spawn as never },
+      watcher: { command: COMMAND, watcherFlagList: FLAGS, spawn: s.spawn as never },
     });
     return { srv, s };
   }
@@ -2068,7 +2068,7 @@ describe("serveUi — ekrandan gözcü", () => {
     const { srv } = await gozculu();
     try {
       const html = await (await fetch(srv.url)).text();
-      expect(html).toContain('const WATCHER_CONFIG = {"bayraklar":["--model","claude:m"]};');
+      expect(html).toContain('const WATCHER_CONFIG = {"watcherFlagList":["--model","claude:m"]};');
     } finally {
       await srv.close();
     }

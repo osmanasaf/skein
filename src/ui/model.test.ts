@@ -93,7 +93,7 @@ const put = (title = "iş"): Promise<Card> =>
  */
 describe("buildModel — başka akışın kartı", () => {
   /** Kartın diskteki kaydını başka bir akışa çevirir. */
-  async function baskaAkisaCevir(id: string): Promise<void> {
+  async function switchToOtherFlow(id: string): Promise<void> {
     const dir = join(root, ".skein", "queue", "coder");
     for (const itemName of await readdir(dir)) {
       if (!itemName.includes(id)) continue;
@@ -108,7 +108,7 @@ describe("buildModel — başka akışın kartı", () => {
 
   it("yetim de bayat da sayılmıyor, ayrı işaretleniyor", async () => {
     const card = await put();
-    await baskaAkisaCevir(card.id);
+    await switchToOtherFlow(card.id);
 
     const m = await buildModel(base);
     const c = m.cards.find((x) => x.id === card.id);

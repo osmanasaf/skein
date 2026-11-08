@@ -100,3 +100,35 @@ describe("tel sözleşmesi — yazma uçlarının gövde alanları", () => {
     expect(unread).toEqual([]);
   });
 });
+
+describe("tel sözleşmesi — sunucunun okuduğu her alan", () => {
+  it("sunucunun `request[\"x\"]` ile okuduğu her alanı istemci GÖNDERİYOR", async () => {
+    const server = await readFile(SERVER, "utf8");
+    const script = await clientScript();
+
+    /*
+     * TERS YÖN. Önceki sınama istemcinin gönderdiklerini kontrol ediyordu
+     * ve bir kusuru KAÇIRDI: istemci gövdeyi satır içi nesne yerine bir
+     * DEĞİŞKENDE kuruyor (`JSON.stringify(bodyPart)`), o yüzden regex onu
+     * görmedi.
+     *
+     * ÖLÇÜLEN KUSUR: sunucu `request["sonra"]` okuyordu, istemci
+     * `afterRole` gönderiyordu. Alan hiç okunmuyordu ve sunucu "`sonra`
+     * boş olamaz" diyordu — oysa istemci DOLU gönderiyordu. Yeni rol
+     * eklemek TAMAMEN kırıktı; tsc temizdi.
+     *
+     * Bu yön daha sağlam: sunucunun okuduğu ad sabit bir dize, ve
+     * istemcide o adın bir nesne alanı olarak geçmesi aranıyor.
+     */
+    const read = [...server.matchAll(/request\["([A-Za-z_][A-Za-z0-9_]*)"\]/g)]
+      .map((m) => m[1] as string);
+    expect(read.length).toBeGreaterThan(5);
+
+    const missing = [...new Set(read)].filter((name) => {
+      const asKey = new RegExp(`\\b${name}\\s*:`);
+      const asShorthand = new RegExp(`[{,]\\s*${name}\\s*[,}]`);
+      return !asKey.test(script) && !asShorthand.test(script);
+    });
+    expect(missing).toEqual([]);
+  });
+});

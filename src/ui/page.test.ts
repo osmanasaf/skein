@@ -20,11 +20,11 @@ function scriptText(html: string): string {
  */
 function scriptFn<T>(html: string, nameText: string): T {
   const src = scriptText(html);
-  const bas = src.indexOf(`function ${nameText}(`);
-  if (bas < 0) throw new Error(`betikte ${nameText} yok`);
-  const last = src.indexOf("\n}\n", bas);
+  const press = src.indexOf(`function ${nameText}(`);
+  if (press < 0) throw new Error(`betikte ${nameText} yok`);
+  const last = src.indexOf("\n}\n", press);
   if (last < 0) throw new Error(`${nameText} kapanışı bulunamadı`);
-  const text = src.slice(bas, last + 3);
+  const text = src.slice(press, last + 3);
   return new Function(`${text}; return ${nameText};`)() as T;
 }
 
@@ -813,8 +813,8 @@ describe("renderPage — gözcü ayarı gömülü", () => {
   });
 
   it("bayraklarla verilirse GOZCU_AYAR o bayrakları taşır", () => {
-    const src = scriptText(renderPage("x", { bayraklar: ["--model", "claude:m"] }));
-    expect(src).toContain('const WATCHER_CONFIG = {"bayraklar":["--model","claude:m"]};');
+    const src = scriptText(renderPage("x", { watcherFlagList: ["--model", "claude:m"] }));
+    expect(src).toContain('const WATCHER_CONFIG = {"watcherFlagList":["--model","claude:m"]};');
   });
 });
 
@@ -1872,10 +1872,10 @@ describe("akisAdiGecerliMi — DEVIR.md §3/§4'ün a-z0-9- kısıtı", () => {
 });
 
 describe("yeniAkisGecerliMi — 'Oluştur ve düzenle' düğmesinin etkinlik kararı", () => {
-  const valid = (nameText: string, mevcut: string[]): boolean =>
+  const valid = (nameText: string, existingOne: string[]): boolean =>
     scriptFns<(a: string, m: string[]) => boolean>(
       renderPage("t"), ["isFlowNameValid", "isNewFlowValid"], "isNewFlowValid",
-    )(nameText, mevcut);
+    )(nameText, existingOne);
 
   it("geçerli ve benzersiz adı kabul eder", () => {
     expect(valid("yeni-akis", ["test", "ikinci"])).toBe(true);

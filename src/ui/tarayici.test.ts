@@ -807,7 +807,7 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
    * SINANAMAZ'dı.
    */
   async function managedServer(watcherConfig: {
-    bayraklar?: string[];
+    watcherFlagList?: string[];
     spawn?: (argv: string[]) => { pid: number; kill: () => void; onExit: (cb: () => void) => void };
     alive?: () => boolean;
   } = {}): Promise<{ s: UiServer; flow: { name: string; hash: string } }> {
@@ -820,7 +820,7 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
       alive: watcherConfig.alive ?? (() => true),
       watcher: {
         command: ["node", "-e", ""],
-        bayraklar: watcherConfig.bayraklar ?? ["--model", "claude:m"],
+        watcherFlagList: watcherConfig.watcherFlagList ?? ["--model", "claude:m"],
         spawn: (watcherConfig.spawn ?? (() => ({ pid: 777, kill: () => {}, onExit: () => {} }))) as never,
       },
     });
@@ -912,7 +912,7 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
     const flow = await loadFlow(join(root, "hub", "flows", "test.yaml"), { root, providers: knownProviderSet() });
     const s = await serveUi({
       root, queue, topology, flowName: flow.name, flowHash: flow.hash,
-      watcher: { command: ["node"], bayraklar: [], spawn: (() => ({ pid: 1, kill: () => {}, onExit: () => {} })) as never },
+      watcher: { command: ["node"], watcherFlagList: [], spawn: (() => ({ pid: 1, kill: () => {}, onExit: () => {} })) as never },
     });
     // Ölü pid: "bayat kilitte gözcü düğmesi 'başlat' diyor" sınamasıyla AYNI
     // sabit (2^22 üstü Linux'ta ayrılmaz).

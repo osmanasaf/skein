@@ -485,7 +485,7 @@ describe("loadFlow — planlama (kural 17-22)", () => {
   // Çok katılımcılı testler ÜÇ rollü fikstürü kullanıyor: `VALID`'de
   // `reviewer` açık bir `reject: coder` taşıyor ve katılımcı olunca
   // kural 22'ye çarpıyor — bu doğru davranış, fikstürün sorunu.
-  const withPlanUc = (block: string) => `${THREE_ROLES}\n${block}\n`;
+  const withPlanThree = (block: string) => `${THREE_ROLES}\n${block}\n`;
 
   // KURAL 23 — yükümlülük denetçisi. Dört rollü fikstür: denetçi
   // katılımcıların ARKASINDA ve ret kenarı taşıyor, yani kuralın geçtiği
@@ -609,7 +609,7 @@ audit:
   // Yazılmamış bir alanı sessizce yok saymak, çalıştığı sanılan bir alan
   // bırakır. `audit.enabled` bir dönem tam bunu yaptı.
   it("iki katılımcıyı ve tek turu kabul eder — 6b", async () => {
-    const yaml = withPlanUc("planlama:\n  katilimcilar: [analyst, architect]\n  tur: 1\n  plan: docs/plan/{kart}.md");
+    const yaml = withPlanThree("planlama:\n  katilimcilar: [analyst, architect]\n  tur: 1\n  plan: docs/plan/{kart}.md");
     const flow = await load(await write(yaml));
     expect(flow.plan?.katilimcilar).toEqual(["analyst", "architect"]);
     expect(flow.plan?.tur).toBe(1);
@@ -617,13 +617,13 @@ audit:
 
   // 6c: çok turlu alışveriş açıldı. Tavan dilin içinde, promptun değil.
   it("birden çok turu kabul eder — 6c", async () => {
-    const yaml = withPlanUc("planlama:\n  katilimcilar: [analyst, architect]\n  tur: 3\n  plan: docs/plan/{kart}.md");
+    const yaml = withPlanThree("planlama:\n  katilimcilar: [analyst, architect]\n  tur: 3\n  plan: docs/plan/{kart}.md");
     const flow = await load(await write(yaml));
     expect(flow.plan?.tur).toBe(3);
   });
 
   it("tavanın üstündeki turu reddeder", async () => {
-    const yaml = withPlanUc("planlama:\n  katilimcilar: [analyst, architect]\n  tur: 6\n  plan: docs/plan/{kart}.md");
+    const yaml = withPlanThree("planlama:\n  katilimcilar: [analyst, architect]\n  tur: 6\n  plan: docs/plan/{kart}.md");
     await expect(load(await write(yaml))).rejects.toThrow(/kural 18.*1 ile 5/s);
   });
 
@@ -638,11 +638,11 @@ audit:
   // 6e: körleme uygulandı (fan-out/fan-in taşıma), alan artık kabul
   // ediliyor ve varsayılanı açık.
   it("körleme alanını okur; varsayılanı açık", async () => {
-    const isOpen = await load(await write(withPlanUc(
+    const isOpen = await load(await write(withPlanThree(
       "planlama:\n  katilimcilar: [analyst, architect]\n  plan: docs/plan/{kart}.md"), "kor-yok.yaml"));
     expect(isOpen.plan?.ilkTurKor).toBe(true);
 
-    const closed = await load(await write(withPlanUc(
+    const closed = await load(await write(withPlanThree(
       "planlama:\n  katilimcilar: [analyst, architect]\n  ilk-tur-kor: false\n  plan: docs/plan/{kart}.md"),
       "kor-false.yaml"));
     expect(closed.plan?.ilkTurKor).toBe(false);
@@ -658,18 +658,18 @@ audit:
   // eklenmemişti: yalnızca `tur`da ayrışan iki akış aynı damgayı
   // üretiyordu, yani damga davranışı belirleyen bir kararı gizliyordu.
   it("tur tavanı hash'i değiştirir", async () => {
-    const one = await load(await write(withPlanUc(
+    const one = await load(await write(withPlanThree(
       "planlama:\n  katilimcilar: [analyst, architect]\n  tur: 1\n  plan: docs/plan/{kart}.md"), "t1.yaml"));
-    const uc = await load(await write(withPlanUc(
+    const uc = await load(await write(withPlanThree(
       "planlama:\n  katilimcilar: [analyst, architect]\n  tur: 3\n  plan: docs/plan/{kart}.md"), "t3.yaml"));
     expect(one.hash).not.toBe(uc.hash);
   });
 
   // Körleme topolojinin parçası: değişirse yoldaki kart eskisiyle yaşar.
   it("körleme ayarı hash'i değiştirir", async () => {
-    const a = await load(await write(withPlanUc(
+    const a = await load(await write(withPlanThree(
       "planlama:\n  katilimcilar: [analyst, architect]\n  plan: docs/plan/{kart}.md"), "h1.yaml"));
-    const b = await load(await write(withPlanUc(
+    const b = await load(await write(withPlanThree(
       "planlama:\n  katilimcilar: [analyst, architect]\n  ilk-tur-kor: false\n  plan: docs/plan/{kart}.md"),
       "h2.yaml"));
     expect(a.hash).not.toBe(b.hash);

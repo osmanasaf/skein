@@ -34,7 +34,7 @@
  */
 export function renderPage(
   token: string,
-  watcher: { bayraklar: string[] } | null = null,
+  watcher: { watcherFlagList: string[] } | null = null,
   tema: "sistem" | "acik" | "koyu" = "sistem",
 ): string {
   const attribute = tema === "acik" ? ' data-theme="light"' : tema === "koyu" ? ' data-theme="dark"' : "";
@@ -1934,7 +1934,7 @@ function gateExits(kind, planLock, backTarget) {
   // doğru şeyi söylüyor ya hiç çıkmıyor.
   // (Not: bu dosya istemci betiğini bir şablon dizesi içinde taşıyor —
   // yorumda ters tik derlemeyi bozar.)
-  const geri = (label) => (backTarget ? [label, "back"] : ["Baştan koştur", "retry"]);
+  const backRef = (label) => (backTarget ? [label, "back"] : ["Baştan koştur", "retry"]);
 
   // Üç kapı, üç ayrı çıkış kümesi. Kaçışta "Geçir" YOK: tur tamamlanmadı,
   // kod sonraki worktree'ye hiç taşınmadı ve çekirdek zaten reddeder.
@@ -1957,10 +1957,10 @@ function gateExits(kind, planLock, backTarget) {
         buttons: [["Planı olduğu gibi ilerlet", "forward"], ["Alışverişi yeniden aç", "retry"]] };
     }
     return { label: "kilit kapısı", not: "ret limiti doldu",
-      buttons: [["Üretici haklı", "forward"], geri("Denetçi haklı")] };
+      buttons: [["Üretici haklı", "forward"], backRef("Denetçi haklı")] };
   }
   return { label: "onay kapısı", not: "kod taşındı",
-    buttons: [["Geçir", "forward"], geri("Geri gönder")] };
+    buttons: [["Geçir", "forward"], backRef("Geri gönder")] };
 }
 
 /** Yetim kartı kapatır — tek meşru çıkış. */
@@ -2381,10 +2381,10 @@ function buildTraceTimeline(history) {
     if (i < history.length - 1) railEl.append(el("s"));
     line.append(railEl);
     const bodyEl = el("div", "gov");
-    const bas = el("div");
-    bas.append(el("b", null, EVENT[h.event] || h.event));
-    if (h.who) bas.append(el("em", null, h.who));
-    if (h.commit) bas.append(el("em", null, h.commit));
+    const press = el("div");
+    press.append(el("b", null, EVENT[h.event] || h.event));
+    if (h.who) press.append(el("em", null, h.who));
+    if (h.commit) press.append(el("em", null, h.commit));
     if (h.plan) {
       // Alışverişin kendi sayıları — kaydın taşımadığı (null) alanlar hiç
       // basılmaz, "0" ile "hiç ölçülmedi" karışmasın.
@@ -2398,9 +2398,9 @@ function buildTraceTimeline(history) {
       if (h.plan.objections !== null) summary += ", " + h.plan.objections + " itiraz";
       if (h.plan.accepted !== null) summary += ", " + h.plan.accepted + " kabul";
       if (h.plan.invalid !== null) summary += ", " + h.plan.invalid + " sayılmadı";
-      bas.append(el("em", null, "(" + summary + ")"));
+      press.append(el("em", null, "(" + summary + ")"));
     }
-    bodyEl.append(bas);
+    bodyEl.append(press);
     if (h.note) bodyEl.append(el("p", null, h.note));
     line.append(bodyEl);
     trail.append(line);
@@ -4548,13 +4548,13 @@ function drawRailRole(box, m, roleIdent) {
   // bir yol olmadan kilitli kalmamalı — DEVIR.md'nin "yapamayacağı şeyi
   // vaat eden düğme" sınıfının TERSİ bir kusur, düğmenin KENDİSİ hiç
   // çıkmaması.
-  const geri = el("button", "railGeri", "← Genel bakış");
-  geri.type = "button";
-  geri.addEventListener("click", () => {
+  const backRef = el("button", "railGeri", "← Genel bakış");
+  backRef.type = "button";
+  backRef.addEventListener("click", () => {
     RAIL = railTransition(RAIL, { tur: "genelBakis" });
     railRedraw();
   });
-  box.append(geri);
+  box.append(backRef);
 
   const meta = railRoleMeta(m, roleIdent);
   if (!meta) {
@@ -4621,14 +4621,14 @@ function drawRailCard(box, d) {
   const c = d.card;
 
   const topRow = el("div", "railKartUst");
-  const geri = el("button", "railGeri", "←");
-  geri.type = "button";
-  geri.setAttribute("aria-label", "geri");
-  geri.addEventListener("click", () => {
+  const backRef = el("button", "railGeri", "←");
+  backRef.type = "button";
+  backRef.setAttribute("aria-label", "geri");
+  backRef.addEventListener("click", () => {
     RAIL = railTransition(RAIL, { tur: "geri" });
     railRedraw();
   });
-  topRow.append(geri);
+  topRow.append(backRef);
   const statusText = c.gate ? gateExits(c.gate, c.planLock, c.backTarget).label
     : c.state === "active" ? "çalışıyor" : c.state === "done" ? "bitti" : "kuyrukta";
   topRow.append(el("span", "railDurumEtiket", statusText));
@@ -5005,12 +5005,12 @@ async function railLoadEdit(box) {
 }
 
 /** Tek değerli bir alan: seçenek listesi varsa 'select', yoksa serbest metin 'input'. */
-function editField(label, value, secenekler, onChange, labelResolver) {
+function editField(label, value, choices, onChange, labelResolver) {
   const l = el("label", "duzenleAlanTekil");
   l.append(el("span", "duzenleAlanEtiket", label));
-  const g = el(secenekler ? "select" : "input");
-  if (secenekler) {
-    secenekler.forEach((s) => {
+  const g = el(choices ? "select" : "input");
+  if (choices) {
+    choices.forEach((s) => {
       const o = el("option", null, labelResolver ? labelResolver(s) : (s === "" ? "yok" : s));
       o.value = s;
       if (s === value) o.selected = true;
@@ -5025,13 +5025,13 @@ function editField(label, value, secenekler, onChange, labelResolver) {
 }
 
 /** ALIM segment düğmesi — "tekil/toplu", 2px kenar, seçili koyu zeminli (DEVIR.md §3). */
-function editSegment(label, value, secenekler, onChange) {
+function editSegment(label, value, choices, onChange) {
   const wrap = el("div");
   wrap.append(el("span", "duzenleAlanEtiket", label));
   const group = el("div", "duzenleSegment");
   group.setAttribute("role", "group");
   group.setAttribute("aria-label", label);
-  secenekler.forEach(([v, name]) => {
+  choices.forEach(([v, name]) => {
     const b = el("button", "duzenleSegmentBtn" + (v === value ? " secili" : ""), name);
     b.type = "button";
     b.setAttribute("aria-pressed", String(v === value));
@@ -5075,8 +5075,8 @@ function editStepper(value, min, max, onChange) {
 function editPromptField(roleRec) {
   const wrap = el("div", "duzenlePromptSarmal");
   const knownOnes = EDIT_PROMPTS.map((p) => p.path);
-  const secenekler = knownOnes.includes(roleRec.prompt) ? knownOnes : [roleRec.prompt, ...knownOnes];
-  const field = editField("prompt", roleRec.prompt, secenekler, (v) => { roleRec.prompt = v; });
+  const choices = knownOnes.includes(roleRec.prompt) ? knownOnes : [roleRec.prompt, ...knownOnes];
+  const field = editField("prompt", roleRec.prompt, choices, (v) => { roleRec.prompt = v; });
   wrap.append(field);
   const open = el("button", "railBtn", "Aç");
   open.type = "button";
@@ -5366,10 +5366,10 @@ async function editWrite() {
 function drawRailEditPanel(box, m) {
   box.replaceChildren();
 
-  const geri = el("button", "railGeri", "← Genel bakış");
-  geri.type = "button";
-  geri.addEventListener("click", () => { closeEdit(); });
-  box.append(geri);
+  const backRef = el("button", "railGeri", "← Genel bakış");
+  backRef.type = "button";
+  backRef.addEventListener("click", () => { closeEdit(); });
+  box.append(backRef);
 
   if (EDIT_ERROR) {
     box.append(el("div", "err", "Akış okunamadı: " + EDIT_ERROR));
@@ -5479,10 +5479,10 @@ async function railLoadWatcher() {
 function drawRailWatcher(box, m) {
   box.replaceChildren();
 
-  const geri = el("button", "railGeri", "← Genel bakış");
-  geri.type = "button";
-  geri.addEventListener("click", () => { closeWatcher(); });
-  box.append(geri);
+  const backRef = el("button", "railGeri", "← Genel bakış");
+  backRef.type = "button";
+  backRef.addEventListener("click", () => { closeWatcher(); });
+  box.append(backRef);
 
   const g = m.daemon;
   const isManaged = Boolean(WATCHER_CONFIG);
@@ -5567,11 +5567,11 @@ function drawRailWatcher(box, m) {
     box.append(infoBox);
   }
 
-  if (isManaged && WATCHER_CONFIG.bayraklar.length > 0) {
+  if (isManaged && WATCHER_CONFIG.watcherFlagList.length > 0) {
     box.append(el("div", "railAraBaslik", "Gözcüye geçen bayraklar"));
-    const bayraklar = el("div", "railGozcuBayraklar");
-    WATCHER_CONFIG.bayraklar.forEach((b) => bayraklar.append(el("span", "tag tag-outline", b)));
-    box.append(bayraklar);
+    const watcherFlagList = el("div", "railGozcuBayraklar");
+    WATCHER_CONFIG.watcherFlagList.forEach((b) => watcherFlagList.append(el("span", "tag tag-outline", b)));
+    box.append(watcherFlagList);
   }
 
   box.append(el("div", "railGozcuLogBaslik", ".skein/gozcu.log · son satırlar"));
@@ -6028,12 +6028,12 @@ async function openFlow() {
   document.getElementById("panel").replaceChildren(drawFlowPanel());
 }
 
-function field(name, value, onChange, secenekler) {
+function field(name, value, onChange, choices) {
   const l = el("label", null);
   l.append(document.createTextNode(name));
-  const g = el(secenekler ? "select" : "input");
-  if (secenekler) {
-    secenekler.forEach((s) => {
+  const g = el(choices ? "select" : "input");
+  if (choices) {
+    choices.forEach((s) => {
       const o = el("option", null, s);
       o.value = s;
       if (s === value) o.selected = true;
@@ -6067,10 +6067,10 @@ function syncBackField(roleRec, otherIds) {
     checkbox.type = "checkbox";
     checkbox.checked = (roleRec.syncBack || []).includes(id);
     checkbox.addEventListener("change", () => {
-      const mevcut = new Set(roleRec.syncBack || []);
-      if (checkbox.checked) mevcut.add(id);
-      else mevcut.delete(id);
-      roleRec.syncBack = Array.from(mevcut);
+      const existingOne = new Set(roleRec.syncBack || []);
+      if (checkbox.checked) existingOne.add(id);
+      else existingOne.delete(id);
+      roleRec.syncBack = Array.from(existingOne);
       void preview();
     });
     label.append(checkbox, document.createTextNode(id));
@@ -6693,9 +6693,9 @@ function promptsUpdateStatus() {
     if (item2.dataset.path !== PROMPT_SELECTED) return;
     const name = item2.querySelector(".promptlarOgeAd");
     if (!name) return;
-    const mevcut = name.querySelector(".promptlarTaslakIsareti");
-    if (dirty && !mevcut) name.append(el("span", "promptlarTaslakIsareti"));
-    if (!dirty && mevcut) mevcut.remove();
+    const existingOne = name.querySelector(".promptlarTaslakIsareti");
+    if (dirty && !existingOne) name.append(el("span", "promptlarTaslakIsareti"));
+    if (!dirty && existingOne) existingOne.remove();
   });
   const statusEl = document.querySelector(".promptlarDurum");
   if (statusEl) statusEl.textContent = promptStatusText(dirty);
@@ -6940,7 +6940,7 @@ async function submitNewRole() {
       id: idInput.value.trim(),
       provider: selectProvider.value,
       workspace: workspaceInput.value.trim(),
-      sonra: selectAfter.value,
+      afterRole: selectAfter.value,
       ...(promptBody.trim() === "" ? {} : { prompt: promptBody }),
     };
     const answerBody = await fetch("/rol/yeni", {

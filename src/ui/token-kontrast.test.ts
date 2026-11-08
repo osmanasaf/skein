@@ -78,9 +78,9 @@ function mediaOverride(html: string): Map<string, string> {
  * c-20261106-e62847, page.ts'teki TEMA ANAHTARI yorumu).
  */
 function forcedDarkTokens(html: string): Map<string, string> {
-  const bas = html.indexOf(':root[data-theme="dark"] {');
-  const last = html.indexOf("\n  }", bas);
-  return tokenlariAyristir(html.slice(bas, last));
+  const press = html.indexOf(':root[data-theme="dark"] {');
+  const last = html.indexOf("\n  }", press);
+  return tokenlariAyristir(html.slice(press, last));
 }
 
 /**

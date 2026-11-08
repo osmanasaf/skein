@@ -60,11 +60,11 @@ describe("parseArgs — --timeout", () => {
  */
 describe("zamanAsimiSecenegi", () => {
   it("bayrak verilmediyse alanı HİÇ yazmaz", () => {
-    const secenek = zamanAsimiSecenegi(parseArgs(["akis"]));
-    expect(secenek).toEqual({});
+    const choice = zamanAsimiSecenegi(parseArgs(["akis"]));
+    expect(choice).toEqual({});
     // `{ timeoutMs: undefined }` yetmez: `exactOptionalPropertyTypes`
     // altında bile nesne yayılınca alan VAR sayılabilir.
-    expect("timeoutMs" in secenek).toBe(false);
+    expect("timeoutMs" in choice).toBe(false);
   });
 
   it("bayrak verildiyse aynen taşır", () => {

@@ -90,12 +90,12 @@ export function gateDecision(card: Card, requestedEntry?: ReleaseDecision): Gate
   // `back` hedefi: rolün ret hedefi. Zincirin başında geri dönecek rol
   // olmadığı için rol işi kendisi yeniden yapar — ve bu bir `retry`'dir,
   // öyle de kaydedilir.
-  const geriHedefi = role.reject;
+  const backTargetOf = role.reject;
   const applied: ReleaseDecision =
-    requested === "back" && geriHedefi === null ? "retry" : requested;
+    requested === "back" && backTargetOf === null ? "retry" : requested;
 
   const destination =
-    applied === "retry" ? role.id : applied === "forward" ? ileri : (geriHedefi ?? role.id);
+    applied === "retry" ? role.id : applied === "forward" ? ileri : (backTargetOf ?? role.id);
 
   return { kind, requested, applied, target: destination };
 }
@@ -132,7 +132,7 @@ interface Located {
  * "Aynı bilgi iki (üç) yerde" bu depoda tekrarlayan kusur sınıfı; kural
  * artık tek yerde.
  */
-function kopyaSirasi(copies: Located[]): Located[] {
+function copyOrder(copies: Located[]): Located[] {
   // `sort` yerinde çalışır, o yüzden kopya alınıyor. İHTİYAT, ölçülmüş bir
   // kusur DEĞİL: bugünkü üç çağıranın hiçbiri listesini sonra kullanmıyor
   // ve "yerinde sırala" mutasyonu sınamaların hiçbirini düşürmüyor. Böyle
@@ -291,7 +291,7 @@ export class CardQueue {
   async get(id: string): Promise<Card | null> {
     const { cards, corrupt } = await this.#tara();
     const found = cards.filter((entry) => entry.card.id === id);
-    const card = kopyaSirasi(found)[0]?.card;
+    const card = copyOrder(found)[0]?.card;
     if (card !== undefined) return card;
     // Aranan kart BOZUK olanlardan biri olabilir: "böyle bir kart yok"
     // demek veri kaybını yokluk gibi okutmak olurdu.
@@ -700,11 +700,11 @@ export class CardQueue {
    */
   async requeue(card: Card, reason: string): Promise<Card> {
     const { role, path } = this.#requireActive(card);
-    const geri = {
+    const backRef = {
       ...this.#push(card, { at: now(), event: "requeued", role: role.id, reason }),
       state: "queued" as const,
     };
-    return this.#move(geri, this.#queueDir(role.id), this.#queueName(geri, PRIO_RETURNED), path);
+    return this.#move(backRef, this.#queueDir(role.id), this.#queueName(backRef, PRIO_RETURNED), path);
   }
 
   /**
@@ -721,7 +721,7 @@ export class CardQueue {
     const trimmed = reason.trim();
     if (trimmed === "") throw new QueueError("Kapatma gerekçesi boş olamaz");
 
-    const kopyalar = kopyaSirasi(await this.#locate(id));
+    const kopyalar = copyOrder(await this.#locate(id));
     const here = kopyalar[0];
     if (here === undefined) throw new QueueError(`Böyle bir kart yok: ${id}`);
     if (here.card.state === "done") throw new QueueError(`Kart zaten bitmiş: ${id}`);
@@ -770,7 +770,7 @@ export class CardQueue {
 
     const requeued: Card[] = [];
     for (const copies of byId.values()) {
-      const sorted = kopyaSirasi(copies);
+      const sorted = copyOrder(copies);
       const keep = sorted[0] as Located;
       for (const stale of sorted.slice(1)) {
         await rm(stale.path, { force: true });

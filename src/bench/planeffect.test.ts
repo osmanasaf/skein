@@ -52,7 +52,7 @@ function runFixture(runId: string, taskId: string, arm: "planli" | "plansiz", s:
 }
 
 /** Üç tekrar: kontrol kolu 4/10 kırmızı, planlı kol `planliRed`. */
-const ucTekrar = (plannedRed: number, taskId = "gorev-1", model = "m1"): SkeinEvent[] =>
+const threeRepeats = (plannedRed: number, taskId = "gorev-1", model = "m1"): SkeinEvent[] =>
   // Koşu kimliği göreve göre değişmeli: aynı kimlik iki görevde kullanılırsa
   // koşular tek koşu sanılır (ilk hâlinde tam bu oldu ve iki görev tek
   // gruba eridi).
@@ -399,7 +399,7 @@ describe("obligationStats — madde başına son karar", () => {
 
 describe("planEffect", () => {
   it("eşiğin üstünde ve tutarlı azalma olumlu karardır", () => {
-    const r = planEffect(ucTekrar(1));
+    const r = planEffect(threeRepeats(1));
     const g = r.groups[0];
     expect(g?.repeats).toBe(3);
     expect(g?.relativeReduction).toBeCloseTo(0.75);
@@ -408,7 +408,7 @@ describe("planEffect", () => {
   });
 
   it("azalma yoksa olumsuz karardır", () => {
-    const r = planEffect(ucTekrar(4));
+    const r = planEffect(threeRepeats(4));
     expect(r.groups[0]?.relativeReduction).toBe(0);
     expect(r.groups[0]?.verdict.code).toBe("olumsuz");
   });
@@ -543,13 +543,13 @@ describe("planEffect", () => {
   });
 
   it("görevler ayrışırsa havuzda eritmez", () => {
-    const r = planEffect([...ucTekrar(1, "iyi"), ...ucTekrar(4, "kotu")]);
+    const r = planEffect([...threeRepeats(1, "iyi"), ...threeRepeats(4, "kotu")]);
     expect(r.verdict.code).toBe("belirsiz");
     expect(r.verdict.reason).toMatch(/ayrışıyor/);
   });
 
   it("aktivasyon ve maliyet farkını kaydeder", () => {
-    const g = planEffect(ucTekrar(1)).groups[0];
+    const g = planEffect(threeRepeats(1)).groups[0];
     expect(g?.planli?.activations).toBe(12);
     expect(g?.plansiz?.activations).toBe(6);
   });
@@ -561,7 +561,7 @@ describe("planEffect", () => {
 // ikisini tek hücre sanıyordu.
 describe("planEffect — grup anahtarı görev × model", () => {
   it("aynı görevin iki modeli AYRI gruplara düşer", () => {
-    const r = planEffect([...ucTekrar(1, "gorev-1", "sonnet"), ...ucTekrar(4, "gorev-1", "haiku")]);
+    const r = planEffect([...threeRepeats(1, "gorev-1", "sonnet"), ...threeRepeats(4, "gorev-1", "haiku")]);
     expect(r.groups).toHaveLength(2);
     expect(r.groups.map((g) => [g.taskId, g.model, g.repeats])).toEqual(
       expect.arrayContaining([["gorev-1", "sonnet", 3], ["gorev-1", "haiku", 3]]),
@@ -587,7 +587,7 @@ describe("planEffect — grup anahtarı görev × model", () => {
       ev({ type: "ab.arm", taskId: "gorev-1", arm: "plansiz", flow: "ab-plansiz" }, "eski-1"),
       ev({ type: "hooks.measured", cell: "olcum/plansiz", ran: true, total: 10, red: ["k1"] }, "eski-1"),
     ];
-    const r = planEffect([...old, ...ucTekrar(1, "gorev-1", "sonnet")]);
+    const r = planEffect([...old, ...threeRepeats(1, "gorev-1", "sonnet")]);
     expect(r.groups.map((g) => g.model).sort()).toEqual(["(bilinmiyor)", "sonnet"]);
   });
 });

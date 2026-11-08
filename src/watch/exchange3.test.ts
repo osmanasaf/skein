@@ -405,10 +405,10 @@ describe("6e — körlü tur: taşıma dallanıyor ve toplanıyor", () => {
     const theCard = (await queue.get(card.id)) as Card;
     for (const roleName of ["architect", "coder"]) {
       const textBody = buildTaskText(theCard, roleOf(topology, roleName) as never);
-      const bas = textBody.slice(0, textBody.indexOf("## İş"));
-      expect(bas).toMatch(/git commit/);
-      expect(bas).toMatch(/commit'lemE/);
-      expect(bas).toMatch(/git add -A/);
+      const press = textBody.slice(0, textBody.indexOf("## İş"));
+      expect(press).toMatch(/git commit/);
+      expect(press).toMatch(/commit'lemE/);
+      expect(press).toMatch(/git add -A/);
     }
   });
 

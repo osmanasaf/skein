@@ -373,8 +373,8 @@ async function runRole(card: Card, role: SnapshotRole, options: TickOptions): Pr
   // Tur itiraz dosyasından okunmaya devam ediyor ve denemenin kendisi
   // uyarı olarak kayda geçiyor. Dosya yoksa `planStep` zaten "itiraz
   // dosyası yok" diye reddediyor ve ne yapılması gerektiğini yazıyor.
-  const planFazi = planPhase(card, role.id, card.topology);
-  const planKind = planFazi.kind === "itiraz" || planFazi.kind === "cevap";
+  const planPhaseName = planPhase(card, role.id, card.topology);
+  const planKind = planPhaseName.kind === "itiraz" || planPhaseName.kind === "cevap";
   const wrongChannel = planKind && verdict.verdict.decision === "reject";
 
   /**

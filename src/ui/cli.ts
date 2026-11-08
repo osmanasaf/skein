@@ -285,7 +285,7 @@ async function main(argv: string[]): Promise<number> {
               tsxCliPath(root),
               join(root, "src", "watch", "cli.ts"),
             ],
-            bayraklar: watcherFlags,
+            watcherFlagList: watcherFlags,
           },
         }),
   };
