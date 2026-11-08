@@ -600,7 +600,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
       const hata = yetkili(req, token, names, portu());
       if (hata !== null) {
         res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({ hata }));
+        res.end(JSON.stringify({ error: hata }));
         return;
       }
       const setting = options.watcher;
@@ -683,7 +683,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
       const hata = yetkili(req, token, names, portu());
       if (hata !== null) {
         res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({ hata }));
+        res.end(JSON.stringify({ error: hata }));
         return;
       }
       readBody(req)
@@ -745,7 +745,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
       const hata = yetkili(req, token, names, portu());
       if (hata !== null) {
         res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({ hata }));
+        res.end(JSON.stringify({ error: hata }));
         return;
       }
       const flowPath = active.flowPath;
@@ -806,7 +806,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
       const hata = yetkili(req, token, names, portu());
       if (hata !== null) {
         res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({ hata }));
+        res.end(JSON.stringify({ error: hata }));
         return;
       }
       const setting = options.flowChoice;
@@ -851,7 +851,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
       const hata = yetkili(req, token, names, portu());
       if (hata !== null) {
         res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({ hata }));
+        res.end(JSON.stringify({ error: hata }));
         return;
       }
       // Aynı kapı akış düzenlemeyle: `flowPath`/`loadOptions` verilmediyse
@@ -923,7 +923,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
       const hata = yetkili(req, token, names, portu());
       if (hata !== null) {
         res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({ hata }));
+        res.end(JSON.stringify({ error: hata }));
         return;
       }
       // Aynı kapı akış/prompt düzenlemeyle: "ekranın yetkisi, onu açan
@@ -1037,7 +1037,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
       const hata = yetkili(req, token, names, portu());
       if (hata !== null) {
         res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({ hata }));
+        res.end(JSON.stringify({ error: hata }));
         return;
       }
       const id = decodeURIComponent(kapat[1] as string);
@@ -1072,7 +1072,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
       const hata = yetkili(req, token, names, portu());
       if (hata !== null) {
         res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({ hata }));
+        res.end(JSON.stringify({ error: hata }));
         return;
       }
       const id = decodeURIComponent(release[1] as string);
@@ -1109,7 +1109,7 @@ export async function serveUi(options: ServeUiOptions): Promise<UiServer> {
       const hata = yetkili(req, token, names, portu());
       if (hata !== null) {
         res.writeHead(403, { "content-type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({ hata }));
+        res.end(JSON.stringify({ error: hata }));
         return;
       }
       readBody(req)

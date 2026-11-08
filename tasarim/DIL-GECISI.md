@@ -359,6 +359,37 @@ hâliyle asla görünemeyecek bir dizeyi arıyordu — yani ISIRMAYAN bir
 sınamaya dönüşmüştü. Elle düzeltildi. Sessizce atlanmış olsaydı
 takımda yeşil görünen ölü bir beklenti kalırdı.
 
+**14. AYNI KUSUR SINIFI İKİNCİ KEZ: KAYBOLAN HATA MESAJLARI.**
+
+Sunucu 34 yerde `JSON.stringify({ hata })` gönderiyordu. Geçiş
+istemcinin `.hata` okumalarını (23 yer) `.error` yaptı ama sunucunun
+KISAYOL alanını atladı (kısayol hem bildirim hem özellik, bkz. §7).
+
+Sonuç: o uçlardan gelen HER hata mesajı `undefined` geliyordu ve
+istemci mesaj yerine ham durum koduna düşüyordu. **1656 sınamanın
+hiçbiri düşmedi**, `tsc` temizdi. Mevcut beklentiler `.error` okuyordu
+çünkü ZATEN İngilizce olan öteki uçları sınıyorlardı.
+
+Bu, §7'deki prompt-kaydetme kusurunun AYNI sınıfı: sunucu alanı ile
+istemcinin okuduğu ad ayrışıyor ve kırılma sessiz, çünkü betik bir
+DİZEDE yaşıyor.
+
+**DÜZELTME:** 34 yanıtın hepsi `{ error: hata }` (tel adı İngilizce,
+yerel ad olduğu gibi).
+
+**KUSURU YAKALAYAN SINAMA:** `src/ui/tel-sozlesmesi.test.ts`. İki tarafı
+KAYNAK DÜZEYİNDE bağlıyor: `server.ts` ile `page.ts`in `<script>`
+bölgesini okuyup alan adlarını karşılaştırıyor. Sunucu çalıştırmıyor,
+o yüzden her koşuda ucuz. İki sınama:
+1. Sunucunun gönderdiği hata alanı ile betiğin okuduğu ad aynı mı.
+2. Betiğin POST gövdelerindeki her alan, sunucunun okuduğu adlar
+   arasında mı (kısayol alanlar dahil — kusur tam orada çıktı).
+
+Mutasyonla doğrulandı: sunucu bir yerde `{ hata }` gönderince 1. sınama
+kırmızı; istemci gövdesine `metin` kısayolu konunca 2. sınama
+`expected [ 'metin' ] to deeply equal []` diyor. İkisi geri alınınca
+yeşil.
+
 **Kanıt (her iki aşama için):** Türkçe metne bakan sınamaların hepsi
 DEĞİŞMEDEN geçmeli. Değişen varsa sınır çiğnenmiştir.
 
