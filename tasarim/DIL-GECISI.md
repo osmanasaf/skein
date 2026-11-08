@@ -320,6 +320,45 @@ simge olarak veriyor — dize içindeki adlar kendiliğinden korunuyor.
 sayı, yalnızca o üç dosyada bildirilen adlar için **850**. Önceki sayım
 sınırlı bir Türkçe kök listesine dayanıyordu.
 
+**13. ARAYÜZ AŞAMASINDA ÇIKAN DÖRT SINIR DAHA.** Hepsinde `tsc` TEMİZDİ.
+
+**(a) `dataset.X` = HTML'deki `data-X`.** `el.dataset.sekme` ile
+`data-sekme="promptlar"` aynı çiftin iki yüzü; nitelik bir DİZEDE
+yaşıyor. JS tarafını çevirmek çifti koparıyor: okuma `data-tab` arıyor,
+HTML `data-sekme` yazıyor, değer hep `undefined`. ÖLÇÜLDÜ: nav rozeti
+hiç güncellenmedi, üç tarayıcı sınaması ZAMAN AŞIMINA düştü. Araç artık
+`dataset` özelliklerine hiç dokunmuyor.
+
+Geçiş öncesiyle karşılaştırıldı: `dataset.kart` -> `card` ve
+`dataset.yol` -> `path` önceki partilerde çevrilmiş ama o iki nitelik
+hiçbir yerde dize olarak yazılmıyor (ne `page.ts`te ne sınamalarda),
+yalnızca JS içinde yazılıp okunuyor — çift tutarlı, kırık yok.
+
+**(b) `{ad}` sarılı adlar YER TUTUCU.** Akış YAML'ı
+`plan: docs/plan/{kart}.md` yazıyor ve `snapshot.ts` `{kart}`/`{rol}`
+yerine kimlikleri koyuyor. Bir beklentinin içindeki `{kart}`ı çevirmek
+o sözleşmeyi kırıyor. Tarayıcıda bir adın iki yanında `{` ve `}` varsa
+çevrilmiyor.
+
+**(c) Dize geçişi YALNIZCA `src/ui/` altındaki sınamalarda.** Tüm
+sınama dosyalarına yayılınca `flow/load.test.ts`in `"{kart}"`
+beklentileri bozuldu ve 10 sınama düştü.
+
+**(d) Kod işareti ayrımı DARDI.** İlk sürüm yalnızca `[=(){};]` ve
+`const/function/return` arıyordu; `"m.engeller && m.engeller.length"` ve
+`"canli ? \"Gözcüyü durdur\" : ..."` çevrilmeden kaldı. Ayrım Türkçe
+düz metinde geçmeyen işaretlere bağlandı; en ayırt edici olanı
+BOŞLUKSUZ NOKTA-HARF (`m.engeller`), çünkü Türkçe cümlede nokta SONDA
+ve ardından boşluk gelir. `?` kuralı bilerek dar: yalnızca ardından
+tırnak gelen üçlü işleç.
+
+**ARACIN "DOKUNMADIM, BİLDİRDİM" DAVRANIŞI İŞE YARADI.** Bir OLUMSUZ
+beklenti (`expect(src).not.toContain("m.engeller.length + \" kart")`)
+yeni içerik tırnak taşıdığı için çevrilmedi ve bildirildi. Çevrilmemiş
+hâliyle asla görünemeyecek bir dizeyi arıyordu — yani ISIRMAYAN bir
+sınamaya dönüşmüştü. Elle düzeltildi. Sessizce atlanmış olsaydı
+takımda yeşil görünen ölü bir beklenti kalırdı.
+
 **Kanıt (her iki aşama için):** Türkçe metne bakan sınamaların hepsi
 DEĞİŞMEDEN geçmeli. Değişen varsa sınır çiğnenmiştir.
 

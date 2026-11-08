@@ -1547,7 +1547,7 @@ describe("serveUi — yeni akış oluşturma (yeniAd)", () => {
     expect(await readFile(newPath, "utf8")).toContain("id: coder");
     // Aktif akış (test.yaml) AYNEN duruyor — yazma BAŞKA bir dosyaya gitti.
     const oldContent = await readFile(realFlow.path, "utf8");
-    expect(oldContent).not.toContain("kopya");
+    expect(oldContent).not.toContain("copy");
     const v = (await res.json()) as { model: { flow: { name: string } } };
     expect(v.model.flow.name).toBe("test");
   });
