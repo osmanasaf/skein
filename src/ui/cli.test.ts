@@ -373,7 +373,7 @@ roles:
   // `token`a doğrudan erişimi yok (bkz. `server.test.ts`'teki o erişim).
   async function takeToken(url: string): Promise<string> {
     const html = await (await fetch(url)).text();
-    const m = /const JETON = "([^"]+)"/.exec(html);
+    const m = /const TOKEN = "([^"]+)"/.exec(html);
     if (m === null) throw new Error("sayfada jeton bulunamadı");
     return m[1] as string;
   }

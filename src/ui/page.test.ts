@@ -75,7 +75,7 @@ describe("kapiCikislari — geri hedefi", () => {
   const cikis = (kind: string, planKilidi: boolean, geriHedef: string | null): Cikis =>
     fonksiyon<(k: string, p: boolean, g: string | null) => Cikis>(
       renderPage("x"),
-      "kapiCikislari",
+      "gateExits",
     )(kind, planKilidi, geriHedef);
 
   it("onay kapısı: hedef varsa geri gönder, yoksa baştan koştur", () => {
@@ -220,7 +220,7 @@ describe("renderPage", () => {
     expect(html).toContain("Alışverişi yeniden aç");
     // Bağlantı: ayrım modelden geliyor, çıkarsanmıyor.
     expect(html).toContain("if (planKilidi)");
-    expect(html).toContain("kapiCikislari(c.gate, c.planKilidi, c.geriHedef)");
+    expect(html).toContain("gateExits(c.gate, c.planKilidi, c.geriHedef)");
   });
 
   it("bozuk kart dosyası uyarı bandına bağlı", () => {
@@ -383,7 +383,7 @@ describe("renderPage — ekrandan kart açmak", () => {
 describe("renderPage — akış seçici", () => {
   it("liste boşsa seçici hiç çıkmıyor", () => {
     const src = betik(renderPage("x"));
-    expect(src).toContain("if (AKISLAR.length)");
+    expect(src).toContain("if (FLOWS.length)");
     expect(src).toContain('secici.id = "akisSecici"');
   });
 
@@ -430,24 +430,24 @@ describe("renderPage — gözcü düğmesi", () => {
  */
 describe("sonrakiSutun — zincir okunun hedefi", () => {
   it("rolün 'next' kenarı varsa hedefi döner", () => {
-    const sonrakiSutun = fonksiyon<(m: unknown, rolId: string) => string>(
-      renderPage("t"), "sonrakiSutun",
+    const nextColumn = fonksiyon<(m: unknown, rolId: string) => string>(
+      renderPage("t"), "nextColumn",
     );
     const m = { edges: [
       { from: "coder", to: "reviewer", kind: "next" },
       { from: "coder", to: "coder", kind: "reject" },
     ] };
-    expect(sonrakiSutun(m, "coder")).toBe("reviewer");
+    expect(nextColumn(m, "coder")).toBe("reviewer");
   });
 
   // model.ts zincirin SONUNA ('done'a) kenar hiç üretmiyor (boş bir kenarı
   // çizmek olmayan bir ilişkiyi varmış gibi göstermek olurdu) — yani
   // sütunun kendi "next" kenarı yoksa hedef zaten "bitti" sütunudur.
   it("'next' kenarı yoksa 'bitti' döner", () => {
-    const sonrakiSutun = fonksiyon<(m: unknown, rolId: string) => string>(
-      renderPage("t"), "sonrakiSutun",
+    const nextColumn = fonksiyon<(m: unknown, rolId: string) => string>(
+      renderPage("t"), "nextColumn",
     );
-    expect(sonrakiSutun({ edges: [] }, "coder")).toBe("bitti");
+    expect(nextColumn({ edges: [] }, "coder")).toBe("bitti");
   });
 });
 
@@ -461,8 +461,8 @@ describe("sonrakiSutun — zincir okunun hedefi", () => {
  */
 describe("jsonGibiMi — ajan mesajı mono/kaydırmalı mı, paragraf mı", () => {
   it("süslü parantezle başlayan metin JSON sayılır", () => {
-    const jsonGibiMi = fonksiyon<(s: string) => boolean>(renderPage("t"), "jsonGibiMi");
-    expect(jsonGibiMi('{"a":1}')).toBe(true);
+    const looksLikeJson = fonksiyon<(s: string) => boolean>(renderPage("t"), "looksLikeJson");
+    expect(looksLikeJson('{"a":1}')).toBe(true);
   });
 
   // GERÇEK bir kesilmiş kuyruk '{' ile değil '…' ile başlar (agentSaid son
@@ -470,29 +470,29 @@ describe("jsonGibiMi — ajan mesajı mono/kaydırmalı mı, paragraf mı", () =
   // "anahtar": kalıbına da bakıyor. Bu dal olmasa ÖLÇÜLEN bugün karttaki
   // kusur yine JSON sayılmazdı.
   it("'{' ile BAŞLAMAYAN ama 'anahtar': kalıbı üç kez geçen kırpılmış kuyruk da JSON sayılır", () => {
-    const jsonGibiMi = fonksiyon<(s: string) => boolean>(renderPage("t"), "jsonGibiMi");
-    expect(jsonGibiMi('…"a":1,"b":2,"c":3}')).toBe(true);
+    const looksLikeJson = fonksiyon<(s: string) => boolean>(renderPage("t"), "looksLikeJson");
+    expect(looksLikeJson('…"a":1,"b":2,"c":3}')).toBe(true);
   });
 
   it("düz bir cümle JSON sayılmaz", () => {
-    const jsonGibiMi = fonksiyon<(s: string) => boolean>(renderPage("t"), "jsonGibiMi");
-    expect(jsonGibiMi("Ajan zaman aşımına uğradı, yeniden deneniyor.")).toBe(false);
+    const looksLikeJson = fonksiyon<(s: string) => boolean>(renderPage("t"), "looksLikeJson");
+    expect(looksLikeJson("Ajan zaman aşımına uğradı, yeniden deneniyor.")).toBe(false);
   });
 });
 
 describe("ozetle — katlı özetin kısaltması TAM METNİ etkilemiyor", () => {
   it("kısa metin DEĞİŞMEDEN döner", () => {
-    const ozetle = fonksiyon<(s: string) => string>(renderPage("t"), "ozetle");
-    expect(ozetle("kısa metin")).toBe("kısa metin");
+    const summarize = fonksiyon<(s: string) => string>(renderPage("t"), "summarize");
+    expect(summarize("kısa metin")).toBe("kısa metin");
   });
 
   // Kırpma burada SADECE özet etiketini ilgilendiriyor — gerekceKur
   // govdeye ayraçtan sonraki metnin TAMAMINI yazıyor, ozetle onu
   // ETKİLEMİYOR (bkz. tarayici.test.ts'teki "tamamı DOM'da" sınaması).
   it("uzun metin yalnızca ÖZET için kısaltılır", () => {
-    const ozetle = fonksiyon<(s: string) => string>(renderPage("t"), "ozetle");
+    const summarize = fonksiyon<(s: string) => string>(renderPage("t"), "summarize");
     const uzun = "a".repeat(300);
-    const result = ozetle(uzun);
+    const result = summarize(uzun);
     expect(result.length).toBeLessThan(300);
     expect(result.endsWith("…")).toBe(true);
   });
@@ -639,7 +639,7 @@ describe("gozcuPanelDurum — gözcü panelinin beş durumu", () => {
   type Durum = { durum: string; label: string };
   const durum = (g: Daemon, yonetiliyor: boolean, duruyor: boolean): Durum =>
     fonksiyonlar<(g: Daemon, y: boolean, d: boolean) => Durum>(
-      renderPage("t"), ["gozcuDurum", "gozcuPanelDurum"], "gozcuPanelDurum",
+      renderPage("t"), ["gozcuDurum", "watcherPanelState"], "watcherPanelState",
     )(g, yonetiliyor, duruyor);
 
   // ÖNCELİK: yönetilmiyorsa HER ZAMAN "unmanaged" — gözcü GERÇEKTEN
@@ -762,7 +762,7 @@ describe("gozcuEylemEtiketi — başlat/devral/durdur etiketi", () => {
 describe("gozcuBeklemeSonucu — durdurma/yeniden başlatma bekleniyorken gözcü öldüyse", () => {
   type Sonuc = { restart: boolean } | null;
   const result = (bekleyen: string | null, g: Daemon): Sonuc =>
-    fonksiyon<(b: string | null, g: Daemon) => Sonuc>(renderPage("t"), "gozcuBeklemeSonucu")(bekleyen, g);
+    fonksiyon<(b: string | null, g: Daemon) => Sonuc>(renderPage("t"), "watcherWaitResult")(bekleyen, g);
 
   it("beklenen YOK (bekleyen null): her g için null", () => {
     expect(result(null, null)).toBeNull();
@@ -805,12 +805,12 @@ describe("gozcuBeklemeSonucu — durdurma/yeniden başlatma bekleniyorken gözc�
 describe("renderPage — gözcü ayarı gömülü", () => {
   it("ikinci parametre verilmezse GOZCU_AYAR null olur", () => {
     const src = betik(renderPage("x"));
-    expect(src).toContain("const GOZCU_AYAR = null;");
+    expect(src).toContain("const WATCHER_CONFIG = null;");
   });
 
   it("bayraklarla verilirse GOZCU_AYAR o bayrakları taşır", () => {
     const src = betik(renderPage("x", { bayraklar: ["--model", "claude:m"] }));
-    expect(src).toContain('const GOZCU_AYAR = {"bayraklar":["--model","claude:m"]};');
+    expect(src).toContain('const WATCHER_CONFIG = {"bayraklar":["--model","claude:m"]};');
   });
 });
 
@@ -925,7 +925,7 @@ describe("rolKonumu — V üzerindeki rol yerleşimi", () => {
   type Konum = { x: number; y: number; arm: string };
   const konum = (i: number, n: number): Konum =>
     fonksiyonlar<(i: number, n: number) => Konum>(
-      renderPage("t"), ["FORMASYON_GOVDE", "rolKonumu"], "rolKonumu",
+      renderPage("t"), ["FORMATION_BODY", "rolKonumu"], "rolKonumu",
     )(i, n);
 
   // TEK ROL VARSA TEPEDE — n===1 bir özel durum, f hesabına hiç girmez
@@ -993,7 +993,7 @@ describe("rolKonumu — V üzerindeki rol yerleşimi", () => {
  */
 describe("kusRengi — rol düğümünün kuş rengi", () => {
   const renk = (kartlar: { state: string; gate: string | null }[]): string =>
-    fonksiyon<(k: { state: string; gate: string | null }[]) => string>(renderPage("t"), "kusRengi")(kartlar);
+    fonksiyon<(k: { state: string; gate: string | null }[]) => string>(renderPage("t"), "birdColour")(kartlar);
 
   it("çalışan kart varsa accent", () => {
     expect(renk([{ state: "active", gate: null }])).toBe("var(--color-accent)");
@@ -1045,7 +1045,7 @@ describe("kareDurumu — kart karesinin durumu", () => {
 describe("retYayKontrol — ret yayının kontrol noktası", () => {
   type Nokta = { x: number; y: number };
   const kontrol = (a: Nokta, b: Nokta): Nokta =>
-    fonksiyon<(a: Nokta, b: Nokta) => Nokta>(renderPage("t"), "retYayKontrol")(a, b);
+    fonksiyon<(a: Nokta, b: Nokta) => Nokta>(renderPage("t"), "rejectArcCheck")(a, b);
 
   it("orta nokta hedefe (500,170) doğru %60 kaydırılır, hedefin KENDİSİNE eşitlenmez", () => {
     const k = kontrol({ x: 40, y: 110 }, { x: 230, y: 110 });
@@ -1148,7 +1148,7 @@ describe("maliyetMetni — maliyetin ALT SINIR olduğunu söyleyen biçim", () =
 describe("kanatCirpiyorMu — kanat çırpmanın koşulu", () => {
   type Daemon = { alive: boolean } | null;
   const cirpiyor = (kartlar: { state: string }[], daemon: Daemon): boolean =>
-    fonksiyon<(k: { state: string }[], d: Daemon) => boolean>(renderPage("t"), "kanatCirpiyorMu")(kartlar, daemon);
+    fonksiyon<(k: { state: string }[], d: Daemon) => boolean>(renderPage("t"), "wingsFlapping")(kartlar, daemon);
 
   it("çalışan kart VE canlı gözcü varsa true", () => {
     expect(cirpiyor([{ state: "active" }], { alive: true })).toBe(true);
@@ -1184,7 +1184,7 @@ describe("planlamaKatilimciKonumlari — planlama bandının noktaları", () => 
   const konumlar = (roller: Rol[], katilimcilar: string[]): Konum[] =>
     fonksiyonlar<(r: Rol[], k: string[]) => Konum[]>(
       renderPage("t"),
-      ["FORMASYON_GOVDE", "rolKonumu", "planlamaKatilimciKonumlari"],
+      ["FORMATION_BODY", "rolKonumu", "planlamaKatilimciKonumlari"],
       "planlamaKatilimciKonumlari",
     )(roller, katilimcilar);
 
@@ -1218,7 +1218,7 @@ describe("planlamaBandYolu — bandın tepeden dolanması", () => {
   type Konum = { x: number; y: number; arm: string };
   const path = (first: Konum, last: Konum): string =>
     fonksiyonlar<(a: Konum, b: Konum) => string>(
-      renderPage("t"), ["FORMASYON_GOVDE", "planlamaBandYolu"], "planlamaBandYolu",
+      renderPage("t"), ["FORMATION_BODY", "planlamaBandYolu"], "planlamaBandYolu",
     )(first, last);
 
   // İKİ KOLA YAYILAN bant (ilk solda, son sağda) TEPE'den (500,480)
@@ -1256,18 +1256,18 @@ describe("railGecis — sağ panelin durum geçişleri", () => {
   const gecis = (rail: Rail, eylem: Record<string, unknown>): Rail =>
     fonksiyon<(r: Rail, e: Record<string, unknown>) => Rail>(renderPage("t"), "railGecis")(rail, eylem);
 
-  const GENEL_BAKIS: Rail = { mode: "overview", roleId: null, cardId: null, cardFrom: "overview" };
+  const OVERVIEW: Rail = { mode: "overview", roleId: null, cardId: null, cardFrom: "overview" };
 
   it("'genelBakis' her zaman Genel bakışa döner", () => {
     const icindeyken = { mode: "card", roleId: "coder", cardId: "c-1", cardFrom: "role" };
-    expect(gecis(icindeyken, { tur: "genelBakis" })).toEqual(GENEL_BAKIS);
+    expect(gecis(icindeyken, { tur: "genelBakis" })).toEqual(OVERVIEW);
   });
 
   // TOGGLE: Rol modunda AYNI role tekrar tıklamak Genel bakışa döner —
   // formasyon düğümünün eski davranışıyla (secimDegistir) AYNI.
   it("Rol modunda AYNI role tıklamak Genel bakışa döner", () => {
     const rolAcik: Rail = { mode: "role", roleId: "coder", cardId: null, cardFrom: "overview" };
-    expect(gecis(rolAcik, { tur: "rolSec", roleId: "coder" })).toEqual(GENEL_BAKIS);
+    expect(gecis(rolAcik, { tur: "rolSec", roleId: "coder" })).toEqual(OVERVIEW);
   });
 
   it("Rol modunda BAŞKA role tıklamak o role GEÇER, kapatmaz", () => {
@@ -1295,7 +1295,7 @@ describe("railGecis — sağ panelin durum geçişleri", () => {
   });
 
   it("'kartAcRol' roleId'yi KORUR, cardFrom 'role'dur", () => {
-    expect(gecis(GENEL_BAKIS, { tur: "kartAcRol", roleId: "reviewer", kartId: "c-9" })).toEqual({
+    expect(gecis(OVERVIEW, { tur: "kartAcRol", roleId: "reviewer", kartId: "c-9" })).toEqual({
       mode: "card", roleId: "reviewer", cardId: "c-9", cardFrom: "role",
     });
   });
@@ -1309,7 +1309,7 @@ describe("railGecis — sağ panelin durum geçişleri", () => {
 
   it("'geri' — Kart 'overview'den açıldıysa Genel bakışa döner", () => {
     const kartAcik: Rail = { mode: "card", roleId: null, cardId: "c-9", cardFrom: "overview" };
-    expect(gecis(kartAcik, { tur: "geri" })).toEqual(GENEL_BAKIS);
+    expect(gecis(kartAcik, { tur: "geri" })).toEqual(OVERVIEW);
   });
 
   it("tanınmayan bir eylem rail'i DEĞİŞTİRMEDEN döner", () => {
@@ -1329,7 +1329,7 @@ describe("railRolMeta — Rol modunun meta satırı", () => {
   };
   const meta = (m: unknown, rolId: string): Meta | null =>
     fonksiyonlar<(m: unknown, rolId: string) => Meta | null>(
-      renderPage("t"), ["sonrakiSutun", "railRolMeta"], "railRolMeta",
+      renderPage("t"), ["nextColumn", "railRolMeta"], "railRolMeta",
     )(m, rolId);
 
   const MODEL = {
@@ -1673,36 +1673,36 @@ describe("duzenlePlanlamaAyarla — katılım her zaman zincirin KESİNTİSİZ b
       renderPage("t"), "duzenlePlanlamaAyarla",
     )(katilimcilar, rolIdler, idx, katilmak);
 
-  const ROLLER = ["a", "b", "c", "d"];
+  const ROLES = ["a", "b", "c", "d"];
 
   it("hiç katılımcı yokken İLK rolü katmak öneği bir uzatır", () => {
-    expect(ayarla([], ROLLER, 0, true)).toEqual(["a"]);
+    expect(ayarla([], ROLES, 0, true)).toEqual(["a"]);
   });
 
   it("önekin TAM ARDINDAKİ rolü katmak öneği uzatır", () => {
-    expect(ayarla(["a"], ROLLER, 1, true)).toEqual(["a", "b"]);
+    expect(ayarla(["a"], ROLES, 1, true)).toEqual(["a", "b"]);
   });
 
   // SIRA DIŞI istek: önek {a} iken DOĞRUDAN c'yi (idx 2) katmaya çalışmak
   // kuralı (19) ihlal ederdi — sessizce YOK SAYILIR.
   it("SIRA DIŞI bir katılım isteği YOK SAYILIR, önek değişmez", () => {
-    expect(ayarla(["a"], ROLLER, 2, true)).toEqual(["a"]);
+    expect(ayarla(["a"], ROLES, 2, true)).toEqual(["a"]);
   });
 
   it("zaten katılımcı olan bir role 'katıl' demek DEĞİŞTİRMEZ", () => {
-    expect(ayarla(["a", "b"], ROLLER, 0, true)).toEqual(["a", "b"]);
+    expect(ayarla(["a", "b"], ROLES, 0, true)).toEqual(["a", "b"]);
   });
 
   it("önekin SON elemanını çıkarmak öneği bir kısaltır", () => {
-    expect(ayarla(["a", "b"], ROLLER, 1, false)).toEqual(["a"]);
+    expect(ayarla(["a", "b"], ROLES, 1, false)).toEqual(["a"]);
   });
 
   it("ortadan birini ÇIKARMAK onu ve ARDINDAKİ hepsini öneğin dışına atar", () => {
-    expect(ayarla(["a", "b", "c"], ROLLER, 1, false)).toEqual(["a"]);
+    expect(ayarla(["a", "b", "c"], ROLES, 1, false)).toEqual(["a"]);
   });
 
   it("katılımcı olmayan bir role 'çık' demek DEĞİŞTİRMEZ", () => {
-    expect(ayarla(["a"], ROLLER, 2, false)).toEqual(["a"]);
+    expect(ayarla(["a"], ROLES, 2, false)).toEqual(["a"]);
   });
 });
 
@@ -1712,26 +1712,26 @@ describe("duzenleDenetciGecerle — kural 23: denetçi katılımcı OLAMAZ, kat�
       renderPage("t"), "duzenleDenetciGecerle",
     )(denetci, katilimcilar, rolIdler);
 
-  const ROLLER = ["a", "b", "c", "d"];
+  const ROLES = ["a", "b", "c", "d"];
 
   it("katılımcılardan SONRA gelen geçerli bir denetçiyi KORUR", () => {
-    expect(gecerle("c", ["a", "b"], ROLLER)).toBe("c");
+    expect(gecerle("c", ["a", "b"], ROLES)).toBe("c");
   });
 
   it("denetçi bir KATILIMCIYSA temizlenir", () => {
-    expect(gecerle("b", ["a", "b"], ROLLER)).toBeUndefined();
+    expect(gecerle("b", ["a", "b"], ROLES)).toBeUndefined();
   });
 
   it("denetçi katılımcılardan ÖNCE/ARASINDAYSA temizlenir", () => {
-    expect(gecerle("a", ["a", "b"], ROLLER)).toBeUndefined();
+    expect(gecerle("a", ["a", "b"], ROLES)).toBeUndefined();
   });
 
   it("katılımcı YOKSA denetçi de anlamsız, temizlenir", () => {
-    expect(gecerle("c", [], ROLLER)).toBeUndefined();
+    expect(gecerle("c", [], ROLES)).toBeUndefined();
   });
 
   it("denetçi tanımsızsa tanımsız kalır", () => {
-    expect(gecerle(undefined, ["a"], ROLLER)).toBeUndefined();
+    expect(gecerle(undefined, ["a"], ROLES)).toBeUndefined();
   });
 });
 
@@ -2228,14 +2228,14 @@ describe("ajanGuncelKart — rolün 'güncel' kartı", () => {
 
 describe("ajanDurumMetni — DEVIR.md §6'nın beş durum metni", () => {
   const ON = { alive: true };
-  const KAPALI = null;
+  const CLOSED = null;
   // ajanDurumMetni artık kararı paylaşılan ajanSuAnDurumu'ndan okuyor
   // (bkz. page.ts yorumu — ajanSuAnKutuKur İKİSİ aynı karardan geçsin
   // diye); o yüzden tek başına değil, ikisi BİRLİKTE çıkarılıyor
   // (rolKonumu/FORMASYON_GOVDE çiftinin aynı deseni, bkz. fonksiyonlar).
   const durum = (role: { depth: number }, card: AjanKart | null, daemon: unknown): string =>
     fonksiyonlar<(r: { depth: number }, k: AjanKart | null, d: unknown) => string>(
-      renderPage("t"), ["ajanSuAnDurumu", "ajanDurumMetni"], "ajanDurumMetni",
+      renderPage("t"), ["agentCurrentState", "ajanDurumMetni"], "ajanDurumMetni",
     )(role, card, daemon);
 
   it("boşta: kart yok, kuyruk boş", () => {
@@ -2275,7 +2275,7 @@ describe("ajanDurumMetni — DEVIR.md §6'nın beş durum metni", () => {
       role: "coder", state: "active", title: "jitter ekle",
       live: { name: "Bash", kind: "tool", detail: "npx vitest run" },
     };
-    expect(durum({ depth: 0 }, card, KAPALI)).toBe("gözcü kapalı · jitter ekle yarıda");
+    expect(durum({ depth: 0 }, card, CLOSED)).toBe("gözcü kapalı · jitter ekle yarıda");
   });
 
   it("gözcü kapalı: daemon alive:false iken de aynı dal çalışır", () => {
@@ -2296,7 +2296,7 @@ describe("ajanSuAnDurumu — iki yüzeyin paylaştığı karar", () => {
   type AjanDurum = { tur: string; live?: { name?: string; kind?: string; detail?: string } };
   const durum = (card: AjanKart | null, daemon: unknown): AjanDurum | null =>
     fonksiyon<(k: AjanKart | null, d: unknown) => AjanDurum | null>(
-      renderPage("t"), "ajanSuAnDurumu",
+      renderPage("t"), "agentCurrentState",
     )(card, daemon);
 
   it("kart yoksa null — çağıran kendi 'boşta'/'kuyrukta' kararını verir", () => {
@@ -2634,7 +2634,7 @@ describe("ucusPlanlariniKur — devirlerden uçuş planına", () => {
   const planlar = (devirler: { cardId: string; from: string; to: string }[], roller: Rol[]): Plan[] =>
     fonksiyonlar<(d: typeof devirler, r: Rol[]) => Plan[]>(
       renderPage("t"),
-      ["FORMASYON_GOVDE", "rolKonumu", "govdeYolu", "ucusSuresiMs", "ucusPlanlariniKur"],
+      ["FORMATION_BODY", "rolKonumu", "govdeYolu", "ucusSuresiMs", "ucusPlanlariniKur"],
       "ucusPlanlariniKur",
     )(devirler, roller);
 

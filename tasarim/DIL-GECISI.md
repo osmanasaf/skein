@@ -285,6 +285,41 @@ olmadığını anlamak için diskteki JSON'a bakmak YETMEZ. Ajana ne
 söylediğimize de bakılacak: `hub/prompts/**` ve `bench/prompts/**`
 içindeki her JSON örneği bir şemadır.
 
+**12. ARAYÜZ AŞAMASI AÇILDI — doğru ayrım ÇAĞRI BAĞLAMI.**
+
+§9 bu katmanı ertelemişti. Sorun, beklenen dizelerin içindeki kodu
+çevirirken Türkçe sınama BAŞLIKLARINI ayırmaktı. İlk denemem "JS olarak
+ayrışıyor mu" diye bakıyordu ve ayrışan başlıkları da çeviriyordu.
+
+**ÇALIŞAN AYRIM — dizenin NEREDE kullanıldığı:**
+
+| konum | karar |
+|---|---|
+| `it`/`test`/`describe`'ın İLK argümanı | ASLA dokunulmaz (başlık) |
+| `fonksiyon`/`bildirim`/`fonksiyonlar`'ın ad argümanı | tam değiştirilir |
+| `toContain`/`toMatch` argümanı, içinde kod işareti varsa | tanımlayıcı konumları çevrilir |
+| düzenli ifade literali, içinde kod işareti varsa | tanımlayıcı konumları çevrilir |
+| başka her dize | dokunulmaz |
+
+**AYRIŞTIRICI DEĞİL TARAYICI (scanner).** Beklentiler betiğin bir ALT
+DİZESİNİ doğruluyor, yani parça çoğu zaman dengesiz: `fetch("/kart/yeni"`.
+Ayrıştırıcı bunları reddediyor ve o beklentiler sessizce çevrilmeden
+kalıyordu. Tarayıcı dengeli sözdizimi istemiyor ve DİZE simgelerini ayrı
+simge olarak veriyor — dize içindeki adlar kendiliğinden korunuyor.
+
+**İKİ ÖLÇÜLEN KUSUR (ikisinde de `tsc` temizdi):**
+1. Dize geçişi yalnızca üç UI dosyasında yapıldı; `ui/cli.test.ts` ve
+   `ui/server.test.ts` de servis edilen HTML'in kaynak metnini
+   doğruluyor → 3 sınama düştü. Dize geçişi HER sınama dosyasına
+   yayıldı (tanımlayıcı geçişi hâlâ yalnızca üç dosyada: adlar orada
+   bildiriliyor).
+2. `/const JETON = "([^"]+)"/` bir DÜZENLİ İFADE literali, dize değil →
+   "sayfada jeton bulunamadı". Regex literalleri de kapsandı.
+
+**KAPSAM DÜZELTMESİ:** §9 bu katmanda "166 ad" kalmış diyordu. Gerçek
+sayı, yalnızca o üç dosyada bildirilen adlar için **850**. Önceki sayım
+sınırlı bir Türkçe kök listesine dayanıyordu.
+
 **Kanıt (her iki aşama için):** Türkçe metne bakan sınamaların hepsi
 DEĞİŞMEDEN geçmeli. Değişen varsa sınır çiğnenmiştir.
 

@@ -2068,7 +2068,7 @@ describe("serveUi — ekrandan gözcü", () => {
     const { srv } = await gozculu();
     try {
       const html = await (await fetch(srv.url)).text();
-      expect(html).toContain('const GOZCU_AYAR = {"bayraklar":["--model","claude:m"]};');
+      expect(html).toContain('const WATCHER_CONFIG = {"bayraklar":["--model","claude:m"]};');
     } finally {
       await srv.close();
     }
@@ -2078,7 +2078,7 @@ describe("serveUi — ekrandan gözcü", () => {
     const srv = await serveUi({ root, queue, topology, flowName: "test", flowHash: realFlow.hash });
     try {
       const html = await (await fetch(srv.url)).text();
-      expect(html).toContain("const GOZCU_AYAR = null;");
+      expect(html).toContain("const WATCHER_CONFIG = null;");
     } finally {
       await srv.close();
     }

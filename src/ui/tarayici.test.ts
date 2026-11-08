@@ -142,7 +142,7 @@ declare function requestAnimationFrame(cb: () => void): number;
 declare const performance: { now: () => number };
 
 declare let RAIL: { mode: string; roleId: string | null; cardId: string | null; cardFrom: string };
-declare let SON_MODEL: unknown;
+declare let LAST_MODEL: unknown;
 declare function ciz(m: unknown): void;
 
 type Tarayici = { newPage: (o?: unknown) => Promise<Sayfa>; close: () => Promise<void> };
@@ -1384,7 +1384,7 @@ roles:
   describe("formasyon işaretleri — planlama bandı, kapı çizgisi, ret yayı", () => {
     // planner/architect PLANLAMA katılımcısı (coder/reviewer DEĞİL — kural
     // 22: bir katılımcı "reject" taşıyamaz, itirazın yolu itiraz dosyası).
-    const ZENGIN_FLOW = `
+    const RICH_FLOW = `
 name: zengin
 constitution:
   - ../prompts/base.md
@@ -1431,7 +1431,7 @@ reject:
 `;
 
     async function zenginSunucusuAc() {
-      await writeFile(join(root, "hub", "flows", "zengin.yaml"), ZENGIN_FLOW);
+      await writeFile(join(root, "hub", "flows", "zengin.yaml"), RICH_FLOW);
       const flow = await loadFlow(join(root, "hub", "flows", "zengin.yaml"), {
         root, providers: knownProviderSet(),
       });
@@ -1492,8 +1492,8 @@ reject:
     // TEK KATILIMCIDA BANT YOK: "ilk ile son arasında geçen bir şerit" tek
     // noktada anlamsız (skein-merkez-v3.html'in kendi kuralı, plan.length>1).
     it("tek katılımcılı planlamada bant/etiket HİÇ çizilmiyor", async () => {
-      const TEK_KATILIMCI_FLOW = ZENGIN_FLOW.replace("katilimcilar: [planner, architect]", "katilimcilar: [planner]");
-      await writeFile(join(root, "hub", "flows", "zengin.yaml"), TEK_KATILIMCI_FLOW);
+      const SINGLE_PARTICIPANT_FLOW = RICH_FLOW.replace("katilimcilar: [planner, architect]", "katilimcilar: [planner]");
+      await writeFile(join(root, "hub", "flows", "zengin.yaml"), SINGLE_PARTICIPANT_FLOW);
       const flow = await loadFlow(join(root, "hub", "flows", "zengin.yaml"), {
         root, providers: knownProviderSet(),
       });
@@ -1876,7 +1876,7 @@ reject:
         await page.waitForSelector(".railSayiSatiri", { timeout: 15_000 });
         await page.evaluate(() => {
           RAIL = { mode: "role", roleId: "hayalet-rol", cardId: null, cardFrom: "overview" };
-          ciz(SON_MODEL);
+          ciz(LAST_MODEL);
         });
         await page.waitForSelector(".railBos", { timeout: 10_000 });
         expect(await page.textContent(".railBos")).toContain("rol bulunamadı");
@@ -2101,7 +2101,7 @@ reject:
    * ortak noktası.
    */
   describe("akış diyagramı", () => {
-    const GUNLUK_TEK_FLOW = `
+    const DAILY_SINGLE_FLOW = `
 name: gunluk-tek
 constitution:
   - ../prompts/base.md
@@ -2126,7 +2126,7 @@ roles:
     // davranışsal olarak kapı DEĞİL ve bu yüzden işaretlenmemeli, biri
     // 'approval' — işaretlenmeli). Filtreleme kararı SAYFADA (bkz.
     // model.ts "kapı tipi filtrelenmeden taşınıyor" yorumu).
-    const AB_PLANLI_FLOW = `
+    const AB_PLANNED_FLOW = `
 name: ab-planli
 constitution:
   - ../prompts/base.md
@@ -2196,7 +2196,7 @@ gates:
     }
 
     it("gunluk-tek: iki düğüm, next ileri, reject ve syncBack GERİ ve GÖRSEL OLARAK AYRI", async () => {
-      const s = await akisSunucusuAc("gunluk-tek", GUNLUK_TEK_FLOW);
+      const s = await akisSunucusuAc("gunluk-tek", DAILY_SINGLE_FLOW);
       const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
@@ -2258,7 +2258,7 @@ gates:
      * GERÇEK viewport'ta HESAPLANAN 'display'dan.
      */
     it("geniş ekranda yatay diyagram görünür/dikey gizli, dar ekranda tersi", async () => {
-      const s = await akisSunucusuAc("gunluk-tek", GUNLUK_TEK_FLOW);
+      const s = await akisSunucusuAc("gunluk-tek", DAILY_SINGLE_FLOW);
       const genis = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
       const dar = await (browser as Tarayici).newPage({ viewport: { width: 400, height: 900 } });
       try {
@@ -2292,7 +2292,7 @@ gates:
     }, 60_000);
 
     it("ab-planli: dört rol, zincirdeki her next/reject kenarı ve yalnızca onay kapısı işaretli", async () => {
-      const s = await akisSunucusuAc("ab-planli", AB_PLANLI_FLOW);
+      const s = await akisSunucusuAc("ab-planli", AB_PLANNED_FLOW);
       const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
@@ -2502,7 +2502,7 @@ gates:
      * TEMİZLENEREK sınanıyor).
      */
     it("diyagramdan düğüme tıklayınca düzenleme alanları açılıyor, provider değiştirip kaydetmek dosyayı değiştiriyor", async () => {
-      const s = await akisSunucusuDuzenlenebilirAc("gunluk-tek", GUNLUK_TEK_FLOW);
+      const s = await akisSunucusuDuzenlenebilirAc("gunluk-tek", DAILY_SINGLE_FLOW);
       const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
@@ -2544,7 +2544,7 @@ gates:
      * seçiminde) önceden söylüyor, sonra /rol/yeni'yi ATOMİK çağırıyor.
      */
     it("diyagramdaki '+' ile iki düğüm arasına rol ekleniyor, zincire doğru yere giriyor", async () => {
-      const s = await akisSunucusuDuzenlenebilirAc("gunluk-tek", GUNLUK_TEK_FLOW);
+      const s = await akisSunucusuDuzenlenebilirAc("gunluk-tek", DAILY_SINGLE_FLOW);
       const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
@@ -2592,7 +2592,7 @@ gates:
      * kaydet) aynı sonucu ürettiğini kanıtlıyor — page.ts'teki `rolSil`in
      * KENDİSİ koşuyor, HTTP gövdesi elle kurulmuyor.
      */
-    const UCLU_FLOW = `
+    const TRIPLE_FLOW = `
 name: uclu
 constitution:
   - ../prompts/base.md
@@ -2622,7 +2622,7 @@ roles:
 `;
 
     it("diyagramdan rol silinince zincir KOPMUYOR, çıkarılan role işaret eden kenarlar TEMİZLENİYOR", async () => {
-      const s = await akisSunucusuDuzenlenebilirAc("uclu", UCLU_FLOW);
+      const s = await akisSunucusuDuzenlenebilirAc("uclu", TRIPLE_FLOW);
       const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
@@ -2667,7 +2667,7 @@ roles:
      * geçmeden.
      */
     it("diyagramdan geçersiz bir değişiklik yapınca kural mesajı EKRANDA (diyagram sekmesinde) görünüyor", async () => {
-      const s = await akisSunucusuDuzenlenebilirAc("gunluk-tek", GUNLUK_TEK_FLOW);
+      const s = await akisSunucusuDuzenlenebilirAc("gunluk-tek", DAILY_SINGLE_FLOW);
       const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
@@ -2718,7 +2718,7 @@ roles:
      * iddia geri kalan HER ŞEYİN yerinde durduğu.
      */
     it("diyagramdan bir kenar değişince yorumlar, audit ve planlama bloğu AYNEN duruyor", async () => {
-      const PLANLI_FLOW = `# Üst başlık yorumu
+      const PLANNED_FLOW = `# Üst başlık yorumu
 # İkinci satır
 
 name: planli
@@ -2749,7 +2749,7 @@ planlama:
   denetci: reviewer
 `;
       const path = join(root, "hub", "flows", "planli.yaml");
-      const s = await akisSunucusuDuzenlenebilirAc("planli", PLANLI_FLOW);
+      const s = await akisSunucusuDuzenlenebilirAc("planli", PLANNED_FLOW);
       const page = await (browser as Tarayici).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
@@ -3610,7 +3610,7 @@ roles:
    * topolojiyle açılıyor.
    */
   describe("Uçuş — devredilen kartın V üzerinde uçması", () => {
-    const FLOW_IKI = `
+    const FLOW_TWO = `
 name: iki
 constitution:
   - ../prompts/base.md
@@ -3629,7 +3629,7 @@ roles:
 
     /** İki rollü akışı yazar, topolojisini çıkarır ve ONUNLA bir sunucu açar. */
     async function ikiRoluSunucuAc(): Promise<{ s: UiServer; topologyIki: TopologySnapshot }> {
-      await writeFile(join(root, "hub", "flows", "iki.yaml"), FLOW_IKI);
+      await writeFile(join(root, "hub", "flows", "iki.yaml"), FLOW_TWO);
       const flowIki = await loadFlow(join(root, "hub", "flows", "iki.yaml"), {
         root, providers: knownProviderSet(),
       });
