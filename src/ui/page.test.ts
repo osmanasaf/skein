@@ -18,7 +18,7 @@ function scriptText(html: string): string {
  * kapanışsız fonksiyon kesilip değerlendiriliyor — ölçülen şey gerçekten
  * sayfaya giden metin.
  */
-function fonksiyon<T>(html: string, nameText: string): T {
+function scriptFn<T>(html: string, nameText: string): T {
   const src = scriptText(html);
   const bas = src.indexOf(`function ${nameText}(`);
   if (bas < 0) throw new Error(`betikte ${nameText} yok`);
@@ -29,7 +29,7 @@ function fonksiyon<T>(html: string, nameText: string): T {
 }
 
 /** `fonksiyon`'un TEK bir bildirimi (fonksiyon ya da üst düzey `const`) için kullandığı çıkarma mantığı. */
-function notice(src: string, nameText: string): string {
+function declaration(src: string, nameText: string): string {
   const funcStart = src.indexOf(`function ${nameText}(`);
   if (funcStart >= 0) {
     const last = src.indexOf("\n}\n", funcStart);
@@ -55,9 +55,9 @@ function notice(src: string, nameText: string): string {
  * garantisi yok — tam da bu dosyadaki AJAN_AYRAC'ın kendi yorumunun
  * uyardığı kusur) ikisi BİRLİKTE, gerçek kaynaktan çıkarılıyor.
  */
-function fonksiyonlar<T>(html: string, names: string[], turnBack: string): T {
+function scriptFns<T>(html: string, names: string[], turnBack: string): T {
   const src = scriptText(html);
-  const text = names.map((nameText) => notice(src, nameText)).join("\n");
+  const text = names.map((nameText) => declaration(src, nameText)).join("\n");
   return new Function(`${text}; return ${turnBack};`)() as T;
 }
 
@@ -73,7 +73,7 @@ type Exit = { label: string; not: string; buttons: [string, string][] };
  */
 describe("kapiCikislari — geri hedefi", () => {
   const exitSpec = (kind: string, planLock: boolean, backTarget: string | null): Exit =>
-    fonksiyon<(k: string, p: boolean, g: string | null) => Exit>(
+    scriptFn<(k: string, p: boolean, g: string | null) => Exit>(
       renderPage("x"),
       "gateExits",
     )(kind, planLock, backTarget);
@@ -315,7 +315,7 @@ describe("renderPage — kuyruk engeli bandı", () => {
  */
 describe("engelBandBasligi — davranış", () => {
   const headingText = (cardTotal: number, blockages: { code: string }[]): string =>
-    fonksiyon<(k: number, e: { code: string }[]) => string>(
+    scriptFn<(k: number, e: { code: string }[]) => string>(
       renderPage("x"),
       "blockageBandTitle",
     )(cardTotal, blockages);
@@ -434,7 +434,7 @@ describe("renderPage — gözcü düğmesi", () => {
  */
 describe("sonrakiSutun — zincir okunun hedefi", () => {
   it("rolün 'next' kenarı varsa hedefi döner", () => {
-    const nextColumn = fonksiyon<(m: unknown, roleIdent: string) => string>(
+    const nextColumn = scriptFn<(m: unknown, roleIdent: string) => string>(
       renderPage("t"), "nextColumn",
     );
     const m = { edges: [
@@ -448,7 +448,7 @@ describe("sonrakiSutun — zincir okunun hedefi", () => {
   // çizmek olmayan bir ilişkiyi varmış gibi göstermek olurdu) — yani
   // sütunun kendi "next" kenarı yoksa hedef zaten "bitti" sütunudur.
   it("'next' kenarı yoksa 'bitti' döner", () => {
-    const nextColumn = fonksiyon<(m: unknown, roleIdent: string) => string>(
+    const nextColumn = scriptFn<(m: unknown, roleIdent: string) => string>(
       renderPage("t"), "nextColumn",
     );
     expect(nextColumn({ edges: [] }, "coder")).toBe("bitti");
@@ -465,7 +465,7 @@ describe("sonrakiSutun — zincir okunun hedefi", () => {
  */
 describe("jsonGibiMi — ajan mesajı mono/kaydırmalı mı, paragraf mı", () => {
   it("süslü parantezle başlayan metin JSON sayılır", () => {
-    const looksLikeJson = fonksiyon<(s: string) => boolean>(renderPage("t"), "looksLikeJson");
+    const looksLikeJson = scriptFn<(s: string) => boolean>(renderPage("t"), "looksLikeJson");
     expect(looksLikeJson('{"a":1}')).toBe(true);
   });
 
@@ -474,19 +474,19 @@ describe("jsonGibiMi — ajan mesajı mono/kaydırmalı mı, paragraf mı", () =
   // "anahtar": kalıbına da bakıyor. Bu dal olmasa ÖLÇÜLEN bugün karttaki
   // kusur yine JSON sayılmazdı.
   it("'{' ile BAŞLAMAYAN ama 'anahtar': kalıbı üç kez geçen kırpılmış kuyruk da JSON sayılır", () => {
-    const looksLikeJson = fonksiyon<(s: string) => boolean>(renderPage("t"), "looksLikeJson");
+    const looksLikeJson = scriptFn<(s: string) => boolean>(renderPage("t"), "looksLikeJson");
     expect(looksLikeJson('…"a":1,"b":2,"c":3}')).toBe(true);
   });
 
   it("düz bir cümle JSON sayılmaz", () => {
-    const looksLikeJson = fonksiyon<(s: string) => boolean>(renderPage("t"), "looksLikeJson");
+    const looksLikeJson = scriptFn<(s: string) => boolean>(renderPage("t"), "looksLikeJson");
     expect(looksLikeJson("Ajan zaman aşımına uğradı, yeniden deneniyor.")).toBe(false);
   });
 });
 
 describe("ozetle — katlı özetin kısaltması TAM METNİ etkilemiyor", () => {
   it("kısa metin DEĞİŞMEDEN döner", () => {
-    const summarize = fonksiyon<(s: string) => string>(renderPage("t"), "summarize");
+    const summarize = scriptFn<(s: string) => string>(renderPage("t"), "summarize");
     expect(summarize("kısa metin")).toBe("kısa metin");
   });
 
@@ -494,7 +494,7 @@ describe("ozetle — katlı özetin kısaltması TAM METNİ etkilemiyor", () => 
   // govdeye ayraçtan sonraki metnin TAMAMINI yazıyor, ozetle onu
   // ETKİLEMİYOR (bkz. tarayici.test.ts'teki "tamamı DOM'da" sınaması).
   it("uzun metin yalnızca ÖZET için kısaltılır", () => {
-    const summarize = fonksiyon<(s: string) => string>(renderPage("t"), "summarize");
+    const summarize = scriptFn<(s: string) => string>(renderPage("t"), "summarize");
     const uzun = "a".repeat(300);
     const result = summarize(uzun);
     expect(result.length).toBeLessThan(300);
@@ -514,7 +514,7 @@ describe("ozetle — katlı özetin kısaltması TAM METNİ etkilemiyor", () => 
  */
 describe("bosRolMetni — boş sütun metninin karar noktası", () => {
   const text = (roleRec: { depth: number }, cardList: unknown[]): string =>
-    fonksiyon<(r: { depth: number }, k: unknown[]) => string>(renderPage("t"), "emptyRoleText")(
+    scriptFn<(r: { depth: number }, k: unknown[]) => string>(renderPage("t"), "emptyRoleText")(
       roleRec, cardList,
     );
 
@@ -546,7 +546,7 @@ describe("bosRolMetni — boş sütun metninin karar noktası", () => {
  */
 describe("bosBittiMetni — boş 'bitti' sütununun karar noktası", () => {
   const text = (cards: { state: string }[], open: number): string =>
-    fonksiyon<(m: { cards: { state: string }[]; totals: { open: number } }) => string>(
+    scriptFn<(m: { cards: { state: string }[]; totals: { open: number } }) => string>(
       renderPage("t"), "emptyDoneText",
     )({ cards, totals: { open } });
 
@@ -579,7 +579,7 @@ describe("bosBittiMetni — boş 'bitti' sütununun karar noktası", () => {
  * düğmesi tıklanınca ekran sessizce Akışlar sekmesine atlardı.
  */
 describe("sekmeAdi — hash'ten aktif sekme kararı", () => {
-  const tab = (h: string): string => fonksiyon<(h: string) => string>(renderPage("t"), "tabName")(h);
+  const tab = (h: string): string => scriptFn<(h: string) => string>(renderPage("t"), "tabName")(h);
 
   it("üç sekme adını aynen döner", () => {
     expect(tab("akislar")).toBe("akislar");
@@ -607,7 +607,7 @@ describe("sekmeAdi — hash'ten aktif sekme kararı", () => {
 describe("gozcuDurum — gözcü çipinin durum kararı", () => {
   type Status = { durum: string; label: string };
   const durum = (g: { alive: boolean; info?: unknown } | null): Status =>
-    fonksiyon<(g: { alive: boolean; info?: unknown } | null) => Status>(renderPage("t"), "watcherStatus")(g);
+    scriptFn<(g: { alive: boolean; info?: unknown } | null) => Status>(renderPage("t"), "watcherStatus")(g);
 
   it("kilit yoksa 'yok' der", () => {
     expect(durum(null)).toEqual({ durum: "yok", label: "gözcü yok" });
@@ -642,7 +642,7 @@ const DAEMON_INFO: DaemonInfo = { pid: 1, flow: "f", hash: "abc", mode: "serve",
 describe("gozcuPanelDurum — gözcü panelinin beş durumu", () => {
   type Status = { durum: string; label: string };
   const durum = (g: Daemon, isManaged: boolean, stopped: boolean): Status =>
-    fonksiyonlar<(g: Daemon, y: boolean, d: boolean) => Status>(
+    scriptFns<(g: Daemon, y: boolean, d: boolean) => Status>(
       renderPage("t"), ["watcherStatus", "watcherPanelState"], "watcherPanelState",
     )(g, isManaged, stopped);
 
@@ -691,7 +691,7 @@ describe("gozcuPanelDurum — gözcü panelinin beş durumu", () => {
  */
 describe("gozcuTopoUyari — akış gözcü açıldıktan sonra değişti mi", () => {
   const warning = (g: Daemon, flowHash: string, durum: string): boolean =>
-    fonksiyon<(g: Daemon, f: string, d: string) => boolean>(renderPage("t"), "watcherTopoWarning")(g, flowHash, durum);
+    scriptFn<(g: Daemon, f: string, d: string) => boolean>(renderPage("t"), "watcherTopoWarning")(g, flowHash, durum);
 
   it("açıkken hash değiştiyse uyarır", () => {
     expect(warning({ alive: true, info: DAEMON_INFO }, "YENI-HASH", "on")).toBe(true);
@@ -716,7 +716,7 @@ describe("gozcuTopoUyari — akış gözcü açıldıktan sonra değişti mi", (
 /** GOZCUKOMUTORNEKLERI — "unmanaged" panelindeki iki örnek komut. SAF, DOM yok. */
 describe("gozcuKomutOrnekleri — ayrı kabuk komutları", () => {
   const examples = (flowName: string): { cmd1: string; cmd2: string } =>
-    fonksiyon<(f: string) => { cmd1: string; cmd2: string }>(renderPage("t"), "watcherCommandExamples")(flowName);
+    scriptFn<(f: string) => { cmd1: string; cmd2: string }>(renderPage("t"), "watcherCommandExamples")(flowName);
 
   it("akış adını İKİ komuta da yerleştirir", () => {
     const o = examples("gunluk-tek");
@@ -734,7 +734,7 @@ describe("gozcuKomutOrnekleri — ayrı kabuk komutları", () => {
  */
 describe("gozcuEylemEtiketi — başlat/devral/durdur etiketi", () => {
   const label = (g: Daemon): string =>
-    fonksiyon<(g: Daemon) => string>(renderPage("t"), "watcherActionLabel")(g);
+    scriptFn<(g: Daemon) => string>(renderPage("t"), "watcherActionLabel")(g);
 
   it("kilit yoksa 'Gözcüyü başlat'", () => {
     expect(label(null)).toBe("Gözcüyü başlat");
@@ -766,7 +766,7 @@ describe("gozcuEylemEtiketi — başlat/devral/durdur etiketi", () => {
 describe("gozcuBeklemeSonucu — durdurma/yeniden başlatma bekleniyorken gözcü öldüyse", () => {
   type Outcome = { restart: boolean } | null;
   const result = (pendingOnes: string | null, g: Daemon): Outcome =>
-    fonksiyon<(b: string | null, g: Daemon) => Outcome>(renderPage("t"), "watcherWaitResult")(pendingOnes, g);
+    scriptFn<(b: string | null, g: Daemon) => Outcome>(renderPage("t"), "watcherWaitResult")(pendingOnes, g);
 
   it("beklenen YOK (bekleyen null): her g için null", () => {
     expect(result(null, null)).toBeNull();
@@ -846,7 +846,7 @@ describe("renderPage — gözcü günlüğü hata satırı zeminli rozet kullan�
  */
 describe("kapidaBekleyenSayisi — Pano rozeti", () => {
   const say = (cards: { gate: string | null }[]): number =>
-    fonksiyon<(c: { gate: string | null }[]) => number>(renderPage("t"), "atGateCount")(cards);
+    scriptFn<(c: { gate: string | null }[]) => number>(renderPage("t"), "atGateCount")(cards);
 
   it("gate alanı dolu olanları sayar, null olanları saymaz", () => {
     expect(say([{ gate: "approval" }, { gate: null }, { gate: "deadlock" }])).toBe(2);
@@ -859,7 +859,7 @@ describe("kapidaBekleyenSayisi — Pano rozeti", () => {
 
 describe("calisanAjanSayisi — Ajanlar rozeti", () => {
   const say = (cards: { state: string }[]): number =>
-    fonksiyon<(c: { state: string }[]) => number>(renderPage("t"), "runningAgentCount")(cards);
+    scriptFn<(c: { state: string }[]) => number>(renderPage("t"), "runningAgentCount")(cards);
 
   // SINIR: yalnızca "active" sayılır — "gate"/"done"/"queued" ÇALIŞAN
   // ajan DEĞİL, karşı mutasyon (=== yerine !==) bu satırı KIRAR.
@@ -881,7 +881,7 @@ describe("calisanAjanSayisi — Ajanlar rozeti", () => {
  */
 describe("temaNitelikDegeri — tema adından <html data-theme> niteliğine", () => {
   const attribute = (tema: string): string | null =>
-    fonksiyon<(t: string) => string | null>(renderPage("t"), "themeAttributeValue")(tema);
+    scriptFn<(t: string) => string | null>(renderPage("t"), "themeAttributeValue")(tema);
 
   it("'acik' -> 'light'", () => {
     expect(attribute("acik")).toBe("light");
@@ -898,7 +898,7 @@ describe("temaNitelikDegeri — tema adından <html data-theme> niteliğine", ()
 
 describe("nitelikTemaDegeri — <html data-theme> niteliğinden tema adına (tersi)", () => {
   const tema = (attribute: string | null): string =>
-    fonksiyon<(n: string | null) => string>(renderPage("t"), "attributeThemeValue")(attribute);
+    scriptFn<(n: string | null) => string>(renderPage("t"), "attributeThemeValue")(attribute);
 
   it("'light' -> 'acik'", () => {
     expect(tema("light")).toBe("acik");
@@ -928,7 +928,7 @@ describe("nitelikTemaDegeri — <html data-theme> niteliğinden tema adına (ter
 describe("rolKonumu — V üzerindeki rol yerleşimi", () => {
   type Position = { x: number; y: number; arm: string };
   const position = (i: number, n: number): Position =>
-    fonksiyonlar<(i: number, n: number) => Position>(
+    scriptFns<(i: number, n: number) => Position>(
       renderPage("t"), ["FORMATION_BODY", "rolePosition"], "rolePosition",
     )(i, n);
 
@@ -997,7 +997,7 @@ describe("rolKonumu — V üzerindeki rol yerleşimi", () => {
  */
 describe("kusRengi — rol düğümünün kuş rengi", () => {
   const colourVal = (cardList: { state: string; gate: string | null }[]): string =>
-    fonksiyon<(k: { state: string; gate: string | null }[]) => string>(renderPage("t"), "birdColour")(cardList);
+    scriptFn<(k: { state: string; gate: string | null }[]) => string>(renderPage("t"), "birdColour")(cardList);
 
   it("çalışan kart varsa accent", () => {
     expect(colourVal([{ state: "active", gate: null }])).toBe("var(--color-accent)");
@@ -1020,7 +1020,7 @@ describe("kusRengi — rol düğümünün kuş rengi", () => {
 /** KAREDURUMU — kart karesinin üç durumu (çizim ".kare-<ad>" sınıfıyla paylaşılıyor). */
 describe("kareDurumu — kart karesinin durumu", () => {
   const durum = (c: { state: string; gate: string | null }): string =>
-    fonksiyon<(c: { state: string; gate: string | null }) => string>(renderPage("t"), "squareState")(c);
+    scriptFn<(c: { state: string; gate: string | null }) => string>(renderPage("t"), "squareState")(c);
 
   it("çalışıyor", () => {
     expect(durum({ state: "active", gate: null })).toBe("calisiyor");
@@ -1049,7 +1049,7 @@ describe("kareDurumu — kart karesinin durumu", () => {
 describe("retYayKontrol — ret yayının kontrol noktası", () => {
   type Point = { x: number; y: number };
   const check = (a: Point, b: Point): Point =>
-    fonksiyon<(a: Point, b: Point) => Point>(renderPage("t"), "rejectArcCheck")(a, b);
+    scriptFn<(a: Point, b: Point) => Point>(renderPage("t"), "rejectArcCheck")(a, b);
 
   it("orta nokta hedefe (500,170) doğru %60 kaydırılır, hedefin KENDİSİNE eşitlenmez", () => {
     const k = check({ x: 40, y: 110 }, { x: 230, y: 110 });
@@ -1073,7 +1073,7 @@ describe("kapiCizgisi — iki nokta arasındaki çizgiye dik segment", () => {
   type Point = { x: number; y: number };
   type Segment = { x1: number; y1: number; x2: number; y2: number };
   const lineSeg = (a: Point, b: Point, lengthPx: number): Segment =>
-    fonksiyon<(a: Point, b: Point, u: number) => Segment>(renderPage("t"), "gateLine")(a, b, lengthPx);
+    scriptFn<(a: Point, b: Point, u: number) => Segment>(renderPage("t"), "gateLine")(a, b, lengthPx);
 
   it("yatay bir çizginin ortasına DİK (düşey) bir segment üretir", () => {
     const s = lineSeg({ x: 0, y: 0 }, { x: 10, y: 0 }, 16);
@@ -1109,7 +1109,7 @@ describe("kapiCizgisi — iki nokta arasındaki çizgiye dik segment", () => {
  */
 describe("maliyetMetni — maliyetin ALT SINIR olduğunu söyleyen biçim", () => {
   const text = (amount: number, unmeasured: number, tokens: number): string =>
-    fonksiyonlar<(t: number, o: number, saturated: number) => string>(
+    scriptFns<(t: number, o: number, saturated: number) => string>(
       renderPage("t"),
       ["money", "shortCount", "costText"],
       "costText",
@@ -1152,7 +1152,7 @@ describe("maliyetMetni — maliyetin ALT SINIR olduğunu söyleyen biçim", () =
 describe("kanatCirpiyorMu — kanat çırpmanın koşulu", () => {
   type Daemon = { alive: boolean } | null;
   const flapping = (cardList: { state: string }[], daemon: Daemon): boolean =>
-    fonksiyon<(k: { state: string }[], d: Daemon) => boolean>(renderPage("t"), "wingsFlapping")(cardList, daemon);
+    scriptFn<(k: { state: string }[], d: Daemon) => boolean>(renderPage("t"), "wingsFlapping")(cardList, daemon);
 
   it("çalışan kart VE canlı gözcü varsa true", () => {
     expect(flapping([{ state: "active" }], { alive: true })).toBe(true);
@@ -1186,7 +1186,7 @@ describe("planlamaKatilimciKonumlari — planlama bandının noktaları", () => 
   type Position = { x: number; y: number; arm: string };
   type RoleShape = { id: string };
   const positions = (roleList: RoleShape[], katilimcilar: string[]): Position[] =>
-    fonksiyonlar<(r: RoleShape[], k: string[]) => Position[]>(
+    scriptFns<(r: RoleShape[], k: string[]) => Position[]>(
       renderPage("t"),
       ["FORMATION_BODY", "rolePosition", "planningParticipantPositions"],
       "planningParticipantPositions",
@@ -1221,7 +1221,7 @@ describe("planlamaKatilimciKonumlari — planlama bandının noktaları", () => 
 describe("planlamaBandYolu — bandın tepeden dolanması", () => {
   type Position = { x: number; y: number; arm: string };
   const path = (first: Position, last: Position): string =>
-    fonksiyonlar<(a: Position, b: Position) => string>(
+    scriptFns<(a: Position, b: Position) => string>(
       renderPage("t"), ["FORMATION_BODY", "planningBandPath"], "planningBandPath",
     )(first, last);
 
@@ -1258,7 +1258,7 @@ describe("planlamaBandYolu — bandın tepeden dolanması", () => {
 describe("railGecis — sağ panelin durum geçişleri", () => {
   type Rail = { mode: string; roleId: string | null; cardId: string | null; cardFrom: string };
   const transition = (railEl: Rail, actionSpec: Record<string, unknown>): Rail =>
-    fonksiyon<(r: Rail, e: Record<string, unknown>) => Rail>(renderPage("t"), "railTransition")(railEl, actionSpec);
+    scriptFn<(r: Rail, e: Record<string, unknown>) => Rail>(renderPage("t"), "railTransition")(railEl, actionSpec);
 
   const OVERVIEW: Rail = { mode: "overview", roleId: null, cardId: null, cardFrom: "overview" };
 
@@ -1332,7 +1332,7 @@ describe("railRolMeta — Rol modunun meta satırı", () => {
     nextRole: string; rejectTarget: string | null; receive: string; prompt: string;
   };
   const meta = (m: unknown, roleIdent: string): Meta | null =>
-    fonksiyonlar<(m: unknown, roleIdent: string) => Meta | null>(
+    scriptFns<(m: unknown, roleIdent: string) => Meta | null>(
       renderPage("t"), ["nextColumn", "railRoleMeta"], "railRoleMeta",
     )(m, roleIdent);
 
@@ -1382,7 +1382,7 @@ describe("railRolMeta — Rol modunun meta satırı", () => {
  */
 describe("railYenidenYuklenmeliMi — Kart modunun fetch kararı", () => {
   const decision = (g: unknown, h: unknown): boolean =>
-    fonksiyon<(g: unknown, h: unknown) => boolean>(renderPage("t"), "railNeedsReload")(g, h);
+    scriptFn<(g: unknown, h: unknown) => boolean>(renderPage("t"), "railNeedsReload")(g, h);
 
   it("gösterilen kart hedefle AYNIYSA yeniden yüklemez", () => {
     expect(decision("c-1", "c-1")).toBe(false);
@@ -1412,7 +1412,7 @@ type EditRole = {
 
 describe("duzenleHatalari — boş/tekrarlanan rol adı HATA'sı", () => {
   const errors = (roleList: EditRole[]): { errors: string[]; invalid: Set<number> } =>
-    fonksiyon<(r: EditRole[]) => { errors: string[]; invalid: Set<number> }>(
+    scriptFn<(r: EditRole[]) => { errors: string[]; invalid: Set<number> }>(
       renderPage("t"), "editErrors",
     )(roleList);
 
@@ -1444,7 +1444,7 @@ describe("duzenleHatalari — boş/tekrarlanan rol adı HATA'sı", () => {
 describe("duzenleSilmeUyarilari — açık kartı olan silinen rol UYARI'sı (engellemez)", () => {
   type CardShape = { role: string; state: string; orphan?: boolean };
   const warningList = (previous: string[], nowTs: string[], cardList: CardShape[]): string[] =>
-    fonksiyon<(o: string[], s: string[], k: CardShape[]) => string[]>(
+    scriptFn<(o: string[], s: string[], k: CardShape[]) => string[]>(
       renderPage("t"), "editDeleteWarnings",
     )(previous, nowTs, cardList);
 
@@ -1469,7 +1469,7 @@ describe("duzenleSilmeUyarilari — açık kartı olan silinen rol UYARI'sı (en
 
 describe("duzenleSiradanBagla — 'next' HER ZAMAN sıradan türer, sonuncusu 'done'", () => {
   const bind = (roleList: EditRole[]): EditRole[] =>
-    fonksiyon<(r: EditRole[]) => EditRole[]>(renderPage("t"), "editBindInOrder")(roleList);
+    scriptFn<(r: EditRole[]) => EditRole[]>(renderPage("t"), "editBindInOrder")(roleList);
 
   it("üç rolü sırayla zincirler, sonuncusu 'done'", () => {
     const result = bind([{ id: "a" }, { id: "b" }, { id: "c" }]);
@@ -1483,7 +1483,7 @@ describe("duzenleSiradanBagla — 'next' HER ZAMAN sıradan türer, sonuncusu 'd
 
 describe("duzenleReddiTemizle — kural 13: reject yalnızca DAHA ÖNCEki role işaret edebilir", () => {
   const clear = (roleList: EditRole[]): EditRole[] =>
-    fonksiyon<(r: EditRole[]) => EditRole[]>(renderPage("t"), "editClearReject")(roleList);
+    scriptFn<(r: EditRole[]) => EditRole[]>(renderPage("t"), "editClearReject")(roleList);
 
   it("öncekine işaret eden reject KORUNUR", () => {
     const result = clear([{ id: "a" }, { id: "b", reject: "a" }]);
@@ -1508,7 +1508,7 @@ describe("duzenleReddiTemizle — kural 13: reject yalnızca DAHA ÖNCEki role i
 
 describe("duzenleTasi — ↑/↓ ikon düğmeleri: sırayı değiştirir, next'i yeniden türetir", () => {
   const move = (roleList: EditRole[], i: number, direction: number): EditRole[] =>
-    fonksiyonlar<(r: EditRole[], i: number, y: number) => EditRole[]>(
+    scriptFns<(r: EditRole[], i: number, y: number) => EditRole[]>(
       renderPage("t"), ["editClearReject", "editBindInOrder", "editMove"], "editMove",
     )(roleList, i, direction);
 
@@ -1540,7 +1540,7 @@ describe("duzenleTasi — ↑/↓ ikon düğmeleri: sırayı değiştirir, next'
 
 describe("duzenleAdSanitize — DEVIR.md §3: ad girişi yalnızca a-z0-9-", () => {
   const sanitiseName = (value: string): string =>
-    fonksiyon<(d: string) => string>(renderPage("t"), "editSanitizeName")(value);
+    scriptFn<(d: string) => string>(renderPage("t"), "editSanitizeName")(value);
 
   it("zaten geçerli bir ad DEĞİŞMEDEN kalır", () => {
     expect(sanitiseName("coder-2")).toBe("coder-2");
@@ -1566,7 +1566,7 @@ describe("duzenleAdSanitize — DEVIR.md §3: ad girişi yalnızca a-z0-9-", () 
 describe("duzenleAdDegis — ad değişince reject/planlama.katilimcilar/denetci de güncellenir", () => {
   type DraftShape = { roles: EditRole[]; planlama?: { katilimcilar: string[]; denetci?: string } };
   const change = (draftState: DraftShape, i: number, newName: string): DraftShape =>
-    fonksiyon<(t: DraftShape, i: number, a: string) => DraftShape>(renderPage("t"), "editRenameRole")(draftState, i, newName);
+    scriptFn<(t: DraftShape, i: number, a: string) => DraftShape>(renderPage("t"), "editRenameRole")(draftState, i, newName);
 
   it("rolün kendi id'sini değiştirir", () => {
     const result = change({ roles: [{ id: "coder" }] }, 0, "yazar");
@@ -1622,7 +1622,7 @@ describe("duzenleSil — rol silinince reject/syncBack/gates/planlama referansla
     planlama?: { katilimcilar: string[]; denetci?: string };
   };
   const remove = (draftState: DraftShape, id: string): DraftShape =>
-    fonksiyonlar<(t: DraftShape, id: string) => DraftShape>(
+    scriptFns<(t: DraftShape, id: string) => DraftShape>(
       renderPage("t"), ["editClearReject", "editBindInOrder", "editDelete"], "editDelete",
     )(draftState, id);
 
@@ -1673,7 +1673,7 @@ describe("duzenleSil — rol silinince reject/syncBack/gates/planlama referansla
 
 describe("duzenlePlanlamaAyarla — katılım her zaman zincirin KESİNTİSİZ bir öneği", () => {
   const configure = (katilimcilar: string[], roleIds: string[], idx: number, joining: boolean): string[] =>
-    fonksiyon<(k: string[], r: string[], i: number, kt: boolean) => string[]>(
+    scriptFn<(k: string[], r: string[], i: number, kt: boolean) => string[]>(
       renderPage("t"), "editSetPlanning",
     )(katilimcilar, roleIds, idx, joining);
 
@@ -1712,7 +1712,7 @@ describe("duzenlePlanlamaAyarla — katılım her zaman zincirin KESİNTİSİZ b
 
 describe("duzenleDenetciGecerle — kural 23: denetçi katılımcı OLAMAZ, katılımcılardan SONRA gelmeli", () => {
   const validate = (denetci: string | undefined, katilimcilar: string[], roleIds: string[]): string | undefined =>
-    fonksiyon<(d: string | undefined, k: string[], r: string[]) => string | undefined>(
+    scriptFn<(d: string | undefined, k: string[], r: string[]) => string | undefined>(
       renderPage("t"), "editValidateAuditor",
     )(denetci, katilimcilar, roleIds);
 
@@ -1741,7 +1741,7 @@ describe("duzenleDenetciGecerle — kural 23: denetçi katılımcı OLAMAZ, kat�
 
 describe("duzenlePlanlamaOzet — 'Yazar: X · itiraz: Y, Z' özeti", () => {
   const summary = (katilimcilar: string[]): string =>
-    fonksiyon<(k: string[]) => string>(renderPage("t"), "editPlanningSummary")(katilimcilar);
+    scriptFn<(k: string[]) => string>(renderPage("t"), "editPlanningSummary")(katilimcilar);
 
   it("katılımcı yoksa boş dize", () => {
     expect(summary([])).toBe("");
@@ -1762,7 +1762,7 @@ describe("duzenleNormallestir — kaydetmeden/önizlemeden önce uygulanan TAM n
     planlama?: { katilimcilar: string[]; denetci?: string; tur: number; plan: string; ilkTurKor: boolean };
   };
   const normalise = (draftState: DraftShape): DraftShape =>
-    fonksiyonlar<(t: DraftShape) => DraftShape>(
+    scriptFns<(t: DraftShape) => DraftShape>(
       renderPage("t"),
       ["editClearReject", "editBindInOrder", "editValidateAuditor", "editNormalise"],
       "editNormalise",
@@ -1800,7 +1800,7 @@ describe("duzenleNormallestir — kaydetmeden/önizlemeden önce uygulanan TAM n
 describe("akisOzetBul — AKISLAR_OZET içinde ad arama", () => {
   type Summary = { name: string; draft: unknown; error?: string };
   const find = (items: Summary[], nameText: string): Summary | null =>
-    fonksiyon<(l: Summary[], a: string) => Summary | null>(renderPage("t"), "findFlowSummary")(items, nameText);
+    scriptFn<(l: Summary[], a: string) => Summary | null>(renderPage("t"), "findFlowSummary")(items, nameText);
 
   it("ad listede varsa o kaydı döner", () => {
     const items = [{ name: "a", draft: 1 }, { name: "b", draft: 2 }];
@@ -1819,7 +1819,7 @@ describe("akisOzetBul — AKISLAR_OZET içinde ad arama", () => {
 
 describe("akisZinciriMetni — 'planner → … → bitti' metni", () => {
   const chainText = (roleIds: string[]): string =>
-    fonksiyon<(r: string[]) => string>(renderPage("t"), "flowChainText")(roleIds);
+    scriptFn<(r: string[]) => string>(renderPage("t"), "flowChainText")(roleIds);
 
   it("roller varsa sırayla birleştirip 'bitti' ile biter", () => {
     expect(chainText(["planner", "architect", "coder"])).toBe("planner → architect → coder → bitti");
@@ -1838,7 +1838,7 @@ describe("akisZinciriMetni — 'planner → … → bitti' metni", () => {
 
 describe("akisKartSinifi — 'panoda' zemin kararı", () => {
   const sinif = (nameText: string, activeName: string): string =>
-    fonksiyon<(a: string, b: string) => string>(renderPage("t"), "flowCardClass")(nameText, activeName);
+    scriptFn<(a: string, b: string) => string>(renderPage("t"), "flowCardClass")(nameText, activeName);
 
   it("aktif akışın kartı 'akisKart-panoda' taşır", () => {
     expect(sinif("test", "test")).toBe("akisKart akisKart-panoda");
@@ -1851,7 +1851,7 @@ describe("akisKartSinifi — 'panoda' zemin kararı", () => {
 
 describe("akisAdiGecerliMi — DEVIR.md §3/§4'ün a-z0-9- kısıtı", () => {
   const valid = (nameText: string): boolean =>
-    fonksiyon<(a: string) => boolean>(renderPage("t"), "isFlowNameValid")(nameText);
+    scriptFn<(a: string) => boolean>(renderPage("t"), "isFlowNameValid")(nameText);
 
   it("küçük harf, sayı ve tire kabul edilir", () => {
     expect(valid("ab-planli-2")).toBe(true);
@@ -1873,7 +1873,7 @@ describe("akisAdiGecerliMi — DEVIR.md §3/§4'ün a-z0-9- kısıtı", () => {
 
 describe("yeniAkisGecerliMi — 'Oluştur ve düzenle' düğmesinin etkinlik kararı", () => {
   const valid = (nameText: string, mevcut: string[]): boolean =>
-    fonksiyonlar<(a: string, m: string[]) => boolean>(
+    scriptFns<(a: string, m: string[]) => boolean>(
       renderPage("t"), ["isFlowNameValid", "isNewFlowValid"], "isNewFlowValid",
     )(nameText, mevcut);
 
@@ -1905,7 +1905,7 @@ type Summary = { name: string; draft: SummaryDraft | null };
  */
 describe("flowGoreliYolKokeCevir — flow-relatif yolu KÖK-relatife çevirir", () => {
   const translate = (relPath: string): string =>
-    fonksiyon<(g: string) => string>(renderPage("t"), "flowRelativePathToRoot")(relPath);
+    scriptFn<(g: string) => string>(renderPage("t"), "flowRelativePathToRoot")(relPath);
 
   it("'../' ile dizin yukarı çıkan yolu doğru çözer", () => {
     expect(translate("../prompts/constitution/base.md")).toBe("hub/prompts/constitution/base.md");
@@ -1924,7 +1924,7 @@ describe("flowGoreliYolKokeCevir — flow-relatif yolu KÖK-relatife çevirir", 
 });
 
 describe("dosyaAdiKisa — uzantısız kısa dosya adı", () => {
-  const nameText = (path: string): string => fonksiyon<(y: string) => string>(renderPage("t"), "shortFileName")(path);
+  const nameText = (path: string): string => scriptFn<(y: string) => string>(renderPage("t"), "shortFileName")(path);
 
   it("yolun son parçasından uzantıyı KALDIRIR", () => {
     expect(nameText("hub/prompts/roles/coder.md")).toBe("coder");
@@ -1946,7 +1946,7 @@ describe("dosyaAdiKisa — uzantısız kısa dosya adı", () => {
  */
 describe("promptKullananListesi — bir prompt dosyasının kullanıcıları", () => {
   const users = (p: Prompt[], o: Summary[], activeName: string, path: string) =>
-    fonksiyonlar<(p: Prompt[], o: Summary[], a: string, y: string) => { akis: string; roleRec: string | null }[]>(
+    scriptFns<(p: Prompt[], o: Summary[], a: string, y: string) => { akis: string; roleRec: string | null }[]>(
       renderPage("t"), ["flowRelativePathToRoot", "promptUsersList"], "promptUsersList",
     )(p, o, activeName, path);
 
@@ -2012,7 +2012,7 @@ describe("promptKullananListesi — bir prompt dosyasının kullanıcıları", (
 
 describe("promptKullanimSayisi — 'N rol · M akış' sayımı", () => {
   const count = (items: { akis: string; roleRec: string | null }[]) =>
-    fonksiyon<(l: { akis: string; roleRec: string | null }[]) => { roleRec: number; akis: number }>(
+    scriptFn<(l: { akis: string; roleRec: string | null }[]) => { roleRec: number; akis: number }>(
       renderPage("t"), "promptUsageCount",
     )(items);
 
@@ -2038,7 +2038,7 @@ describe("promptKullanimSayisi — 'N rol · M akış' sayımı", () => {
  */
 describe("promptKullanimEtiketi — kullanım metni", () => {
   const label = (roleRec: number, akis: number): string =>
-    fonksiyon<(r: number, a: number) => string>(renderPage("t"), "promptUsageLabel")(roleRec, akis);
+    scriptFn<(r: number, a: number) => string>(renderPage("t"), "promptUsageLabel")(roleRec, akis);
 
   it("ikisi de sıfırsa 'kullanılmıyor' der", () => {
     expect(label(0, 0)).toBe("kullanılmıyor");
@@ -2068,7 +2068,7 @@ describe("promptKullanimEtiketi — kullanım metni", () => {
 describe("ajanOkumaSirasi — 'Ajanın okuduğu sıra' şeridi", () => {
   type Step = { label: string; accented: boolean };
   const order = (p: Prompt[], selected: string | null): Step[] =>
-    fonksiyonlar<(p: Prompt[], s: string | null) => Step[]>(
+    scriptFns<(p: Prompt[], s: string | null) => Step[]>(
       renderPage("t"), ["shortFileName", "agentReadOrder"], "agentReadOrder",
     )(p, selected);
 
@@ -2122,7 +2122,7 @@ describe("ajanOkumaSirasi — 'Ajanın okuduğu sıra' şeridi", () => {
 
 describe("promptKirliMi — editördeki metin disktekinden FARKLI mı", () => {
   const dirty = (original: Record<string, string>, text: Record<string, string>, path: string): boolean =>
-    fonksiyon<(o: Record<string, string>, m: Record<string, string>, y: string) => boolean>(
+    scriptFn<(o: Record<string, string>, m: Record<string, string>, y: string) => boolean>(
       renderPage("t"), "isPromptDirty",
     )(original, text, path);
 
@@ -2141,7 +2141,7 @@ describe("promptKirliMi — editördeki metin disktekinden FARKLI mı", () => {
 
 describe("promptKaydedilmemisSayisi — Promptlar nav rozetinin sayısı", () => {
   const count = (original: Record<string, string>, text: Record<string, string>): number =>
-    fonksiyonlar<(o: Record<string, string>, m: Record<string, string>) => number>(
+    scriptFns<(o: Record<string, string>, m: Record<string, string>) => number>(
       renderPage("t"), ["isPromptDirty", "promptUnsavedCount"], "promptUnsavedCount",
     )(original, text);
 
@@ -2164,7 +2164,7 @@ describe("promptKaydedilmemisSayisi — Promptlar nav rozetinin sayısı", () =>
 
 describe("promptDurumMetni — sabit alt çubuğun durum metni", () => {
   const text = (dirty: boolean): string =>
-    fonksiyon<(k: boolean) => string>(renderPage("t"), "promptStatusText")(dirty);
+    scriptFn<(k: boolean) => string>(renderPage("t"), "promptStatusText")(dirty);
 
   it("kirliyse 'kaydedilmemiş değişiklik' der", () => {
     expect(text(true)).toBe("kaydedilmemiş değişiklik");
@@ -2184,7 +2184,7 @@ type AgentCard = {
 
 describe("ajanGuncelKart — rolün 'güncel' kartı", () => {
   const current = (roleIdent: string, cards: AgentCard[]): AgentCard | null =>
-    fonksiyonlar<(r: string, c: AgentCard[]) => AgentCard | null>(
+    scriptFns<(r: string, c: AgentCard[]) => AgentCard | null>(
       renderPage("t"), ["roleOpenCards", "agentCurrentCard"], "agentCurrentCard",
     )(roleIdent, cards);
 
@@ -2238,7 +2238,7 @@ describe("ajanDurumMetni — DEVIR.md §6'nın beş durum metni", () => {
   // diye); o yüzden tek başına değil, ikisi BİRLİKTE çıkarılıyor
   // (rolKonumu/FORMASYON_GOVDE çiftinin aynı deseni, bkz. fonksiyonlar).
   const durum = (role: { depth: number }, card: AgentCard | null, daemon: unknown): string =>
-    fonksiyonlar<(r: { depth: number }, k: AgentCard | null, d: unknown) => string>(
+    scriptFns<(r: { depth: number }, k: AgentCard | null, d: unknown) => string>(
       renderPage("t"), ["agentCurrentState", "agentStatusText"], "agentStatusText",
     )(role, card, daemon);
 
@@ -2299,7 +2299,7 @@ describe("ajanDurumMetni — DEVIR.md §6'nın beş durum metni", () => {
 describe("ajanSuAnDurumu — iki yüzeyin paylaştığı karar", () => {
   type AgentStatus = { tur: string; live?: { name?: string; kind?: string; detail?: string } };
   const durum = (card: AgentCard | null, daemon: unknown): AgentStatus | null =>
-    fonksiyon<(k: AgentCard | null, d: unknown) => AgentStatus | null>(
+    scriptFn<(k: AgentCard | null, d: unknown) => AgentStatus | null>(
       renderPage("t"), "agentCurrentState",
     )(card, daemon);
 
@@ -2342,7 +2342,7 @@ describe("ajanSuAnDurumu — iki yüzeyin paylaştığı karar", () => {
 
 describe("promptGorevOzeti — 'Görevi · promptundan' bloğunun ayrıştırması", () => {
   const summary = (text: string): { entry: string; title: string | null; clauses: string[] } =>
-    fonksiyon<(m: string) => { entry: string; title: string | null; clauses: string[] }>(
+    scriptFn<(m: string) => { entry: string; title: string | null; clauses: string[] }>(
       renderPage("t"), "promptTaskSummary",
     )(text);
 
@@ -2401,7 +2401,7 @@ describe("promptGorevOzeti — 'Görevi · promptundan' bloğunun ayrıştırmas
 
 describe("ajanCanliMi — 'canlı' etiketi ve /adimlar yoklama kararı", () => {
   const isLive = (card: AgentCard | null, daemon: unknown): boolean =>
-    fonksiyon<(k: AgentCard | null, d: unknown) => boolean>(renderPage("t"), "isAgentLive")(card, daemon);
+    scriptFn<(k: AgentCard | null, d: unknown) => boolean>(renderPage("t"), "isAgentLive")(card, daemon);
 
   it("kart yoksa canlı değil", () => {
     expect(isLive(null, { alive: true })).toBe(false);
@@ -2430,7 +2430,7 @@ describe("govdeYolu — uçuşun gövde çizgisi üzerindeki yolu", () => {
   type Position = { x: number; y: number; arm: string };
   const apex: Position = { x: 500, y: 480, arm: "tepe" };
   const path = (a: Position, b: Position): Position[] =>
-    fonksiyon<(a: Position, b: Position, t: Position) => Position[]>(renderPage("t"), "bodyPath")(a, b, apex);
+    scriptFn<(a: Position, b: Position, t: Position) => Position[]>(renderPage("t"), "bodyPath")(a, b, apex);
 
   it("aynı koldaki iki nokta DÜZ yol alır (2 nokta), tepeden dolanmaz", () => {
     const a = { x: 230, y: 110, arm: "sol" };
@@ -2467,7 +2467,7 @@ describe("govdeYolu — uçuşun gövde çizgisi üzerindeki yolu", () => {
 describe("ucusSuresiMs — uçuşun süresi", () => {
   type Position = { x: number; y: number };
   const duration = (path: Position[]): number =>
-    fonksiyon<(y: Position[]) => number>(renderPage("t"), "flightDurationMs")(path);
+    scriptFn<(y: Position[]) => number>(renderPage("t"), "flightDurationMs")(path);
 
   it("düz yol (2 nokta) KISA sürede uçar (600ms)", () => {
     expect(duration([{ x: 0, y: 0 }, { x: 10, y: 0 }])).toBe(600);
@@ -2487,7 +2487,7 @@ describe("ucusSuresiMs — uçuşun süresi", () => {
  */
 describe("yumusakIlerleme — ease-in/out eğrisi", () => {
   const progress = (t: number): number =>
-    fonksiyon<(t: number) => number>(renderPage("t"), "easeProgress")(t);
+    scriptFn<(t: number) => number>(renderPage("t"), "easeProgress")(t);
 
   it("uçlarda (0 ve 1) sınır değerleri korunur", () => {
     expect(progress(0)).toBe(0);
@@ -2516,7 +2516,7 @@ describe("yumusakIlerleme — ease-in/out eğrisi", () => {
 describe("ucusKonumu — yol üzerindeki ara nokta", () => {
   type Point = { x: number; y: number };
   const position = (path: Point[], t: number): Point =>
-    fonksiyon<(y: Point[], t: number) => Point>(renderPage("t"), "flightPosition")(path, t);
+    scriptFn<(y: Point[], t: number) => Point>(renderPage("t"), "flightPosition")(path, t);
 
   it("t=0 KAYNAKTA, t=1 HEDEFTE durur (2 noktalı düz yol)", () => {
     const path = [{ x: 0, y: 0 }, { x: 10, y: 0 }];
@@ -2562,7 +2562,7 @@ describe("ucusKonumu — yol üzerindeki ara nokta", () => {
 describe("rolHaritasiCikar — kart→rol haritası", () => {
   type CardShape = { id: string; role: string; orphan: boolean };
   const lookupMap = (cardList: CardShape[]): Map<string, string> =>
-    fonksiyon<(k: CardShape[]) => Map<string, string>>(renderPage("t"), "buildRoleMap")(cardList);
+    scriptFn<(k: CardShape[]) => Map<string, string>>(renderPage("t"), "buildRoleMap")(cardList);
 
   it("her kartın id'sini rolüne eşler", () => {
     const h = lookupMap([{ id: "c1", role: "coder", orphan: false }]);
@@ -2584,7 +2584,7 @@ describe("rolHaritasiCikar — kart→rol haritası", () => {
 describe("kartDevirleriniBul — iki yoklama arasındaki devirler", () => {
   type CardShape = { id: string; role: string; orphan: boolean };
   const handoffs = (previous: Map<string, string>, cardList: CardShape[]) =>
-    fonksiyon<(o: Map<string, string>, k: CardShape[]) => { cardId: string; from: string; to: string }[]>(
+    scriptFn<(o: Map<string, string>, k: CardShape[]) => { cardId: string; from: string; to: string }[]>(
       renderPage("t"), "findCardHandoffs",
     )(previous, cardList);
 
@@ -2636,7 +2636,7 @@ describe("ucusPlanlariniKur — devirlerden uçuş planına", () => {
   type RoleShape = { id: string };
   type Plan = { cardId: string; path: { x: number; y: number }[]; duration: number };
   const planList = (handoffs: { cardId: string; from: string; to: string }[], roleList: RoleShape[]): Plan[] =>
-    fonksiyonlar<(d: typeof handoffs, r: RoleShape[]) => Plan[]>(
+    scriptFns<(d: typeof handoffs, r: RoleShape[]) => Plan[]>(
       renderPage("t"),
       ["FORMATION_BODY", "rolePosition", "bodyPath", "flightDurationMs", "buildFlightPlans"],
       "buildFlightPlans",

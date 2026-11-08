@@ -2961,9 +2961,9 @@ function draw(m) {
     m.blockageList.forEach((e) => {
       items.append(el("div", null, e.code + "  " + e.role + "  " + e.path));
       if (e.message) {
-        const alt = el("div", null, e.message);
-        alt.style.cssText = "color:var(--ink-3)";
-        items.append(alt);
+        const subEl = el("div", null, e.message);
+        subEl.style.cssText = "color:var(--ink-3)";
+        items.append(subEl);
       }
     });
     bandEl.append(items);
@@ -5791,11 +5791,11 @@ function buildDiagramSvg(model, direction, editable) {
     id.style.fontSize = "12.5px";
     id.textContent = roleRec.id;
     g.append(id);
-    const alt = sv("text", { x: 0, y: 14, "text-anchor": "middle" });
-    alt.style.fill = "var(--ink-3)";
-    alt.style.fontSize = "10px";
-    alt.textContent = roleRec.provider + " · " + roleRec.workspace;
-    g.append(alt);
+    const subEl = sv("text", { x: 0, y: 14, "text-anchor": "middle" });
+    subEl.style.fill = "var(--ink-3)";
+    subEl.style.fontSize = "10px";
+    subEl.textContent = roleRec.provider + " · " + roleRec.workspace;
+    g.append(subEl);
     nodeLayer.append(g);
   });
 
@@ -6228,14 +6228,14 @@ function drawPreviewBlock() {
   result.id = "onizleme";
   wrap.append(result);
 
-  const alt = el("div", "exits");
+  const subEl = el("div", "exits");
   const save = el("button", "kaydet", "Dosyaya yaz");
   save.type = "button";
   save.id = "kaydet";
   save.disabled = true;
   save.addEventListener("click", () => { void writeText(); });
-  alt.append(save);
-  wrap.append(alt);
+  subEl.append(save);
+  wrap.append(subEl);
   wrap.append(el("div", "soon",
     "Kaydetmek akış dosyasını yeniden yazar: YORUMLAR KAYBOLUR. Dosya git'te, " +
     "diff'e bakabilirsin. Kapı metinleri, anayasa ve audit ayarları aynen korunur."));
