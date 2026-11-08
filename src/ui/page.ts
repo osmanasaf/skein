@@ -1712,7 +1712,7 @@ function markaSvg(renk) {
  * (bu fonksiyon yalnızca sayfa yüklenirken BİR KEZ çağrılıyor) aynı
  * etiket güncellenir.
  */
-function faviconAyarla() {
+function setFavicon() {
   const svgMetin = "<svg xmlns='http:" + "//www.w3.org/2000/svg' viewBox='0 0 24 24'>" +
     "<path d='" + MARK_D + "' fill='none' stroke='#15212C' stroke-width='2.4' " +
     "stroke-linecap='round' stroke-linejoin='round'/></svg>";
@@ -1725,7 +1725,7 @@ function faviconAyarla() {
   link.type = "image/svg+xml";
   link.href = "data:image/svg+xml," + encodeURIComponent(svgMetin);
 }
-faviconAyarla();
+setFavicon();
 const el = (tag, cls, text) => {
   const n = document.createElement(tag);
   if (cls) n.className = cls;
@@ -1820,7 +1820,7 @@ function summarize(metin) {
  * "İlk 200 karakter, gerisi yok" burada YOK: govde ayraçtan sonraki
  * metnin TAMAMINI taşıyor, özet yalnızca <summary> etiketinde kısalıyor.
  */
-function gerekceKur(kutu, gerekce) {
+function buildRationale(kutu, gerekce) {
   const ayrac = gerekce.indexOf(AGENT_SEPARATOR);
   const core = ayrac === -1 ? gerekce : gerekce.slice(0, ayrac);
   kutu.append(el("div", "reason", core));
@@ -1908,7 +1908,7 @@ function nextColumn(m, rolId) {
  * ÖRNEKLEMEDEN kendi hedefini bilmeli, boş bir rolün bile "Rol" paneli
  * açılabiliyor).
  */
-function railRolMeta(m, rolId) {
+function railRoleMeta(m, rolId) {
   const i = m.roles.findIndex((r) => r.id === rolId);
   if (i === -1) return null;
   const rol = m.roles[i];
@@ -1964,7 +1964,7 @@ function gateExits(kind, planKilidi, geriHedef) {
 }
 
 /** Yetim kartı kapatır — tek meşru çıkış. */
-async function kapatKart(id, card) {
+async function closeCard(id, card) {
   const buttons = card.querySelectorAll("button");
   buttons.forEach((b) => (b.disabled = true));
   try {
@@ -2032,8 +2032,8 @@ async function decision(id, secim, dugme, card) {
     const data = await cevap.json();
     if (!cevap.ok) throw new Error(data.error || cevap.status);
     if (RAIL.mode === "card" && RAIL.cardId === id) {
-      const sagPanel = document.getElementById("sagPanel");
-      if (sagPanel) sagPanel.removeAttribute("data-rail-kart");
+      const rightPanel = document.getElementById("sagPanel");
+      if (rightPanel) rightPanel.removeAttribute("data-rail-kart");
     }
     ciz(data.model);
     // Düğmenin KENDİ etiketi ("Yeniden koş", "Geçir", "Üretici haklı" …) —
@@ -2055,7 +2055,7 @@ async function decision(id, secim, dugme, card) {
  * döndürüyor. "Başlattı mı" sorusunun cevabı dosyada, bizim iddiamızda
  * değil.
  */
-async function gozcuKomut(ne, dugme) {
+async function watcherCommand(ne, dugme) {
   dugme.disabled = true;
   const eski = document.querySelector("#bar .redd");
   if (eski) eski.remove();
@@ -2078,7 +2078,7 @@ async function gozcuKomut(ne, dugme) {
     // Başlatma/durdurma gözcü.log'a yeni satır düşürür — gözcü paneli
     // AÇIKSA günlüğü TAZELE, yoksa operatör panele girene kadar eski
     // kalırdı.
-    if (RAIL.mode === "daemon") void railGozcuYukle();
+    if (RAIL.mode === "daemon") void railLoadWatcher();
   } catch (e) {
     dugme.disabled = false;
     // İSTENEN durdurma/yeniden başlatma BAŞARISIZ oldu — GOZCU_BEKLEYEN'i
@@ -2140,7 +2140,7 @@ async function selectFlow(name, secici) {
  * yoklamada el("div", ...) çağrısı yeni bir düğüm doğurur ve kimlik
  * hiç korunamaz.
  */
-function kartIcerik(kutu, c) {
+function cardContent(kutu, c) {
   kutu.className = "card" + (c.state === "active" ? " live" : "") + (c.gate ? " gate" : "") + (c.orphan ? " orphan" : "");
   kutu.replaceChildren();
 
@@ -2188,7 +2188,7 @@ function kartIcerik(kutu, c) {
     kutu.append(d);
   }
 
-  if (c.gateReason) gerekceKur(kutu, c.gateReason);
+  if (c.gateReason) buildRationale(kutu, c.gateReason);
   else if (c.lastReject && c.state !== "done") {
     const r = el("div", "reason", c.lastReject);
     r.style.color = "var(--ink-2)";
@@ -2236,7 +2236,7 @@ function kartIcerik(kutu, c) {
     b.style.cssText = "background:var(--reject);border-color:var(--reject);color:#fff";
     b.addEventListener("click", (e) => {
       e.stopPropagation();
-      void kapatKart(c.id, kutu);
+      void closeCard(c.id, kutu);
     });
     cikis.append(b);
     kutu.append(cikis);
@@ -2265,10 +2265,10 @@ function kartIcerik(kutu, c) {
 }
 
 /** Bir kart için TAZE bir düğüm yaratır — kimliğin önemsiz olduğu yerlerde (bant kartları). */
-function kartCiz(c) {
+function drawCard(c) {
   const kutu = el("div");
-  kartIcerik(kutu, c);
-  kartDugumBaslat(kutu, c.id);
+  cardContent(kutu, c);
+  startCardNode(kutu, c.id);
   return kutu;
 }
 
@@ -2280,7 +2280,7 @@ function kartCiz(c) {
  * burada kapatılan değer (closure) hep doğru kalır; kartYerlestir bu
  * fonksiyonu yalnızca düğüm YENİ yaratıldığında çağırıyor.
  */
-function kartDugumBaslat(kutu, id) {
+function startCardNode(kutu, id) {
   kutu.tabIndex = 0;
   kutu.setAttribute("role", "button");
   // Panel adreslenebilir: bir karta bakarken URL'yi paylaşabilmek,
@@ -2314,10 +2314,10 @@ function drawDetail(d) {
   ust.addEventListener("click", (e) => { if (e.target === ust) kapat(); });
   const p = el("div", "panel");
 
-  const kapatDugme = el("button", "kapat", "Kapat");
-  kapatDugme.type = "button";
-  kapatDugme.addEventListener("click", kapat);
-  p.append(kapatDugme);
+  const closeButton = el("button", "kapat", "Kapat");
+  closeButton.type = "button";
+  closeButton.addEventListener("click", kapat);
+  p.append(closeButton);
 
   p.append(el("h2", null, d.card.title));
   p.append(el("div", "cid", d.card.id + " · " + d.card.role + " · " + d.card.state));
@@ -2351,10 +2351,10 @@ function drawDetail(d) {
   p.append(m);
 
   // "En son neden reddedildi" — gerekçeler kartın kendi geçmişinden.
-  p.append(izZamanCizelgesiKur(d.history));
+  p.append(buildTraceTimeline(d.history));
 
   // "Kodda ne değişti" — devredilen commit'in diff özeti.
-  p.append(kodDegisikligiKur(d.diff));
+  p.append(buildCodeChange(d.diff));
 
   ust.append(p);
   return ust;
@@ -2367,7 +2367,7 @@ function drawDetail(d) {
  * ayrı kopya, AJAN_AYRAC'ın kendi yorumunun uyardığı kusur sınıfı olurdu.
  * Çıkarma davranışı DEĞİŞTİRMİYOR — detayCiz'in ürettiği DOM BİREBİR AYNI.
  */
-function izZamanCizelgesiKur(history) {
+function buildTraceTimeline(history) {
   const iz = el("div", "kutu");
   iz.append(el("div", "eyebrow", "Kartın izi"));
   history.forEach((h, i) => {
@@ -2412,7 +2412,7 @@ function izZamanCizelgesiKur(history) {
  * "Kodda ne değişti" — devredilen commit'in diff özeti. izZamanCizelgesiKur
  * gibi detayCiz'den ÇIKARILDI, sağ panelin Kart modu AYNI bloğu kullanıyor.
  */
-function kodDegisikligiKur(diff) {
+function buildCodeChange(diff) {
   const code = el("div", "kutu");
   code.append(el("div", "eyebrow", "Kodda ne değişti"));
   if (!diff) {
@@ -2500,15 +2500,15 @@ function hashOku() {
   const h = decodeURIComponent(location.hash.replace(/^#/, ""));
   if (h.startsWith("kart/")) openDetail(h.slice("kart/".length));
   else if (h === "akis") void openFlow();
-  else if (h === "prompt/yeni") void yeniRolAc();
-  else if (h === "yeni") yeniKartAc();
+  else if (h === "prompt/yeni") void openNewRole();
+  else if (h === "yeni") openNewCard();
   else document.getElementById("panel").replaceChildren();
   // Akışlar/Promptlar sekmeleri Pano'nun bir sub-paneli DEĞİL (bkz.
   // sekmeAdi) — kendi içeriklerini YUKARIDAKİ dallardan BAĞIMSIZ
   // kuruyorlar, #panel'i de aynen boşaltan dal (üstteki son 'else') zaten
   // çalıştı.
   if (h === "akislar") drawFlowsScreen();
-  if (h === "promptlar") void promptlarEkraniCiz();
+  if (h === "promptlar") void drawPromptsScreen();
 }
 window.addEventListener("hashchange", hashOku);
 
@@ -2527,7 +2527,7 @@ window.addEventListener("hashchange", hashOku);
  * unmanaged ekranın bilmediği bilgi" diyordu; bu kart GOZCU_AYAR/
  * GOZCU_BEKLEYEN ile o bilgiyi gerçekten taşıyor).
  */
-function gozcuDurum(g) {
+function watcherStatus(g) {
   if (g === null) return { durum: "yok", label: "gözcü yok" };
   if (g.alive) return { durum: "acik", label: "gözcü açık" };
   return { durum: "cokmus", label: "gözcü kapalı (bayat kilit)" };
@@ -2551,7 +2551,7 @@ function gozcuDurum(g) {
  */
 function watcherPanelState(g, yonetiliyor, stopped) {
   if (!yonetiliyor) return { durum: "unmanaged", label: "gözcü · elle" };
-  const baseline = gozcuDurum(g);
+  const baseline = watcherStatus(g);
   if (baseline.durum === "yok") return { durum: "off", label: "gözcü kapalı" };
   if (baseline.durum === "cokmus") return { durum: "stale", label: "gözcü çökmüş" };
   return stopped ? { durum: "stopping", label: "gözcü duruyor…" } : { durum: "on", label: "gözcü açık" };
@@ -2568,7 +2568,7 @@ function watcherPanelState(g, yonetiliyor, stopped) {
  * zaten eski süreç ölüyor/ölmüş, uyarı "yeniden başlat" vaat eder ama
  * başlatılacak bir şey yoktur.
  */
-function gozcuTopoUyari(g, flowHash, durum) {
+function watcherTopoWarning(g, flowHash, durum) {
   return durum === "on" && g !== null && g.info.hash !== flowHash;
 }
 
@@ -2582,7 +2582,7 @@ function gozcuTopoUyari(g, flowHash, durum) {
  * gerçek bayrakları bilmiyor (bilse "unmanaged" olmazdı), o yüzden
  * burada yazan model/araç seçimi bir ÖNERİ, bir İDDİA değil.
  */
-function gozcuKomutOrnekleri(flowName) {
+function watcherCommandExamples(flowName) {
   return {
     cmd1: "npx tsx src/watch/cli.ts " + flowName + " --serve --model claude:claude-sonnet-5",
     cmd2: "npx tsx src/ui/cli.ts " + flowName + " --model claude:claude-sonnet-5",
@@ -2603,13 +2603,13 @@ function gozcuKomutOrnekleri(flowName) {
  * kilidi zaten "tutan yok" sayıyor (watch/lock.ts), yani sunucu tarafında
  * İKİ ayrı yol yok, yalnızca ETİKET ayrışıyor.
  */
-function gozcuEylemEtiketi(g) {
+function watcherActionLabel(g) {
   const canli = Boolean(g && g.alive);
   return g && !canli ? "Kilidi devral ve başlat" : (canli ? "Gözcüyü durdur" : "Gözcüyü başlat");
 }
 
 /** Pano rozetinin sayısı — kapıda bekleyen kart. SAF, DOM yok. */
-function kapidaBekleyenSayisi(cards) {
+function atGateCount(cards) {
   return cards.filter((c) => Boolean(c.gate)).length;
 }
 
@@ -2658,14 +2658,14 @@ function watcherWaitResult(bekleyen, g) {
  * BEKLEMEDEN) üretiyor. İkisi uyuşmazsa ekran AÇILDIĞINDA gösterdiği
  * temayla anahtarın gösterdiği "seçili" düğme ÇELİŞİRDİ.
  */
-function temaNitelikDegeri(tema) {
+function themeAttributeValue(tema) {
   if (tema === "acik") return "light";
   if (tema === "koyu") return "dark";
   return null;
 }
 
 /** Tersi: gerçek nitelikten üç hâlden birine. SAF. */
-function nitelikTemaDegeri(nitelik) {
+function attributeThemeValue(nitelik) {
   if (nitelik === "light") return "acik";
   if (nitelik === "dark") return "koyu";
   return "sistem";
@@ -2686,8 +2686,8 @@ function nitelikTemaDegeri(nitelik) {
  * SAPMALAR.md §2.3'ün gerektirdiği jeton/Origin kapısından GEÇİYOR
  * (bkz. fetch çağrısı), sadece hata sessizce yutuluyor.
  */
-function temaSec(tema) {
-  const nitelik = temaNitelikDegeri(tema);
+function selectTheme(tema) {
+  const nitelik = themeAttributeValue(tema);
   if (nitelik === null) delete document.documentElement.dataset.theme;
   else document.documentElement.dataset.theme = nitelik;
   if (LAST_MODEL) ciz(LAST_MODEL);
@@ -2704,16 +2704,16 @@ function temaSec(tema) {
  * AYNI deseni izliyor: düğme grubu + "secili" sınıfı, YENİ bir etkileşim
  * deseni İCAT EDİLMİYOR.
  */
-function temaAnahtariKur() {
-  const mevcutTema = nitelikTemaDegeri(document.documentElement.dataset.theme || null);
+function buildThemeSwitch() {
+  const currentTheme = attributeThemeValue(document.documentElement.dataset.theme || null);
   const grup = el("div", "temaAnahtari");
   grup.setAttribute("role", "group");
   grup.setAttribute("aria-label", "Tema");
   [["sistem", "Sistem"], ["acik", "Açık"], ["koyu", "Koyu"]].forEach(([value, label]) => {
-    const b = el("button", "temaBtn" + (value === mevcutTema ? " secili" : ""), label);
+    const b = el("button", "temaBtn" + (value === currentTheme ? " secili" : ""), label);
     b.type = "button";
-    b.setAttribute("aria-pressed", String(value === mevcutTema));
-    b.addEventListener("click", () => { if (value !== mevcutTema) temaSec(value); });
+    b.setAttribute("aria-pressed", String(value === currentTheme));
+    b.addEventListener("click", () => { if (value !== currentTheme) selectTheme(value); });
     grup.append(b);
   });
   return grup;
@@ -2737,11 +2737,11 @@ function temaAnahtariKur() {
  * eklenecekler) engeller.length ile kartSayisi zaten eşit (her kayıt ayrı
  * bir karttı, eski anlam), o yüzden ikinci cümle gerekmiyor.
  */
-function engelBandBasligi(kartSayisi, engeller) {
+function blockageBandTitle(cardTotal, engeller) {
   const kirliSayisi = engeller.filter((e) => e.code === "KIRLI").length;
   return kirliSayisi > 0
-    ? kartSayisi + " kart kuyrukta alınamıyor — " + kirliSayisi + " kirli dosya"
-    : kartSayisi + " kart kuyrukta alınamıyor";
+    ? cardTotal + " kart kuyrukta alınamıyor — " + kirliSayisi + " kirli dosya"
+    : cardTotal + " kart kuyrukta alınamıyor";
 }
 
 function ciz(m) {
@@ -2767,9 +2767,9 @@ function ciz(m) {
   const nav = el("div", "anaNav");
   nav.setAttribute("aria-label", "Ana sekmeler");
   [
-    ["pano", "Pano", kapidaBekleyenSayisi(m.cards), "accent"],
+    ["pano", "Pano", atGateCount(m.cards), "accent"],
     ["akislar", "Akışlar", FLOWS.length, "notr"],
-    ["promptlar", "Promptlar", promptKaydedilmemisSayisi(PROMPT_ORIGINAL, PROMPT_TEXT), "notr"],
+    ["promptlar", "Promptlar", promptUnsavedCount(PROMPT_ORIGINAL, PROMPT_TEXT), "notr"],
     ["ajanlar", "Ajanlar", runningAgentCount(m.cards), "accent"],
   ].forEach(([name, label, count, renk]) => {
     const b = el("button", "navSekme" + (name === activeTab ? " navSekme-aktif" : ""));
@@ -2820,23 +2820,23 @@ function ciz(m) {
     secici.addEventListener("change", () => void selectFlow(secici.value, secici));
     panoArac.append(secici);
   }
-  const duzenle = el("button", "mini", "Akışı düzenle");
-  duzenle.type = "button";
-  duzenle.addEventListener("click", () => { location.hash = "akis"; });
-  panoArac.append(duzenle);
+  const edit = el("button", "mini", "Akışı düzenle");
+  edit.type = "button";
+  edit.addEventListener("click", () => { location.hash = "akis"; });
+  panoArac.append(edit);
   // "Rolleri düzenle" — DEVIR.md §3, sağ panelin MOD 5'i (kart
   // c-20261105-725320). "Akışı düzenle" (yukarıda) ESKİ overlay'i açıyor —
   // bu YENİ düğme sağ panelde ayrı bir yüzey açıyor, overlay'in yerini
   // ALMIYOR (ikisi de AYNI /akis + /akis/onizleme + /akis/yaz uçlarını
   // paylaşıyor, overlay'in sökülmesi bu kartın kapsamı dışında).
-  const rolleriDuzenleDugme = el("button", "mini", "Rolleri düzenle");
-  rolleriDuzenleDugme.type = "button";
-  rolleriDuzenleDugme.addEventListener("click", () => { duzenleAc(); });
-  panoArac.append(rolleriDuzenleDugme);
-  const promptlarDugme = el("button", "mini", "Promptları düzenle");
-  promptlarDugme.type = "button";
-  promptlarDugme.addEventListener("click", () => { location.hash = "promptlar"; });
-  panoArac.append(promptlarDugme);
+  const editRolesButton = el("button", "mini", "Rolleri düzenle");
+  editRolesButton.type = "button";
+  editRolesButton.addEventListener("click", () => { openEdit(); });
+  panoArac.append(editRolesButton);
+  const promptsButton = el("button", "mini", "Promptları düzenle");
+  promptsButton.type = "button";
+  promptsButton.addEventListener("click", () => { location.hash = "promptlar"; });
+  panoArac.append(promptsButton);
 
   // Akış dosyası bozulduysa ekran eski topolojiyle çizmeye devam ediyor;
   // bunu söylemezse kullanıcı düzenlemesinin neden tutmadığını bilemez.
@@ -2861,10 +2861,10 @@ function ciz(m) {
   const waitResult = watcherWaitResult(WATCHER_PENDING, g);
   if (waitResult) {
     WATCHER_PENDING = null;
-    if (waitResult.restart) void gozcuKomut("baslat", document.createElement("button"));
+    if (waitResult.restart) void watcherCommand("baslat", document.createElement("button"));
   }
   const statusInfo = watcherPanelState(g, Boolean(WATCHER_CONFIG), WATCHER_PENDING !== null);
-  const topoUyari = gozcuTopoUyari(g, m.flow.hash, statusInfo.durum);
+  const topoUyari = watcherTopoWarning(g, m.flow.hash, statusInfo.durum);
   const pillSinif = "pill" + (statusInfo.durum === "stale" || topoUyari
     ? " dikkat"
     : RAIL.mode === "daemon" ? " railAcik" : "");
@@ -2881,12 +2881,12 @@ function ciz(m) {
   // (SAPMALAR'ın "unmanaged" önceliği YALNIZCA eylem yetkisini kapatıyor,
   // teşhis bilgisini DEĞİL) — ikisi ayrı olmazsa bu ekran "elle" derken
   // bayat kilit bilgisini GİZLERDİ.
-  if (gozcuDurum(g).durum === "cokmus") pill.append(el("span", "mono", "bayat kilit"));
+  if (watcherStatus(g).durum === "cokmus") pill.append(el("span", "mono", "bayat kilit"));
   if (g) pill.append(el("span", "mono", "pid " + g.info.pid));
   const ok = el("span", "ok", "→");
   ok.setAttribute("aria-hidden", "true");
   pill.append(ok);
-  pill.addEventListener("click", () => { gozcuAc(); });
+  pill.addEventListener("click", () => { openWatcher(); });
   bar.append(pill);
 
   bar.append(el("div", "spacer"));
@@ -2908,7 +2908,7 @@ function ciz(m) {
 
   // TEMA ANAHTARI — kart c-20261106-e62847 (UX.md "operatör koyu temayı
   // kapatamıyor" bulgusunun yaması).
-  bar.append(temaAnahtariKur());
+  bar.append(buildThemeSwitch());
 
   // yeni kart dugmesi: ekranin en cok kullanilan eylemi, ust cubugun ana dugmesi.
   const fresh = el("button", "yeniKart", "Yeni kart");
@@ -2951,7 +2951,7 @@ function ciz(m) {
   // string'i kapatır.
   if (m.engeller && m.engeller.length) {
     const band = el("div", "band");
-    band.append(el("h2", null, engelBandBasligi(m.totals.engelliKart, m.engeller)));
+    band.append(el("h2", null, blockageBandTitle(m.totals.engelliKart, m.engeller)));
     band.append(el("p", null,
       "Bu kartlar kuyrukta duruyor ama role verilemiyor ve bu bir yarış değil: " +
       "dosya kilitli, izin yok ya da yolda bir şey var. Kart kendiliğinden " +
@@ -2983,7 +2983,7 @@ function ciz(m) {
       "Rolleri bu akışta bulunmadığı için hiçbir sütuna düşmüyorlar. " +
       "Kendi akışının ekranını aç ya da npm run card -- ls ile bak."));
     const kartlar = el("div", "kartlar");
-    digerler.forEach((c) => kartlar.append(kartCiz(c)));
+    digerler.forEach((c) => kartlar.append(drawCard(c)));
     band.append(kartlar);
     bands.push(band);
   }
@@ -2998,7 +2998,7 @@ function ciz(m) {
       "ve yolunu ondan okuyor — yani kimse onu almıyor ve hiçbir hata da üretmiyor. " +
       "Gözcüyü ve ekranı yeniden başlatmak ilkini çözer; rol gerçekten silindiyse kartı kapat."));
     const kartlar = el("div", "kartlar");
-    yetimler.forEach((c) => kartlar.append(kartCiz(c)));
+    yetimler.forEach((c) => kartlar.append(drawCard(c)));
     band.append(kartlar);
     bands.push(band);
   }
@@ -3011,14 +3011,14 @@ function ciz(m) {
   // formasyonu bir devir hareketi istemiyor, "canlı" sinyali artık kanat
   // çırpmanın kendisi.
   const board = document.getElementById("board");
-  board.replaceChildren(formasyonSvgKur(m));
+  board.replaceChildren(buildFormationSvg(m));
 
-  document.getElementById("lejant").replaceChildren(lejantKur(m));
+  document.getElementById("lejant").replaceChildren(buildLegend(m));
 
   // SAĞ PANEL — kart c-20261105-d500f1. formasyonSvgKur gibi HER
   // ÇAĞRIDA RAIL'in o anki moduna göre yeniden doluyor (Kart modu
   // kendi FETCH korumasını kendi taşıyor, bkz. sagPanelCiz).
-  sagPanelCiz(m);
+  drawRightPanel(m);
 
   // AJANLAR SEKMESİ — formasyonSvgKur/sagPanelCiz'le AYNI ilke: sekme
   // GÖRÜNMÜYOR OLSA BİLE her yoklamada yeniden çiziliyor (DEVIR.md §6,
@@ -3069,8 +3069,8 @@ function findFlowSummary(ozetListesi, name) {
  * 'rolIdler' boşsa (akış bozuk, bkz. akisKartKur) bile "bitti" basıyor:
  * her akış 'done'a varır, zincirin kendisi bilinmese de BU bilinir.
  */
-function flowChainText(rolIdler) {
-  return rolIdler.length ? rolIdler.join(" → ") + " → bitti" : "bitti";
+function flowChainText(roleIds) {
+  return roleIds.length ? roleIds.join(" → ") + " → bitti" : "bitti";
 }
 
 /**
@@ -3096,7 +3096,7 @@ function isFlowNameValid(name) {
  * "Oluştur ve düzenle" düğmesinin etkin olma koşulu — geçerli VE
  * benzersiz. SAF, DOM yok.
  */
-function yeniAkisGecerliMi(name, mevcutAdlar) {
+function isNewFlowValid(name, mevcutAdlar) {
   return isFlowNameValid(name) && !mevcutAdlar.includes(name);
 }
 
@@ -3112,13 +3112,13 @@ function yeniAkisGecerliMi(name, mevcutAdlar) {
  * aksi hâlde tarayıcı SVG'yi oranı KORUYARAK sığdırır ve kutunun bir
  * kenarında boşluk kalır.
  */
-function miniFormasyonSvg(rolSayisi) {
+function miniFormationSvg(roleCount) {
   const svg = sv("svg", {
     viewBox: "0 0 1000 640", width: "200", height: "110", preserveAspectRatio: "none",
     role: "img", "aria-label": "Rol formasyonu önizlemesi",
   });
   svg.classList.add("akisKartFormasyon");
-  if (rolSayisi <= 0) return svg;
+  if (roleCount <= 0) return svg;
   // Renk CSS SINIFINDAN geliyor, satır-içi style'dan DEĞİL: ".akisKart-panoda
   // .akisKartFormasyonGovde/-Nokta" (yukarıda) kartın panoda OLUP OLMAMASINA
   // göre --color-text/--color-neutral-900 arasında seçim yapıyor — bu
@@ -3129,8 +3129,8 @@ function miniFormasyonSvg(rolSayisi) {
     points: FORMATION_BODY.map((p) => p.join(",")).join(" "), "vector-effect": "non-scaling-stroke",
   });
   svg.append(govde);
-  for (let i = 0; i < rolSayisi; i++) {
-    const konum = rolKonumu(i, rolSayisi);
+  for (let i = 0; i < roleCount; i++) {
+    const konum = rolePosition(i, roleCount);
     const nokta = sv("circle", { class: "akisKartFormasyonNokta", cx: konum.x, cy: konum.y, r: "20" });
     svg.append(nokta);
   }
@@ -3172,7 +3172,7 @@ async function selectAndOpenFlowCard(name, target) {
     if (!succeeded) return;
   }
   location.hash = "";
-  if (target === "duzenle") duzenleAc();
+  if (target === "duzenle") openEdit();
 }
 
 /**
@@ -3185,25 +3185,25 @@ async function selectAndOpenFlowCard(name, target) {
 function buildFlowCard(name, aktifAd) {
   const summary = findFlowSummary(FLOWS_SUMMARY, name);
   const draft = summary ? summary.draft : null;
-  const rolIdler = draft ? draft.roles.map((r) => r.id) : [];
+  const roleIds = draft ? draft.roles.map((r) => r.id) : [];
 
   const card = el("div", flowCardClass(name, aktifAd));
   card.dataset.akis = name;
-  card.append(miniFormasyonSvg(rolIdler.length));
+  card.append(miniFormationSvg(roleIds.length));
 
   const ust = el("div", "akisKartUst");
   const nameBlock = el("div", "akisKartAdBlok");
   nameBlock.append(el("h3", "akisKartAd", name));
   if (name === aktifAd) nameBlock.append(el("span", "akisKartEtiket", "panoda"));
   ust.append(nameBlock);
-  ust.append(el("div", "akisKartRolSayisi", rolIdler.length ? rolIdler.length + " rol" : "rol sayısı bilinmiyor"));
+  ust.append(el("div", "akisKartRolSayisi", roleIds.length ? roleIds.length + " rol" : "rol sayısı bilinmiyor"));
   card.append(ust);
 
   if (summary && summary.error) {
     card.append(el("p", "akisKartHata", summary.error));
   } else if (draft) {
     card.append(el("p", "akisKartAciklama", draft.description || "(açıklama yok)"));
-    card.append(el("div", "akisKartZincir", flowChainText(rolIdler)));
+    card.append(el("div", "akisKartZincir", flowChainText(roleIds)));
   }
 
   const buttons = el("div", "akisKartDugmeler");
@@ -3212,10 +3212,10 @@ function buildFlowCard(name, aktifAd) {
   panodaAc.addEventListener("click", () => void selectAndOpenFlowCard(name, "pano"));
   buttons.append(panodaAc);
 
-  const rolleriDuzenle = el("button", "railBtn", "Rolleri düzenle");
-  rolleriDuzenle.type = "button";
-  rolleriDuzenle.addEventListener("click", () => void selectAndOpenFlowCard(name, "duzenle"));
-  buttons.append(rolleriDuzenle);
+  const editRoles = el("button", "railBtn", "Rolleri düzenle");
+  editRoles.type = "button";
+  editRoles.addEventListener("click", () => void selectAndOpenFlowCard(name, "duzenle"));
+  buttons.append(editRoles);
 
   // "Kopyala": şablon taslağı bu kartın KENDİ taslağı — bozuksa (draft
   // null) kopyalanacak bir yapı yok, düğme bunu VAAT ETMİYOR.
@@ -3223,7 +3223,7 @@ function buildFlowCard(name, aktifAd) {
   kopyala.type = "button";
   kopyala.disabled = !draft;
   if (!draft) kopyala.title = "Bu akış şu an geçersiz, şablon olarak kullanılamıyor.";
-  kopyala.addEventListener("click", () => { yeniAkisAc({ sablon: name, onerilenAd: name + "-kopya" }); });
+  kopyala.addEventListener("click", () => { openNewFlow({ sablon: name, onerilenAd: name + "-kopya" }); });
   buttons.append(kopyala);
 
   card.append(buttons);
@@ -3245,7 +3245,7 @@ function buildFlowCard(name, aktifAd) {
  * sub-panelleri gibi davranıp hash'i "yeni"ye çevirseydi, Escape'in
  * ("#" boşaltır) Pano'ya sıçraması gerekirdi.
  */
-function yeniAkisAc(onerilenler) {
+function openNewFlow(onerilenler) {
   const sablonOnerisi = (onerilenler && onerilenler.sablon) || FLOWS[0] || "";
   const kap = document.getElementById("panel");
   const kutu = el("div", "ust ust-ortali");
@@ -3303,8 +3303,8 @@ function yeniAkisAc(onerilenler) {
   line.append(olustur, vazgec);
   ic.append(line);
 
-  const guncelle = () => { olustur.disabled = !yeniAkisGecerliMi(adI.value, FLOWS); };
-  adI.addEventListener("input", () => { adI.value = duzenleAdSanitize(adI.value); guncelle(); });
+  const guncelle = () => { olustur.disabled = !isNewFlowValid(adI.value, FLOWS); };
+  adI.addEventListener("input", () => { adI.value = editSanitizeName(adI.value); guncelle(); });
   guncelle();
 
   olustur.addEventListener("click", async () => {
@@ -3315,15 +3315,15 @@ function yeniAkisAc(onerilenler) {
       if (!sablonOzet || !sablonOzet.draft) throw new Error("Şablon akış şu an okunamıyor.");
       // Derin kopya: sablonOzet.draft AKISLAR_OZET'in KENDİ nesnesi,
       // üzerine doğrudan yazmak o listeyi de değiştirirdi.
-      const yeniTaslak = JSON.parse(JSON.stringify(sablonOzet.draft));
-      yeniTaslak.name = adI.value;
-      if (acI.value.trim()) yeniTaslak.description = acI.value.trim();
-      else delete yeniTaslak.description;
+      const newDraft = JSON.parse(JSON.stringify(sablonOzet.draft));
+      newDraft.name = adI.value;
+      if (acI.value.trim()) newDraft.description = acI.value.trim();
+      else delete newDraft.description;
 
       const yazCevap = await fetch("/akis/yaz", {
         method: "POST",
         headers: { "content-type": "application/json", "x-skein-token": TOKEN },
-        body: JSON.stringify({ ...yeniTaslak, newName: adI.value }),
+        body: JSON.stringify({ ...newDraft, newName: adI.value }),
       });
       const yazVeri = await yazCevap.json();
       if (!yazCevap.ok) throw new Error(yazVeri.error || yazCevap.status);
@@ -3335,7 +3335,7 @@ function yeniAkisAc(onerilenler) {
       // sekme hâlâ "akislar"ken açılsaydı #icerikPano'nun "display:none"ı
       // onu GÖRÜNMEZ bırakırdı (bkz. akisKartSecVeAc'in AYNI deseni).
       location.hash = "";
-      duzenleAc();
+      openEdit();
     } catch (e) {
       olustur.disabled = false;
       hataKutu.textContent = e.message;
@@ -3364,10 +3364,10 @@ function drawFlowsScreen() {
   title.append(el("p", null,
     "Depodaki her akış burada: hangi rollerden geçtiği, hangisinin şu an " +
     "panoda açık olduğu, ve rollerini düzenlemek ya da kopyalamak için kısayollar."));
-  const yeniDugme = el("button", "railBtn primary", "Yeni akış");
-  yeniDugme.type = "button";
-  yeniDugme.addEventListener("click", () => { yeniAkisAc(null); });
-  title.append(yeniDugme);
+  const newButton = el("button", "railBtn primary", "Yeni akış");
+  newButton.type = "button";
+  newButton.addEventListener("click", () => { openNewFlow(null); });
+  title.append(newButton);
 
   const izgara = el("div", "akislarIzgara");
   if (!FLOWS.length) {
@@ -3400,16 +3400,16 @@ async function yokla() {
     const motionReduced = typeof matchMedia === "function" &&
       matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (!motionReduced) {
-      const devirler = kartDevirleriniBul(CARD_LAST_ROLE, data.cards);
+      const devirler = findCardHandoffs(CARD_LAST_ROLE, data.cards);
       if (devirler.length) {
-        ucusPlanlariniKur(devirler, data.roles).forEach((plan) => {
+        buildFlightPlans(devirler, data.roles).forEach((plan) => {
           FLIGHTS.push({
             cardId: plan.cardId, path: plan.path, sure: plan.sure, baslangic: performance.now(),
           });
         });
       }
     }
-    CARD_LAST_ROLE = rolHaritasiCikar(data.cards);
+    CARD_LAST_ROLE = buildRoleMap(data.cards);
     ciz(data);
   } catch (e) {
     // Okuma koptuğunda ekranı boşaltmak, "iş yok" ile "bakamıyorum"u
@@ -3436,7 +3436,7 @@ let PROVIDERS = [];
  * Ortadan başlatmak, önceki rollerin üreteceği girdiyi atlamak olurdu ve
  * o atlama hiçbir yerde görünmezdi.
  */
-function yeniKartAc() {
+function openNewCard() {
   const kap = document.getElementById("panel");
   const kutu = el("div", "ust");
   const ic = el("div", "panel");
@@ -3577,7 +3577,7 @@ function okUcu(ucX, ucY, yonX, yonY, renk) {
  * yazma yolu YOK, bu düğme sadece aynı tek yolu (POST /rol/yeni, o da
  * writeDraft'tan geçiyor) diyagramdan ÇAĞIRIYOR.
  */
-function ekleIsaretiKur(x, y, sonraId) {
+function buildAddMark(x, y, sonraId) {
   const g = sv("g", { class: "kenar-ekle", "data-sonra": sonraId });
   g.style.cursor = "pointer";
   const daire = sv("circle", { cx: x, cy: y, r: 9 });
@@ -3644,7 +3644,7 @@ const FORMATION_BODY = [[40, 110], [230, 110], [500, 480], [770, 110], [950, 110
  * "n===1 mi" sorusuna göre DEĞİL. Prototip de aynı ayrımı yapıyor
  * (place fonksiyonunun side==="apex" dalı).
  */
-function rolKonumu(i, n) {
+function rolePosition(i, n) {
   const LEFT_END = { x: FORMATION_BODY[1][0], y: FORMATION_BODY[1][1] };
   const APEX = { x: FORMATION_BODY[2][0], y: FORMATION_BODY[2][1] };
   const RIGHT_END = { x: FORMATION_BODY[3][0], y: FORMATION_BODY[3][1] };
@@ -3705,7 +3705,7 @@ function rejectArcCheck(a, b) {
  * İki noktayı birleştiren çizgiye DİK, ortasından geçen kısa bir
  * segment — insan onayı kapısının işareti. SAF, DOM yok.
  */
-function kapiCizgisi(a, b, uzunluk) {
+function gateLine(a, b, uzunluk) {
   const mx = (a.x + b.x) / 2;
   const my = (a.y + b.y) / 2;
   const dx = b.x - a.x;
@@ -3724,8 +3724,8 @@ function kapiCizgisi(a, b, uzunluk) {
  * bekleyen bir kart insan kararını bekliyor, kanat çırpıp "iş sürüyor"
  * demek yanlış bir sinyal olurdu.
  */
-function wingsFlapping(rolKartlari, daemon) {
-  return rolKartlari.some((c) => c.state === "active") && Boolean(daemon && daemon.alive);
+function wingsFlapping(roleCards, daemon) {
+  return roleCards.some((c) => c.state === "active") && Boolean(daemon && daemon.alive);
 }
 
 /**
@@ -3743,7 +3743,7 @@ function wingsFlapping(rolKartlari, daemon) {
  * yazmak dizeyi kapatır ve dosya derlenmez, bu dosyada birkaç kez
  * düşülen bir tuzak.)
  */
-function rolunAcikKartlari(cards, rolId) {
+function roleOpenCards(cards, rolId) {
   return cards.filter((c) => c.role === rolId && c.state !== "done" && !c.orphan);
 }
 
@@ -3757,7 +3757,7 @@ function rolunAcikKartlari(cards, rolId) {
  * da yalnızca kuyrukta, gösterilecek "güncel" bir kart yok.
  */
 function agentCurrentCard(rolId, cards) {
-  const kartlar = rolunAcikKartlari(cards, rolId);
+  const kartlar = roleOpenCards(cards, rolId);
   return kartlar.find((c) => c.state === "active") || kartlar.find((c) => c.gate) || null;
 }
 
@@ -3832,7 +3832,7 @@ function planlamaKatilimciKonumlari(roller, katilimcilar) {
   const result = [];
   katilimcilar.forEach((id) => {
     const i = roller.findIndex((r) => r.id === id);
-    if (i !== -1) result.push(rolKonumu(i, n));
+    if (i !== -1) result.push(rolePosition(i, n));
   });
   return result;
 }
@@ -3850,9 +3850,9 @@ function planlamaKatilimciKonumlari(roller, katilimcilar) {
  */
 function planlamaBandYolu(first, last) {
   const tepe = { x: FORMATION_BODY[2][0], y: FORMATION_BODY[2][1] };
-  const tepedenGecsin = first.arm === "sol" && last.arm === "sag";
+  const goOverApex = first.arm === "sol" && last.arm === "sag";
   return "M " + first.x + " " + first.y +
-    (tepedenGecsin ? " L " + tepe.x + " " + tepe.y : "") +
+    (goOverApex ? " L " + tepe.x + " " + tepe.y : "") +
     " L " + last.x + " " + last.y;
 }
 
@@ -3861,7 +3861,7 @@ function planlamaBandYolu(first, last) {
  * Konum DEVIR.md'ye göre: sol kolda düğümün SOLUNA (sağa yaslı), sağ
  * kolda SAĞINA (sola yaslı), tepedekinde ALTINA (ortalı).
  */
-function formasyonEtiketKur(rol, i, konum) {
+function buildFormationLabel(rol, i, konum) {
   const g = sv("g", { class: "formasyonEtiket" });
   let x, hiza;
   if (konum.arm === "sol") { x = -40; hiza = "end"; }
@@ -3895,7 +3895,7 @@ function formasyonEtiketKur(rol, i, konum) {
  * gerektirmeyen bir karar, bu dosyadaki kapiCikislari/rolKonumu ile
  * AYNI ilke.
  */
-function railGecis(rail, eylem) {
+function railTransition(rail, eylem) {
   const OVERVIEW = { mode: "overview", roleId: null, cardId: null, cardFrom: "overview" };
   if (eylem.tur === "genelBakis") return OVERVIEW;
   if (eylem.tur === "rolSec") {
@@ -3928,7 +3928,7 @@ function railGecis(rail, eylem) {
 let RAIL = { mode: "overview", roleId: null, cardId: null, cardFrom: "overview" };
 
 /** ciz()'i SON_MODEL varsa çağırır — RAIL geçişlerinin tekrarlayan kuyruğu. */
-function railYenidenCiz() {
+function railRedraw() {
   if (LAST_MODEL) ciz(LAST_MODEL);
 }
 
@@ -3958,7 +3958,7 @@ let FORMATION_SHOW_REJECTS = true;
  * kartlar (orphan) elenir: akışta artık karşılığı olmayan bir rolden
  * "uçmak" anlamsız, hedef düğüm yok.
  */
-function rolHaritasiCikar(kartlar) {
+function buildRoleMap(kartlar) {
   const harita = new Map();
   kartlar.forEach((k) => { if (!k.orphan) harita.set(k.id, k.role); });
   return harita;
@@ -3974,7 +3974,7 @@ function rolHaritasiCikar(kartlar) {
  * konumunda zaten BELİRİR — bu AYRI bir karar, olmayan bir hareketi
  * varmış gibi göstermemek.
  */
-function kartDevirleriniBul(oncekiRoller, kartlar) {
+function findCardHandoffs(oncekiRoller, kartlar) {
   const devirler = [];
   kartlar.forEach((k) => {
     if (k.orphan) return;
@@ -3999,7 +3999,7 @@ function kartDevirleriniBul(oncekiRoller, kartlar) {
  * segmentleri kendi uzunluklarıyla tartarak örnekliyor, bir dizeyi
  * yeniden ayrıştırmaya gerek yok.
  */
-function govdeYolu(a, b, tepe) {
+function bodyPath(a, b, tepe) {
   const onSeparateArms = a.arm !== b.arm && a.arm !== "tepe" && b.arm !== "tepe";
   return onSeparateArms ? [a, tepe, b] : [a, b];
 }
@@ -4012,7 +4012,7 @@ function govdeYolu(a, b, tepe) {
  * basit tutuyor VE mutasyon sınamasına açık: "yol.length > 2" ters
  * çevrilirse kısa/uzun yer değiştirir, sınama hemen düşer.
  */
-function ucusSuresiMs(path) {
+function flightDurationMs(path) {
   return path.length > 2 ? 900 : 600;
 }
 
@@ -4023,7 +4023,7 @@ function ucusSuresiMs(path) {
  * yer. Doğrusal t'nin KENDİSİ kullanılsaydı kuş sabit hızla kayardı,
  * "yumuşak" hiçbir şey olmazdı.
  */
-function yumusakIlerleme(t) {
+function easeProgress(t) {
   return t * t * (3 - 2 * t);
 }
 
@@ -4043,7 +4043,7 @@ function yumusakIlerleme(t) {
  * ölçülen hâli tarayici.test.ts'te; bu fonksiyon o ölçümün ALTINDAKİ
  * saf karardır.
  */
-function ucusKonumu(path, t) {
+function flightPosition(path, t) {
   const tt = Math.max(0, Math.min(1, t));
   const uzunluklar = [];
   let toplam = 0;
@@ -4081,17 +4081,17 @@ function ucusKonumu(path, t) {
  * düğüme uçtuğunu göstermek, hiç göstermemekten daha kötü bir hata
  * modu olurdu (bkz. planlamaKatilimciKonumlari'nin AYNI ilkesi).
  */
-function ucusPlanlariniKur(devirler, roller) {
+function buildFlightPlans(devirler, roller) {
   const n = roller.length;
-  const konumHaritasi = new Map(roller.map((r, i) => [r.id, rolKonumu(i, n)]));
+  const positionMap = new Map(roller.map((r, i) => [r.id, rolePosition(i, n)]));
   const tepe = { x: FORMATION_BODY[2][0], y: FORMATION_BODY[2][1] };
   const planlar = [];
   devirler.forEach((d) => {
-    const a = konumHaritasi.get(d.from);
-    const b = konumHaritasi.get(d.to);
+    const a = positionMap.get(d.from);
+    const b = positionMap.get(d.to);
     if (!a || !b) return;
-    const path = govdeYolu(a, b, tepe);
-    planlar.push({ cardId: d.cardId, path: path, sure: ucusSuresiMs(path) });
+    const path = bodyPath(a, b, tepe);
+    planlar.push({ cardId: d.cardId, path: path, sure: flightDurationMs(path) });
   });
   return planlar;
 }
@@ -4146,27 +4146,27 @@ let FLIGHTS = [];
  * daha var, hangisi aktif) uçuşun ANLAMINI değiştirmez, yalnızca
  * karmaşıklık ekler.
  */
-function ucanKusKur(u) {
+function buildFlyingBird(u) {
   const g = sv("g", { class: "ucanKus" });
   g.dataset.card = u.cardId;
   const kus = sv("svg", { x: -23, y: -11.5, width: 46, height: 23, viewBox: "0 0 46 23" });
   kus.classList.add("formasyonKus", "ucanKusGovde");
-  const kusCizgi = sv("polyline", { points: "2,5 13,9 24,19 35,9 46,5", fill: "none" });
-  kusCizgi.style.stroke = "var(--color-accent)";
-  kusCizgi.style.strokeWidth = "4";
-  kusCizgi.style.strokeLinejoin = "miter";
-  kus.append(kusCizgi);
+  const birdPolyline = sv("polyline", { points: "2,5 13,9 24,19 35,9 46,5", fill: "none" });
+  birdPolyline.style.stroke = "var(--color-accent)";
+  birdPolyline.style.strokeWidth = "4";
+  birdPolyline.style.strokeLinejoin = "miter";
+  kus.append(birdPolyline);
   g.append(kus);
 
-  let ilkKare = true;
+  let firstFrame = true;
   const stepOnce = () => {
-    if (!ilkKare && !g.isConnected) return;
-    ilkKare = false;
-    const gecenMs = performance.now() - u.baslangic;
-    const linear = Math.max(0, Math.min(1, gecenMs / u.sure));
-    const nokta = ucusKonumu(u.path, yumusakIlerleme(linear));
+    if (!firstFrame && !g.isConnected) return;
+    firstFrame = false;
+    const elapsedMs = performance.now() - u.baslangic;
+    const linear = Math.max(0, Math.min(1, elapsedMs / u.sure));
+    const nokta = flightPosition(u.path, easeProgress(linear));
     g.setAttribute("transform", "translate(" + nokta.x + " " + nokta.y + ")");
-    if (gecenMs < u.sure) requestAnimationFrame(stepOnce);
+    if (elapsedMs < u.sure) requestAnimationFrame(stepOnce);
   };
   stepOnce();
   return g;
@@ -4184,11 +4184,11 @@ function ucanKusKur(u) {
  * yeni bir öğe doğuyor. "İş sürüyor" sinyali hâlâ kanat çırpmanın
  * kendisi; uçuş yalnızca DEVİR ANINI gösteriyor.
  */
-function formasyonSvgKur(m) {
+function buildFormationSvg(m) {
   const roller = m.roles;
   const n = roller.length;
-  const konumlar = roller.map((_, i) => rolKonumu(i, n));
-  const konumHaritasi = new Map(roller.map((r, i) => [r.id, konumlar[i]]));
+  const konumlar = roller.map((_, i) => rolePosition(i, n));
+  const positionMap = new Map(roller.map((r, i) => [r.id, konumlar[i]]));
   const girisNokta = { x: FORMATION_BODY[0][0], y: FORMATION_BODY[0][1] };
   const exitDot = { x: FORMATION_BODY[4][0], y: FORMATION_BODY[4][1] };
 
@@ -4232,8 +4232,8 @@ function formasyonSvgKur(m) {
   // RET YAYLARI — "showArcs" (DEVIR.md) burada FORMASYON_RET_GOSTER.
   if (FORMATION_SHOW_REJECTS) {
     m.edges.filter((e) => e.kind === "reject").forEach((kenar) => {
-      const a = konumHaritasi.get(kenar.from);
-      const b = konumHaritasi.get(kenar.to);
+      const a = positionMap.get(kenar.from);
+      const b = positionMap.get(kenar.to);
       if (!a || !b) return;
       const kontrol = rejectArcCheck(a, b);
       const path = sv("path", {
@@ -4264,12 +4264,12 @@ function formasyonSvgKur(m) {
   // dizideki bir sonraki İNDEKSİ varsaymıyor: bu modelin TEK gerçek
   // kaynağı zaten edges (bkz. model.ts), diziye bitişiklik rastlantı.
   m.gates.filter((g) => g.type === "approval").forEach((kapi) => {
-    const a = konumHaritasi.get(kapi.after);
+    const a = positionMap.get(kapi.after);
     if (!a) return;
     const sonrakiId = nextColumn(m, kapi.after);
-    const b = sonrakiId === "bitti" ? exitDot : konumHaritasi.get(sonrakiId);
+    const b = sonrakiId === "bitti" ? exitDot : positionMap.get(sonrakiId);
     if (!b) return;
-    const cizgi = kapiCizgisi(a, b, 36);
+    const cizgi = gateLine(a, b, 36);
     const hat = sv("line", { x1: cizgi.x1, y1: cizgi.y1, x2: cizgi.x2, y2: cizgi.y2 });
     hat.style.stroke = "var(--color-accent)";
     hat.style.strokeWidth = "6";
@@ -4316,7 +4316,7 @@ function formasyonSvgKur(m) {
   // ROL DÜĞÜMLERİ — en üstte çiziliyor (her şeyin üzerinde tıklanabilir).
   roller.forEach((rol, i) => {
     const p = konumlar[i];
-    const rolKartlari = rolunAcikKartlari(m.cards, rol.id);
+    const roleCards = roleOpenCards(m.cards, rol.id);
     // Düğüm "seçili" sayılır RAIL.roleId bu role eşitse — Rol modunda VE
     // o rolün bir kartına (Kart modu, cardFrom "role") bakarken AYNI:
     // rolden içeri girilince düğüm Genel bakışa dönülene kadar vurgulu
@@ -4339,25 +4339,25 @@ function formasyonSvgKur(m) {
     const animationOn = document.documentElement.dataset.animate !== "off";
     const kus = sv("svg", { x: -23, y: -11.5, width: 46, height: 23, viewBox: "0 0 46 23" });
     kus.classList.add("formasyonKus");
-    if (wingsFlapping(rolKartlari, m.daemon) && animationOn) kus.classList.add("kanatCirpiyor");
-    const kusCizgi = sv("polyline", { points: "2,5 13,9 24,19 35,9 46,5", fill: "none" });
-    kusCizgi.style.stroke = birdColour(rolKartlari);
-    kusCizgi.style.strokeWidth = "4";
-    kusCizgi.style.strokeLinejoin = "miter";
-    kus.append(kusCizgi);
+    if (wingsFlapping(roleCards, m.daemon) && animationOn) kus.classList.add("kanatCirpiyor");
+    const birdPolyline = sv("polyline", { points: "2,5 13,9 24,19 35,9 46,5", fill: "none" });
+    birdPolyline.style.stroke = birdColour(roleCards);
+    birdPolyline.style.strokeWidth = "4";
+    birdPolyline.style.strokeLinejoin = "miter";
+    kus.append(birdPolyline);
     g.append(kus);
 
     // KART KARELERİ — düğümün altında küçük bir sıra, ortalı.
     const kareAraligi = 12;
-    const kareBasi = -((rolKartlari.length - 1) * kareAraligi) / 2 - 5;
-    rolKartlari.forEach((c, idx) => {
+    const kareBasi = -((roleCards.length - 1) * kareAraligi) / 2 - 5;
+    roleCards.forEach((c, idx) => {
       const kare = sv("rect", {
         class: "kare-" + kareDurumu(c), x: kareBasi + idx * kareAraligi, y: 26, width: 10, height: 10,
       });
       g.append(kare);
     });
 
-    g.append(formasyonEtiketKur(rol, i, p));
+    g.append(buildFormationLabel(rol, i, p));
 
     const secimDegistir = () => {
       // "Rolleri düzenle" AÇIKKEN düğüme tıklamak MODU DEĞİŞTİRMİYOR —
@@ -4366,10 +4366,10 @@ function formasyonSvgKur(m) {
       // olurdu: panelden ÇIKARIR, oysa istenen panel AÇIKKEN içindeki
       // bloğu işaret etmek.
       if (RAIL.mode === "edit") {
-        duzenleVurgula(rol.id);
+        editHighlight(rol.id);
         return;
       }
-      RAIL = railGecis(RAIL, { tur: "rolSec", roleId: rol.id });
+      RAIL = railTransition(RAIL, { tur: "rolSec", roleId: rol.id });
       ciz(m);
     };
     g.addEventListener("click", secimDegistir);
@@ -4383,13 +4383,13 @@ function formasyonSvgKur(m) {
   // SİLMİYOR — her çizimde elenen liste tek doğru kaynağı tutuyor.
   const simdi = performance.now();
   FLIGHTS = FLIGHTS.filter((u) => simdi - u.baslangic < u.sure);
-  FLIGHTS.forEach((u) => svg.append(ucanKusKur(u)));
+  FLIGHTS.forEach((u) => svg.append(buildFlyingBird(u)));
 
   return svg;
 }
 
 /** Lejant — diyagramın altındaki açıklama şeridi (DEVIR.md + SAPMALAR.md §2.4). */
-function lejantKur(m) {
+function buildLegend(m) {
   const kutu = el("div");
   [["calisiyor", "çalışıyor"], ["kapida", "kapıda"], ["kuyrukta", "kuyrukta"]].forEach(([sinif, label]) => {
     const oge = el("span", "oge");
@@ -4424,7 +4424,7 @@ function lejantKur(m) {
  * rengi kareDurumu'ndan (aynı karar formasyon düğümünün kart kareleriyle
  * PAYLAŞILIYOR) — bu satırın rengi diyagramdakiyle AYRIŞAMAZ.
  */
-function railKartSatiri(c, footer, tiklaCb) {
+function railCardRow(c, footer, tiklaCb) {
   const line = el("div", "railSatir");
   line.tabIndex = 0;
   line.setAttribute("role", "button");
@@ -4450,7 +4450,7 @@ function railKartSatiri(c, footer, tiklaCb) {
  * bu fonksiyon yeni bir karar kümesi İCAT ETMİYOR, var olanı yeni bir
  * kutuya TAŞIYOR (kart c-20261105-d500f1'in şartı tam bu).
  */
-function railKapiKutu(c, titleClick) {
+function railGateBox(c, titleClick) {
   const kapi = gateExits(c.gate, c.planKilidi, c.geriHedef);
   const kutu = el("div", "railKapiKutu");
   kutu.append(el("div", "railKapiEtiket", kapi.label + " · " + c.role));
@@ -4466,9 +4466,9 @@ function railKapiKutu(c, titleClick) {
   // details'a TAM olarak yazılıyor; ".railGerekce .reason" kuralı
   // (yukarıda) yalnızca GÖRÜNÜMÜ 3 satıra kırpıyor, DOM'dan hiçbir şey
   // SİLİNMİYOR.
-  const gerekceSarmal = el("div", "railGerekce");
-  if (c.gateReason) gerekceKur(gerekceSarmal, c.gateReason);
-  kutu.append(gerekceSarmal);
+  const rationaleWrap = el("div", "railGerekce");
+  if (c.gateReason) buildRationale(rationaleWrap, c.gateReason);
+  kutu.append(rationaleWrap);
 
   const cikis = el("div", "railCikis");
   kapi.buttons.forEach(([name, secim], i) => {
@@ -4488,32 +4488,32 @@ function railKapiKutu(c, titleClick) {
  * MOD 1 — Genel bakış: kapıda bekleyen kart sayısı + her kapı kartı,
  * altında "Uçuşta" listesi (DEVIR.md).
  */
-function railGenelBakisCiz(kutu, m) {
+function drawRailOverview(kutu, m) {
   kutu.replaceChildren();
 
-  const kapidakiler = m.cards.filter((c) => Boolean(c.gate));
+  const atGateOnes = m.cards.filter((c) => Boolean(c.gate));
   const sayiSatiri = el("div", "railSayiSatiri");
-  sayiSatiri.append(el("div", "railSayi", String(kapidakiler.length)));
+  sayiSatiri.append(el("div", "railSayi", String(atGateOnes.length)));
   sayiSatiri.append(el("div", "railSayiAciklama", "kart kararını bekliyor"));
   kutu.append(sayiSatiri);
 
-  kapidakiler.forEach((c) => {
-    kutu.append(railKapiKutu(c, () => {
-      RAIL = railGecis(RAIL, { tur: "kartAcGenel", kartId: c.id });
-      railYenidenCiz();
+  atGateOnes.forEach((c) => {
+    kutu.append(railGateBox(c, () => {
+      RAIL = railTransition(RAIL, { tur: "kartAcGenel", kartId: c.id });
+      railRedraw();
     }));
   });
 
-  const ucustakiler = m.cards.filter((c) => c.state === "active");
-  kutu.append(el("div", "railAraBaslik", "Uçuşta · " + ucustakiler.length));
-  if (ucustakiler.length === 0) {
+  const inFlight = m.cards.filter((c) => c.state === "active");
+  kutu.append(el("div", "railAraBaslik", "Uçuşta · " + inFlight.length));
+  if (inFlight.length === 0) {
     kutu.append(el("div", "railBos", "şu an çalışan kart yok"));
   } else {
-    ucustakiler.forEach((c) => {
+    inFlight.forEach((c) => {
       const adim = c.live ? (c.live.name || c.live.kind) : null;
-      kutu.append(railKartSatiri(c, c.role + (adim ? " · " + adim : ""), () => {
-        RAIL = railGecis(RAIL, { tur: "kartAcGenel", kartId: c.id });
-        railYenidenCiz();
+      kutu.append(railCardRow(c, c.role + (adim ? " · " + adim : ""), () => {
+        RAIL = railTransition(RAIL, { tur: "kartAcGenel", kartId: c.id });
+        railRedraw();
       }));
     });
   }
@@ -4540,7 +4540,7 @@ function railGenelBakisCiz(kutu, m) {
  * fonksiyonun "m.roles.some" kontrolü), yani düğme "o rolü seçili açar"
  * vaadini artık GERÇEKTEN tutuyor.
  */
-function railRolCiz(kutu, m, rolId) {
+function drawRailRole(kutu, m, rolId) {
   kutu.replaceChildren();
 
   // "← Genel bakış" ÖNCE kuruluyor, meta bulunamasa bile: akış rol
@@ -4551,12 +4551,12 @@ function railRolCiz(kutu, m, rolId) {
   const geri = el("button", "railGeri", "← Genel bakış");
   geri.type = "button";
   geri.addEventListener("click", () => {
-    RAIL = railGecis(RAIL, { tur: "genelBakis" });
-    railYenidenCiz();
+    RAIL = railTransition(RAIL, { tur: "genelBakis" });
+    railRedraw();
   });
   kutu.append(geri);
 
-  const meta = railRolMeta(m, rolId);
+  const meta = railRoleMeta(m, rolId);
   if (!meta) {
     kutu.append(el("div", "railBos", "rol bulunamadı — akış değişmiş olabilir"));
     return;
@@ -4574,13 +4574,13 @@ function railRolCiz(kutu, m, rolId) {
   kutu.append(metaSatir);
 
   const buttons = el("div", "railRolDugmeler");
-  const promptBtn = el("button", "railBtn", "Prompt · " + meta.prompt);
-  promptBtn.type = "button";
-  promptBtn.addEventListener("click", () => {
+  const promptBtnEl = el("button", "railBtn", "Prompt · " + meta.prompt);
+  promptBtnEl.type = "button";
+  promptBtnEl.addEventListener("click", () => {
     PROMPT_SELECTED = meta.prompt;
     location.hash = "promptlar";
   });
-  buttons.append(promptBtn);
+  buttons.append(promptBtnEl);
   const agentBtn = el("button", "railBtn", "Ajanı izle →");
   agentBtn.type = "button";
   agentBtn.addEventListener("click", () => {
@@ -4590,18 +4590,18 @@ function railRolCiz(kutu, m, rolId) {
   buttons.append(agentBtn);
   kutu.append(buttons);
 
-  const rolKartlari = rolunAcikKartlari(m.cards, rolId);
-  kutu.append(el("div", "railAraBaslik", "kartlar · " + rolKartlari.length));
-  if (rolKartlari.length === 0) {
+  const roleCards = roleOpenCards(m.cards, rolId);
+  kutu.append(el("div", "railAraBaslik", "kartlar · " + roleCards.length));
+  if (roleCards.length === 0) {
     const rol = m.roles.find((r) => r.id === rolId);
-    kutu.append(el("div", "railBos", rol ? emptyRoleText(rol, rolKartlari) : "kuyrukta kart yok"));
+    kutu.append(el("div", "railBos", rol ? emptyRoleText(rol, roleCards) : "kuyrukta kart yok"));
   } else {
-    rolKartlari.forEach((c) => {
+    roleCards.forEach((c) => {
       const durum = c.gate ? gateExits(c.gate, c.planKilidi, c.geriHedef).label
         : c.state === "active" ? "çalışıyor" : "kuyrukta";
-      kutu.append(railKartSatiri(c, durum, () => {
-        RAIL = railGecis(RAIL, { tur: "kartAcRol", rolId, kartId: c.id });
-        railYenidenCiz();
+      kutu.append(railCardRow(c, durum, () => {
+        RAIL = railTransition(RAIL, { tur: "kartAcRol", rolId, kartId: c.id });
+        railRedraw();
       }));
     });
   }
@@ -4616,7 +4616,7 @@ function railRolCiz(kutu, m, rolId) {
  * (bkz. yukarıda) — bu iki blok BİREBİR AYNI, iki yerde yeniden
  * YAZILMIYOR.
  */
-function railKartCiz(kutu, d) {
+function drawRailCard(kutu, d) {
   kutu.replaceChildren();
   const c = d.card;
 
@@ -4625,8 +4625,8 @@ function railKartCiz(kutu, d) {
   geri.type = "button";
   geri.setAttribute("aria-label", "geri");
   geri.addEventListener("click", () => {
-    RAIL = railGecis(RAIL, { tur: "geri" });
-    railYenidenCiz();
+    RAIL = railTransition(RAIL, { tur: "geri" });
+    railRedraw();
   });
   ustSatir.append(geri);
   const statusText = c.gate ? gateExits(c.gate, c.planKilidi, c.geriHedef).label
@@ -4647,7 +4647,7 @@ function railKartCiz(kutu, d) {
   kutu.append(meta);
 
   if (c.gate) {
-    kutu.append(railKapiKutu(c, null));
+    kutu.append(railGateBox(c, null));
   } else if (c.lastReject && c.state !== "done") {
     kutu.append(el("div", "railRetBlok", c.lastReject));
   }
@@ -4660,8 +4660,8 @@ function railKartCiz(kutu, d) {
     kutu.append(s);
   }
 
-  kutu.append(izZamanCizelgesiKur(d.history));
-  kutu.append(kodDegisikligiKur(d.diff));
+  kutu.append(buildTraceTimeline(d.history));
+  kutu.append(buildCodeChange(d.diff));
 }
 
 /**
@@ -4671,7 +4671,7 @@ function railKartCiz(kutu, d) {
  * yoksa her saniyelik yoklama (yokla/ciz) kartı yeniden yükler, panel her
  * saniye "yükleniyor…"ya döner ve kaydırma konumu kaybolurdu.
  */
-async function railKartYukle(kutu, id) {
+async function railLoadCard(kutu, id) {
   kutu.replaceChildren(el("div", "railBos", "yükleniyor…"));
   try {
     const cevap = await fetch("/kart/" + encodeURIComponent(id), { cache: "no-store" });
@@ -4680,7 +4680,7 @@ async function railKartYukle(kutu, id) {
     // RAIL fetch sürerken BAŞKA bir karta/moda geçmiş olabilir — bayat
     // cevabı eskimiş bir isteğin üstüne YAZMIYORUZ.
     if (RAIL.mode !== "card" || RAIL.cardId !== id) return;
-    railKartCiz(kutu, d);
+    drawRailCard(kutu, d);
   } catch (e) {
     if (RAIL.mode !== "card" || RAIL.cardId !== id) return;
     kutu.replaceChildren(el("div", "err", "Kart okunamadı: " + e.message));
@@ -4694,7 +4694,7 @@ async function railKartYukle(kutu, id) {
  * çağrılması Kart modunu "yükleniyor…"ya döndürmesin diye (bkz.
  * railKartYukle yorumu).
  */
-function railYenidenYuklenmeliMi(gosterilenId, hedefId) {
+function railNeedsReload(gosterilenId, hedefId) {
   return gosterilenId !== hedefId;
 }
 
@@ -4712,7 +4712,7 @@ function railYenidenYuklenmeliMi(gosterilenId, hedefId) {
  * hangi rol bloğunun kırmızı kenarla işaretleneceğini taşıyor — mesaj
  * metninin kendisi "hangi kutu" sorusuna cevap vermez.
  */
-function duzenleHatalari(roller) {
+function editErrors(roller) {
   const errors = [];
   const invalid = new Set();
   roller.forEach((r, i) => {
@@ -4744,7 +4744,7 @@ function duzenleHatalari(roller) {
  * state !== "done" — railRolCiz'in kart listesiyle AYNI filtre, yetim
  * kartlar ('orphan') zaten akıştan bağımsız, sayılmaz.
  */
-function duzenleSilmeUyarilari(oncekiIdler, simdikiIdler, kartlar) {
+function editDeleteWarnings(oncekiIdler, simdikiIdler, kartlar) {
   const simdiSet = new Set(simdikiIdler);
   const uyarilar = [];
   oncekiIdler.filter((id) => !simdiSet.has(id)).forEach((id) => {
@@ -4760,7 +4760,7 @@ function duzenleSilmeUyarilari(oncekiIdler, simdikiIdler, kartlar) {
  * referans) ve aynı diziyi döner; ekranda ayrı bir "next" alanı/seçicisi
  * YOK, sıra tek doğruluk kaynağı.
  */
-function duzenleSiradanBagla(roller) {
+function editBindInOrder(roller) {
   roller.forEach((r, i) => {
     r.next = i + 1 < roller.length ? roller[i + 1].id : "done";
   });
@@ -4775,7 +4775,7 @@ function duzenleSiradanBagla(roller) {
  * seçenekleri sunmuyor, ama bir TAŞIMA önceden geçerli bir değeri listenin
  * dışına çıkarabilir — bu fonksiyon o artığı siler.
  */
-function duzenleReddiTemizle(roller) {
+function editClearReject(roller) {
   const indeks = new Map(roller.map((r, i) => [r.id, i]));
   roller.forEach((r, i) => {
     if (r.reject === undefined || r.reject === "") return;
@@ -4792,14 +4792,14 @@ function duzenleReddiTemizle(roller) {
  * Taşıma SIRAYI değiştirdiği için 'next' yeniden türetilir ve artık
  * geçersiz kalmış 'reject' hedefleri temizlenir.
  */
-function duzenleTasi(roller, i, yon) {
+function editMove(roller, i, yon) {
   const j = i + yon;
   if (j < 0 || j >= roller.length) return roller;
   const tmp = roller[i];
   roller[i] = roller[j];
   roller[j] = tmp;
-  duzenleReddiTemizle(roller);
-  duzenleSiradanBagla(roller);
+  editClearReject(roller);
+  editBindInOrder(roller);
   return roller;
 }
 
@@ -4811,7 +4811,7 @@ function duzenleTasi(roller, i, yon) {
  * SESSİZCE temizlemek, DEVIR.md'nin kendi kısıtını (yalnızca a-z0-9-)
  * ihlal etmeyen bir sonucu HER ZAMAN garantiliyor.
  */
-function duzenleAdSanitize(value) {
+function editSanitizeName(value) {
   return (value || "").trim().toLowerCase().replace(/[^a-z0-9-]/g, "");
 }
 
@@ -4827,7 +4827,7 @@ function duzenleAdSanitize(value) {
  * yine de "boş" HALE gelebilir (kullanıcı kutuya sadece boşluk yazarsa) —
  * o durum kaskad DIŞINDA, duzenleHatalari'nin yakaladığı bir durum.
  */
-function duzenleAdDegis(taslak, i, newName) {
+function editRenameRole(taslak, i, newName) {
   const eski = taslak.roles[i].id;
   if (!newName || newName === eski) return taslak;
   taslak.roles[i].id = newName;
@@ -4849,7 +4849,7 @@ function duzenleAdDegis(taslak, i, newName) {
  * tek katılımcısız bir planlamayı zaten yasaklıyor, yarım bir blok
  * bırakmanın anlamı yok. Son rol SİLİNEMEZ (eski 'rolSil' ile AYNI koruma).
  */
-function duzenleSil(taslak, id) {
+function editDelete(taslak, id) {
   const i = taslak.roles.findIndex((r) => r.id === id);
   if (i === -1 || taslak.roles.length < 2) return taslak;
   taslak.roles.splice(i, 1);
@@ -4863,8 +4863,8 @@ function duzenleSil(taslak, id) {
     if (taslak.planlama.denetci === id) taslak.planlama.denetci = undefined;
     if (taslak.planlama.katilimcilar.length === 0) taslak.planlama = undefined;
   }
-  duzenleReddiTemizle(taslak.roles);
-  duzenleSiradanBagla(taslak.roles);
+  editClearReject(taslak.roles);
+  editBindInOrder(taslak.roles);
   return taslak;
 }
 
@@ -4881,14 +4881,14 @@ function duzenleSil(taslak, id) {
  * KENDİSİ ve SONRASI önekten çıkar: aradan birini çıkarmak öndekini
  * katılımcı olmaktan ÇIKARAMAZ, ama ardındaki zaten önek dışıydı.
  */
-function duzenlePlanlamaAyarla(katilimcilar, rolIdler, idx, katilmak) {
+function editSetPlanning(katilimcilar, roleIds, idx, katilmak) {
   const k = katilimcilar.length;
   if (katilmak) {
     if (idx !== k) return katilimcilar;
-    return rolIdler.slice(0, k + 1);
+    return roleIds.slice(0, k + 1);
   }
   if (idx >= k) return katilimcilar;
-  return rolIdler.slice(0, idx);
+  return roleIds.slice(0, idx);
 }
 
 /**
@@ -4897,17 +4897,17 @@ function duzenlePlanlamaAyarla(katilimcilar, rolIdler, idx, katilmak) {
  * ZORUNDA. Katılımcı yoksa denetçi de anlamsız (yükümlülük kapısının
  * denetleyeceği bir itiraz yok).
  */
-function duzenleDenetciGecerle(denetci, katilimcilar, rolIdler) {
+function editValidateAuditor(denetci, katilimcilar, roleIds) {
   if (denetci === undefined || denetci === "") return undefined;
   if (katilimcilar.length === 0 || katilimcilar.includes(denetci)) return undefined;
-  const sonKatilimciIndeks = rolIdler.indexOf(katilimcilar[katilimcilar.length - 1]);
-  const auditorIndex = rolIdler.indexOf(denetci);
+  const sonKatilimciIndeks = roleIds.indexOf(katilimcilar[katilimcilar.length - 1]);
+  const auditorIndex = roleIds.indexOf(denetci);
   if (auditorIndex === -1 || auditorIndex <= sonKatilimciIndeks) return undefined;
   return denetci;
 }
 
 /** "Yazar: X · itiraz: Y, Z" özeti — DEVIR.md §3 "Planlama bölümü: özet". Katılımcı yoksa boş dize. */
-function duzenlePlanlamaOzet(katilimcilar) {
+function editPlanningSummary(katilimcilar) {
   if (katilimcilar.length === 0) return "";
   if (katilimcilar.length === 1) return "Yazar: " + katilimcilar[0];
   return "Yazar: " + katilimcilar[0] + " · itiraz: " + katilimcilar.slice(1).join(", ");
@@ -4919,12 +4919,12 @@ function duzenlePlanlamaOzet(katilimcilar) {
  * sıradan türer, geçersiz ret hedefleri ve geçersiz denetçi temizlenir.
  * Taslağı YERİNDE değiştirir ve aynı nesneyi döner.
  */
-function duzenleNormallestir(taslak) {
-  duzenleReddiTemizle(taslak.roles);
-  duzenleSiradanBagla(taslak.roles);
+function editNormalise(taslak) {
+  editClearReject(taslak.roles);
+  editBindInOrder(taslak.roles);
   if (taslak.planlama) {
-    const rolIdler = taslak.roles.map((r) => r.id);
-    taslak.planlama.denetci = duzenleDenetciGecerle(taslak.planlama.denetci, taslak.planlama.katilimcilar, rolIdler);
+    const roleIds = taslak.roles.map((r) => r.id);
+    taslak.planlama.denetci = editValidateAuditor(taslak.planlama.denetci, taslak.planlama.katilimcilar, roleIds);
   }
   return taslak;
 }
@@ -4950,7 +4950,7 @@ let EDIT_PREVIEW = null;
 let EDIT_HIGHLIGHT = null;
 
 /** "Rolleri düzenle" girişi — panoArac'taki düğme bunu çağırır. */
-function duzenleAc() {
+function openEdit() {
   RAIL = { mode: "edit", roleId: null, cardId: null, cardFrom: "overview" };
   EDIT_DRAFT = null;
   EDIT_ORIGINAL = null;
@@ -4959,15 +4959,15 @@ function duzenleAc() {
   EDIT_YAML_VISIBLE = false;
   EDIT_PREVIEW = null;
   EDIT_HIGHLIGHT = null;
-  railYenidenCiz();
+  railRedraw();
 }
 
 /** Genel bakışa döner ve panelin durumunu TEMİZLER — açık bir taslak bayat kalmasın. */
-function duzenleKapat() {
+function closeEdit() {
   RAIL = { mode: "overview", roleId: null, cardId: null, cardFrom: "overview" };
   EDIT_DRAFT = null;
   EDIT_ORIGINAL = null;
-  railYenidenCiz();
+  railRedraw();
 }
 
 /**
@@ -4976,7 +4976,7 @@ function duzenleKapat() {
  * railKartYukle'nin "data-rail-kart"ıyla AYNI desen): yoksa her saniyelik
  * yoklama formu sıfırlar, operatör yazarken kutular BAŞA dönerdi.
  */
-async function railDuzenleYukle(kutu) {
+async function railLoadEdit(kutu) {
   kutu.replaceChildren(el("div", "railBos", "yükleniyor…"));
   try {
     const flowAnswer = await fetch("/akis", { cache: "no-store" });
@@ -4991,9 +4991,9 @@ async function railDuzenleYukle(kutu) {
     // editörü ENGELLEMİYORUZ — prompt alanı o durumda yalnızca ROLÜN
     // KENDİ değerini seçenek olarak gösterir (bkz. duzenlePromptAlani).
     try {
-      const promptCevap = await fetch("/promptlar", { cache: "no-store" });
-      const promptVeri = await promptCevap.json();
-      EDIT_PROMPTS = promptCevap.ok ? (promptVeri.prompts || []) : [];
+      const promptAnswer = await fetch("/promptlar", { cache: "no-store" });
+      const promptData = await promptAnswer.json();
+      EDIT_PROMPTS = promptAnswer.ok ? (promptData.prompts || []) : [];
     } catch {
       EDIT_PROMPTS = [];
     }
@@ -5001,11 +5001,11 @@ async function railDuzenleYukle(kutu) {
     EDIT_ERROR = e.message;
   }
   if (RAIL.mode !== "edit") return; // panel kapandıysa bayat cevabı YAZMA
-  railDuzenlePaneliCiz(kutu, LAST_MODEL);
+  drawRailEditPanel(kutu, LAST_MODEL);
 }
 
 /** Tek değerli bir alan: seçenek listesi varsa 'select', yoksa serbest metin 'input'. */
-function duzenleAlan(label, value, secenekler, onChange, etiketCozucu) {
+function editField(label, value, secenekler, onChange, etiketCozucu) {
   const l = el("label", "duzenleAlanTekil");
   l.append(el("span", "duzenleAlanEtiket", label));
   const g = el(secenekler ? "select" : "input");
@@ -5019,13 +5019,13 @@ function duzenleAlan(label, value, secenekler, onChange, etiketCozucu) {
   } else {
     g.value = value == null ? "" : value;
   }
-  g.addEventListener("change", () => { onChange(g.value); duzenleYenile(); });
+  g.addEventListener("change", () => { onChange(g.value); editRefresh(); });
   l.append(g);
   return l;
 }
 
 /** ALIM segment düğmesi — "tekil/toplu", 2px kenar, seçili koyu zeminli (DEVIR.md §3). */
-function duzenleSegment(label, value, secenekler, onChange) {
+function editSegment(label, value, secenekler, onChange) {
   const sarmal = el("div");
   sarmal.append(el("span", "duzenleAlanEtiket", label));
   const grup = el("div", "duzenleSegment");
@@ -5038,7 +5038,7 @@ function duzenleSegment(label, value, secenekler, onChange) {
     b.addEventListener("click", () => {
       if (v === value) return;
       onChange(v);
-      duzenleYenile();
+      editRefresh();
     });
     grup.append(b);
   });
@@ -5047,20 +5047,20 @@ function duzenleSegment(label, value, secenekler, onChange) {
 }
 
 /** 1..5 arası stepper — tur ve ret limiti AYNI widget'ı paylaşıyor (DEVIR.md §3). */
-function duzenleStepper(value, min, max, onChange) {
+function editStepper(value, min, max, onChange) {
   const sarmal = el("div", "duzenleStepper");
   const eksi = el("button", "duzenleIkon", "−");
   eksi.type = "button";
   eksi.disabled = value <= min;
   eksi.setAttribute("aria-label", "azalt");
-  eksi.addEventListener("click", () => { onChange(Math.max(min, value - 1)); duzenleYenile(); });
+  eksi.addEventListener("click", () => { onChange(Math.max(min, value - 1)); editRefresh(); });
   sarmal.append(eksi);
   sarmal.append(el("span", "duzenleStepperDeger mono", String(value)));
   const arti = el("button", "duzenleIkon", "+");
   arti.type = "button";
   arti.disabled = value >= max;
   arti.setAttribute("aria-label", "arttır");
-  arti.addEventListener("click", () => { onChange(Math.min(max, value + 1)); duzenleYenile(); });
+  arti.addEventListener("click", () => { onChange(Math.min(max, value + 1)); editRefresh(); });
   sarmal.append(arti);
   return sarmal;
 }
@@ -5072,11 +5072,11 @@ function duzenleStepper(value, min, max, onChange) {
  * yoksa (örn. henüz hiçbir rolün kullanmadığı bir yol) seçenek listesine
  * EKLENİR — aksi hâlde seçim sessizce BAŞKA bir dosyaya kayardı.
  */
-function duzenlePromptAlani(rol) {
+function editPromptField(rol) {
   const sarmal = el("div", "duzenlePromptSarmal");
   const knownOnes = EDIT_PROMPTS.map((p) => p.path);
   const secenekler = knownOnes.includes(rol.prompt) ? knownOnes : [rol.prompt, ...knownOnes];
-  const field = duzenleAlan("prompt", rol.prompt, secenekler, (v) => { rol.prompt = v; });
+  const field = editField("prompt", rol.prompt, secenekler, (v) => { rol.prompt = v; });
   sarmal.append(field);
   const open = el("button", "railBtn", "Aç");
   open.type = "button";
@@ -5097,7 +5097,7 @@ function duzenlePromptAlani(rol) {
  * düğmenin "yapamayacağı şeyi vaat etmesi" bu dosyada iki kez düzeltilmiş
  * bir kusur sınıfı (bkz. "back" düğmesinin kaldırılması).
  */
-function duzenlePlanlamaKatilimKutusuCiz(taslak, i) {
+function drawEditPlanningParticipantBox(taslak, i) {
   const rol = taslak.roles[i];
   const katilimcilar = taslak.planlama ? taslak.planlama.katilimcilar : [];
   const k = katilimcilar.length;
@@ -5119,63 +5119,63 @@ function duzenlePlanlamaKatilimKutusuCiz(taslak, i) {
   }
 
   kutucuk.addEventListener("change", () => {
-    const rolIdler = taslak.roles.map((r) => r.id);
-    const yeniKatilimcilar = duzenlePlanlamaAyarla(katilimcilar, rolIdler, i, kutucuk.checked);
-    if (yeniKatilimcilar.length === 0) {
+    const roleIds = taslak.roles.map((r) => r.id);
+    const newParticipants = editSetPlanning(katilimcilar, roleIds, i, kutucuk.checked);
+    if (newParticipants.length === 0) {
       taslak.planlama = undefined;
     } else {
       const previous = taslak.planlama;
       taslak.planlama = {
-        katilimcilar: yeniKatilimcilar,
+        katilimcilar: newParticipants,
         plan: previous ? previous.plan : "docs/plan/{kart}.md",
         tur: previous ? previous.tur : 1,
         ilkTurKor: previous ? previous.ilkTurKor : true,
         ...(previous && previous.denetci !== undefined ? { denetci: previous.denetci } : {}),
       };
-      taslak.planlama.denetci = duzenleDenetciGecerle(taslak.planlama.denetci, yeniKatilimcilar, rolIdler);
+      taslak.planlama.denetci = editValidateAuditor(taslak.planlama.denetci, newParticipants, roleIds);
     }
-    duzenleYenile();
+    editRefresh();
   });
   return sarmal;
 }
 
 /** Planlama bölümü: özet, tur stepper'ı (1-5), yükümlülük denetçisi seçimi (DEVIR.md §3). */
-function duzenlePlanlamaBolumuCiz(taslak) {
+function drawEditPlanningSection(taslak) {
   const kutu = el("div", "duzenleBolum");
   kutu.append(el("div", "eyebrow", "Planlama"));
   const katilimcilar = taslak.planlama ? taslak.planlama.katilimcilar : [];
-  const summary = duzenlePlanlamaOzet(katilimcilar);
+  const summary = editPlanningSummary(katilimcilar);
   kutu.append(el("div", "duzenleOzet", summary || "katılım yok — hiçbir rol planlamaya katılmıyor"));
   if (katilimcilar.length === 0 || !taslak.planlama) return kutu;
 
   const turSira = el("div", "duzenleStepperSarmal");
   turSira.append(el("span", "duzenleAlanEtiket", "en çok tur"));
-  turSira.append(duzenleStepper(taslak.planlama.tur, 1, 5, (v) => { taslak.planlama.tur = v; }));
+  turSira.append(editStepper(taslak.planlama.tur, 1, 5, (v) => { taslak.planlama.tur = v; }));
   kutu.append(turSira);
 
-  const rolIdler = taslak.roles.map((r) => r.id);
-  const auditorOptions = ["", ...rolIdler.slice(katilimcilar.length)];
-  kutu.append(duzenleAlan("yükümlülük denetçisi", taslak.planlama.denetci || "", auditorOptions,
+  const roleIds = taslak.roles.map((r) => r.id);
+  const auditorOptions = ["", ...roleIds.slice(katilimcilar.length)];
+  kutu.append(editField("yükümlülük denetçisi", taslak.planlama.denetci || "", auditorOptions,
     (v) => { taslak.planlama.denetci = v || undefined; }));
 
   return kutu;
 }
 
 /** Ret bölümü: limit stepper'ı (1-5); limit dolunca kart kapıya düşer (DEVIR.md §3). */
-function duzenleRetBolumuCiz(taslak) {
+function drawEditRejectSection(taslak) {
   if (!taslak.reject) taslak.reject = { limit: 2, onExhausted: "gate" };
   const kutu = el("div", "duzenleBolum");
   kutu.append(el("div", "eyebrow", "Ret"));
   const sira = el("div", "duzenleStepperSarmal");
   sira.append(el("span", "duzenleAlanEtiket", "limit"));
-  sira.append(duzenleStepper(taslak.reject.limit ?? 2, 1, 5, (v) => { taslak.reject.limit = v; }));
+  sira.append(editStepper(taslak.reject.limit ?? 2, 1, 5, (v) => { taslak.reject.limit = v; }));
   kutu.append(sira);
   kutu.append(el("div", "duzenleAciklama", "limit dolunca kart insan kapısında bekler (onExhausted: gate)"));
   return kutu;
 }
 
 /** Bir rol bloğu — numara, ad girişi, ↑↓✕, 2x2 ızgara, prompt, planlama katılımı (DEVIR.md §3). */
-function duzenleRolBlogu(taslak, i, gecersizMi) {
+function editRoleBlock(taslak, i, gecersizMi) {
   const rol = taslak.roles[i];
   const blok = el("div", "duzenleRol" + (EDIT_HIGHLIGHT === rol.id ? " duzenleVurgu" : ""));
   blok.dataset.rol = rol.id;
@@ -5192,8 +5192,8 @@ function duzenleRolBlogu(taslak, i, gecersizMi) {
   // göstermek yerine.
   nameInput.setAttribute("pattern", "[a-z0-9-]+");
   nameInput.addEventListener("change", () => {
-    duzenleAdDegis(taslak, i, duzenleAdSanitize(nameInput.value));
-    duzenleYenile();
+    editRenameRole(taslak, i, editSanitizeName(nameInput.value));
+    editRefresh();
   });
   ust.append(nameInput);
 
@@ -5201,21 +5201,21 @@ function duzenleRolBlogu(taslak, i, gecersizMi) {
   yukari.type = "button";
   yukari.disabled = i === 0;
   yukari.setAttribute("aria-label", "yukarı taşı");
-  yukari.addEventListener("click", () => { duzenleTasi(taslak.roles, i, -1); duzenleYenile(); });
+  yukari.addEventListener("click", () => { editMove(taslak.roles, i, -1); editRefresh(); });
   ust.append(yukari);
 
   const asagi = el("button", "duzenleIkon", "↓");
   asagi.type = "button";
   asagi.disabled = i === taslak.roles.length - 1;
   asagi.setAttribute("aria-label", "aşağı taşı");
-  asagi.addEventListener("click", () => { duzenleTasi(taslak.roles, i, 1); duzenleYenile(); });
+  asagi.addEventListener("click", () => { editMove(taslak.roles, i, 1); editRefresh(); });
   ust.append(asagi);
 
   const sil = el("button", "duzenleIkon duzenleIkonSil", "✕");
   sil.type = "button";
   sil.disabled = taslak.roles.length < 2;
   sil.setAttribute("aria-label", "rolü sil");
-  sil.addEventListener("click", () => { duzenleSil(taslak, rol.id); duzenleYenile(); });
+  sil.addEventListener("click", () => { editDelete(taslak, rol.id); editRefresh(); });
   ust.append(sil);
   blok.append(ust);
 
@@ -5228,23 +5228,23 @@ function duzenleRolBlogu(taslak, i, gecersizMi) {
   // adaptöre karşılık gelir") REDDEDECEĞİ bir seçimi SUNMAK olurdu —
   // "yapamayacağı şeyi vaat eden düğme" kusur sınıfının select hâli.
   const saglayicilar = EDIT_PROVIDERS.length ? EDIT_PROVIDERS : [rol.provider];
-  izgara.append(duzenleAlan("sağlayıcı", rol.provider, saglayicilar, (v) => { rol.provider = v; }));
-  izgara.append(duzenleAlan("çalışma alanı", rol.workspace, null, (v) => { rol.workspace = v; }));
-  izgara.append(duzenleSegment("alım", rol.receive || "task",
+  izgara.append(editField("sağlayıcı", rol.provider, saglayicilar, (v) => { rol.provider = v; }));
+  izgara.append(editField("çalışma alanı", rol.workspace, null, (v) => { rol.workspace = v; }));
+  izgara.append(editSegment("alım", rol.receive || "task",
     [["task", "tekil"], ["batch", "toplu"]], (v) => { rol.receive = v; }));
   const oncekiIdler = taslak.roles.slice(0, i).map((r) => r.id);
-  izgara.append(duzenleAlan("ret yolu", rol.reject || "", ["", ...oncekiIdler],
+  izgara.append(editField("ret yolu", rol.reject || "", ["", ...oncekiIdler],
     (v) => { rol.reject = v || undefined; }));
   blok.append(izgara);
 
-  blok.append(duzenlePromptAlani(rol));
-  blok.append(duzenlePlanlamaKatilimKutusuCiz(taslak, i));
+  blok.append(editPromptField(rol));
+  blok.append(drawEditPlanningParticipantBox(taslak, i));
 
   return blok;
 }
 
 /** "Rol ekle" — zincirin SONUNA ekler (sıra = tek doğruluk kaynağı, next duzenleSiradanBagla'dan gelir). */
-function duzenleRolEkle() {
+function editAddRole() {
   const taslak = EDIT_DRAFT;
   const sonuncusu = taslak.roles[taslak.roles.length - 1];
   let n = 1;
@@ -5257,12 +5257,12 @@ function duzenleRolEkle() {
     receive: "task",
     next: "done",
   });
-  duzenleSiradanBagla(taslak.roles);
-  duzenleYenile();
+  editBindInOrder(taslak.roles);
+  editRefresh();
 }
 
 /** Diyagramdan tıklanan düğümü panelde vurgular — RAIL'i DEĞİŞTİRMEZ (bkz. secimDegistir). */
-function duzenleVurgula(id) {
+function editHighlight(id) {
   EDIT_HIGHLIGHT = id;
   document.querySelectorAll("#sagPanel .duzenleRol").forEach((node) => {
     node.classList.toggle("duzenleVurgu", node.dataset.rol === id);
@@ -5272,12 +5272,12 @@ function duzenleVurgula(id) {
 }
 
 /** "Vazgeç" — panel AÇILDIĞINDAki hâle döner, kaydetmeden. */
-function duzenleVazgec() {
+function editCancel() {
   if (EDIT_ORIGINAL === null) return;
   EDIT_DRAFT = JSON.parse(EDIT_ORIGINAL);
   EDIT_YAML_VISIBLE = false;
   EDIT_PREVIEW = null;
-  duzenleYenile();
+  editRefresh();
 }
 
 /**
@@ -5289,8 +5289,8 @@ function duzenleVazgec() {
  * diye roller dizisini sessizce değiştirmek, operatörün GÖRMEDİĞİ bir
  * mutasyon olurdu.
  */
-async function duzenleOnizlemeYukle() {
-  const kopya = duzenleNormallestir(JSON.parse(JSON.stringify(EDIT_DRAFT)));
+async function editLoadPreview() {
+  const kopya = editNormalise(JSON.parse(JSON.stringify(EDIT_DRAFT)));
   try {
     const cevap = await fetch("/akis/onizleme", {
       method: "POST",
@@ -5304,16 +5304,16 @@ async function duzenleOnizlemeYukle() {
     EDIT_PREVIEW = { ok: false, message: "Önizleme alınamadı: " + e.message, yaml: "" };
   }
   if (RAIL.mode !== "edit") return; // panel kapandıysa bayat cevabı YAZMA
-  duzenleAltCubukGuncelle();
+  editUpdateBottomBar();
   const yamlKutu = document.getElementById("duzenleYaml");
   if (yamlKutu) yamlKutu.textContent = EDIT_PREVIEW.yaml || "";
 }
 
 /** Sabit alt çubuğu (durum metni + Vazgeç/Kaydet'in devre dışı kalma durumu) SURGICAL olarak günceller. */
-function duzenleAltCubukGuncelle() {
+function editUpdateBottomBar() {
   const taslak = EDIT_DRAFT;
   if (!taslak) return;
-  const { errors } = duzenleHatalari(taslak.roles);
+  const { errors } = editErrors(taslak.roles);
   const degisti = JSON.stringify(taslak) !== EDIT_ORIGINAL;
   const sunucuGecersiz = Boolean(EDIT_PREVIEW && EDIT_PREVIEW.ok === false);
   const durum = document.getElementById("duzenleDurumMetni");
@@ -5333,18 +5333,18 @@ function duzenleAltCubukGuncelle() {
 }
 
 /** Taslağın TAMAMINI yeniden çizer ve taze bir önizleme ister — her mutasyondan sonra çağrılır. */
-function duzenleYenile() {
+function editRefresh() {
   const kutu = document.getElementById("sagPanel");
   if (!kutu || RAIL.mode !== "edit") return;
-  railDuzenlePaneliCiz(kutu, LAST_MODEL);
-  void duzenleOnizlemeYukle();
+  drawRailEditPanel(kutu, LAST_MODEL);
+  void editLoadPreview();
 }
 
 /** "Kaydet" — MEVCUT /akis/yaz ucu. Geçersiz taslak zaten devre dışı bırakılmış düğmeden çağrılamaz. */
-async function duzenleYaz() {
+async function editWrite() {
   const kaydetBtn = document.getElementById("duzenleKaydetBtn");
   if (kaydetBtn) kaydetBtn.disabled = true;
-  const kopya = duzenleNormallestir(JSON.parse(JSON.stringify(EDIT_DRAFT)));
+  const kopya = editNormalise(JSON.parse(JSON.stringify(EDIT_DRAFT)));
   try {
     const cevap = await fetch("/akis/yaz", {
       method: "POST",
@@ -5354,21 +5354,21 @@ async function duzenleYaz() {
     const v = await cevap.json();
     if (!cevap.ok) throw new Error(v.error || cevap.status);
     ciz(v.model);
-    duzenleKapat();
+    closeEdit();
     showNotice("Roller kaydedildi.");
   } catch (e) {
     EDIT_PREVIEW = { ok: false, message: "Kaydedilemedi: " + e.message, yaml: EDIT_PREVIEW ? EDIT_PREVIEW.yaml : "" };
-    duzenleAltCubukGuncelle();
+    editUpdateBottomBar();
   }
 }
 
 /** MOD 5'in dış çatısı — geri düğmesi, üst bilgi, rol listesi, bölümler, YAML önizlemesi, sabit alt çubuk. */
-function railDuzenlePaneliCiz(kutu, m) {
+function drawRailEditPanel(kutu, m) {
   kutu.replaceChildren();
 
   const geri = el("button", "railGeri", "← Genel bakış");
   geri.type = "button";
-  geri.addEventListener("click", () => { duzenleKapat(); });
+  geri.addEventListener("click", () => { closeEdit(); });
   kutu.append(geri);
 
   if (EDIT_ERROR) {
@@ -5386,35 +5386,35 @@ function railDuzenlePaneliCiz(kutu, m) {
   kutu.append(el("div", "duzenleAciklama",
     "Sıra formasyonu belirler: ↑/↓ ile taşımak rolün V'deki yerini de değiştirir."));
 
-  const { errors, invalid } = duzenleHatalari(taslak.roles);
-  const uyarilar = duzenleSilmeUyarilari(EDIT_ORIGINAL_ROLE_IDS, taslak.roles.map((r) => r.id), m.cards);
+  const { errors, invalid } = editErrors(taslak.roles);
+  const uyarilar = editDeleteWarnings(EDIT_ORIGINAL_ROLE_IDS, taslak.roles.map((r) => r.id), m.cards);
   errors.forEach((h) => kutu.append(el("div", "duzenleHata", h)));
   uyarilar.forEach((w) => kutu.append(el("div", "duzenleUyari", w)));
 
   const items = el("div", "duzenleRolListe");
-  taslak.roles.forEach((rol, i) => { items.append(duzenleRolBlogu(taslak, i, invalid.has(i))); });
+  taslak.roles.forEach((rol, i) => { items.append(editRoleBlock(taslak, i, invalid.has(i))); });
   kutu.append(items);
 
   const ekle = el("button", "railBtn", "Rol ekle");
   ekle.type = "button";
-  ekle.addEventListener("click", () => { duzenleRolEkle(); });
+  ekle.addEventListener("click", () => { editAddRole(); });
   kutu.append(ekle);
 
-  kutu.append(duzenlePlanlamaBolumuCiz(taslak));
-  kutu.append(duzenleRetBolumuCiz(taslak));
+  kutu.append(drawEditPlanningSection(taslak));
+  kutu.append(drawEditRejectSection(taslak));
 
   const yamlBtn = el("button", "railBtn", EDIT_YAML_VISIBLE ? "YAML'ı gizle" : "YAML'ı göster");
   yamlBtn.type = "button";
   yamlBtn.addEventListener("click", () => {
     EDIT_YAML_VISIBLE = !EDIT_YAML_VISIBLE;
-    railDuzenlePaneliCiz(kutu, m);
+    drawRailEditPanel(kutu, m);
   });
   kutu.append(yamlBtn);
   if (EDIT_YAML_VISIBLE) {
-    const onizlemeKutu = el("div", "onizle");
-    onizlemeKutu.id = "duzenleYaml";
-    onizlemeKutu.textContent = EDIT_PREVIEW ? (EDIT_PREVIEW.yaml || "") : "önizleme yükleniyor…";
-    kutu.append(onizlemeKutu);
+    const previewBox = el("div", "onizle");
+    previewBox.id = "duzenleYaml";
+    previewBox.textContent = EDIT_PREVIEW ? (EDIT_PREVIEW.yaml || "") : "önizleme yükleniyor…";
+    kutu.append(previewBox);
   }
 
   const bottomBar = el("div", "duzenleAlt");
@@ -5424,30 +5424,30 @@ function railDuzenlePaneliCiz(kutu, m) {
   const vazgec = el("button", "railBtn", "Vazgeç");
   vazgec.type = "button";
   vazgec.id = "duzenleVazgecBtn";
-  vazgec.addEventListener("click", () => { duzenleVazgec(); });
+  vazgec.addEventListener("click", () => { editCancel(); });
   bottomBar.append(vazgec);
   const kaydetBtn = el("button", "railBtn primary", "Kaydet");
   kaydetBtn.type = "button";
   kaydetBtn.id = "duzenleKaydetBtn";
   kaydetBtn.disabled = true;
-  kaydetBtn.addEventListener("click", () => { void duzenleYaz(); });
+  kaydetBtn.addEventListener("click", () => { void editWrite(); });
   bottomBar.append(kaydetBtn);
   kutu.append(bottomBar);
 
-  duzenleAltCubukGuncelle();
-  if (EDIT_PREVIEW === null) void duzenleOnizlemeYukle();
+  editUpdateBottomBar();
+  if (EDIT_PREVIEW === null) void editLoadPreview();
 }
 
 /** "Gözcü" girişi — çip bunu çağırır (bkz. ciz() "GÖZCÜ ÇİPİ" bloğu). */
-function gozcuAc() {
+function openWatcher() {
   RAIL = { mode: "daemon", roleId: null, cardId: null, cardFrom: "overview" };
-  railYenidenCiz();
+  railRedraw();
 }
 
 /** Genel bakışa döner — MOD 5'in duzenleKapat()'ıyla AYNI desen. */
-function gozcuKapat() {
+function closeWatcher() {
   RAIL = { mode: "overview", roleId: null, cardId: null, cardFrom: "overview" };
-  railYenidenCiz();
+  railRedraw();
 }
 
 /**
@@ -5458,7 +5458,7 @@ function gozcuKapat() {
  * Okunamazsa (dosya yok, gözcü hiç açılmamış) sessizce BOŞ liste —
  * bu bir hata değil, "henüz günlük yok" demek.
  */
-async function railGozcuYukle() {
+async function railLoadWatcher() {
   try {
     const cevap = await fetch("/gozcu/log", { cache: "no-store" });
     const data = await cevap.json();
@@ -5466,7 +5466,7 @@ async function railGozcuYukle() {
   } catch (e) {
     WATCHER_LOG = [];
   }
-  if (RAIL.mode === "daemon") railYenidenCiz();
+  if (RAIL.mode === "daemon") railRedraw();
 }
 
 /**
@@ -5476,19 +5476,19 @@ async function railGozcuYukle() {
  * olması saniyeler içinde değişir; günlük kuyruğu (GOZCU_LOG) ise ayrı
  * bir ritimle yükleniyor (yukarıdaki railGozcuYukle yorumu).
  */
-function railGozcuCiz(kutu, m) {
+function drawRailWatcher(kutu, m) {
   kutu.replaceChildren();
 
   const geri = el("button", "railGeri", "← Genel bakış");
   geri.type = "button";
-  geri.addEventListener("click", () => { gozcuKapat(); });
+  geri.addEventListener("click", () => { closeWatcher(); });
   kutu.append(geri);
 
   const g = m.daemon;
   const yonetiliyor = Boolean(WATCHER_CONFIG);
   const stopped = WATCHER_PENDING !== null;
   const statusInfo = watcherPanelState(g, yonetiliyor, stopped);
-  const topoUyari = gozcuTopoUyari(g, m.flow.hash, statusInfo.durum);
+  const topoUyari = watcherTopoWarning(g, m.flow.hash, statusInfo.durum);
 
   kutu.append(el("div", "railUst", "Gözcü"));
   const titleRow = el("div", "railGozcuBaslikSatir");
@@ -5513,7 +5513,7 @@ function railGozcuCiz(kutu, m) {
     yenidenBtn.type = "button";
     yenidenBtn.addEventListener("click", () => {
       WATCHER_PENDING = "yenidenBaslatiliyor";
-      void gozcuKomut("durdur", yenidenBtn);
+      void watcherCommand("durdur", yenidenBtn);
     });
     uyari.append(yenidenBtn);
     kutu.append(uyari);
@@ -5521,7 +5521,7 @@ function railGozcuCiz(kutu, m) {
 
   const eylemler = el("div", "railGozcuEylemler");
   if (statusInfo.durum === "unmanaged") {
-    const ornekler = gozcuKomutOrnekleri(m.flow.name);
+    const ornekler = watcherCommandExamples(m.flow.name);
     eylemler.append(el("div", "railGozcuKomutEtiket", "Ayrı kabukta:"));
     eylemler.append(el("code", "railGozcuKomut", ornekler.cmd1));
     eylemler.append(el("div", "railGozcuKomutEtiket", "ya da ekranı bayraklarla aç, düğme çıkar:"));
@@ -5533,7 +5533,7 @@ function railGozcuCiz(kutu, m) {
     eylemler.append(b);
   } else {
     const canli = Boolean(g && g.alive);
-    const label = gozcuEylemEtiketi(g);
+    const label = watcherActionLabel(g);
     const b = el("button", "railBtn" + (canli ? "" : " primary"), label);
     b.type = "button";
     b.addEventListener("click", () => {
@@ -5541,7 +5541,7 @@ function railGozcuCiz(kutu, m) {
       // çip/panel bir SONRAKİ yoklamada "stopping" göstersin diye bayrak
       // BURADA, cevap gelmeden ÖNCE kuruluyor.
       if (canli) WATCHER_PENDING = "durduruluyor";
-      void gozcuKomut(canli ? "durdur" : "baslat", b);
+      void watcherCommand(canli ? "durdur" : "baslat", b);
     });
     eylemler.append(b);
   }
@@ -5588,7 +5588,7 @@ function railGozcuCiz(kutu, m) {
 }
 
 /** Sağ paneli RAIL'in o anki moduna göre doldurur — ciz()'in her çağrısında. */
-function sagPanelCiz(m) {
+function drawRightPanel(m) {
   const kutu = document.getElementById("sagPanel");
   if (!kutu) return;
   if (RAIL.mode !== "card") kutu.removeAttribute("data-rail-kart");
@@ -5601,32 +5601,32 @@ function sagPanelCiz(m) {
   // railGozcuYukle); durum/düğme HER turda zaten taze (railGozcuCiz).
   if (RAIL.mode !== "daemon") kutu.removeAttribute("data-rail-gozcu");
   if (RAIL.mode === "role") {
-    railRolCiz(kutu, m, RAIL.roleId);
+    drawRailRole(kutu, m, RAIL.roleId);
     return;
   }
   if (RAIL.mode === "card") {
-    if (railYenidenYuklenmeliMi(kutu.dataset.railKart, RAIL.cardId)) {
+    if (railNeedsReload(kutu.dataset.railKart, RAIL.cardId)) {
       kutu.dataset.railKart = RAIL.cardId;
-      void railKartYukle(kutu, RAIL.cardId);
+      void railLoadCard(kutu, RAIL.cardId);
     }
     return;
   }
   if (RAIL.mode === "daemon") {
     if (kutu.dataset.railGozcu !== "1") {
       kutu.dataset.railGozcu = "1";
-      void railGozcuYukle();
+      void railLoadWatcher();
     }
-    railGozcuCiz(kutu, m);
+    drawRailWatcher(kutu, m);
     return;
   }
   if (RAIL.mode === "edit") {
     if (kutu.dataset.railEdit !== "1") {
       kutu.dataset.railEdit = "1";
-      void railDuzenleYukle(kutu);
+      void railLoadEdit(kutu);
     }
     return;
   }
-  railGenelBakisCiz(kutu, m);
+  drawRailOverview(kutu, m);
 }
 
 /**
@@ -5681,7 +5681,7 @@ function buildDiagramSvg(model, yon, editable) {
   svg.classList.add("diyagram-" + yon);
 
   const kenarKat = sv("g", { class: "kenarlar" });
-  const kapiKat = sv("g", { class: "kapilar" });
+  const gateLayer = sv("g", { class: "kapilar" });
   const nodeLayer = sv("g", { class: "dugumler" });
 
   model.edges.forEach((kenar) => {
@@ -5709,7 +5709,7 @@ function buildDiagramSvg(model, yon, editable) {
         // kenar.from ile kenar.to arasına gireceğini GÖSTERİYOR, ayrı
         // bir "nereye eklensin" sorusu sormuyor çünkü soru zaten diyagramda
         // tıklanan yerle cevaplanmış.
-        kenarKat.append(ekleIsaretiKur((p1.x + p2.x) / 2, (p1.y + p2.y) / 2, kenar.from));
+        kenarKat.append(buildAddMark((p1.x + p2.x) / 2, (p1.y + p2.y) / 2, kenar.from));
       }
       return;
     } else {
@@ -5757,7 +5757,7 @@ function buildDiagramSvg(model, yon, editable) {
     label.style.fontWeight = "600";
     label.textContent = "kapı";
     g.append(label);
-    kapiKat.append(g);
+    gateLayer.append(g);
   });
 
   // DÜĞÜMLER — kart değil ETİKET: id + sağlayıcı/workspace, hepsi kısa.
@@ -5799,7 +5799,7 @@ function buildDiagramSvg(model, yon, editable) {
     nodeLayer.append(g);
   });
 
-  svg.append(kenarKat, kapiKat, nodeLayer);
+  svg.append(kenarKat, gateLayer, nodeLayer);
   return svg;
 }
 
@@ -5811,7 +5811,7 @@ function buildDiagramSvg(model, yon, editable) {
  * reject varsa → reject kenarı, syncBack'in her ögesi → syncBack kenarı):
  * iki yerde iki ayrı "akış ne diyor" yorumu olmasın.
  */
-function taslakModelKur(taslak) {
+function buildDraftModel(taslak) {
   const edges = [];
   taslak.roles.forEach((rol) => {
     if (rol.next !== "done") edges.push({ from: rol.id, to: rol.next, kind: "next" });
@@ -5868,7 +5868,7 @@ function drawDiagramContent(model, editable) {
   if (editable) {
     const i = DRAFT.roles.findIndex((r) => r.id === DIAGRAM_SELECTED);
     if (i !== -1) sarmal.append(drawDiagramEditPanel(DRAFT.roles[i], i));
-    sarmal.append(onizlemeBlokCiz());
+    sarmal.append(drawPreviewBlock());
   }
   return sarmal;
 }
@@ -5900,10 +5900,10 @@ function drawDiagramEditPanel(rol, i) {
   sil.addEventListener("click", () => { diagramDeleteRole(rol.id); });
   ust.append(sil);
 
-  const kapatSecim = el("button", "mini", "Seçimi kapat");
-  kapatSecim.type = "button";
-  kapatSecim.addEventListener("click", () => { DIAGRAM_SELECTED = null; yenile(); });
-  ust.append(kapatSecim);
+  const closeSelection = el("button", "mini", "Seçimi kapat");
+  closeSelection.type = "button";
+  closeSelection.addEventListener("click", () => { DIAGRAM_SELECTED = null; yenile(); });
+  ust.append(closeSelection);
   kutu.append(ust);
 
   const idler = DRAFT.roles.map((r) => r.id);
@@ -5928,7 +5928,7 @@ function drawDiagramEditPanel(rol, i) {
  */
 function diagramDeleteRole(id) {
   DIAGRAM_SELECTED = null;
-  rolSilById(id);
+  deleteRoleById(id);
 }
 
 /**
@@ -5960,10 +5960,10 @@ function drawFlowPanel() {
   ust.addEventListener("click", (e) => { if (e.target === ust) kapat(); });
   const p = el("div", "panel");
 
-  const kapatDugme = el("button", "kapat", "Kapat");
-  kapatDugme.type = "button";
-  kapatDugme.addEventListener("click", kapat);
-  p.append(kapatDugme);
+  const closeButton = el("button", "kapat", "Kapat");
+  closeButton.type = "button";
+  closeButton.addEventListener("click", kapat);
+  p.append(closeButton);
 
   p.append(el("h2", null, "Akış: " + (LAST_MODEL ? LAST_MODEL.flow.name : "")));
 
@@ -5991,12 +5991,12 @@ function drawFlowPanel() {
     // Düzenleme AÇIK mı (düğümler tıklanabilir, "+"ler çıkıyor mu)
     // sorusunun cevabı ise HER ZAMAN TASLAK'ın var olup olmadığı —
     // görüntülemek düzenlemekten ayrı bir yetki (bkz. akisAc yorumu).
-    const duzenlenebilir = DRAFT !== null;
+    const editableFlag = DRAFT !== null;
     const flowValid = !(LAST_MODEL && LAST_MODEL.flow && LAST_MODEL.flow.error);
-    const diagramModel = duzenlenebilir && flowValid ? taslakModelKur(DRAFT) : LAST_MODEL;
-    icerik.append(drawDiagramContent(diagramModel, duzenlenebilir));
+    const diagramModel = editableFlag && flowValid ? buildDraftModel(DRAFT) : LAST_MODEL;
+    icerik.append(drawDiagramContent(diagramModel, editableFlag));
   } else if (DRAFT !== null) {
-    icerik.append(editorIcerikCiz());
+    icerik.append(drawEditorContent());
   } else {
     icerik.append(el("div", "err", FLOW_ERROR || "Akış okunamadı."));
   }
@@ -6080,7 +6080,7 @@ function syncBackAlani(rol, otherIds) {
   return l;
 }
 
-function rolCiz(rol, i) {
+function drawRole(rol, i) {
   const kutu = el("div", "rol");
   const ust = el("div", "rolust");
   ust.append(el("b", null, (i + 1) + ". " + rol.id));
@@ -6090,12 +6090,12 @@ function rolCiz(rol, i) {
   // sıra dizideki yerden değil 'next' zincirinden okunuyor.
   const ekle = el("button", "mini", "Altına rol ekle");
   ekle.type = "button";
-  ekle.addEventListener("click", () => { rolEkle(i); });
+  ekle.addEventListener("click", () => { addRole(i); });
   ust.append(ekle);
 
   const sil = el("button", "mini sil", "Sil");
   sil.type = "button";
-  sil.addEventListener("click", () => { rolSil(i); });
+  sil.addEventListener("click", () => { deleteRole(i); });
   ust.append(sil);
   kutu.append(ust);
 
@@ -6103,7 +6103,7 @@ function rolCiz(rol, i) {
   const hedefler = idler.filter((x) => x !== rol.id).concat(["done"]);
   const retler = [""].concat(idler.filter((x) => x !== rol.id));
 
-  kutu.append(field("id", rol.id, (v) => { rolAdiDegis(i, v); }));
+  kutu.append(field("id", rol.id, (v) => { roleRename(i, v); }));
   kutu.append(field("provider", rol.provider, (v) => (rol.provider = v), PROVIDERS));
   kutu.append(field("workspace", rol.workspace, (v) => (rol.workspace = v)));
   kutu.append(field("receive", rol.receive || "task", (v) => (rol.receive = v), ["task", "batch"]));
@@ -6117,7 +6117,7 @@ function rolCiz(rol, i) {
 }
 
 /** Rolü zincire ekler: önceki rolün 'next'i yeni role, yeni rolünki eskisine. */
-function rolEkle(i) {
+function addRole(i) {
   const previous = DRAFT.roles[i];
   let n = 1;
   while (DRAFT.roles.some((r) => r.id === "rol" + n)) n += 1;
@@ -6140,7 +6140,7 @@ function rolEkle(i) {
  * Atıfları bırakmak akışı kalıcı olarak geçersiz yapardı: kullanıcı silmek
  * istediği rolü silemez, çünkü ona işaret eden bir 'reject' kalıyor.
  */
-function rolSil(i) {
+function deleteRole(i) {
   if (DRAFT.roles.length < 2) return;
   const giden = DRAFT.roles[i];
   DRAFT.roles.splice(i, 1);
@@ -6161,12 +6161,12 @@ function rolSil(i) {
  * (bkz. rolSil yorumu) diyagramın konuştuğu kimlikle çağırıyor, mantığı
  * İKİ YERDE yazmak yerine.
  */
-function rolSilById(id) {
+function deleteRoleById(id) {
   const i = DRAFT.roles.findIndex((r) => r.id === id);
-  if (i !== -1) rolSil(i);
+  if (i !== -1) deleteRole(i);
 }
 
-function rolAdiDegis(i, newName) {
+function roleRename(i, newName) {
   const eski = DRAFT.roles[i].id;
   if (!newName || newName === eski) return;
   DRAFT.roles[i].id = newName;
@@ -6201,15 +6201,15 @@ function yenile() {
  * akisPanelCiz'de; bu fonksiyon yalnızca İÇERİĞİ döndürüyor, diyagram
  * sekmesiyle AYNI yuvaya giriyor.
  */
-function editorIcerikCiz() {
+function drawEditorContent() {
   const icerik = el("div", null);
   icerik.append(el("div", "cid", DRAFT.roles.length + " rol · kaydetmek dosyayı YENİDEN YAZAR"));
 
   const ed = el("div", "ed");
-  DRAFT.roles.forEach((rol, i) => ed.append(rolCiz(rol, i)));
+  DRAFT.roles.forEach((rol, i) => ed.append(drawRole(rol, i)));
   icerik.append(ed);
 
-  icerik.append(onizlemeBlokCiz());
+  icerik.append(drawPreviewBlock());
   return icerik;
 }
 
@@ -6222,7 +6222,7 @@ function editorIcerikCiz() {
  * çatışması yok. Mantığı burada TEK yerde tutmak, "Ham YAML"ın ileride
  * değişip diyagramın eski kalması riskini kapatıyor.
  */
-function onizlemeBlokCiz() {
+function drawPreviewBlock() {
   const sarmal = el("div", null);
   const result = el("div", "kutu");
   result.id = "onizleme";
@@ -6358,7 +6358,7 @@ function flowGoreliYolKokeCevir(goreli) {
  * (akisSecimi verilmişse) — o girdi BİLEREK ATLANIYOR: 'promptlar'
  * listesinden ZATEN sayıldı, aksi hâlde aynı akış İKİ KEZ sayılırdı.
  */
-function promptKullananListesi(prompts, ozetListesi, aktifAd, path) {
+function promptUsersList(prompts, ozetListesi, aktifAd, path) {
   const result = [];
   prompts.forEach((p) => {
     if (p.path !== path) return;
@@ -6377,7 +6377,7 @@ function promptKullananListesi(prompts, ozetListesi, aktifAd, path) {
 }
 
 /** 'promptKullananListesi'nin SAYIMI — "N rol · M akış" (DEVIR.md §5). SAF. */
-function promptKullanimSayisi(items) {
+function promptUsageCount(items) {
   const flows = new Set();
   let rol = 0;
   items.forEach((k) => {
@@ -6398,7 +6398,7 @@ function promptKullanimSayisi(items) {
  * sınanabilir olmalı, DEVIR.md'nin kendi sözcüğü de bu ("ya da
  * kullanılmıyor").
  */
-function promptKullanimEtiketi(rol, akis) {
+function promptUsageLabel(rol, akis) {
   if (rol === 0 && akis === 0) return "kullanılmıyor";
   return rol + " rol · " + akis + " akış";
 }
@@ -6448,7 +6448,7 @@ function shortFileName(path) {
  * olarak şablonun kendisi) dosyalarda "giris" boş döner — bu bir hata
  * DEĞİL, çağıran (ajanGorevKur) boş girişi hiç basmıyor.
  */
-function promptGorevOzeti(metin) {
+function promptTaskSummary(metin) {
   const lines = (metin || "").split("\\n");
   let i = 0;
   // Başlık satırı ("# ...") varsa atlanır — yoksa (biçimi tutmayan bir
@@ -6477,17 +6477,17 @@ function promptGorevOzeti(metin) {
 }
 
 /** Bir dosyanın editördeki metni DİSKTEKİ (son yüklenen/kaydedilen) metinden FARKLI mı. SAF. */
-function promptKirliMi(orijinal, metin, path) {
+function isPromptDirty(orijinal, metin, path) {
   return metin[path] !== undefined && metin[path] !== orijinal[path];
 }
 
 /** Kaç dosyanın editördeki metni disktekinden farklı — Promptlar rozeti (DEVIR.md §5). SAF. */
-function promptKaydedilmemisSayisi(orijinal, metin) {
-  return Object.keys(metin).filter((path) => promptKirliMi(orijinal, metin, path)).length;
+function promptUnsavedCount(orijinal, metin) {
+  return Object.keys(metin).filter((path) => isPromptDirty(orijinal, metin, path)).length;
 }
 
 /** Sabit alt çubuğun durum metni — seçili dosya kirliyse/temizse (DEVIR.md §5). SAF. */
-function promptDurumMetni(kirli) {
+function promptStatusText(kirli) {
   return kirli ? "kaydedilmemiş değişiklik" : "kaydedildi";
 }
 
@@ -6498,7 +6498,7 @@ function promptDurumMetni(kirli) {
  * 'sekmeUygula'nın "data-sekme" ile nav düğmelerini DOĞRUDAN yamaladığı
  * desenin AYNISI.
  */
-function navRozetGuncelle(name, count) {
+function updateNavBadge(name, count) {
   document.querySelectorAll(".navSekme").forEach((b) => {
     if (b.dataset.sekme !== name) return;
     const rozet = b.querySelector(".navRozet");
@@ -6513,7 +6513,7 @@ function navRozetGuncelle(name, count) {
  * hem değiştirilebiliyor hem düzenlenebiliyor (eski promptAc'ın AYNI
  * davranışı).
  */
-async function promptlarEkraniCiz() {
+async function drawPromptsScreen() {
   const kok = document.getElementById("icerikPromptlar");
   try {
     const cevap = await fetch("/promptlar", { cache: "no-store" });
@@ -6525,17 +6525,17 @@ async function promptlarEkraniCiz() {
       return;
     }
     if (!PROMPTS.some((p) => p.path === PROMPT_SELECTED)) PROMPT_SELECTED = PROMPTS[0].path;
-    await promptlarSec(PROMPT_SELECTED);
+    await promptsSelect(PROMPT_SELECTED);
   } catch (e) {
     kok.replaceChildren(el("div", "err", "Prompt listesi okunamadı: " + e.message));
   }
 }
 
 /** Seçilen dosyayı DEĞİŞTİRİR, gerekirse metnini yükler, sekmeyi YENİDEN ÇİZER. */
-async function promptlarSec(path) {
+async function promptsSelect(path) {
   PROMPT_SELECTED = path;
-  await promptlarMetniGetir(path);
-  promptlarCiz();
+  await promptsFetchText(path);
+  drawPrompts();
 }
 
 /**
@@ -6543,7 +6543,7 @@ async function promptlarSec(path) {
  * TEKRAR OKUMUYOR: disk'ten yeniden okumak operatörün elle yazdığını
  * SESSİZCE EZERDİ.
  */
-async function promptlarMetniGetir(path) {
+async function promptsFetchText(path) {
   if (PROMPT_TEXT[path] !== undefined) return;
   try {
     const cevap = await fetch("/prompt?yol=" + encodeURIComponent(path), { cache: "no-store" });
@@ -6558,23 +6558,23 @@ async function promptlarMetniGetir(path) {
 }
 
 /** Bir liste grubunu (Anayasa / Rol promptları) kurar — DEVIR.md §5. */
-function promptlarGrupKur(title, ogeler) {
+function buildPromptsGroup(title, ogeler) {
   const grup = el("div", "promptlarGrup");
   grup.append(el("h3", "promptlarGrupBaslik", title));
   ogeler.forEach((p) => {
-    const kullanim = promptKullanimSayisi(promptKullananListesi(PROMPTS, FLOWS_SUMMARY, ACTIVE_NAME, p.path));
+    const kullanim = promptUsageCount(promptUsersList(PROMPTS, FLOWS_SUMMARY, ACTIVE_NAME, p.path));
     const oge = el("button", "promptlarOge" + (p.path === PROMPT_SELECTED ? " promptlarOge-secili" : ""));
     oge.type = "button";
     oge.title = p.path;
     oge.dataset.path = p.path;
     const nameRow = el("span", "promptlarOgeAd");
     nameRow.append(document.createTextNode(shortFileName(p.path)));
-    if (promptKirliMi(PROMPT_ORIGINAL, PROMPT_TEXT, p.path)) {
+    if (isPromptDirty(PROMPT_ORIGINAL, PROMPT_TEXT, p.path)) {
       nameRow.append(el("span", "promptlarTaslakIsareti"));
     }
     oge.append(nameRow);
-    oge.append(el("span", "promptlarOgeKullanim", promptKullanimEtiketi(kullanim.rol, kullanim.akis)));
-    oge.addEventListener("click", () => { void promptlarSec(p.path); });
+    oge.append(el("span", "promptlarOgeKullanim", promptUsageLabel(kullanim.rol, kullanim.akis)));
+    oge.addEventListener("click", () => { void promptsSelect(p.path); });
     grup.append(oge);
   });
   return grup;
@@ -6584,7 +6584,7 @@ function promptlarGrupKur(title, ogeler) {
  * Sağ taraf — dosya adı/yolu, "Kullanan", "Ajanın okuduğu sıra", metin
  * alanı, sabit alt çubuk (DEVIR.md §5).
  */
-function promptlarPanelKur() {
+function buildPromptsPanel() {
   const panel = el("div", "promptlarPanel");
   panel.append(el("h1", "promptlarBaslik", shortFileName(PROMPT_SELECTED)));
   panel.append(el("div", "promptlarYol mono", PROMPT_SELECTED));
@@ -6592,7 +6592,7 @@ function promptlarPanelKur() {
   const kullananBlok = el("div");
   kullananBlok.append(el("span", "eyebrow", "Kullanan"));
   const kullananSatir = el("div", "promptlarKullanan");
-  const kullanan = promptKullananListesi(PROMPTS, FLOWS_SUMMARY, ACTIVE_NAME, PROMPT_SELECTED);
+  const kullanan = promptUsersList(PROMPTS, FLOWS_SUMMARY, ACTIVE_NAME, PROMPT_SELECTED);
   if (!kullanan.length) {
     kullananSatir.append(el("span", "promptlarIpucu", "hiçbir akış kullanmıyor"));
   } else {
@@ -6600,7 +6600,7 @@ function promptlarPanelKur() {
       const label = el("button", "promptlarKullananEtiket",
         k.rol === null ? k.akis + " · (tüm roller)" : k.akis + " · " + k.rol);
       label.type = "button";
-      label.addEventListener("click", () => { void promptlarKullananTikla(k.akis, k.rol); });
+      label.addEventListener("click", () => { void promptsUserClick(k.akis, k.rol); });
       kullananSatir.append(label);
     });
   }
@@ -6627,24 +6627,24 @@ function promptlarPanelKur() {
   metinKutusu.disabled = metin === undefined;
   metinKutusu.addEventListener("input", () => {
     PROMPT_TEXT[PROMPT_SELECTED] = metinKutusu.value;
-    promptlarDurumGuncelle();
+    promptsUpdateStatus();
   });
   panel.append(metinKutusu);
 
-  const kirli = promptKirliMi(PROMPT_ORIGINAL, PROMPT_TEXT, PROMPT_SELECTED);
+  const kirli = isPromptDirty(PROMPT_ORIGINAL, PROMPT_TEXT, PROMPT_SELECTED);
   const bottomBar = el("div", "duzenleAlt");
-  bottomBar.append(el("span", "duzenleDurumMetni promptlarDurum", promptDurumMetni(kirli)));
+  bottomBar.append(el("span", "duzenleDurumMetni promptlarDurum", promptStatusText(kirli)));
   const geriAl = el("button", "railBtn", "Geri al");
   geriAl.type = "button";
   geriAl.id = "promptlarGeriAl";
   geriAl.disabled = !kirli;
-  geriAl.addEventListener("click", promptlarGeriAl);
+  geriAl.addEventListener("click", promptsUndo);
   bottomBar.append(geriAl);
   const kaydet = el("button", "railBtn primary", "Kaydet");
   kaydet.type = "button";
   kaydet.id = "promptlarKaydet";
   kaydet.disabled = !kirli;
-  kaydet.addEventListener("click", () => { void promptlarKaydet(); });
+  kaydet.addEventListener("click", () => { void promptsSave(); });
   bottomBar.append(kaydet);
   panel.append(bottomBar);
 
@@ -6657,27 +6657,27 @@ function promptlarPanelKur() {
 }
 
 /** Sekmenin TAM içeriği — seçim değişince / "Kaydet"-"Geri al"'dan SONRA baştan kuruluyor. */
-function promptlarCiz() {
+function drawPrompts() {
   const kok = document.getElementById("icerikPromptlar");
   const govde = el("div", "promptlarGovde");
 
   const items = el("div", "promptlarListe");
-  items.append(promptlarGrupKur("Anayasa", PROMPTS.filter((p) => p.label.indexOf("anayasa:") === 0)));
-  items.append(promptlarGrupKur("Rol promptları", PROMPTS.filter((p) => p.label.indexOf("rol:") === 0)));
+  items.append(buildPromptsGroup("Anayasa", PROMPTS.filter((p) => p.label.indexOf("anayasa:") === 0)));
+  items.append(buildPromptsGroup("Rol promptları", PROMPTS.filter((p) => p.label.indexOf("rol:") === 0)));
   // YENİ ROL PROMPTU yolu bu listenin altında: zincire bir rol eklemek
   // demek, promptunu da BİRLİKTE yaratmak demek (bkz. /rol/yeni yorumu,
   // server.ts) — iki ayrı ekrana bölmek yarı yaratılmış bir rolü vaat
   // ederdi. "Sahiplendiğin/Sahiplenmediğin" şablonu BOŞ bırakılırsa
   // sunucu zaten ondan yazıyor (bkz. rolPromptSablonu, server.ts).
-  const yeniRolDugme = el("button", "railBtn promptlarYeniRol", "Yeni rol promptu");
-  yeniRolDugme.type = "button";
-  yeniRolDugme.addEventListener("click", () => { location.hash = "prompt/yeni"; });
-  items.append(yeniRolDugme);
+  const newRoleButton = el("button", "railBtn promptlarYeniRol", "Yeni rol promptu");
+  newRoleButton.type = "button";
+  newRoleButton.addEventListener("click", () => { location.hash = "prompt/yeni"; });
+  items.append(newRoleButton);
   govde.append(items);
 
-  govde.append(promptlarPanelKur());
+  govde.append(buildPromptsPanel());
   kok.replaceChildren(govde);
-  navRozetGuncelle("promptlar", promptKaydedilmemisSayisi(PROMPT_ORIGINAL, PROMPT_TEXT));
+  updateNavBadge("promptlar", promptUnsavedCount(PROMPT_ORIGINAL, PROMPT_TEXT));
 }
 
 /**
@@ -6687,8 +6687,8 @@ function promptlarCiz() {
  * güncelleniyor: seçili ögenin taslak işareti, alt çubuğun düğmeleri/durum
  * metni, nav rozeti.
  */
-function promptlarDurumGuncelle() {
-  const kirli = promptKirliMi(PROMPT_ORIGINAL, PROMPT_TEXT, PROMPT_SELECTED);
+function promptsUpdateStatus() {
+  const kirli = isPromptDirty(PROMPT_ORIGINAL, PROMPT_TEXT, PROMPT_SELECTED);
   document.querySelectorAll(".promptlarOge").forEach((oge) => {
     if (oge.dataset.path !== PROMPT_SELECTED) return;
     const name = oge.querySelector(".promptlarOgeAd");
@@ -6698,19 +6698,19 @@ function promptlarDurumGuncelle() {
     if (!kirli && mevcut) mevcut.remove();
   });
   const statusEl = document.querySelector(".promptlarDurum");
-  if (statusEl) statusEl.textContent = promptDurumMetni(kirli);
+  if (statusEl) statusEl.textContent = promptStatusText(kirli);
   const geriAl = document.getElementById("promptlarGeriAl");
   if (geriAl) geriAl.disabled = !kirli;
   const kaydet = document.getElementById("promptlarKaydet");
   if (kaydet) kaydet.disabled = !kirli;
-  navRozetGuncelle("promptlar", promptKaydedilmemisSayisi(PROMPT_ORIGINAL, PROMPT_TEXT));
+  updateNavBadge("promptlar", promptUnsavedCount(PROMPT_ORIGINAL, PROMPT_TEXT));
 }
 
 /** "Geri al" — editördeki metni DİSKTEKİ (son yüklenen/kaydedilen) hâline döndürür. */
-function promptlarGeriAl() {
+function promptsUndo() {
   if (PROMPT_ORIGINAL[PROMPT_SELECTED] === undefined) return;
   PROMPT_TEXT[PROMPT_SELECTED] = PROMPT_ORIGINAL[PROMPT_SELECTED];
-  promptlarCiz();
+  drawPrompts();
 }
 
 /**
@@ -6720,7 +6720,7 @@ function promptlarGeriAl() {
  * model çiziliyor. Çekirdek reddederse (bilinmeyen yol, boş metin, yetki
  * yok) mesaj kullanıcıya aynen gider — akış düzenleyicideki "yaz"ın aynısı.
  */
-async function promptlarKaydet() {
+async function promptsSave() {
   const kaydet = document.getElementById("promptlarKaydet");
   const hataKutu = document.getElementById("promptlarKaydetHata");
   const path = PROMPT_SELECTED;
@@ -6745,7 +6745,7 @@ async function promptlarKaydet() {
     if (!cevap.ok) throw new Error(data.error || cevap.status);
     PROMPT_ORIGINAL[path] = metin;
     ciz(data.model);
-    promptlarCiz();
+    drawPrompts();
   } catch (e) {
     if (hataKutu) {
       hataKutu.textContent = e.message;
@@ -6763,14 +6763,14 @@ async function promptlarKaydet() {
  * 'rol' null ise (anayasa dosyası kullanımı) yalnızca akışa geçilir, RAIL
  * değişmez — o kullanım belirli bir role değil TÜM rollere ait.
  */
-async function promptlarKullananTikla(akis, rol) {
+async function promptsUserClick(akis, rol) {
   if (akis !== ACTIVE_NAME) {
     const succeeded = await selectFlowCard(akis);
     if (!succeeded) return;
   }
-  if (rol !== null) RAIL = railGecis(RAIL, { tur: "rolSec", roleId: rol });
+  if (rol !== null) RAIL = railTransition(RAIL, { tur: "rolSec", roleId: rol });
   location.hash = "";
-  railYenidenCiz();
+  railRedraw();
 }
 
 // --- Yeni rol ---
@@ -6793,7 +6793,7 @@ let NEW_ROLE_PRESET_AFTER = null;
 /** Seçili "sonra" rolünün tam kaydı — başlıkta "X ile Y arasına" yazmak için. */
 let NEW_ROLE_AFTER_DEFAULT = null;
 
-async function yeniRolAc() {
+async function openNewRole() {
   const kap = document.getElementById("panel");
   const oncedenSonra = NEW_ROLE_PRESET_AFTER;
   NEW_ROLE_PRESET_AFTER = null;
@@ -6814,13 +6814,13 @@ async function yeniRolAc() {
     NEW_ROLE_AFTER_DEFAULT = NEW_ROLE_ROLES.includes(oncedenSonra)
       ? roller.find((r) => r.id === oncedenSonra)
       : null;
-    kap.replaceChildren(yeniRolEditorCiz());
+    kap.replaceChildren(drawNewRoleEditor());
   } catch (e) {
     kap.replaceChildren(el("div", "err", "Rol eklenemedi: " + e.message));
   }
 }
 
-function yeniRolAlani(label, girisTag, id) {
+function newRoleField(label, girisTag, id) {
   const l = el("label", null);
   l.append(document.createTextNode(label));
   const g = el(girisTag);
@@ -6829,15 +6829,15 @@ function yeniRolAlani(label, girisTag, id) {
   return { label: l, entry: g };
 }
 
-function yeniRolEditorCiz() {
+function drawNewRoleEditor() {
   const ust = el("div", "ust");
   ust.addEventListener("click", (e) => { if (e.target === ust) kapat(); });
   const p = el("div", "panel");
 
-  const kapatDugme = el("button", "kapat", "Kapat");
-  kapatDugme.type = "button";
-  kapatDugme.addEventListener("click", kapat);
-  p.append(kapatDugme);
+  const closeButton = el("button", "kapat", "Kapat");
+  closeButton.type = "button";
+  closeButton.addEventListener("click", kapat);
+  p.append(closeButton);
 
   // DİYAGRAMDAN AÇILDIYSA başlık NEREYE eklendiğini AÇIKÇA söylüyor —
   // bu kartın kendi isteği ("yeni rolün zincire NEREYE girdiğini açıkça
@@ -6851,13 +6851,13 @@ function yeniRolEditorCiz() {
 
   const kutu = el("div", "rol");
 
-  const { label: idEtiket, entry: idGiris } = yeniRolAlani("id", "input", "yeniRolId");
+  const { label: idEtiket, entry: idGiris } = newRoleField("id", "input", "yeniRolId");
   idGiris.type = "text";
   idGiris.placeholder = "örn. reviewer";
   kutu.append(idEtiket);
 
   const { label: saglayiciEtiket, entry: saglayiciSec } =
-    yeniRolAlani("provider", "select", "yeniRolProvider");
+    newRoleField("provider", "select", "yeniRolProvider");
   NEW_ROLE_PROVIDERS.forEach((s) => {
     const o = el("option", null, s);
     o.value = s;
@@ -6866,7 +6866,7 @@ function yeniRolEditorCiz() {
   kutu.append(saglayiciEtiket);
 
   const { label: workspaceEtiket, entry: workspaceGiris } =
-    yeniRolAlani("workspace", "input", "yeniRolWorkspace");
+    newRoleField("workspace", "input", "yeniRolWorkspace");
   workspaceGiris.type = "text";
   kutu.append(workspaceEtiket);
 
@@ -6874,7 +6874,7 @@ function yeniRolEditorCiz() {
   // DİYAGRAMDAN gelen ön seçim VARSAYILAN olarak işaretli (operatör
   // isterse değiştirebilir) — başlıktaki "A ile B arasına" ile AYNI yere
   // işaret ediyor.
-  const { label: sonraEtiket, entry: sonraSec } = yeniRolAlani("sonra — hangi rolün ARDINA", "select", "yeniRolSonra");
+  const { label: sonraEtiket, entry: sonraSec } = newRoleField("sonra — hangi rolün ARDINA", "select", "yeniRolSonra");
   NEW_ROLE_ROLES.forEach((id) => {
     const o = el("option", null, id);
     o.value = id;
@@ -6885,12 +6885,12 @@ function yeniRolEditorCiz() {
 
   // Prompt BOŞ bırakılabilir: sunucu bu durumda ŞABLONDAN yazıyor (kural 9
   // boş dosyayı reddediyor, bkz. rolPromptSablonu yorumu).
-  const { label: promptEtiket, entry: promptGiris } = yeniRolAlani(
+  const { label: promptLabel, entry: promptInput } = newRoleField(
     "prompt (boş bırakılırsa ŞABLONDAN yazılır)", "textarea", "yeniRolPrompt",
   );
-  promptEtiket.className = "genis";
-  promptGiris.rows = 10;
-  kutu.append(promptEtiket);
+  promptLabel.className = "genis";
+  promptInput.rows = 10;
+  kutu.append(promptLabel);
 
   p.append(kutu);
 
@@ -6898,7 +6898,7 @@ function yeniRolEditorCiz() {
   const ekle = el("button", "primary", "Rolü ekle");
   ekle.type = "button";
   ekle.id = "yeniRolEkle";
-  ekle.addEventListener("click", () => { void yeniRolGonder(); });
+  ekle.addEventListener("click", () => { void submitNewRole(); });
   bottomRow.append(ekle);
   const vazgec = el("button", null, "Vazgeç");
   vazgec.type = "button";
@@ -6922,26 +6922,26 @@ function yeniRolEditorCiz() {
  * mesaj OLDUĞU GİBİ operatöre gider — workspace/provider kuralları burada
  * TEKRAR UYGULANMIYOR, doğrulama çekirdekte (bkz. server.ts yorumu).
  */
-async function yeniRolGonder() {
+async function submitNewRole() {
   const idGiris = document.getElementById("yeniRolId");
   const saglayiciSec = document.getElementById("yeniRolProvider");
   const workspaceGiris = document.getElementById("yeniRolWorkspace");
   const sonraSec = document.getElementById("yeniRolSonra");
-  const promptGiris = document.getElementById("yeniRolPrompt");
+  const promptInput = document.getElementById("yeniRolPrompt");
   const ekle = document.getElementById("yeniRolEkle");
   const hataKutu = document.getElementById("yeniRolHata");
-  if (!idGiris || !saglayiciSec || !workspaceGiris || !sonraSec || !promptGiris || !ekle || !hataKutu) return;
+  if (!idGiris || !saglayiciSec || !workspaceGiris || !sonraSec || !promptInput || !ekle || !hataKutu) return;
 
   ekle.disabled = true;
   hataKutu.style.cssText = "display:none";
   try {
-    const promptMetni = promptGiris.value;
+    const promptBody = promptInput.value;
     const govde = {
       id: idGiris.value.trim(),
       provider: saglayiciSec.value,
       workspace: workspaceGiris.value.trim(),
       sonra: sonraSec.value,
-      ...(promptMetni.trim() === "" ? {} : { prompt: promptMetni }),
+      ...(promptBody.trim() === "" ? {} : { prompt: promptBody }),
     };
     const cevap = await fetch("/rol/yeni", {
       method: "POST",
@@ -7084,20 +7084,20 @@ function buildAgentTask(meta) {
     }
   }
 
-  const duzenle = el("button", "railBtn", "Promptu düzenle →");
-  duzenle.type = "button";
-  duzenle.addEventListener("click", () => {
+  const edit = el("button", "railBtn", "Promptu düzenle →");
+  edit.type = "button";
+  edit.addEventListener("click", () => {
     PROMPT_SELECTED = meta.prompt;
     location.hash = "promptlar";
   });
-  kutu.append(duzenle);
+  kutu.append(edit);
   return kutu;
 }
 
 /** Seçili rolün sağ taraf içeriği — üst bilgi + "şu an" + adımlar + görev (DEVIR.md §6). */
 function buildAgentPanel(m, rolId) {
   const panel = el("div", "ajanPanel");
-  const meta = railRolMeta(m, rolId);
+  const meta = railRoleMeta(m, rolId);
   if (!meta) {
     panel.append(el("div", "ipucu", "Rol bulunamadı."));
     return panel;
@@ -7124,7 +7124,7 @@ function buildAgentPanel(m, rolId) {
 /** Ajan listesinin TEK satırı — 36px kuş, rol adı, sağlayıcı, tek satırlık durum (DEVIR.md §6). */
 function buildAgentRow(m, rol) {
   const guncelKart = agentCurrentCard(rol.id, m.cards);
-  const kartlar = rolunAcikKartlari(m.cards, rol.id);
+  const kartlar = roleOpenCards(m.cards, rol.id);
 
   const line = el("button", "ajanSatir" + (rol.id === AGENT_SELECTED ? " ajanSatir-secili" : ""));
   line.type = "button";
@@ -7134,11 +7134,11 @@ function buildAgentRow(m, rol) {
   const kus = sv("svg", { viewBox: "0 0 46 23", role: "img", "aria-label": rol.id + " rolü" });
   kus.classList.add("ajanKus");
   if (wingsFlapping(kartlar, m.daemon) && animationOn) kus.classList.add("kanatCirpiyor");
-  const kusCizgi = sv("polyline", { points: "2,5 13,9 24,19 35,9 46,5", fill: "none" });
-  kusCizgi.style.stroke = birdColour(kartlar);
-  kusCizgi.style.strokeWidth = "4";
-  kusCizgi.style.strokeLinejoin = "miter";
-  kus.append(kusCizgi);
+  const birdPolyline = sv("polyline", { points: "2,5 13,9 24,19 35,9 46,5", fill: "none" });
+  birdPolyline.style.stroke = birdColour(kartlar);
+  birdPolyline.style.strokeWidth = "4";
+  birdPolyline.style.strokeLinejoin = "miter";
+  kus.append(birdPolyline);
   line.append(kus);
 
   const bilgi = el("div", "ajanSatirBilgi");
@@ -7195,9 +7195,9 @@ function drawAgentsScreen(m) {
  * değişirse) metin zaten önbellekte, ikinci bir ağ isteği olmaz.
  */
 async function loadAgentPrompt(path) {
-  await promptlarMetniGetir(path);
+  await promptsFetchText(path);
   const metin = PROMPT_TEXT[path];
-  AGENT_PROMPT_SUMMARY[path] = metin === undefined ? null : promptGorevOzeti(metin);
+  AGENT_PROMPT_SUMMARY[path] = metin === undefined ? null : promptTaskSummary(metin);
 }
 
 /**

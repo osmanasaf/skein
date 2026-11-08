@@ -380,7 +380,7 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
       await page.waitForSelector("#bar .pill", { timeout: 15_000 });
       const barBackground = await page.evaluate(() =>
         getComputedStyle(document.querySelector("#bar")).backgroundColor);
-      const govdeZemin = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+      const bodyBackground = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
       const sekmeMetni = await page.evaluate(() =>
         getComputedStyle(document.querySelector(".navSekme")).color);
       // --color-bg'nin koyu ezmesi: #1A1817 → rgb(26, 24, 23).
@@ -390,7 +390,7 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
       // kalıyordu.
       expect(barBackground).not.toBe("rgb(243, 242, 242)");
       // --bg'nin (eski aile) koyu ezmesi: #0B1118 → rgb(11, 17, 24).
-      expect(govdeZemin).toBe("rgb(11, 17, 24)");
+      expect(bodyBackground).toBe("rgb(11, 17, 24)");
       // --color-text'in koyu ezmesi: #F2EFEE → rgb(242, 239, 238).
       expect(sekmeMetni).toBe("rgb(242, 239, 238)");
       expect(errors).toEqual([]);
@@ -427,14 +427,14 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
       await page.waitForSelector(".railKapiKutu", { timeout: 15_000 });
       const kutuZemin = await page.evaluate(() =>
         getComputedStyle(document.querySelector(".railKapiKutu")).backgroundColor);
-      const govdeZemin = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+      const bodyBackground = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
 
       // ESKİ (kusurlu) değer tam olarak bu — KARŞIT iddia, regresyonu pinler.
       expect(kutuZemin).not.toBe("rgb(255, 242, 239)");
       // YENİ değer: --color-accent-100'ün koyu ezmesi, #4d170e → rgb(77, 23, 14).
       expect(kutuZemin).toBe("rgb(77, 23, 14)");
 
-      const diff = Math.abs(parlaklik(kutuZemin) - parlaklik(govdeZemin));
+      const diff = Math.abs(parlaklik(kutuZemin) - parlaklik(bodyBackground));
       expect(diff).toBeLessThanOrEqual(100);
 
       expect(errors).toEqual([]);
@@ -459,14 +459,14 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
       await page.waitForSelector("#lejant", { timeout: 15_000 });
       const kareZemin = await page.evaluate(() =>
         getComputedStyle(document.querySelector(".lejant .kare.kuyrukta")).backgroundColor);
-      const govdeZemin = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+      const bodyBackground = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
 
       // ESKİ (kusurlu) değer tam olarak bu — KARŞIT iddia, regresyonu pinler.
       expect(kareZemin).not.toBe("rgb(155, 151, 151)"); // #9b9797
       // YENİ değer: --color-neutral-500'ün koyu ezmesi, #605d5d → rgb(96, 93, 93).
       expect(kareZemin).toBe("rgb(96, 93, 93)");
 
-      const diff = Math.abs(parlaklik(kareZemin) - parlaklik(govdeZemin));
+      const diff = Math.abs(parlaklik(kareZemin) - parlaklik(bodyBackground));
       expect(diff).toBeLessThanOrEqual(100);
 
       expect(errors).toEqual([]);
@@ -494,14 +494,14 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
       await page.waitForSelector(".railGozcuNokta.unmanaged", { timeout: 10_000 });
       const noktaZemin = await page.evaluate(() =>
         getComputedStyle(document.querySelector(".railGozcuNokta.unmanaged")).backgroundColor);
-      const govdeZemin = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+      const bodyBackground = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
 
       // ESKİ (kusurlu) değer tam olarak bu — KARŞIT iddia, regresyonu pinler.
       expect(noktaZemin).not.toBe("rgb(186, 182, 182)"); // #bab6b6
       // YENİ değer: --color-neutral-400'ün koyu ezmesi, #444141 → rgb(68, 65, 65).
       expect(noktaZemin).toBe("rgb(68, 65, 65)");
 
-      const diff = Math.abs(parlaklik(noktaZemin) - parlaklik(govdeZemin));
+      const diff = Math.abs(parlaklik(noktaZemin) - parlaklik(bodyBackground));
       expect(diff).toBeLessThanOrEqual(100);
 
       expect(errors).toEqual([]);
@@ -806,7 +806,7 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
    * eskiden yardımcının sabit `() => true`'u yüzünden tarayıcıda hiç
    * SINANAMAZ'dı.
    */
-  async function yonetilenSunucu(gozcuAyar: {
+  async function yonetilenSunucu(watcherConfig: {
     bayraklar?: string[];
     spawn?: (argv: string[]) => { pid: number; kill: () => void; onExit: (cb: () => void) => void };
     alive?: () => boolean;
@@ -817,11 +817,11 @@ describe.skipIf(pwChromium === null)("ekran — gerçek tarayıcı", () => {
       // Bayat kilidin PID'i gerçek olmayabilir (4_194_305 gibi) — alive
       // override'ı o YOLU bozmuyor, pidAlive zaten test boyunca
       // KULLANILMIYOR (model her zaman verilen fonksiyona bakıyor).
-      alive: gozcuAyar.alive ?? (() => true),
+      alive: watcherConfig.alive ?? (() => true),
       watcher: {
         command: ["node", "-e", ""],
-        bayraklar: gozcuAyar.bayraklar ?? ["--model", "claude:m"],
-        spawn: (gozcuAyar.spawn ?? (() => ({ pid: 777, kill: () => {}, onExit: () => {} }))) as never,
+        bayraklar: watcherConfig.bayraklar ?? ["--model", "claude:m"],
+        spawn: (watcherConfig.spawn ?? (() => ({ pid: 777, kill: () => {}, onExit: () => {} }))) as never,
       },
     });
     return { s, flow };
@@ -1201,8 +1201,8 @@ roles:
 
       const yaml = await readFile(join(root, "hub", "flows", "test.yaml"), "utf8");
       expect(yaml).toContain("id: reviewer");
-      const promptMetni = await readFile(join(root, "roles", "reviewer.md"), "utf8");
-      expect(promptMetni).toContain("Rolün: reviewer");
+      const promptBody = await readFile(join(root, "roles", "reviewer.md"), "utf8");
+      expect(promptBody).toContain("Rolün: reviewer");
       expect(errors).toEqual([]);
     } finally {
       await page.close();
@@ -1956,7 +1956,7 @@ reject:
     const { page, errors } = await ac();
     try {
       await page.waitForSelector(".marka .markaAd", { timeout: 15_000 });
-      const govdeFontu = await page.evaluate(() => getComputedStyle(document.body).fontFamily);
+      const bodyFont = await page.evaluate(() => getComputedStyle(document.body).fontFamily);
       const markaFontu = await page.evaluate(() =>
         getComputedStyle(document.querySelector(".marka .markaAd")).fontFamily);
       const sekmeFontu = await page.evaluate(() =>
@@ -1968,9 +1968,9 @@ reject:
       expect(buttonFont).toContain("Archivo");
       // KARŞIT İDDİA: gövdenin system-ui yığınına EŞİT KALMADIKLARI —
       // tanımsız var() tam olarak bu değere sessizce düşerdi.
-      expect(markaFontu).not.toBe(govdeFontu);
-      expect(sekmeFontu).not.toBe(govdeFontu);
-      expect(buttonFont).not.toBe(govdeFontu);
+      expect(markaFontu).not.toBe(bodyFont);
+      expect(sekmeFontu).not.toBe(bodyFont);
+      expect(buttonFont).not.toBe(bodyFont);
       expect(errors).toEqual([]);
     } finally {
       await page.close();
@@ -2336,9 +2336,9 @@ gates:
         // KAPI FİLTRESİ: 'none' davranışsal olarak kapı değil, çizilmiyor;
         // 'approval' çiziliyor. İkisi de modelden geliyor (buildModel
         // ikisini de taşıyor, bkz. model.test.ts), filtre SAYFADA.
-        const kapilar = await page.evaluate(() =>
+        const gateList = await page.evaluate(() =>
           Array.from(document.querySelectorAll(".diyagram-yatay .kapi-isaret")).map((g) => g.getAttribute("data-after")));
-        expect(kapilar).toEqual(["coder"]);
+        expect(gateList).toEqual(["coder"]);
 
         expect(errors).toEqual([]);
       } finally {
@@ -2863,7 +2863,7 @@ planlama:
    * /akis/onizleme, /akis/yaz, /promptlar) PAYLAŞIYOR.
    */
   describe("Rolleri düzenle (sağ panel MOD 5)", () => {
-    const duzenleFlowYaml = (ad: string): string => `
+    const editFlowYaml = (ad: string): string => `
 name: ${ad}
 constitution:
   - ../prompts/base.md
@@ -2891,7 +2891,7 @@ roles:
 `;
 
     /** "Ham YAML" sekmesinin DÜZENLENEBİLİR sunucu açılışıyla AYNI kalıp (bkz. akisSunucusuDuzenlenebilirAc). */
-    async function duzenleSunucusuAc(ad: string, metin: string) {
+    async function openEditServer(ad: string, metin: string) {
       const path = join(root, "hub", "flows", `${ad}.yaml`);
       await writeFile(path, metin);
       const live = await LiveFlow.open(path, { root, providers: knownProviderSet() });
@@ -2904,7 +2904,7 @@ roles:
     }
 
     it("panel açılınca roller listelenir; başlıkta akış dosya yolu görünür, Kaydet değişiklik yokken devre dışıdır", async () => {
-      const s = await duzenleSunucusuAc("duzenle-test1", duzenleFlowYaml("duzenle-test1"));
+      const s = await openEditServer("duzenle-test1", editFlowYaml("duzenle-test1"));
       const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
@@ -2925,7 +2925,7 @@ roles:
     }, 60_000);
 
     it("aynı adı taşıyan iki rol HATA verir (accent-700), Kaydet devre dışı kalır", async () => {
-      const s = await duzenleSunucusuAc("duzenle-test2", duzenleFlowYaml("duzenle-test2"));
+      const s = await openEditServer("duzenle-test2", editFlowYaml("duzenle-test2"));
       const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
@@ -2964,7 +2964,7 @@ roles:
     it("açık kartı olan bir rol silinince UYARI çıkar, ama silmeyi ENGELLEMEZ", async () => {
       const ad = "duzenle-test3";
       const path = join(root, "hub", "flows", `${ad}.yaml`);
-      await writeFile(path, duzenleFlowYaml(ad));
+      await writeFile(path, editFlowYaml(ad));
       const live = await LiveFlow.open(path, { root, providers: knownProviderSet() });
       await queue.add(newCard({ title: "açık kart", task: "iş", topology: live.topology }));
       const s = await serveUi({
@@ -2998,7 +2998,7 @@ roles:
 
     it("sağlayıcı değiştirip Kaydet'e basmak dosyayı GERÇEKTEN değiştiriyor", async () => {
       const ad = "duzenle-test4";
-      const s = await duzenleSunucusuAc(ad, duzenleFlowYaml(ad));
+      const s = await openEditServer(ad, editFlowYaml(ad));
       const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
@@ -3033,7 +3033,7 @@ roles:
     // birim sınamasının TAMAMLAYICISI.
     it("↑ ile rolü yukarı taşımak sırayı GERÇEKTEN değiştirir, next yeniden kurulup kaydedilir", async () => {
       const ad = "duzenle-test5";
-      const s = await duzenleSunucusuAc(ad, duzenleFlowYaml(ad));
+      const s = await openEditServer(ad, editFlowYaml(ad));
       const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
@@ -3066,7 +3066,7 @@ roles:
     // accent-100 ile vurgulanır." — RAIL modu DEĞİŞMİYOR (panel kapanmıyor).
     it("diyagramda bir düğüme tıklamak panelde o rolün bloğunu vurgular, panel AÇIK KALIR", async () => {
       const ad = "duzenle-test6";
-      const s = await duzenleSunucusuAc(ad, duzenleFlowYaml(ad));
+      const s = await openEditServer(ad, editFlowYaml(ad));
       const page = await (browser as Browser).newPage({ viewport: { width: 1280, height: 900 } });
       const errors: string[] = [];
       page.on("pageerror", (e) => errors.push(String(e)));
@@ -3694,7 +3694,7 @@ roles:
          * geçiyor. İddia aynı (SAPMALAR §2.7 — KONUM ölçülür, nitelik
          * değil), yalnızca dayanağı sağlam.
          */
-        const izSozu = page.evaluate(
+        const tracePromise = page.evaluate(
           () =>
             new Promise<{ x: number; y: number; w: number }[]>((coz) => {
               const kareler: { x: number; y: number; w: number }[] = [];
@@ -3720,7 +3720,7 @@ roles:
         // DEVİR — kart artık "coder" DEĞİL, "reviewer" rolünde.
         await queue.handoff(taken, {});
 
-        const iz = await izSozu;
+        const iz = await tracePromise;
         // Tek kare "hareket" iddiasını taşımaz.
         expect(iz.length).toBeGreaterThan(2);
 
@@ -3783,8 +3783,8 @@ roles:
         });
         // UÇUŞ overlay'i artık YOK — kalıcı bir "hayalet kuş" bırakmıyor.
         await page.waitForTimeout(1_200);
-        const ucanKusSayisi = await page.evaluate(() => document.querySelectorAll(".ucanKus").length);
-        expect(ucanKusSayisi).toBe(0);
+        const flyingBirdCount = await page.evaluate(() => document.querySelectorAll(".ucanKus").length);
+        expect(flyingBirdCount).toBe(0);
 
         expect(errors).toEqual([]);
       } finally {
@@ -3821,8 +3821,8 @@ roles:
         // bağlı bir yarış DEĞİL).
         await page.waitForSelector('.formasyonDugum[data-rol="reviewer"] .kare-calisiyor', { timeout: 15_000 });
 
-        const ucanKusSayisi = await page.evaluate(() => document.querySelectorAll(".ucanKus").length);
-        expect(ucanKusSayisi).toBe(0);
+        const flyingBirdCount = await page.evaluate(() => document.querySelectorAll(".ucanKus").length);
+        expect(flyingBirdCount).toBe(0);
         expect(errors).toEqual([]);
       } finally {
         await page.close();
