@@ -462,7 +462,20 @@ bir satırda aynı ad birden çok geçebilir).
 | `gerekce` | 16 | `not` | 240 |
 
 **SIFIR olan yok.** 22 adın hepsi en az bir yerde geçiyor — kusur
-BULUNMADI. (Ölçüm `.skein/` içindeki ÇALIŞMA ZAMANI dosyalarını
+BULUNMADI.
+
+**DÜZELTME (operatör, aynı gün):** tablodaki sayılar "gerçek KULLANIM"
+diye veriliyor ama bazıları İNGİLİZCE eşadlarını da sayıyor. Ölçüldü:
+`not` = 240'ın **168'i** `.not.` — Vitest'in olumsuzlama eşleştiricisi,
+Türkçe `not` alanı DEĞİL. Aynı şüphe `tur`, `ne` ve `durum` için de
+geçerli (`tur` İngilizce "turn"ün kökü değil ama `durum` bu depoda hem
+sabit alan hem sıradan bir sözcük).
+
+Bu, bölümün ASIL iddiasını (hiçbiri sıfır değil) çürütmüyor: `akis`,
+`itiraz`, `katilimcilar`, `ilkTurKor`, `alinti`, `gerekce`, `kanitli`,
+`yakalandi` gibi eşadı olmayan adlar tek tek doğrulandı ve sayıları
+birebir aynı çıktı. Ama "kaç kez geçiyor" sütunu bir ÜST SINIR, kesin
+sayı değil — kelime sınırı eşadı ayırt etmiyor. (Ölçüm `.skein/` içindeki ÇALIŞMA ZAMANI dosyalarını
 KAPSAMIYOR — o dizin `.gitignore`'da, depoya ait değil, kodda sayılmaz.
 Orada da aynı adlar üretiliyor olmalı ama bu kart o dizine bakmadı;
 "ölçülemedi".)
