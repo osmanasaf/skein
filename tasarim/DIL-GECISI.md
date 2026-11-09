@@ -424,3 +424,85 @@ DEĞİŞMEDEN geçmeli. Değişen varsa sınır çiğnenmiştir.
 4. Arayüz metnine dokunulmadığının kanıtı: Türkçe metne bakan
    sınamaların hepsi değişmeden geçmeli. Değişen varsa sınır
    çiğnenmiştir.
+
+---
+
+## Kapanış — sınır kanıtı
+
+Geçiş bitti. Aşağıdaki dört ölçü **bugün (9 Kasım 2026), bu ağaç
+üzerinde** yeniden ölçüldü — hiçbiri önceki bölümlerden kopyalanmadı.
+Komutlar tekrarlanabilir; `rg` (ripgrep) kullanıldı, `node_modules` ve
+`.skein/` (gitignore'da) otomatik dışlanıyor.
+
+### 1. Türkçe sınama başlıkları duruyor mu
+
+```
+rg -o '\b(it|describe)\(\s*"[^"]*[çğıöşüÇĞİÖŞÜ][^"]*"' -g '*.test.ts' | wc -l
+```
+→ **1774** (74 dosyada).
+
+### 2. Serileşen SABİT alan adları hâlâ kodda mı
+
+Her ad için: `rg -o '\bAD\b' -g '*.ts' -g '*.json' -g '*.jsonl' | wc -l`
+(tekil geçişte toplam gerçek KULLANIM sayısı, satır sayısı değil —
+bir satırda aynı ad birden çok geçebilir).
+
+| ad | sayı | ad | sayı |
+|---|---|---|---|
+| `akis` | 194 | `kanitli` | 12 |
+| `tema` | 120 | `yakalandi` | 18 |
+| `kanit` | 34 | `sinif` | 31 |
+| `itiraz` | 351 | `planlama` | 208 |
+| `kabuller` | 38 | `planli` | 143 |
+| `katilimcilar` | 129 | `plansiz` | 105 |
+| `denetci` | 92 | `engelli` | 26 |
+| `ilkTurKor` | 19 | `durum` | 350 |
+| `yukumlulukler` | 24 | `ne` | 164 |
+| `alinti` | 29 | `tur` | 364 |
+| `gerekce` | 16 | `not` | 240 |
+
+**SIFIR olan yok.** 22 adın hepsi en az bir yerde geçiyor — kusur
+BULUNMADI. (Ölçüm `.skein/` içindeki ÇALIŞMA ZAMANI dosyalarını
+KAPSAMIYOR — o dizin `.gitignore`'da, depoya ait değil, kodda sayılmaz.
+Orada da aynı adlar üretiliyor olmalı ama bu kart o dizine bakmadı;
+"ölçülemedi".)
+
+### 3. Türkçe arayüz metni duruyor mu
+
+```
+rg -o 'METİN' src | wc -l
+```
+
+| metin | sayı |
+|---|---|
+| "Gözcüyü başlat" | 13 |
+| "Kilidi devral ve başlat" | 7 |
+| "Rolleri düzenle" | 26 |
+
+Üçü de duruyor, sıfır yok.
+
+### 4. `hub/prompts` ve `bench/prompts` altında Türkçe harf içeren dosya
+
+Dosya ADLARI (basename) hiçbirinde Türkçe harf (çğıöşüÇĞİÖŞÜ) YOK —
+dizin zaten ASCII-transliterasyonla adlandırılıyor (`siniflandir.md`,
+`plan-itiraz.md`), bu bir kusur değil, var olan kural.
+
+Dosya İÇERİĞİNDE Türkçe harf arandı
+(`rg -l '[çğıöşüÇĞİÖŞÜ]' hub/prompts` / `bench/prompts`):
+
+- `hub/prompts`: 7/8 dosya Türkçe içerik taşıyor. İstisna:
+  `constitution/base.md` — bu dosya kasıtlı olarak İngilizce (orkestratör
+  tarafından yazılan, her rol için ortak çekirdek; bu kart onu
+  değiştirmedi, geçişten önce de İngilizceydi).
+- `bench/prompts`: 5/5 dosya Türkçe içerik taşıyor.
+
+### Derleme ve sınama
+
+```
+npx tsc --noEmit    → temiz, hata yok
+npx vitest run      → 66 dosya, 1659 sınama, hepsi geçti
+```
+
+**Sonuç:** sınır duruyor. Kod tanımlayıcıları İngilizce, arayüz ve
+sınama başlıkları Türkçe, ajana verilen JSON sözleşmesi (`bench/prompts`
+alan adları) Türkçe, serileşen sabit alan adları hiçbiri sıfırlanmamış.
