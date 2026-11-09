@@ -1,0 +1,94 @@
+# GENİŞ FORMASYON — altı rollü zincir.
+#
+# NİYE VAR
+#
+# `tasarim/UX.md` 3.3: "V formasyonu az rolde boş duruyor". İki rollü
+# `gunluk-tek`te diyagram iki düğüm ve bir gövde çizgisinden oluşuyor;
+# formasyon metaforu ancak rol sayısı arttıkça görünür hâle geliyor. Bu
+# akış o yüzeyi ALTI düğümle gösteriyor: kuşun V üzerindeki uçuşu,
+# planlama bandı, ret yayları ve kapı çizgisi geniş formasyonda nasıl
+# duruyor — ekranda ölçülebilir hâle geliyor.
+#
+# İkinci işi: rol sayısı arttıkça kırılan şeyleri yakalamak. Düğüm
+# konumları `f = i/(n-1)` ile hesaplanıyor; n=2 ile n=6 arasında
+# etiket sıkışması, kuş ölçeği ve yay çakışması ayrı davranır.
+#
+# ZİNCİR
+#
+#   specifier -> planner -> architect -> guard -> coder -> reviewer -> done
+#
+# Altı rolün hepsi `claude`: bu akış satıcı farkını ÖLÇMÜYOR, formasyon
+# yüzeyini gösteriyor. Çapraz satıcı ölçümü için `plan-capraz.yaml`.
+#
+# `planlama` bölümü BİLEREK YOK. Planlama turu açıldığında her tur ek
+# aktivasyon demek; bu akışın işi formasyonu göstermek, plan etkisini
+# ölçmek değil. Plan ölçümü için `plan3`/`plan4`.
+#
+# MALİYET
+#
+# Altı rol baştan sona koşarsa altı aktivasyon. Ama formasyonu görmek
+# için tamamı gerekmiyor: kart ilk rolü bitirip İKİNCİYE devredildiğinde
+# diyagram zaten altı düğümle çizilmiş oluyor ve uçuş o devirde görünüyor.
+#
+# Model pini koşarken verilir, akış dosyasında değil:
+#   npx tsx src/watch/cli.ts genis-formasyon --model claude:claude-sonnet-5
+
+name: genis-formasyon
+description: Altı rollü zincir — formasyon yüzeyini geniş hâlde göstermek için.
+
+constitution:
+  - ../prompts/constitution/base.md
+
+roles:
+  - id: specifier
+    provider: claude
+    workspace: main
+    prompt: ../prompts/roles/specifier.md
+    receive: task
+    next: planner
+
+  - id: planner
+    provider: claude
+    workspace: planner
+    prompt: ../prompts/roles/planner.md
+    receive: task
+    next: architect
+
+  - id: architect
+    provider: claude
+    workspace: architect
+    prompt: ../prompts/roles/plan-itiraz.md
+    receive: task
+    next: guard
+
+  - id: guard
+    provider: claude
+    workspace: guard
+    prompt: ../prompts/roles/guard.md
+    receive: task
+    reject: planner
+    next: coder
+
+  - id: coder
+    provider: claude
+    workspace: coder
+    prompt: ../prompts/roles/coder.md
+    receive: task
+    reject: planner
+    next: reviewer
+
+  - id: reviewer
+    provider: claude
+    workspace: reviewer
+    prompt: ../prompts/roles/reviewer.md
+    receive: batch
+    syncBack: [coder]
+    reject: coder
+    next: done
+
+reject:
+  limit: 2
+  onExhausted: gate
+
+audit:
+  enabled: false
