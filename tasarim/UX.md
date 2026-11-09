@@ -37,9 +37,12 @@ sayısı diye basıyordu — `src/ui/model.ts`'teki `cardCount()` artık
 hiç çözülmüş görünmüyordu çünkü yolu (kaynak dosya) hiç kaybolmuyordu —
 `dirtyStillHolds()` artık o rolün son `agent.started` anına bakarak
 engelin hâlâ sürüp sürmediğine karar veriyor (günlükten türüyor, ek I/O
-yok). `src/ui/model.test.ts` → `describe("kartSayisi", …)` (satır ~907)
-ve `describe("kirliSuruyorMu", …)` (satır ~941), `src/ui/page.test.ts`
-→ `describe("engelBandBasligi — davranış", …)` (satır ~316) bu davranışı
+yok); başlığı basan `src/ui/page.ts`'teki SAF fonksiyonun gerçek adı
+`blockageBandTitle()` (satır 2740, "engelBandBasligi" sadece testin
+Türkçe `describe` etiketi). `src/ui/model.test.ts` →
+`describe("kartSayisi", …)` (satır ~907) ve `describe("kirliSuruyorMu",
+…)` (satır ~941), `src/ui/page.test.ts` →
+`describe("engelBandBasligi — davranış", …)` (satır ~316) bu davranışı
 sınıyor. `npx vitest run src/ui/model.test.ts src/ui/page.test.ts` → 2
 dosya, 365 sınama, hepsi geçti (2026-11-09, bu turda koşuldu).
 
