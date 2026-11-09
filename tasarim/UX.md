@@ -12,7 +12,7 @@ sonra yapılamayanlar, sonra cila.
 
 ## 1. Ekran yanlış bilgi veriyor
 
-### 1.1 Sahte tıkanıklık uyarısı — EN ÖNCELİKLİ
+### 1.1 Sahte tıkanıklık uyarısı — KAPANDI
 
 Pano'nun en büyük, en kırmızı öğesi şunu diyordu:
 
@@ -28,6 +28,20 @@ Bedeli daha sinsi: operatöre uyarıları ciddiye almamayı öğretir.
 
 **Yapılacak:** engel kayıtları zamana bağlanmalı. Bir engel ancak o
 kart hâlâ kuyruktaysa VE engel son başarılı turdan sonraysa gösterilir.
+
+**Kanıt:** `bf34631` ("düzelt: kırmızı bant yanlış sayıyor ve hiç
+kapanmıyor (kart c-20261106-9a451b)") iki hatayı birlikte kapatıyor:
+(a) `KIRLI` engeli dosya başına kayıt üretiyordu ve başlık bunu kart
+sayısı diye basıyordu — `src/ui/model.ts`'teki `cardCount()` artık
+`KIRLI`'yi role göre gruplayıp gerçek kart sayısını veriyor; (b) `KIRLI`
+hiç çözülmüş görünmüyordu çünkü yolu (kaynak dosya) hiç kaybolmuyordu —
+`dirtyStillHolds()` artık o rolün son `agent.started` anına bakarak
+engelin hâlâ sürüp sürmediğine karar veriyor (günlükten türüyor, ek I/O
+yok). `src/ui/model.test.ts` → `describe("kartSayisi", …)` (satır ~907)
+ve `describe("kirliSuruyorMu", …)` (satır ~941), `src/ui/page.test.ts`
+→ `describe("engelBandBasligi — davranış", …)` (satır ~316) bu davranışı
+sınıyor. `npx vitest run src/ui/model.test.ts src/ui/page.test.ts` → 2
+dosya, 365 sınama, hepsi geçti (2026-11-09, bu turda koşuldu).
 
 ### 1.2 `≥` işareti açıklamasız
 
@@ -186,7 +200,7 @@ rolde V yerine düz çizgi.
 | # | iş | niye |
 |---|---|---|
 | 1 | 2.1 kurtarma yolu + engel gürültüsü | gecenin en pahalı sorunu |
-| 2 | 1.1 sahte tıkanıklık uyarısı | ekranın en görünür yeri yalan söylüyor |
+| 2 | 1.1 sahte tıkanıklık uyarısı — **KAPANDI** (`bf34631`) | ekranın en görünür yeri yalan söylüyor |
 | 3 | 1.4 üst çubukta koşan ajan göstergesi | operatörün doğrudan isteği |
 | 4 | 1.3 boş durumda ekranın kendini anlatması | "çalışmıyor" sanılıyor |
 | 5 | 2.4 bayat kilit bildirimi | 36 dakika sessiz durma |
