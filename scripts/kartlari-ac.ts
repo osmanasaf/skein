@@ -10,10 +10,17 @@
  * Kullanım:
  *   npx tsx scripts/kartlari-ac.ts scripts/kartlar-2026-11-10.json --plan
  *   npx tsx scripts/kartlari-ac.ts scripts/kartlar-2026-11-10.json
+ *   npx tsx scripts/kartlari-ac.ts scripts/kartlar-2026-11-10.json --sadece 3
  *
  * `--plan` hiçbir kart açmaz, yalnızca ne açılacağını yazar. Varsayılan
  * DEĞİL çünkü kart açmak ucuz ve geri alınabilir; ama koşmadan önce ne
  * açacağını görmek isteyeceksin.
+ *
+ * `--sadece <n>` (1'den başlar, virgülle birden fazla: `--sadece 3,1`)
+ * yalnızca o kartları açar, VERİLDİĞİ SIRAYLA. Kuyruk FIFO olduğu için
+ * açılış sırası koşma sırasıdır: bu dosyadaki 3. kart (işin operatörün
+ * ağacına dönmemesi) diğer ikisinin düzeltmesini güvenceye alan bildirimi
+ * getiriyor, o yüzden önce o koşsun istiyorsan `--sadece 3` ile başla.
  *
  * İKİ KEZ KOŞTURMA: kuyruk aynı başlıkla ikinci bir kart açar ve iki ajan
  * aynı işi yapar. Önce `npx tsx src/card/cli.ts ls` ile bak.
@@ -53,14 +60,47 @@ function loadSpecs(path: string): CardSpec[] {
 
 const args = process.argv.slice(2);
 const plan = args.includes("--plan");
-const path = args.find((a) => !a.startsWith("--"));
+const onlyAt = args.indexOf("--sadece");
+const onlyRaw = onlyAt === -1 ? undefined : args[onlyAt + 1];
+// `onlyAt === -1` iken `onlyAt + 1` SIFIR olur ve ilk konumsal argümanı —
+// yani dosya yolunu — atardı: `--sadece` vermeyen her çağrı "kullanım"
+// basıp çıkıyordu. Bayrak yoksa atlanacak indeks de YOKTUR.
+const skipIndex = onlyAt === -1 ? -1 : onlyAt + 1;
+const positional = args.filter((a, i) => !a.startsWith("--") && i !== skipIndex);
+const path = positional[0];
 
 if (path === undefined) {
-  console.error("Kullanım: npx tsx scripts/kartlari-ac.ts <kartlar.json> [--plan]");
+  console.error(
+    "Kullanım: npx tsx scripts/kartlari-ac.ts <kartlar.json> [--plan] [--sadece 3,1]",
+  );
   process.exit(2);
 }
 
-const specs = loadSpecs(path);
+const all = loadSpecs(path);
+
+/**
+ * `--sadece` sırayı KORUR: verilen numara dizilimi açılış dizilimidir.
+ * Sıralamak bu seçeneğin tek işini bozardı — kuyruk FIFO olduğu için
+ * açılış sırası koşma sırası demek.
+ */
+function pick(raw: string | undefined): CardSpec[] {
+  if (raw === undefined) return all;
+  const picked: CardSpec[] = [];
+  for (const part of raw.split(",")) {
+    const n = Number(part.trim());
+    if (!Number.isInteger(n) || n < 1 || n > all.length) {
+      console.error(`✗ --sadece: "${part.trim()}" geçerli bir kart numarası değil (1..${String(all.length)})`);
+      process.exit(2);
+    }
+    picked.push(all[n - 1] as CardSpec);
+  }
+  return picked;
+}
+
+const specs = pick(onlyRaw);
+if (onlyRaw !== undefined) {
+  console.log(`--sadece ${onlyRaw}: ${String(all.length)} karttan ${String(specs.length)} tanesi`);
+}
 
 for (const [i, spec] of specs.entries()) {
   const no = `${String(i + 1)}/${String(specs.length)}`;
