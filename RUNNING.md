@@ -25,8 +25,12 @@ npm install
 npm test
 ```
 
-`npm test` testlerin tamamını geçmeli (şu an 453). Geçmiyorsa çıktıyı
-sakla.
+`npm test` testlerin tamamını geçmeli — 2026-11-10'da **67 dosya, 1663
+sınama**. Geçmiyorsa çıktıyı sakla.
+
+> Bu sayı eskidi bir kez: burada uzun süre "453" yazıyordu ve okuyan
+> kişinin elindeki 1663'ü "bir şey bozulmuş" diye okuması için yeterliydi.
+> Sayı yazan her satır bayatlar; tarihini de yaz.
 
 ---
 
@@ -68,6 +72,29 @@ hemen çıkar.
 |---|---|
 | `--serve` | Kuyruk boşalınca çıkma, bekle |
 | `--poll <ms>` | Beklerken yoklama aralığı (varsayılan 1000) |
+
+### Hazır kartlar — 2026-11-10'da ölçülen üç kusur
+
+Kartlar `.skein/` altında yaşıyor ve `.skein/` **gitignore'da**: kart açmak
+depoya yazmaz. Yani bu depoyu klonladığında kuyruk BOŞ gelir, başka bir
+makinede açılmış kartlar sana gelmez. O gün ölçülen üç kusurun iş metni
+bu yüzden depoda duruyor:
+
+```powershell
+# Ne açılacağını gör — hiçbir kart açmaz
+npx tsx scripts/kartlari-ac.ts scripts/kartlar-2026-11-10.json --plan
+
+# Aç
+npx tsx scripts/kartlari-ac.ts scripts/kartlar-2026-11-10.json
+```
+
+Üçü de `gunluk-tek` akışında, bilerek: o gün ölçüldü ki 11 akıştan 8'inde
+kabul edilmiş iş operatörün checkout'una hiç dönmüyor, iş rol dallarında
+(`skein/<workspace>`) kalıyor. `gunluk-tek` dönen üç akıştan biri. Üçüncü
+kart tam olarak bu boşluğu kapatıyor, o yüzden **önce onu koştur**.
+
+Betiği iki kez koşturma: kuyruk aynı başlıkla ikinci bir kart açar ve iki
+ajan aynı işi yapar. `npx tsx src/card/cli.ts ls` ile bak.
 
 ### Ajan koşarken ne yaptığını izlemek
 
