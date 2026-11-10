@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { tempRoot } from "../testing/temp-root.js";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { knownProviderSet } from "../adapters/factory.js";
 import { dirname } from "node:path";
@@ -27,7 +27,7 @@ const draftDoc = (): FlowDraft => ({
 });
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), "skein-draft-"));
+  root = await tempRoot("skein-draft-");
   await mkdir(join(root, "hub", "flows"), { recursive: true });
   await mkdir(join(root, "hub", "prompts"), { recursive: true });
   await mkdir(join(root, "roles"), { recursive: true });

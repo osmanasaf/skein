@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { tempRoot } from "../testing/temp-root.js";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Adapter, InvokeRequest, InvokeResult } from "../adapters/contract.js";
 import { newCard, rejectCount, type Card } from "../card/card.js";
@@ -74,7 +74,7 @@ let options: TickOptions;
 beforeEach(async () => {
   // Üretimde tek bir kök var: prompt dosyaları da, worktree'ler de onun
   // altında. Test de öyle kurulur, yoksa sınadığı şey üretimdeki şey olmaz.
-  root = await mkdtemp(join(tmpdir(), "skein-tick-"));
+  root = await tempRoot("skein-tick-");
   await mkdir(join(root, "hub", "flows"), { recursive: true });
   await mkdir(join(root, "hub", "prompts"), { recursive: true });
   await mkdir(join(root, "roles"), { recursive: true });

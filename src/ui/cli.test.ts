@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { tempRoot } from "../testing/temp-root.js";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { killTree, spawnPortable, tsxCliPath } from "../proc/process.js";
 
@@ -31,7 +31,7 @@ roles:
 let root: string;
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), "skein-uicli-"));
+  root = await tempRoot("skein-uicli-");
   await mkdir(join(root, "hub", "flows"), { recursive: true });
   await mkdir(join(root, "hub", "prompts"), { recursive: true });
   await mkdir(join(root, "roles"), { recursive: true });

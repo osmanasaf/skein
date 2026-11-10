@@ -1,13 +1,13 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { tempRoot } from "../testing/temp-root.js";
+import { mkdir, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { loadTask } from "./task.js";
 
 let root: string;
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), "skein-task-"));
+  root = await tempRoot("skein-task-");
 });
 afterEach(async () => {
   await rm(root, { recursive: true, force: true });

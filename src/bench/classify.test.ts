@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { tempRoot } from "../testing/temp-root.js";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { adapterFor } from "../adapters/factory.js";
 import { makeFakeCli } from "../testing/fake-cli.js";
@@ -57,7 +57,7 @@ describe("classifyReport — uçtan uca", () => {
   let root: string;
 
   beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), "skein-sinif-"));
+    root = await tempRoot("skein-sinif-");
     await mkdir(join(root, "artifact/src"), { recursive: true });
     await mkdir(join(root, "is"), { recursive: true });
     await writeFile(join(root, "spec.md"), "# Görev\n");

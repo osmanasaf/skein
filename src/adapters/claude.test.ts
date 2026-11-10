@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import { mkdtemp, writeFile, rm, readFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { tempRoot } from "../testing/temp-root.js";
+import { writeFile, rm, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { ClaudeCliAdapter, addToTally, partialUsage, needsStdin, newTally } from "./claude.js";
 import type { AgentStep } from "./contract.js";
@@ -20,7 +20,7 @@ const req = (over: Partial<Parameters<ClaudeCliAdapter["invoke"]>[0]> = {}) => (
 });
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), "skein-claude-"));
+  root = await tempRoot("skein-claude-");
   await writeFile(join(root, "prompt.md"), "PROMPT");
 });
 afterEach(async () => {

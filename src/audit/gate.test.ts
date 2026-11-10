@@ -1,13 +1,13 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { tempRoot } from "../testing/temp-root.js";
+import { rm, writeFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { AuditGate } from "./gate.js";
 
 let root: string;
 let statePath: string;
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), "skein-gate-"));
+  root = await tempRoot("skein-gate-");
   statePath = join(root, "state", "audit.json");
 });
 afterEach(async () => { await rm(root, { recursive: true, force: true }); });

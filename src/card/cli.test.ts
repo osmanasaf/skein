@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { tempRoot } from "../testing/temp-root.js";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -35,7 +35,7 @@ async function card(cwd: string, ...argv: string[]): Promise<{ code: number; out
 let dir: string;
 
 beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), "skein-cardcli-"));
+  dir = await tempRoot("skein-cardcli-");
   await mkdir(join(dir, ".skein"), { recursive: true });
 });
 afterEach(async () => {

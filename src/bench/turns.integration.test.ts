@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { tempRoot } from "../testing/temp-root.js";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Adapter } from "../adapters/contract.js";
 import { auditLoop } from "./audit-loop.js";
@@ -27,7 +27,7 @@ const writer = (texts: string[]): Adapter => {
 };
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), "skein-turlar-"));
+  root = await tempRoot("skein-turlar-");
   const t = join(root, "gorev");
   await mkdir(join(t, "hidden"), { recursive: true });
   await mkdir(join(t, "seed/src"), { recursive: true });

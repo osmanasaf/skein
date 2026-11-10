@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { tempRoot } from "../testing/temp-root.js";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Adapter, InvokeRequest, InvokeResult } from "../adapters/contract.js";
 import { knownProviderSet } from "../adapters/factory.js";
@@ -41,7 +41,7 @@ let options: TickOptions;
 let adapter: QuietAdapter;
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), "skein-loop-"));
+  root = await tempRoot("skein-loop-");
   await mkdir(join(root, "hub", "flows"), { recursive: true });
   await mkdir(join(root, "hub", "prompts"), { recursive: true });
   await mkdir(join(root, "roles"), { recursive: true });

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { tempRoot } from "../testing/temp-root.js";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { adapterFor } from "../adapters/factory.js";
 import { readEvents, type SkeinEvent } from "../events/log.js";
@@ -38,7 +38,7 @@ async function seedRun(report: string): Promise<SkeinEvent[]> {
 }
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), "skein-sinif-e2e-"));
+  root = await tempRoot("skein-sinif-e2e-");
   await mkdir(join(root, "bench/prompts"), { recursive: true });
 });
 afterEach(async () => {

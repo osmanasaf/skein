@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import { mkdtemp, writeFile, rm, readFile, readdir } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { tempRoot } from "../testing/temp-root.js";
+import { writeFile, rm, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { CodexCliAdapter, bestEffortUsage } from "./codex.js";
 import { makeFakeCli, type FakeCliSpec } from "../testing/fake-cli.js";
@@ -13,7 +13,7 @@ const req = () => ({
 });
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), "skein-codex-"));
+  root = await tempRoot("skein-codex-");
   await writeFile(join(root, "prompt.md"), "ROL PROMPTU");
 });
 afterEach(async () => { await rm(root, { recursive: true, force: true }); });

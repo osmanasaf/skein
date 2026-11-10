@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
+import { tempRoot } from "../testing/temp-root.js";
 import { al } from "../testing/queue.js";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { knownProviderSet } from "../adapters/factory.js";
@@ -30,7 +30,7 @@ const load = async (name: string): Promise<TopologySnapshot> =>
   );
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), "skein-orphan-"));
+  root = await tempRoot("skein-orphan-");
   queue = new CardQueue(join(root, ".skein"));
   await queue.init();
   daily = await load("daily");

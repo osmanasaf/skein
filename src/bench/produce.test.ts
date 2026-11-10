@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import { mkdtemp, mkdir, writeFile, rm, readdir, readFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { tempRoot } from "../testing/temp-root.js";
+import { mkdir, writeFile, rm, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { produce } from "./produce.js";
 import { loadTask } from "./task.js";
@@ -22,7 +22,7 @@ const spy = (cellDir: string): Adapter => ({
 });
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), "skein-produce-"));
+  root = await tempRoot("skein-produce-");
   const t = join(root, "gorev");
   await mkdir(join(t, "hidden"), { recursive: true });
   await writeFile(join(t, "task.yaml"),

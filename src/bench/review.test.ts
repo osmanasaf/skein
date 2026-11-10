@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { tempRoot } from "../testing/temp-root.js";
+import { mkdir, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { review } from "./review.js";
 import { loadTask, type Task } from "./task.js";
@@ -24,7 +24,7 @@ const run = (r: Adapter = reviewer("claude", "m")) =>
   });
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), "skein-review-"));
+  root = await tempRoot("skein-review-");
   const t = join(root, "gorev");
   await mkdir(join(t, "hidden"), { recursive: true });
   await writeFile(join(t, "task.yaml"),

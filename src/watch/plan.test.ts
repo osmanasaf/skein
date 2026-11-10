@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { tempRoot } from "../testing/temp-root.js";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Adapter, InvokeRequest, InvokeResult } from "../adapters/contract.js";
 import { knownProviderSet } from "../adapters/factory.js";
@@ -60,7 +60,7 @@ let options: TickOptions;
 let plans: Map<string, string>;
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), "skein-plan-"));
+  root = await tempRoot("skein-plan-");
   await mkdir(join(root, "hub", "flows"), { recursive: true });
   await mkdir(join(root, "hub", "prompts"), { recursive: true });
   await mkdir(join(root, "roles"), { recursive: true });

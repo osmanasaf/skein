@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, appendFile, readFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { tempRoot } from "../testing/temp-root.js";
+import { rm, appendFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { EventLog, readEvents, EVENT_SCHEMA } from "./log.js";
 
@@ -9,7 +9,7 @@ let path: string;
 const at = () => new Date("2026-01-02T03:04:05.000Z");
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), "skein-log-"));
+  root = await tempRoot("skein-log-");
   path = join(root, "events.jsonl");
 });
 afterEach(async () => {

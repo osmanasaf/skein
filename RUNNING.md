@@ -25,12 +25,48 @@ npm install
 npm test
 ```
 
-`npm test` testlerin tamamını geçmeli — 2026-11-10'da **67 dosya, 1663
-sınama**. Geçmiyorsa çıktıyı sakla.
+`npm test` testlerin tamamını geçmeli. Sayı ORTAMA GÖRE DEĞİŞİR, o yüzden
+tek bir rakama bakma:
 
-> Bu sayı eskidi bir kez: burada uzun süre "453" yazıyordu ve okuyan
+| Ortam | Dosya | Sınama |
+|---|---|---|
+| Playwright/Chromium kurulu | 68 | 1666 geçer |
+| Chromium yok | 68 (1'i atlanır) | 1583 geçer + 83 atlanır |
+
+Ölçüm 2026-11-10'da yapıldı. Tarayıcıya bağlı olan tek dosya
+`src/ui/tarayici.test.ts` ve 83 sınamasının tamamı tarayıcı istiyor;
+Playwright ortamda yoksa `describe.skipIf` dosyayı atlar ve bu bir ARIZA
+DEĞİL. (İlk satır ölçüldü; ikinci satır ondan çıkarıldı — 1666 − 83.)
+
+### `TMPDIR` nerede olmalı
+
+Sınamalar geçici dizinleri `TMPDIR`'ın altında açıyor ve iki yazılı
+olmayan şartı var; ikisini de kendi kurgumu kurarken kırdım:
+
+- **Herhangi bir git deposunun DIŞINDA olmalı.** `src/watch/git.test.ts`
+  üç sınamasında "git deposu olmayan dizin" davranışını ölçüyor; `TMPDIR`
+  bir deponun altındaysa o dizin aslında depodur ve üçü de ürün yüzünden
+  değil, ortam yüzünden kırmızı olur.
+- **Yolunda sağlayıcı adı geçmemeli.** `src/bench/classify.test.ts`
+  raporun kimliksizleştirildiğini sınıyor; yolda `claude` geçerse metne
+  sızar ve sınama haklı olarak reddeder.
+
+macOS'te `TMPDIR` normalde `/var/folders/...` — ikisini de karşılıyor,
+dokunma. `TMPDIR`'ı kendin ayarladıysan bu iki şarta bak.
+
+Senin sayın daha küçükse önce şuna bak — commit'in eskidir:
+
+```powershell
+git log --oneline -1
+git fetch origin main
+git status -sb
+```
+
+> Bu satır bir kez bayatladı: uzun süre "şu an 453" yazıyordu ve okuyan
 > kişinin elindeki 1663'ü "bir şey bozulmuş" diye okuması için yeterliydi.
-> Sayı yazan her satır bayatlar; tarihini de yaz.
+> Sonra ikinci kez bayatladı: tek rakam yazmak, tarayıcısı olmayan
+> makinede 31 atlanan sınamayı "eksik" gibi gösterdi. Sayı yazan her satır
+> bayatlar; ölçüldüğü commit'i ve ortamı da yaz.
 
 ---
 

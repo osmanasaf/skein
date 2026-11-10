@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { tempRoot } from "../testing/temp-root.js";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { Adapter, InvokeRequest, InvokeResult } from "../adapters/contract.js";
 import { readEvents } from "../events/log.js";
@@ -84,7 +84,7 @@ let sandbox: string;
 let logPath: string;
 
 beforeEach(async () => {
-  sandbox = await mkdtemp(join(tmpdir(), "skein-ab-"));
+  sandbox = await tempRoot("skein-ab-");
   logPath = join(sandbox, "olaylar.jsonl");
 });
 afterEach(async () => {

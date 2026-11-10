@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { tempRoot } from "../testing/temp-root.js";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { diffLines, diffSnapshots, splitLines, takeSnapshot, TurnRecorder } from "./snapshot.js";
 
@@ -44,7 +44,7 @@ describe("anlık görüntü", () => {
   const turns = () => join(root, "turlar");
 
   beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), "skein-tur-"));
+    root = await tempRoot("skein-tur-");
     await mkdir(join(artifact(), "src"), { recursive: true });
     await writeFile(join(artifact(), "src/x.ts"), "export const f = () => 1;\n");
   });
@@ -95,7 +95,7 @@ describe("anlık görüntü", () => {
 describe("TurnRecorder", () => {
   let root: string;
   beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), "skein-tur-"));
+    root = await tempRoot("skein-tur-");
     await mkdir(join(root, "artifact"), { recursive: true });
     await writeFile(join(root, "artifact/x.ts"), "bir\n");
   });

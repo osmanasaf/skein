@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
+import { tempRoot } from "../testing/temp-root.js";
 import { al } from "../testing/queue.js";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import { knownProviderSet } from "../adapters/factory.js";
 import { readFile } from "node:fs/promises";
@@ -39,7 +39,7 @@ let server: UiServer;
 let realFlow: Flow;
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), "skein-uisrv-"));
+  root = await tempRoot("skein-uisrv-");
   await mkdir(join(root, "hub", "flows"), { recursive: true });
   await mkdir(join(root, "hub", "prompts"), { recursive: true });
   await mkdir(join(root, "roles"), { recursive: true });
@@ -863,7 +863,7 @@ describe("serveUi — rol promptları", () => {
    * sınama kuralı yazmış gibi yapar, yazmaz.
    */
   const outsideVictim = async () => {
-    const dir = await mkdtemp(join(tmpdir(), "skein-kurban-"));
+    const dir = await tempRoot("skein-kurban-");
     await mkdir(join(dir, "roles"), { recursive: true });
     const file = join(dir, "roles", "coder.prompt");
     await writeFile(file, "KURBAN\n");

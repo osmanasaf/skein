@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { tempRoot } from "../testing/temp-root.js";
+import { writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { assemblePrompt, LAYER_MARK } from "./assemble.js";
 
@@ -12,7 +12,7 @@ const write = async (name: string, body: string) => {
 };
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), "skein-prompt-"));
+  root = await tempRoot("skein-prompt-");
 });
 afterEach(async () => {
   await rm(root, { recursive: true, force: true });

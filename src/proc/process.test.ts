@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { tempRoot } from "../testing/temp-root.js";
+import { mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { isEntryPoint, tsxCliPath } from "./process.js";
@@ -15,7 +15,7 @@ import { isEntryPoint, tsxCliPath } from "./process.js";
 let root: string;
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), "skein-tsxyolu-"));
+  root = await tempRoot("skein-tsxyolu-");
   await mkdir(join(root, "node_modules", "tsx", "dist"), { recursive: true });
   await writeFile(
     join(root, "node_modules", "tsx", "package.json"),

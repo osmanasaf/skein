@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { tempRoot } from "../testing/temp-root.js";
+import { mkdir, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { auditLoop } from "./audit-loop.js";
 import { loadTask, type Task } from "./task.js";
@@ -33,7 +33,7 @@ const run = (adapter: Adapter, maxRounds = 5) =>
   });
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), "skein-loop-"));
+  root = await tempRoot("skein-loop-");
   const t = join(root, "gorev");
   await mkdir(join(t, "hidden"), { recursive: true });
   await writeFile(join(t, "task.yaml"),

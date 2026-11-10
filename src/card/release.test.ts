@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
+import { tempRoot } from "../testing/temp-root.js";
 import { al } from "../testing/queue.js";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { knownProviderSet } from "../adapters/factory.js";
@@ -20,7 +20,7 @@ let daily: TopologySnapshot;
 let logPath: string;
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), "skein-release-"));
+  root = await tempRoot("skein-release-");
   queue = new CardQueue(join(root, ".skein"));
   await queue.init();
   const flow = await loadFlow(join(repoRoot, "hub", "flows", "daily.yaml"), {

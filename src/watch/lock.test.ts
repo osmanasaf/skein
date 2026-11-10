@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { tempRoot } from "../testing/temp-root.js";
+import { readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { acquireLock, liveLock, pidAlive, readLock, releaseLock, type LockInfo } from "./lock.js";
 
@@ -8,7 +8,7 @@ let dir: string;
 let path: string;
 
 beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), "skein-lock-"));
+  dir = await tempRoot("skein-lock-");
   path = join(dir, "daemon.json");
 });
 afterEach(async () => {

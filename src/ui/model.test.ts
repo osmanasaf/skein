@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
+import { tempRoot } from "../testing/temp-root.js";
 import { al } from "../testing/queue.js";
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { knownProviderSet } from "../adapters/factory.js";
 import { newCard, type Card } from "../card/card.js";
@@ -53,7 +53,7 @@ let logPath: string;
 let base: BuildOptions;
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), "skein-ui-"));
+  root = await tempRoot("skein-ui-");
   await mkdir(join(root, "hub", "flows"), { recursive: true });
   await mkdir(join(root, "hub", "prompts"), { recursive: true });
   await mkdir(join(root, "roles"), { recursive: true });

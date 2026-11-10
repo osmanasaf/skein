@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { tempRoot } from "../testing/temp-root.js";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { capture } from "../proc/process.js";
 import { addWorktree, currentBranch, dirtyPaths, GitStatusError, head, isTracked, mergeForward, ORCHESTRATOR_PATHS } from "./git.js";
@@ -13,7 +13,7 @@ const git = (dir: string, ...args: string[]) => capture("git", args, { cwd: dir,
 
 /** `main` ana checkout, `review` ayrı dalda bir worktree. */
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), "skein-git-"));
+  root = await tempRoot("skein-git-");
   main = join(root, "repo");
   review = join(root, "repo", ".worktrees", "reviewer");
 

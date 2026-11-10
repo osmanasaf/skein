@@ -1,8 +1,8 @@
 import { describe, expect, it, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
+import { tempRoot } from "../testing/temp-root.js";
 import { createRequire } from "node:module";
 import { writeFileSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { knownProviderSet } from "../adapters/factory.js";
 import { newCard } from "../card/card.js";
@@ -216,7 +216,7 @@ let topology: TopologySnapshot;
 let server: UiServer;
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), "skein-tarayici-"));
+  root = await tempRoot("skein-tarayici-");
   await mkdir(join(root, "hub", "flows"), { recursive: true });
   await mkdir(join(root, "hub", "prompts"), { recursive: true });
   await mkdir(join(root, "roles"), { recursive: true });
@@ -3849,7 +3849,12 @@ roles:
  * Bu sınama ÇİZİLEN boyutu ölçer. "Nitelik doğru" ile "ekranda doğru"
  * ayrı iddialardır; ikincisini ancak tarayıcı söyleyebilir.
  */
-describe("formasyon kuşu — çizilen boyut", () => {
+// Tarayıcı KORUMASI: bu blok `openIt()` ile Chromium açıyor, yani
+// yukarıdaki blokla aynı şartı taşıyor. Koruması yoktu ve ölçtüm:
+// Playwright olmayan makinede bu iki sınama ATLANMAZ, DÜŞER —
+// yani "tarayıcım yok" bir ortam gerçeği olarak değil, kırmızı
+// olarak görünürdü. Aynı dosyada iki farklı davranış.
+describe.skipIf(pwChromium === null)("formasyon kuşu — çizilen boyut", () => {
   it("kuş kendi 46x23 kutusunda kalır, diyagramı kaplamaz", async () => {
     const { page, errors } = await openIt();
     try {

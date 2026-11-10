@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { tempRoot } from "../testing/temp-root.js";
+import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { spawnPortable, tsxCliPath } from "../proc/process.js";
@@ -126,7 +126,7 @@ describe("giriş noktası — İÇE ALMAK gözcüyü başlatmaz", () => {
    * Koruma varsa hiçbir şey olmaz ve işaret basılır.
    */
   it("ayrı bir süreçte import edilince main KOŞMAZ — temiz çıkar", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "skein-iceal-"));
+    const dir = await tempRoot("skein-iceal-");
     try {
       const modul = pathToFileURL(join(process.cwd(), "src", "watch", "cli.ts")).href;
       const script = join(dir, "iceal.mjs");
