@@ -1,0 +1,67 @@
+# Ortalama zorlukta geliştirme — önce kısa plan, sonra kod ve denetim.
+#
+# Şema: SCHEMA.md
+#
+# NE ZAMAN: iş `gunluk-tek` için fazla (birden çok dosya, korunacak bir
+# sözleşme, "nereden başlasam" sorusu var) ama `plan2`/`plan3`'ün itiraz
+# turlarını gerektirecek kadar belirsiz değil.
+#
+# NİYE `plan.yaml` DEĞİL: zincir aynı, workspace yerleşimi farklı.
+# `plan.yaml`'da `main` planlayıcıda; reviewer'ın syncBack'i coder'ın
+# worktree'sine gidiyor ve kabul edilen iş operatörün ağacına HİÇ dönmüyor
+# (scripts/kartlar-2026-11-10.json, üçüncü kart). Burada `main` coder'da:
+# plan ileri birleştirmeyle main'e gelir, denetimden geçen iş syncBack ile
+# main'e döner. `gunluk-tek`'in dönen yerleşimi, başına plan eklenmiş hâli.
+#
+# Koşu başlamadan senin ağacın temiz olmalı — plan main'e birleştirilirken
+# kirli ağaç kartı kapıya çıkarır.
+#
+# Kullan: npx tsx src/watch/cli.ts orta --serve --model claude:claude-sonnet-5
+
+name: orta
+description: Ortalama zorlukta iş. Kısa plan, sonra kod ve denetim; kabul edilen iş senin ağacına döner.
+
+# Mühendislik maddesi DİLE ÖZELDİR: başka dilde koşacaksan değiştir.
+constitution:
+  - ../prompts/constitution/base.md
+  - ../prompts/constitution/engineering-ts.md
+
+roles:
+  - id: planner
+    provider: claude
+    workspace: planner          # kendi worktree'si; plan ileri birleştirmeyle main'e gider
+    prompt: ../prompts/roles/planner.md
+    receive: task
+    next: coder
+
+  - id: coder
+    provider: claude
+    workspace: main             # iş burada biter: operatörün checkout'u
+    prompt: ../prompts/roles/coder.md
+    receive: task
+    reject: planner             # plan yanlışsa kart plana döner
+    next: reviewer
+
+  - id: reviewer
+    provider: claude
+    workspace: reviewer
+    prompt: ../prompts/roles/reviewer.md
+    receive: batch
+    syncBack: [coder]           # = main; kabul edilen iş operatöre döner
+    reject: coder
+    next: done
+
+planlama:
+  katilimcilar: [planner]       # tek yazar, itiraz turu yok; tartışma lazımsa plan2
+  plan: docs/plan/{kart}.md
+
+gates: []                       # ret limiti dolunca yine insan kapısı kurulur
+
+reject:
+  limit: 2
+  onExhausted: gate
+
+audit:
+  enabled: false                # audit gate yalnızca bench'te; gözcü çağırmıyor
+
+# Maliyet: 3 aktivasyon/kart retsiz. `flow check` en kötü hâli kendisi basar.
